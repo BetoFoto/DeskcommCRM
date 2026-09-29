@@ -35,6 +35,7 @@ import { expect, test } from "./helpers/test";
 
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { lerCreds, loginComoDono } from "./helpers/login-admin";
+import { afirmarDonoDoServidor } from "./utils/precondicao";
 
 const { url, serviceRole } = credenciaisSupabaseDeTeste();
 const db = createClient(url, serviceRole, { auth: { autoRefreshToken: false, persistSession: false } });
@@ -65,6 +66,11 @@ async function entrarComo(page: Page, email: string): Promise<void> {
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
+  // Quem alcança `/admin/**` é o dono do servidor (`platform_admins`). Num banco
+  // semeado do zero ele não existe: a precondição o promove, como na irmã
+  // `admin-credencial-google.spec.ts`.
+  await afirmarDonoDoServidor(lerCreds().users.dono!.email);
+
   const { data: u, error: ue } = await db.auth.admin.createUser({
     email: EMAIL_ERRADO,
     password: SENHA,
@@ -119,6 +125,7 @@ test("suspender, corrigir o e-mail, reativar, editar e excluir — pela tela", a
   await admin.getByRole("button", { name: "Suspender tenant" }).click();
   await admin.locator("#suspend-reason").fill("Inadimplência — teste de ponta a ponta");
   await admin.getByRole("button", { name: "Confirmar suspensão" }).click();
+  await expect(admin.getByRole("dialog")).toHaveCount(0);
   await expect(admin.getByRole("region", { name: "Tenant Suspenso" })).toBeVisible();
   await expect(admin.getByRole("button", { name: "Excluir tenant" })).toBeVisible();
   await foto(admin, "02-tenant-suspenso");
@@ -154,6 +161,15 @@ test("suspender, corrigir o e-mail, reativar, editar e excluir — pela tela", a
   await admin.getByRole("button", { name: "Reativar tenant" }).click();
   await admin.getByRole("textbox").last().fill("Pagamento regularizado — teste e2e");
   await admin.getByRole("button", { name: "Confirmar reativação" }).click();
+  // Esperar pelo BANCO e pelo botão que só existe para tenant ativo. "O aviso
+  // sumiu" não serve: com o diálogo modal aberto, o Radix tira o resto da página
+  // da árvore de acessibilidade, e a asserção passaria antes da gravação.
+  await expect
+    .poll(async () => (await db.from("organizations").select("status").eq("id", orgId).single()).data?.status, {
+      timeout: 15_000,
+    })
+    .toBe("active");
+  await expect(admin.getByRole("button", { name: "Suspender tenant" })).toBeVisible({ timeout: 15_000 });
   await expect(admin.getByRole("region", { name: "Tenant Suspenso" })).toHaveCount(0);
   await novo.goto("/app/inbox");
   await expect(novo).toHaveURL(/\/app\//, { timeout: 30_000 });
@@ -174,6 +190,7 @@ test("suspender, corrigir o e-mail, reativar, editar e excluir — pela tela", a
   await admin.getByRole("button", { name: "Suspender tenant" }).click();
   await admin.locator("#suspend-reason").fill("Encerramento do contrato — teste e2e");
   await admin.getByRole("button", { name: "Confirmar suspensão" }).click();
+  await expect(admin.getByRole("dialog")).toHaveCount(0);
   await admin.getByRole("button", { name: "Excluir tenant" }).click();
   const excluir = admin.getByRole("button", { name: "Excluir definitivamente" });
   await expect(admin.getByText("Esta ação é irreversível.", { exact: false })).toBeVisible();
