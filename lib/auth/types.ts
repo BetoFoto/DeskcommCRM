@@ -1,4 +1,5 @@
 import type { InterfaceSettings } from "@/lib/navigation/interface";
+import type { EstadoDaOrganizacao } from "@/lib/tenants/estado";
 import type { Idioma } from "@/lib/i18n/idiomas";
 import type { ModuloOpcional } from "@/lib/instalacao/modulos";
 import type { CapacidadeDaOrganizacao } from "@/lib/organizacao/capacidades";
@@ -94,7 +95,7 @@ export interface UserOrgMembership {
    * aplicação sabe mostrar "conta suspensa" em vez de "você não pertence a
    * nenhuma empresa" —, mas `resolveActiveOrg` nunca a devolve como ativa.
    */
-  status?: import("@/lib/tenants/estado").EstadoDaOrganizacao;
+  status?: EstadoDaOrganizacao;
 }
 
 export interface AuthUser {

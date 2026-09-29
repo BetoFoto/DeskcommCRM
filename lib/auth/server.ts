@@ -73,7 +73,7 @@ async function localeDaOrgAtiva(memberships: UserOrgMembership[]): Promise<strin
  * da organização ativa, o sorteio decide TAMBÉM em que língua o sistema abre.
  * As duas coisas andam juntas: não tire a ordenação de lá sem resolver isto.
  */
-function escolherMembroAtivo(
+export function escolherMembroAtivo(
   memberships: UserOrgMembership[],
   cookieOrg: string | undefined,
 ): UserOrgMembership | null {
