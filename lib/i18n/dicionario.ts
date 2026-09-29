@@ -1061,6 +1061,9 @@ export const DICIONARIO: Traducoes = {
   "Revisar provedores de IA": { es: "Revisar proveedores de IA" },
   "Revisar modelos do canal": { es: "Revisar plantillas del canal" },
   "Abrir uma conversa afetada": { es: "Abrir una conversación afectada" },
+  "Abrir Agenda": { es: "Abrir Agenda" },
+  "Este contato tem 1 compromisso na Agenda. Cancele ou apague o compromisso antes de excluir.": { es: "Este contacto tiene 1 cita en la Agenda. Cancela o elimina la cita antes de eliminar el contacto." },
+  "Este contato tem {n} compromissos na Agenda. Cancele ou apague os compromissos antes de excluir.": { es: "Este contacto tiene {n} citas en la Agenda. Cancela o elimina las citas antes de eliminar el contacto." },
   "Abrir uso de IA": { es: "Abrir uso de IA" },
   "Abrir Radar": { es: "Abrir Radar" },
   "Peça a quem administra para revisar a conexão do WhatsApp.": { es: "Pide a quien administra que revise la conexión de WhatsApp." },
@@ -3430,6 +3433,14 @@ export const DICIONARIO: Traducoes = {
   "Seu sistema usa inteligência artificial em": { es: "Tu sistema usa inteligencia artificial en" },
   "Skills da IA": { es: "Skills de la IA" },
   "Skills instaladas": { es: "Skills instaladas" },
+  "Há uma versão nova desta skill no catálogo. Ao adotar, ela passa a ser a ativa; a versão atual continua no Histórico de versões e pode ser restaurada.": {
+    es: "Hay una versión nueva de esta skill en el catálogo. Al adoptarla pasa a ser la activa; la versión actual queda en el Historial de versiones y se puede restaurar.",
+  },
+  "Adotar versão nova": { es: "Adoptar versión nueva" },
+  "Adotando…": { es: "Adoptando…" },
+  "Versão nova adotada — a sua cópia agora usa a versão mais recente do catálogo.": {
+    es: "Versión nueva adoptada: tu copia ahora usa la versión más reciente del catálogo.",
+  },
   "Skills prontas, mantidas pela plataforma, disponíveis para instalar com um clique.": {
     es: "Skills listas para usar, mantenidas por la plataforma e instalables con un clic.",
   },
@@ -7568,8 +7579,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Contato anonimizado.": { es: "Contacto anonimizado." },
   "Anonimizar contato (LGPD)": { es: "Anonimizar contacto (LGPD)" },
-  "Esta ação é irreversível. O nome será substituído por \"Cliente Anonimizado #N\", email/telefone/CPF serão limpos, e atividades terão conteúdo redigido.": {
-    es: "Esta acción es irreversible. El nombre se reemplazará por \"Cliente Anonimizado #N\", se borrarán el email, el teléfono y el CPF, y se redactará el contenido de las actividades.",
+  "Esta ação é irreversível. O nome será substituído por \"Cliente Anonimizado #N\", email, telefone e documento serão limpos, e atividades terão conteúdo redigido.": {
+    es: "Esta acción es irreversible. El nombre se reemplazará por \"Cliente Anonimizado #N\", se borrarán el email, el teléfono y el documento, y se redactará el contenido de las actividades.",
   },
   "Justificativa (mínimo 10 caracteres)": { es: "Justificación (mínimo 10 caracteres)" },
   "Ex.: Solicitação formal do titular via email em DD/MM/YYYY": {
@@ -9321,6 +9332,7 @@ export const DICIONARIO: Traducoes = {
   "Faça login.": { es: "Inicia sesión." },
   "Faça login para continuar.": { es: "Inicia sesión para continuar." },
   "Falha ao atualizar o aviso.": { es: "No se pudo actualizar el aviso." },
+  "Já existe um aviso idêntico aberto nesta organização — reabrir duplicaria o alerta.": { es: "Ya existe un aviso idéntico abierto en esta organización: reabrir duplicaría la alerta." },
   "Falha ao carregar as propostas.": { es: "No se pudieron cargar las propuestas." },
   "Falha ao carregar conexões/knobs.": { es: "No se pudieron cargar las conexiones/knobs." },
   "Falha ao carregar o caso.": { es: "No se pudo cargar el caso." },
@@ -10455,8 +10467,8 @@ export const DICIONARIO: Traducoes = {
   },
   "e-mail inválido: ": { es: "e-mail inválido: " },
   "telefone inválido: ": { es: "teléfono inválido: " },
-  " (use DDI+DDD+número, ex.: +5511999998888)": {
-    es: " (usa código de país+código de área+número, ej.: +5511999998888)",
+  " (use o número com o código do país, por exemplo ": {
+    es: " (usa el número con el código del país, por ejemplo ",
   },
   "linha sem telefone nem e-mail": { es: "fila sin teléfono ni e-mail" },
   "Cabeçalho inválido:": { es: "Encabezado inválido:" },

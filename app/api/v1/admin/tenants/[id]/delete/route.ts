@@ -6,7 +6,7 @@
  *  - aqui: admin da plataforma com escopo `full` e MFA de sessão; a organização
  *    precisa estar SUSPENSA; o corpo traz o slug digitado como confirmação e o
  *    motivo (vai para a lápide da auditoria);
- *  - no banco (`fn_excluir_organizacao`, migration 0491): as mesmas três
+ *  - no banco (`fn_excluir_organizacao`, migration 0492): as mesmas três
  *    condições conferidas de novo, dentro da transação.
  *
  * O procedimento inteiro — desligar canais e integrações, a transação, o

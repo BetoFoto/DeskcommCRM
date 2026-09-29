@@ -2,7 +2,7 @@
  * EXCLUSÃO DE UMA ORGANIZAÇÃO — o procedimento inteiro, na ordem que não deixa
  * órfão.
  *
- * O banco faz a parte transacional (`fn_excluir_organizacao`, migration 0491):
+ * O banco faz a parte transacional (`fn_excluir_organizacao`, migration 0492):
  * lápide na auditoria, cascata em ~155 tabelas, conferência de que nada ficou.
  * O que mora FORA do Postgres não entra numa transação, e por isso a ordem é o
  * desenho:

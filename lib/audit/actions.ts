@@ -999,7 +999,7 @@ export const AUDIT_ACTIONS = [
   "company_people.updated",
   "contacts.person_linked",
   "imports.companies_people",
-  // Gestão de tenants pelo admin da plataforma (migration 0491).
+  // Gestão de tenants pelo admin da plataforma (migration 0492).
   // A LÁPIDE, gravada pelo banco dentro de `fn_excluir_organizacao`, com
   // `organization_id` nulo e `resource_id` = a organização excluída.
   "organization.deleted",

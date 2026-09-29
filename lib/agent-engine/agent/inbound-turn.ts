@@ -212,7 +212,11 @@ import type { DependenciasDoPonto } from '@/lib/ai/decisao/ponto';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
-import { anotarUltimaInboundVista, ultimaInboundJaRespondida } from './turno-ja-respondido';
+import {
+  anotarUltimaInboundVista,
+  respostaFicouObsoleta,
+  ultimaInboundJaRespondida,
+} from './turno-ja-respondido';
 
 /**
  * Superfície ESTÁTICA das tools do agente (description + inputSchema) — parte do
@@ -1115,6 +1119,11 @@ export interface InboundTurnKnobs {
   maxSendsPerTurn?: number;
   /** atraso do reagendamento em veto/queued herdado da F2-06 (SEND_QUEUED_RETRY_MS) */
   queuedRetryDelayMs: number;
+  /**
+   * Teto da régua de resposta obsoleta (RESPOSTA_OBSOLETA_TETO_MS) — ver
+   * `respostaFicouObsoleta`. Ausente = desligada (testes que não a exercitam).
+   */
+  respostaObsoletaTetoMs?: number;
   /** circuit breaker de tools por run (F2-15) — env TOOL_BREAKER_* */
   breaker: ToolBreakerThresholds;
   /**
@@ -2971,6 +2980,33 @@ async function executarTurnoDoAgente(
               message:
                 `você já enviou ${seq} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
                 'NÃO envie mais nada agora — encerre o turno e espere a resposta do lead.',
+            },
+          };
+        }
+        // RESPOSTA OBSOLETA: o cliente escreveu de novo enquanto este turno pensava.
+        // Só antes do PRIMEIRO envio — cortar a meio uma resposta já começada é pior
+        // que a duplicata. A mensagem nova tem job próprio, que lê a conversa inteira
+        // e responde a tudo de uma vez. Ver `respostaFicouObsoleta`.
+        if (
+          !preview &&
+          seq === 0 &&
+          (await respostaFicouObsoleta(
+            pool,
+            { organizationId: tenantId, conversationId: input.conversationId, jobId: liveJob().id },
+            deps.knobs.respostaObsoletaTetoMs ?? 0,
+          ))
+        ) {
+          runLog.info('resposta descartada — o cliente escreveu de novo durante o turno', {
+            job_id: liveJob().id,
+            conversation_id: input.conversationId,
+          });
+          return {
+            ok: false,
+            error: {
+              code: 'resposta_obsoleta',
+              message:
+                'O cliente mandou mensagem nova enquanto você escrevia; esta resposta ficou desatualizada e NÃO foi enviada. ' +
+                'NÃO chame send_message de novo neste turno — encerre agora. O próximo turno lê a conversa inteira e responde a tudo de uma vez.',
             },
           };
         }

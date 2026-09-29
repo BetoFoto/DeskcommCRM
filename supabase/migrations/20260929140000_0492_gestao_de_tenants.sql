@@ -1,4 +1,4 @@
--- 0491 — Gestão de tenants pelo admin da plataforma: suspensão que corta de
+-- 0492 — Gestão de tenants pelo admin da plataforma: suspensão que corta de
 -- verdade, exclusão completa e transacional, e o inventário de arquivos da
 -- organização no Storage.
 --

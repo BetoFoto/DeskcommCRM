@@ -100,7 +100,7 @@ export async function rodarUmaRodadaDeCampanha(
 ): Promise<ResultadoDaRodada> {
   // Organização que não opera não prospecta. A regra é UMA para o sistema
   // inteiro (`lib/tenants/estado.ts`): só `active` opera — a mesma que a RLS, a
-  // fila do agente e o dreno de eventos aplicam desde a migration 0491.
+  // fila do agente e o dreno de eventos aplicam desde a migration 0492.
   const idsSuspensas = await organizacoesParadas(admin);
 
   const promovidas = await promoverAgendadas(admin, idsSuspensas, agora);

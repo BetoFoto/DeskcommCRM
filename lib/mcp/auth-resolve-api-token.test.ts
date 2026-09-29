@@ -395,7 +395,7 @@ describe("validateBearerToken — a tradução para MCP não mudou", () => {
   });
 });
 
-describe("organização suspensa (migration 0491)", () => {
+describe("organização suspensa (migration 0492)", () => {
   it("token vivo de organização SUSPENSA é `tenant_suspended`", async () => {
     armar(achou(linhaViva({ organizations: { status: "suspended" } })));
     expect(await reasonDe(PLAINTEXT)).toBe("tenant_suspended");

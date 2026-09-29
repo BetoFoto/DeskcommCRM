@@ -2,7 +2,7 @@
  * O ESTADO DA ORGANIZAÇÃO — a única regra de "este tenant pode operar?".
  *
  * `organizations.status` aceita `active | suspended | redacted | archived`
- * (CHECK `organizations_status_check`). Até a migration 0491 cada consumidor
+ * (CHECK `organizations_status_check`). Até a migration 0492 cada consumidor
  * decidia sozinho se olhava a coluna, e quase nenhum olhava: suspender gravava
  * o status e só a tela de `/app` redirecionava — API, tokens, fila do agente,
  * automações e envio seguiam (auditoria de 28/09/2026, P3).

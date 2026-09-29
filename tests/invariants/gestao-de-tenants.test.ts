@@ -2,13 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
 /**
- * Gestão de tenants pelo admin da plataforma (migration 0491).
+ * Gestão de tenants pelo admin da plataforma (migration 0492).
  *
  * Duas promessas que só o Postgres consegue provar, porque moram em função
  * SECURITY DEFINER, policy e cascata de FK:
  *
  * 1. SUSPENDER CORTA. `fn_user_org_ids()` e `fn_user_role_in_org()` deixam de
- *    devolver a organização suspensa. Até a 0491 elas ignoravam
+ *    devolver a organização suspensa. Até a 0492 elas ignoravam
  *    `organizations.status`, e o JWT do membro seguia lendo tudo pelo PostgREST
  *    (auditoria de 28/09/2026, P3). Reativar devolve o acesso.
  * 2. EXCLUIR É COMPLETO. `fn_excluir_organizacao` apaga a organização inteira

@@ -8,7 +8,7 @@
  *
  *  1. Suspender corta o membro de verdade: a próxima navegação dele cai em
  *     `/account-suspended`, e a API responde `403 tenant_suspended`. Até a
- *     migration 0491 a suspensão só escondia a tela (auditoria 28/09/2026, P3).
+ *     migration 0492 a suspensão só escondia a tela (auditoria 28/09/2026, P3).
  *  2. O e-mail de acesso se corrige pela tela, e a prova é o LOGIN com o
  *     endereço novo — o antigo deixa de entrar.
  *  3. Reativar devolve o acesso.

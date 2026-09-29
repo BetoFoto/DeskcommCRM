@@ -90,7 +90,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { message: string
   }
 
   /**
-   * `neq` e `not(col, "in", ...)` entraram com a migration 0491: o dreno exclui
+   * `neq` e `not(col, "in", ...)` entraram com a migration 0492: o dreno exclui
    * as organizações que não operam (`lib/tenants/estado.ts`) — `neq` para
    * listá-las, `not in` para tirá-las da consulta. Mesmo caso do `lt` acima:
    * sem eles, o instrumento estoura e a lógica do dreno leva a culpa.
