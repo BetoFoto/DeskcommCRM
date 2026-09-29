@@ -17,19 +17,14 @@ vi.mock("@/lib/audit", () => ({
     passos.push("audit");
   }),
 }));
-vi.mock("@/lib/waha/client", () => ({
-  getWahaClient: () => ({
-    logoutSession: vi.fn(async () => {
-      passos.push("waha.logout");
-    }),
-    deleteSession: vi.fn(async () => {
-      passos.push("waha.delete");
-    }),
+vi.mock("@/lib/channels/desligar-da-organizacao", () => ({
+  desligarCanaisDaOrganizacao: vi.fn(async () => {
+    passos.push("canais.desligar");
+    return [{ id: "canal-1", provedor: "qr", desfecho: "ok" }];
   }),
 }));
 vi.mock("@/lib/wacalls/client", () => ({ getWacallsClient: () => null }));
 vi.mock("@/lib/voice/desparear", () => ({ despareaVoz: vi.fn() }));
-vi.mock("@/lib/channels/meta/webhook-override", () => ({ desfazerWebhookDoNumero: vi.fn() }));
 vi.mock("@/lib/webhooks/secrets", () => ({ decryptWebhookSecret: vi.fn() }));
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
@@ -63,17 +58,6 @@ function adminFalso(c: Cenario) {
         return leituraSimples(
           c.status === undefined ? null : { id: ORG, slug: "acme", status: c.status },
         );
-      }
-      if (tabela === "channel_sessions") {
-        return leituraSimples([
-          {
-            id: "canal-1",
-            provider: "waha",
-            waha_session_name: "sess-acme",
-            meta_phone_number_id: null,
-            meta_token_encrypted: null,
-          },
-        ]);
       }
       if (tabela === "tenant_integrations") return leituraSimples(null);
       throw new Error(`tabela inesperada: ${tabela}`);
@@ -173,7 +157,7 @@ describe("a ordem", () => {
     const r = await excluirOrganizacao(admin as never, entrada);
 
     const i = (p: string) => passos.findIndex((x) => x.startsWith(p));
-    expect(i("waha.logout")).toBeLessThan(i("rpc:fn_excluir_organizacao"));
+    expect(i("canais.desligar")).toBeLessThan(i("rpc:fn_excluir_organizacao"));
     expect(i("rpc:fn_excluir_organizacao")).toBeLessThan(i("storage:"));
     expect(i("rpc:fn_excluir_organizacao")).toBeLessThan(i("auth.delete:u1"));
     expect(passos.at(-1)).toBe("audit");

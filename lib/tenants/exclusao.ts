@@ -7,8 +7,9 @@
  * O que mora FORA do Postgres não entra numa transação, e por isso a ordem é o
  * desenho:
  *
- *   1. ANTES do banco, desligar o que fala com o mundo — sessão do WhatsApp no
- *      WAHA, webhook do número na Meta, voz, webhooks da Nuvemshop. Precisa ser
+ *   1. ANTES do banco, desligar o que fala com o mundo — os canais de mensagem
+ *      (`lib/channels/desligar-da-organizacao.ts`), a voz e os webhooks da
+ *      loja integrada. Precisa ser
  *      antes: é a credencial guardada nas linhas da organização que autoriza a
  *      chamada, e depois da cascata ela não existe mais. Best-effort: um serviço
  *      externo fora do ar não segura a exclusão que o admin pediu — o resultado
@@ -29,13 +30,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
-import { CHANNEL_PROVIDER_WAHA } from "@/lib/channels/capabilities";
-import { desfazerWebhookDoNumero } from "@/lib/channels/meta/webhook-override";
+import { desligarCanaisDaOrganizacao } from "@/lib/channels/desligar-da-organizacao";
 import { logger } from "@/lib/logger";
 import { NuvemshopApiClient } from "@/lib/nuvemshop/api-client";
 import { despareaVoz } from "@/lib/voice/desparear";
 import { getWacallsClient } from "@/lib/wacalls/client";
-import { getWahaClient } from "@/lib/waha/client";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 export type DesfechoExterno = "ok" | "falhou" | "nao_se_aplica";
@@ -74,73 +73,6 @@ const LOTE_DO_STORAGE = 100;
 
 function mensagemDe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-/** Passo 1a — cada canal da organização sai do transporte antes de a linha sumir. */
-async function desligarCanais(
-  admin: SupabaseClient,
-  orgId: string,
-): Promise<ResultadoDaExclusao["canais"]> {
-  const { data, error } = await admin
-    .from("channel_sessions")
-    .select("id, provider, waha_session_name, meta_phone_number_id, meta_token_encrypted")
-    .eq("organization_id", orgId);
-  if (error) throw new Error(`exclusao_canais: ${error.message}`);
-
-  const waha = getWahaClient();
-  const saida: ResultadoDaExclusao["canais"] = [];
-  for (const canal of (data ?? []) as Array<{
-    id: string;
-    provider: string;
-    waha_session_name: string | null;
-    meta_phone_number_id: string | null;
-    meta_token_encrypted: string | null;
-  }>) {
-    try {
-      if (canal.provider === CHANNEL_PROVIDER_WAHA) {
-        if (!waha || !canal.waha_session_name) {
-          saida.push({ id: canal.id, provedor: canal.provider, desfecho: "nao_se_aplica" });
-          continue;
-        }
-        await waha.logoutSession(canal.waha_session_name);
-        await waha.deleteSession(canal.waha_session_name);
-        saida.push({ id: canal.id, provedor: canal.provider, desfecho: "ok" });
-      } else if (canal.meta_token_encrypted && canal.meta_phone_number_id) {
-        const token = await decryptWebhookSecret(admin, canal.meta_token_encrypted);
-        if (!token) {
-          saida.push({
-            id: canal.id,
-            provedor: canal.provider,
-            desfecho: "falhou",
-            motivo: "credencial_ilegivel",
-          });
-          continue;
-        }
-        const desfecho = await desfazerWebhookDoNumero({
-          phoneNumberId: canal.meta_phone_number_id,
-          token,
-        });
-        saida.push({
-          id: canal.id,
-          provedor: canal.provider,
-          desfecho: desfecho.ok ? "ok" : "falhou",
-          ...(desfecho.ok
-            ? {}
-            : { motivo: String(desfecho.motivo ?? desfecho.etapa ?? "recusado") }),
-        });
-      } else {
-        saida.push({ id: canal.id, provedor: canal.provider, desfecho: "nao_se_aplica" });
-      }
-    } catch (err) {
-      saida.push({
-        id: canal.id,
-        provedor: canal.provider,
-        desfecho: "falhou",
-        motivo: mensagemDe(err),
-      });
-    }
-  }
-  return saida;
 }
 
 /** Passo 1b — a voz é por organização, não por canal. */
@@ -281,7 +213,7 @@ export async function excluirOrganizacao(
   }
 
   // 1. O que fala com o mundo, com as credenciais ainda no banco.
-  const canais = await desligarCanais(admin, entrada.orgId);
+  const canais = await desligarCanaisDaOrganizacao(admin, entrada.orgId);
   const voz = await desligarVoz(admin, entrada.orgId);
   const nuvemshop = await desligarNuvemshop(admin, entrada.orgId);
 
