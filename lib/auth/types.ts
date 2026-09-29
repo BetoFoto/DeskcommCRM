@@ -88,6 +88,13 @@ export interface UserOrgMembership {
    * então quem usa passa por `fusoValido` e cai em `FUSO_PADRAO`.
    */
   timezone?: string | null;
+  /**
+   * `organizations.status`. Só `active` opera (`lib/tenants/estado.ts`): o
+   * vínculo com uma organização suspensa continua na lista — é por ele que a
+   * aplicação sabe mostrar "conta suspensa" em vez de "você não pertence a
+   * nenhuma empresa" —, mas `resolveActiveOrg` nunca a devolve como ativa.
+   */
+  status?: import("@/lib/tenants/estado").EstadoDaOrganizacao;
 }
 
 export interface AuthUser {
