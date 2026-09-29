@@ -39,7 +39,9 @@ export default async function AccountSuspendedPage() {
   // Quem também participa de uma empresa ATIVA não fica preso aqui: a saída é a
   // mesma troca de organização do seletor do topo (`setActiveOrg`), que só
   // aceita organização ativa.
-  const authUser = user ? await loadAuthUser() : null;
+  // A tela de suspensão não pode cair por causa desta leitura: sem ela, só não
+  // oferece a troca de empresa.
+  const authUser = user ? await loadAuthUser().catch(() => null) : null;
   const escolhida = authUser ? await organizacaoEscolhida(authUser) : null;
   const outras = (authUser?.organizations ?? [])
     .filter((o) => organizacaoOpera(o.status) && o.organization_id !== escolhida?.organization_id)

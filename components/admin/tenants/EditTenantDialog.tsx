@@ -22,7 +22,8 @@ interface EditTenantDialogProps {
 function valoresIniciais(o: TenantOrganization): TenantInput {
   return {
     display_name: o.display_name,
-    legal_name: o.legal_name ?? o.display_name,
+    // Vazia fica vazia: o formulário exige a razão social e o admin a preenche.
+    legal_name: o.legal_name ?? "",
     cnpj: o.cnpj,
     country: o.country ?? "BR",
     timezone: o.timezone ?? "America/Sao_Paulo",

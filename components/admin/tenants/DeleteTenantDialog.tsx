@@ -144,7 +144,7 @@ export function DeleteTenantDialog({
           <div className="space-y-2">
             <Label htmlFor="delete-confirm">
               {t("Para confirmar, digite o identificador do tenant")}:{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">{slug}</code>
+              <code className="rounded-md bg-muted px-1 py-0.5 text-xs">{slug}</code>
             </Label>
             <Input
               id="delete-confirm"
