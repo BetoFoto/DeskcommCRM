@@ -56,7 +56,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const ids = (vinculos ?? []).map((v) => v.user_id as string);
   const { data: admins } = ids.length
-    ? await admin.from("platform_admins").select("user_id").in("user_id", ids).is("revoked_at", null)
+    ? await admin
+        .from("platform_admins")
+        .select("user_id")
+        .in("user_id", ids)
+        .is("revoked_at", null)
     : { data: [] as { user_id: string }[] };
   const deAdmins = new Set((admins ?? []).map((a) => a.user_id as string));
 

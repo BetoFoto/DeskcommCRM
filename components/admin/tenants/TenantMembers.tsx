@@ -44,8 +44,8 @@ export function TenantMembers({ organizationId, readOnly = false }: TenantMember
   const membros = data?.data.members ?? [];
 
   return (
-    <div className="rounded-lg border bg-card p-5 space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="space-y-4 rounded-lg border bg-card p-5">
+      <h2 className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
         {t("Membros e e-mails de acesso")}
       </h2>
 
@@ -79,7 +79,9 @@ export function TenantMembers({ organizationId, readOnly = false }: TenantMember
                 disabled={m.is_platform_admin}
                 title={
                   m.is_platform_admin
-                    ? t("O e-mail de um administrador da plataforma só é trocado pelo próprio dono da conta.")
+                    ? t(
+                        "O e-mail de um administrador da plataforma só é trocado pelo próprio dono da conta.",
+                      )
                     : undefined
                 }
               >
@@ -129,18 +131,26 @@ function TrocarEmailDialog({
       {
         onSuccess: () => {
           toast.success(t("E-mail alterado."), {
-            description: t("A pessoa já entra com o novo endereço, e a recuperação de senha vai para ele."),
+            description: t(
+              "A pessoa já entra com o novo endereço, e a recuperação de senha vai para ele.",
+            ),
           });
           setEmail("");
           onClose();
         },
-        onError: (err: Error) => toast.error(t("Não foi possível alterar o e-mail"), { description: err.message }),
+        onError: (err: Error) =>
+          toast.error(t("Não foi possível alterar o e-mail"), { description: err.message }),
       },
     );
   }
 
   return (
-    <Dialog open={!!membro} onOpenChange={(aberto) => { if (!aberto) fechar(); }}>
+    <Dialog
+      open={!!membro}
+      onOpenChange={(aberto) => {
+        if (!aberto) fechar();
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("Alterar e-mail de acesso")}</DialogTitle>
@@ -170,7 +180,9 @@ function TrocarEmailDialog({
               </p>
             )}
             {valido && igual && (
-              <p className="text-xs text-muted-foreground">{t("Este já é o e-mail desta pessoa.")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("Este já é o e-mail desta pessoa.")}
+              </p>
             )}
           </div>
         </div>

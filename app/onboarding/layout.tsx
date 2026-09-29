@@ -25,8 +25,8 @@ export default async function OnboardingLayout({ children }: { children: React.R
   if (!activeOrg) {
     const escolhida = await organizacaoEscolhida(user);
     if (escolhida && !organizacaoOpera(escolhida.status)) redirect("/account-suspended");
-    redirect("/get-started");
   }
+  if (!activeOrg) redirect("/get-started");
 
   const { state, onboardedAt } = await loadOnboardingState(activeOrg.orgId);
   if (onboardedAt) redirect("/app/inbox");

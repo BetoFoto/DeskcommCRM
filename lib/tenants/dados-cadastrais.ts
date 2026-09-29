@@ -11,15 +11,14 @@
  * `organizations` é a do admin da plataforma (ver o comentário em
  * `app/actions/settings/updateTenant.ts`). Quem chama já decidiu a autorização.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 import { paisesOferecidos } from "@/lib/legal/perfil-do-pais";
 import type { TenantInput } from "@/lib/schemas/settings";
+import type { createAdminClient } from "@/lib/supabase/admin";
 
 export type ResultadoDaGravacao = { ok: true } | { ok: false; erro: string };
 
 export async function gravarDadosCadastrais(
-  admin: SupabaseClient,
+  admin: ReturnType<typeof createAdminClient>,
   orgId: string,
   dados: TenantInput,
 ): Promise<ResultadoDaGravacao> {

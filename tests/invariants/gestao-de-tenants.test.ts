@@ -291,7 +291,10 @@ describe("fn_excluir_organizacao", () => {
     // A outra organização de quem estava nas duas fica intacta.
     expect(sobra.rows[0]!.b).toBe("1");
 
-    const lapide = await pool.query<{ organization_id: string | null; metadata: Record<string, unknown> }>(
+    const lapide = await pool.query<{
+      organization_id: string | null;
+      metadata: Record<string, unknown>;
+    }>(
       `select organization_id, metadata from api_audit_log
         where action = 'organization.deleted' and resource_id = $1`,
       [ORG_X],

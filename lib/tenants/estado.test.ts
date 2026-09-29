@@ -47,7 +47,10 @@ describe("filtroSemParadas", () => {
 
 describe("escolherMembroAtivo", () => {
   it("sem cookie, prefere a primeira organização que OPERA — não para na suspensa por causa da ordem", () => {
-    const escolhido = escolherMembroAtivo([vinculo("A", "suspended"), vinculo("B", "active")], undefined);
+    const escolhido = escolherMembroAtivo(
+      [vinculo("A", "suspended"), vinculo("B", "active")],
+      undefined,
+    );
     expect(escolhido?.organization_id).toBe("B");
   });
 
@@ -57,7 +60,10 @@ describe("escolherMembroAtivo", () => {
   });
 
   it("todas paradas: cai na primeira (o layout mostra a tela de suspensão)", () => {
-    const escolhido = escolherMembroAtivo([vinculo("A", "suspended"), vinculo("B", "suspended")], undefined);
+    const escolhido = escolherMembroAtivo(
+      [vinculo("A", "suspended"), vinculo("B", "suspended")],
+      undefined,
+    );
     expect(escolhido?.organization_id).toBe("A");
   });
 });

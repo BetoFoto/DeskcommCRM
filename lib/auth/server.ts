@@ -245,14 +245,16 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
   }
 
   const rows = (rawMemberships ?? []) as RawMembershipRow[];
-  const primeiro = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+  const primeiro = <T>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
   // A organização SUSPENSA sai do alcance da RLS (migration 0491): o embed dela
   // volta nulo, mas o vínculo continua na lista. Para essas — e só essas — o
   // estado e o nome vêm pelo service role, filtrados pelos ids do próprio
   // vínculo do usuário (fonte confiável). Sem isto, a pessoa de uma empresa
   // suspensa veria "—" e cairia na tela de "sem organização".
-  const foraDoAlcance = rows.filter((r) => !primeiro(r.organizations)).map((r) => r.organization_id);
+  const foraDoAlcance = rows
+    .filter((r) => !primeiro(r.organizations))
+    .map((r) => r.organization_id);
   const paradas = new Map<string, OrgJoin>();
   if (foraDoAlcance.length > 0) {
     const { data: orgsParadas, error: paradasErro } = await createAdminClient()

@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server";
 import { z } from "zod";
-import { requirePlatformAdmin, requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdmin";
+import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdminWrite";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { tenantSchema } from "@/lib/schemas/settings";

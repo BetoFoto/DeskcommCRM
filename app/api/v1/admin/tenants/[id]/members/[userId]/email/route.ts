@@ -35,7 +35,7 @@ import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit, hashEmail } from "@/lib/audit";
-import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdmin";
+import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdminWrite";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -77,7 +77,12 @@ export async function PATCH(
       .eq("organization_id", id)
       .eq("user_id", userId)
       .maybeSingle(),
-    admin.from("platform_admins").select("user_id").eq("user_id", userId).is("revoked_at", null).maybeSingle(),
+    admin
+      .from("platform_admins")
+      .select("user_id")
+      .eq("user_id", userId)
+      .is("revoked_at", null)
+      .maybeSingle(),
   ]);
   if (!vinculo) return fail("not_found", "Membro não encontrado neste tenant.", 404, { requestId });
   if (ehAdmin) {
@@ -105,13 +110,23 @@ export async function PATCH(
   if (error) {
     // GoTrue: `email_exists` (422) quando outro login já usa o endereço.
     const code = (error as { code?: string }).code;
-    if (code === "email_exists" || /already (been )?registered|already exists/i.test(error.message)) {
-      return fail("state_conflict", "Este e-mail já é usado por outro login nesta instalação.", 409, {
-        requestId,
-      });
+    if (
+      code === "email_exists" ||
+      /already (been )?registered|already exists/i.test(error.message)
+    ) {
+      return fail(
+        "state_conflict",
+        "Este e-mail já é usado por outro login nesta instalação.",
+        409,
+        {
+          requestId,
+        },
+      );
     }
     if (code === "validation_failed" || code === "email_address_invalid") {
-      return fail("validation_failed", "O provedor de autenticação recusou este e-mail.", 400, { requestId });
+      return fail("validation_failed", "O provedor de autenticação recusou este e-mail.", 400, {
+        requestId,
+      });
     }
     return fail("internal_error", "Não foi possível trocar o e-mail agora.", 500, { requestId });
   }

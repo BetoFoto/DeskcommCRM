@@ -53,7 +53,8 @@ export interface ResultadoDaExclusao {
 
 export class ExclusaoRecusada extends Error {
   constructor(
-    public readonly codigo: "not_found" | "state_conflict" | "confirmacao_divergente" | "motivo_curto",
+    public readonly codigo:
+      "not_found" | "state_conflict" | "confirmacao_divergente" | "motivo_curto",
     message: string,
   ) {
     super(message);
@@ -107,7 +108,12 @@ async function desligarCanais(
       } else if (canal.meta_token_encrypted && canal.meta_phone_number_id) {
         const token = await decryptWebhookSecret(admin, canal.meta_token_encrypted);
         if (!token) {
-          saida.push({ id: canal.id, provedor: canal.provider, desfecho: "falhou", motivo: "credencial_ilegivel" });
+          saida.push({
+            id: canal.id,
+            provedor: canal.provider,
+            desfecho: "falhou",
+            motivo: "credencial_ilegivel",
+          });
           continue;
         }
         const desfecho = await desfazerWebhookDoNumero({
@@ -118,13 +124,20 @@ async function desligarCanais(
           id: canal.id,
           provedor: canal.provider,
           desfecho: desfecho.ok ? "ok" : "falhou",
-          ...(desfecho.ok ? {} : { motivo: String(desfecho.motivo ?? desfecho.etapa ?? "recusado") }),
+          ...(desfecho.ok
+            ? {}
+            : { motivo: String(desfecho.motivo ?? desfecho.etapa ?? "recusado") }),
         });
       } else {
         saida.push({ id: canal.id, provedor: canal.provider, desfecho: "nao_se_aplica" });
       }
     } catch (err) {
-      saida.push({ id: canal.id, provedor: canal.provider, desfecho: "falhou", motivo: mensagemDe(err) });
+      saida.push({
+        id: canal.id,
+        provedor: canal.provider,
+        desfecho: "falhou",
+        motivo: mensagemDe(err),
+      });
     }
   }
   return saida;
@@ -138,7 +151,10 @@ async function desligarVoz(admin: SupabaseClient, orgId: string): Promise<Desfec
     const r = await despareaVoz(admin, wacalls, orgId);
     return r.desapareado ? "ok" : "nao_se_aplica";
   } catch (err) {
-    logger.warn("[exclusao] falha ao desparear a voz", { organization_id: orgId, erro: mensagemDe(err) });
+    logger.warn("[exclusao] falha ao desparear a voz", {
+      organization_id: orgId,
+      erro: mensagemDe(err),
+    });
     return "falhou";
   }
 }
@@ -156,11 +172,15 @@ async function desligarNuvemshop(admin: SupabaseClient, orgId: string): Promise<
     store_metadata: { store_id?: string | number } | null;
     webhook_subscriptions: Record<string, { id: number | null }> | null;
   } | null;
-  if (!linha?.oauth_access_token_encrypted || !linha.store_metadata?.store_id) return "nao_se_aplica";
+  if (!linha?.oauth_access_token_encrypted || !linha.store_metadata?.store_id)
+    return "nao_se_aplica";
   try {
     const accessToken = await decryptWebhookSecret(admin, linha.oauth_access_token_encrypted);
     if (!accessToken) return "falhou";
-    const client = new NuvemshopApiClient({ storeId: String(linha.store_metadata.store_id), accessToken });
+    const client = new NuvemshopApiClient({
+      storeId: String(linha.store_metadata.store_id),
+      accessToken,
+    });
     let falhou = false;
     for (const assinatura of Object.values(linha.webhook_subscriptions ?? {})) {
       if (!assinatura?.id) continue;
@@ -187,7 +207,10 @@ async function limparArquivos(
 ): Promise<ResultadoDaExclusao["arquivos"]> {
   const { data, error } = await admin.rpc("fn_arquivos_da_organizacao", { p_org: orgId });
   if (error) {
-    logger.warn("[exclusao] inventário do Storage falhou", { organization_id: orgId, erro: error.message });
+    logger.warn("[exclusao] inventário do Storage falhou", {
+      organization_id: orgId,
+      erro: error.message,
+    });
     return { encontrados: 0, removidos: 0, falhas: 1 };
   }
   const porBucket = new Map<string, string[]>();
@@ -231,7 +254,10 @@ export async function excluirOrganizacao(
 ): Promise<ResultadoDaExclusao> {
   const motivo = entrada.motivo.trim();
   if (motivo.length < 10) {
-    throw new ExclusaoRecusada("motivo_curto", "Informe o motivo da exclusão (mínimo 10 caracteres).");
+    throw new ExclusaoRecusada(
+      "motivo_curto",
+      "Informe o motivo da exclusão (mínimo 10 caracteres).",
+    );
   }
 
   const { data: org, error: orgErr } = await admin
@@ -270,8 +296,10 @@ export async function excluirOrganizacao(
   if (rpcErr) {
     // Recusas do próprio banco (corrida com uma reativação, por exemplo) viram
     // a mesma recusa que a checagem de cima daria.
-    if (rpcErr.code === "PT409") throw new ExclusaoRecusada("state_conflict", "A organização não está mais suspensa.");
-    if (rpcErr.code === "PT404") throw new ExclusaoRecusada("not_found", "Organização não encontrada.");
+    if (rpcErr.code === "PT409")
+      throw new ExclusaoRecusada("state_conflict", "A organização não está mais suspensa.");
+    if (rpcErr.code === "PT404")
+      throw new ExclusaoRecusada("not_found", "Organização não encontrada.");
     throw new Error(`exclusao_banco: ${rpcErr.message}`);
   }
   const banco = resultado as {

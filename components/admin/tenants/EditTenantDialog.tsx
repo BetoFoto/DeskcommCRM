@@ -45,7 +45,12 @@ export function EditTenantDialog({ open, onClose, organization }: EditTenantDial
   const salvar = useUpdateTenantData(organization.id);
 
   return (
-    <Dialog open={open} onOpenChange={(aberto) => { if (!aberto) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(aberto) => {
+        if (!aberto) onClose();
+      }}
+    >
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("Editar dados do tenant")}</DialogTitle>

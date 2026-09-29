@@ -60,11 +60,19 @@ function adminFalso(c: Cenario) {
   return {
     from: (tabela: string) => {
       if (tabela === "organizations") {
-        return leituraSimples(c.status === undefined ? null : { id: ORG, slug: "acme", status: c.status });
+        return leituraSimples(
+          c.status === undefined ? null : { id: ORG, slug: "acme", status: c.status },
+        );
       }
       if (tabela === "channel_sessions") {
         return leituraSimples([
-          { id: "canal-1", provider: "waha", waha_session_name: "sess-acme", meta_phone_number_id: null, meta_token_encrypted: null },
+          {
+            id: "canal-1",
+            provider: "waha",
+            waha_session_name: "sess-acme",
+            meta_phone_number_id: null,
+            meta_token_encrypted: null,
+          },
         ]);
       }
       if (tabela === "tenant_integrations") return leituraSimples(null);
@@ -75,7 +83,11 @@ function adminFalso(c: Cenario) {
       if (fn === "fn_excluir_organizacao") {
         if (c.rpcErro) return { data: null, error: c.rpcErro };
         return {
-          data: { slug: "acme", contagens: { membros: 2 }, usuarios_removiveis: c.removiveis ?? [] },
+          data: {
+            slug: "acme",
+            contagens: { membros: 2 },
+            usuarios_removiveis: c.removiveis ?? [],
+          },
           error: null,
         };
       }
@@ -119,7 +131,9 @@ beforeEach(() => {
 describe("recusas — nada é tocado", () => {
   it("organização ATIVA: recusa com state_conflict, sem desligar canal nem chamar o banco", async () => {
     const admin = adminFalso({ status: "active" });
-    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toMatchObject({ codigo: "state_conflict" });
+    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toMatchObject({
+      codigo: "state_conflict",
+    });
     expect(passos).toEqual([]);
   });
 
@@ -133,7 +147,9 @@ describe("recusas — nada é tocado", () => {
 
   it("organização inexistente: not_found", async () => {
     const admin = adminFalso({});
-    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toBeInstanceOf(ExclusaoRecusada);
+    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toBeInstanceOf(
+      ExclusaoRecusada,
+    );
   });
 
   it("motivo curto: recusa antes de ler o banco", async () => {
@@ -168,7 +184,11 @@ describe("a ordem", () => {
   });
 
   it("login que o GoTrue recusa apagar fica como MANTIDO — a exclusão não cai", async () => {
-    const admin = adminFalso({ status: "suspended", removiveis: ["u1", "u2"], deleteUserFalhaPara: ["u2"] });
+    const admin = adminFalso({
+      status: "suspended",
+      removiveis: ["u1", "u2"],
+      deleteUserFalhaPara: ["u2"],
+    });
     const r = await excluirOrganizacao(admin as never, entrada);
     expect(r.usuarios.removidos).toEqual(["u1"]);
     expect(r.usuarios.mantidos.map((m) => m.id)).toEqual(["u2"]);
@@ -180,7 +200,9 @@ describe("a ordem", () => {
       rpcErro: { code: "PT409", message: "organizacao_nao_suspensa" },
       removiveis: ["u1"],
     });
-    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toMatchObject({ codigo: "state_conflict" });
+    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toMatchObject({
+      codigo: "state_conflict",
+    });
     expect(passos.some((p) => p.startsWith("storage:") || p.startsWith("auth.delete"))).toBe(false);
     expect(audit).not.toHaveBeenCalled();
   });

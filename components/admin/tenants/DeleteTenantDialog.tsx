@@ -92,7 +92,12 @@ export function DeleteTenantDialog({
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={(aberto) => { if (!aberto) fechar(); }}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(aberto) => {
+        if (!aberto) fechar();
+      }}
+    >
       <AlertDialogContent className="max-w-lg">
         <AlertDialogHeader>
           <AlertDialogTitle>{t("Excluir tenant definitivamente")}</AlertDialogTitle>
@@ -104,9 +109,11 @@ export function DeleteTenantDialog({
               <p>
                 {t("Serão apagados")}: {counts.user_count} {t("vínculos de usuário")},{" "}
                 {counts.conversations_count} {t("conversas")}, {counts.messages_count}{" "}
-                {t("mensagens")}, {counts.leads_count} {t("leads")} {t("e todos os demais dados de")}{" "}
-                <strong>{displayName}</strong>{" "}
-                {t("— arquivos, agentes, integrações e configurações. As sessões de WhatsApp são desconectadas.")}
+                {t("mensagens")}, {counts.leads_count} {t("leads")}{" "}
+                {t("e todos os demais dados de")} <strong>{displayName}</strong>{" "}
+                {t(
+                  "— arquivos, agentes, integrações e configurações. As sessões de WhatsApp são desconectadas.",
+                )}
               </p>
               <p>
                 {t(
@@ -121,7 +128,9 @@ export function DeleteTenantDialog({
           <div className="space-y-2">
             <Label htmlFor="delete-reason">
               {t("Motivo da exclusão")}{" "}
-              <span className="text-xs font-normal text-muted-foreground">({motivo.length}/500)</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                ({motivo.length}/500)
+              </span>
             </Label>
             <Textarea
               id="delete-reason"

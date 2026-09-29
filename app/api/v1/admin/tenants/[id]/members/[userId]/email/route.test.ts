@@ -13,13 +13,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/auth/requirePlatformAdmin", () => ({ requirePlatformAdminWrite: vi.fn() }));
+vi.mock("@/lib/auth/requirePlatformAdminWrite", () => ({ requirePlatformAdminWrite: vi.fn() }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
-vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined), hashEmail: (e: string) => `h${e.length}` }));
+vi.mock("@/lib/audit", () => ({
+  audit: vi.fn(async () => undefined),
+  hashEmail: (e: string) => `h${e.length}`,
+}));
 
 import { audit } from "@/lib/audit";
-import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdmin";
+import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdminWrite";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { PATCH } from "./route";
@@ -76,7 +79,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(requirePlatformAdminWrite).mockResolvedValue({
     ok: true,
-    ctx: { user: { id: ADMIN }, platformAdmin: { user_id: ADMIN, scope: "full", mfa_required: false } },
+    ctx: {
+      user: { id: ADMIN },
+      platformAdmin: { user_id: ADMIN, scope: "full", mfa_required: false },
+    },
   } as never);
 });
 
@@ -85,20 +91,31 @@ describe("troca de e-mail de membro", () => {
     const { updateUserById } = adminFalso({});
     const res = await pedir("  Certo@Exemplo.COM ");
     expect(res.status).toBe(200);
-    expect(updateUserById).toHaveBeenCalledWith(ALVO, { email: "certo@exemplo.com", email_confirm: true });
+    expect(updateUserById).toHaveBeenCalledWith(ALVO, {
+      email: "certo@exemplo.com",
+      email_confirm: true,
+    });
   });
 
   it("audita só hashes — o e-mail em claro não entra no registro", async () => {
     adminFalso({});
     await pedir("certo@exemplo.com");
-    const chamada = vi.mocked(audit).mock.calls[0]![0] as { action: string; metadata: Record<string, unknown> };
+    const chamada = vi.mocked(audit).mock.calls[0]![0] as {
+      action: string;
+      metadata: Record<string, unknown>;
+    };
     expect(chamada.action).toBe("member.email_changed");
     expect(JSON.stringify(chamada.metadata)).not.toContain("certo@exemplo.com");
     expect(chamada.metadata.email_hash_novo).toBe(`h${"certo@exemplo.com".length}`);
   });
 
   it("e-mail já usado por outro login: 409, sem 500", async () => {
-    adminFalso({ erroNoUpdate: { code: "email_exists", message: "A user with this email address has already been registered" } });
+    adminFalso({
+      erroNoUpdate: {
+        code: "email_exists",
+        message: "A user with this email address has already been registered",
+      },
+    });
     const res = await pedir("ocupado@exemplo.com");
     expect(res.status).toBe(409);
   });

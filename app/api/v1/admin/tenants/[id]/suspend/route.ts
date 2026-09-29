@@ -11,7 +11,7 @@ import { type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdmin";
+import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdminWrite";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";

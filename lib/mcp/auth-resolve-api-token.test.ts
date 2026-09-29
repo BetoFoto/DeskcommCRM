@@ -395,7 +395,6 @@ describe("validateBearerToken — a tradução para MCP não mudou", () => {
   });
 });
 
-
 describe("organização suspensa (migration 0491)", () => {
   it("token vivo de organização SUSPENSA é `tenant_suspended`", async () => {
     armar(achou(linhaViva({ organizations: { status: "suspended" } })));
@@ -410,7 +409,14 @@ describe("organização suspensa (migration 0491)", () => {
   });
 
   it("token revogado de organização suspensa continua respondendo como revogado", async () => {
-    armar(achou(linhaViva({ revoked_at: "2026-09-01T10:00:00.000Z", organizations: { status: "suspended" } })));
+    armar(
+      achou(
+        linhaViva({
+          revoked_at: "2026-09-01T10:00:00.000Z",
+          organizations: { status: "suspended" },
+        }),
+      ),
+    );
     expect(await reasonDe(PLAINTEXT)).toBe("revoked");
   });
 

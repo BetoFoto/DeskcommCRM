@@ -18,7 +18,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdmin";
+import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdminWrite";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -58,9 +58,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     body = bodySchema.parse(await req.json());
   } catch {
-    return fail("validation_failed", "Informe a confirmação e o motivo (mínimo 10 caracteres).", 400, {
-      requestId,
-    });
+    return fail(
+      "validation_failed",
+      "Informe a confirmação e o motivo (mínimo 10 caracteres).",
+      400,
+      {
+        requestId,
+      },
+    );
   }
 
   try {
