@@ -11,7 +11,7 @@ import { type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdminWrite";
+import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
@@ -33,11 +33,12 @@ export async function POST(
   const requestId = randomUUID();
   const { id: tenantId } = await params;
 
-  // Escopo `full` + MFA de sessão: o acesso de suporte é de leitura, e mudar o
-  // estado de um tenant é das ações mais pesadas da plataforma.
-  const guarda = await requirePlatformAdminWrite(requestId);
-  if (!guarda.ok) return guarda.response;
-  const adminCtx = guarda.ctx;
+  let adminCtx: Awaited<ReturnType<typeof requirePlatformAdmin>>;
+  try {
+    adminCtx = await requirePlatformAdmin();
+  } catch {
+    return fail("forbidden", "Platform admin required", 403, { requestId });
+  }
 
   // Validate body
   let body: z.infer<typeof bodySchema>;

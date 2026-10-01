@@ -5,7 +5,6 @@
  * dedicados (ex. ai_agent.dispatch_requested → agent-dispatcher) não têm
  * handler no registry e ficam intocados.
  */
-import { filtroSemParadas, organizacoesParadas } from "@/lib/tenants/estado";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   avisoDeEventoMorto,
@@ -248,12 +247,7 @@ export async function drainEventLog(
     });
   }
 
-  // Organização suspensa não dispara automação, webhook de saída nem nenhum
-  // outro consumidor (lib/tenants/estado.ts): os eventos dela ficam `pending` e
-  // voltam à fila na reativação. Mesmo molde da rodada de campanhas.
-  const semParadas = filtroSemParadas(await organizacoesParadas(admin));
-
-  let consulta = admin
+  const { data: rows, error } = await admin
     .from("event_log")
     // `created_at` viaja porque um consumidor não consegue distinguir "evento de
     // agora" de "evento de três dias parado em `pending`" sem ele — e o drain
@@ -267,8 +261,6 @@ export async function drainEventLog(
     .in("event_type", handledTypes)
     .order("created_at", { ascending: true })
     .limit(limit);
-  if (semParadas) consulta = consulta.not("organization_id", "in", semParadas);
-  const { data: rows, error } = await consulta;
 
   if (error) {
     logger.error("[event-log.drain] select failed", { error: error.message });

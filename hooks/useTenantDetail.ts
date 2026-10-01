@@ -17,7 +17,6 @@ export interface TenantOrganization {
   status: "active" | "suspended" | "redacted";
   onboarded_at: string | null;
   suspended_at: string | null;
-  suspended_reason: string | null;
   created_at: string;
   settings: Record<string, unknown> | null;
   // Dados cadastrais editáveis (os mesmos de Configurações › Empresa).

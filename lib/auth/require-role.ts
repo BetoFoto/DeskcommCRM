@@ -20,8 +20,7 @@ import type { NextResponse } from "next/server";
 
 import { fail, type ApiError } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { loadAuthUser, mfaEmDivida, organizacaoEscolhida, resolveActiveOrg } from "@/lib/auth/server";
-import { CODIGO_ORGANIZACAO_SUSPENSA, organizacaoOpera } from "@/lib/tenants/estado";
+import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK, type ActiveOrg, type AuthUser, type Role } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
@@ -64,10 +63,7 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
   }
   let org: ActiveOrg | null;
   if (organizationId) {
-    const encontrada = user.organizations.find((o) => o.organization_id === organizationId);
-    // Mesma regra de `resolveActiveOrg`: vínculo com organização parada não
-    // autoriza nada, nem pelo caminho do override.
-    const membership = encontrada && organizacaoOpera(encontrada.status) ? encontrada : undefined;
+    const membership = user.organizations.find((o) => o.organization_id === organizationId);
     org = user.support?.organization_id === organizationId
       ? { orgId: organizationId, name: user.support.name, role: user.support.access_mode === "full" ? "admin" : "viewer" }
       : membership
@@ -83,23 +79,6 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
     org = await resolveActiveOrg(user);
   }
   if (!org) {
-    // Distinguir "a empresa está suspensa" de "você não tem empresa" não é
-    // enfeite: o cliente (`lib/api/client.ts`) leva o primeiro caso para a tela
-    // de suspensão, e o segundo para a decisão do servidor.
-    const alvo = organizationId
-      ? user.organizations.find((o) => o.organization_id === organizationId)
-      : await organizacaoEscolhida(user);
-    if (alvo && !organizacaoOpera(alvo.status)) {
-      return {
-        ok: false,
-        response: fail(
-          CODIGO_ORGANIZACAO_SUSPENSA,
-          t("Esta organização está suspensa. Fale com quem administra o sistema."),
-          403,
-          { requestId },
-        ),
-      };
-    }
     return {
       ok: false,
       response: fail("forbidden_tenant", t("Sem organização ativa."), 403, { requestId }),

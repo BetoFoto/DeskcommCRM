@@ -47,17 +47,13 @@ export function TenantActions({ organization, counts }: TenantActionsProps) {
           {t("Ações")}
         </h2>
 
-        {/* Impersonate (S-11.07) — o acompanhamento só vale para tenant ativo. */}
+        {/* Impersonate (S-11.07) */}
         <ImpersonateButton
           organizationId={organizationId}
           displayName={displayName}
-          disabled={!canSuspend}
+          disabled={isRedacted}
           disabledReason={
-            isRedacted
-              ? t("Tenant redigido — ação não disponível")
-              : isSuspended
-                ? t("Tenant suspenso — reative para acompanhar")
-                : undefined
+            isRedacted ? t("Tenant redigido — ação não disponível") : undefined
           }
         />
 

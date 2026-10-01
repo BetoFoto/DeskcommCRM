@@ -1,14 +1,7 @@
 import { InterfaceRefresh } from "@/hooks/auth/InterfaceRefresh";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import {
-  isMfaEnrolled,
-  loadAuthUser,
-  organizacaoEscolhida,
-  requiresMfa,
-  resolveActiveOrg,
-} from "@/lib/auth/server";
-import { organizacaoOpera } from "@/lib/tenants/estado";
+import { isMfaEnrolled, loadAuthUser, requiresMfa, resolveActiveOrg } from "@/lib/auth/server";
 import { DEFAULT_VISIBILITY_MODE, roleAtLeast, type VisibilityMode } from "@/lib/auth/types";
 import { clientePelaAgendaLigado } from "@/lib/schemas/settings";
 import { AuthProvider } from "@/hooks/auth/AuthProvider";
@@ -38,14 +31,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect("/login");
 
   let activeOrg = await resolveActiveOrg(user);
-
-  // Organização suspensa: `resolveActiveOrg` não a devolve (nada opera nela),
-  // mas a pessoa precisa SABER que a empresa foi suspensa — não cair na tela de
-  // "sem organização" nem na de acesso revogado.
-  if (!activeOrg && !user.support) {
-    const escolhida = await organizacaoEscolhida(user);
-    if (escolhida && !organizacaoOpera(escolhida.status)) redirect("/account-suspended");
-  }
 
   // Sem organização ativa existem DOIS estados, e eles pedem telas opostas:
   //

@@ -4385,7 +4385,6 @@ export const DICIONARIO: Traducoes = {
   "Suspender tenant": { es: "Suspender tenant" },
   "Reativar tenant": { es: "Reactivar tenant" },
   // ─── Admin de plataforma: gestão de tenants (editar, excluir, e-mail de acesso) ───
-  "Você também participa de outras empresas que seguem ativas.": { es: "También participas en otras empresas que siguen activas." },
   "Tenant excluído.": { es: "Tenant eliminado." },
   "Logins removidos": { es: "Accesos eliminados" },
   "Logins mantidos (pertencem a outra empresa ou são referenciados)": { es: "Accesos conservados (pertenecen a otra empresa o están referenciados)" },
@@ -4406,7 +4405,6 @@ export const DICIONARIO: Traducoes = {
   "Excluir definitivamente": { es: "Eliminar definitivamente" },
   "Editar dados do tenant": { es: "Editar datos del tenant" },
   "Os mesmos dados que o administrador da empresa vê em Configurações › Empresa.": { es: "Los mismos datos que el administrador de la empresa ve en Configuración › Empresa." },
-  "Tenant suspenso — reative para acompanhar": { es: "Tenant suspendido — reactívalo para acompañar" },
   "Editar dados": { es: "Editar datos" },
   "Excluir tenant": { es: "Eliminar tenant" },
   "Para excluir um tenant, suspenda-o primeiro.": { es: "Para eliminar un tenant, suspéndelo primero." },
@@ -4427,8 +4425,6 @@ export const DICIONARIO: Traducoes = {
   "Novo e-mail": { es: "Nuevo correo" },
   "Este já é o e-mail desta pessoa.": { es: "Este ya es el correo de esta persona." },
   "Salvar e-mail": { es: "Guardar correo" },
-  "Esta organização está suspensa. Fale com quem administra o sistema.": { es: "Esta organización está suspendida. Habla con quien administra el sistema." },
-  "Esta organização está suspensa: nenhuma mensagem sai.": { es: "Esta organización está suspendida: no sale ningún mensaje." },
   "Tenant redigido — ações de gestão não disponíveis.": {
     es: "Tenant anonimizado — acciones de gestión no disponibles.",
   },
