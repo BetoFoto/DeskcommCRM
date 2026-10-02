@@ -92,7 +92,7 @@ test("o dono cria o plano, os limites valem pela tela, e prazo e desligar a chav
   const contextos: BrowserContext[] = [];
   let planoId: string | null = null;
   let falhaDoCenario: unknown;
-  const chaveAntes = await db.from("platform_config").select("valor").eq("chave", CHAVE).maybeSingle();
+  const chaveAntes = await db.from("platform_config").select("valor, eh_segredo, semeado_do_env").eq("chave", CHAVE).maybeSingle();
   if (chaveAntes.error) throw chaveAntes.error;
 
   try {
@@ -153,6 +153,7 @@ test("o dono cria o plano, os limites valem pela tela, e prazo e desligar a chav
     await page.getByRole("button", { name: "Atribuir plano" }).click();
     await expect(page.getByText("Teste grátis", { exact: true })).toBeVisible();
     const assinatura = await db.from("cobranca_assinaturas").select("estado, plano_id").eq("organization_id", orgB).single();
+    if (assinatura.error) throw assinatura.error;
     expect(assinatura.data).toEqual({ estado: "trial", plano_id: planoId });
     await page.screenshot({ path: `${EVIDENCIA}/tenant-card-cobranca.png`, fullPage: true });
 
@@ -200,6 +201,7 @@ test("o dono cria o plano, os limites valem pela tela, e prazo e desligar a chav
     await page.getByRole("button", { name: "Dar prazo" }).click();
     await expect.poll(async () => (await estadoDaOrg(orgB)).status).toBe("active");
     const prazo = await db.from("cobranca_assinaturas").select("prazo_extra_ate").eq("organization_id", orgB).single();
+    if (prazo.error) throw prazo.error;
     expect(prazo.data?.prazo_extra_ate).not.toBeNull();
 
     // ── 7. Suspensa de novo; desligar a chave libera ────────────────────────
@@ -207,7 +209,12 @@ test("o dono cria o plano, os limites valem pela tela, e prazo e desligar a chav
     await page.goto("/admin/sistema");
     const interruptor = page.getByRole("switch", { name: "Cobrança dos seus clientes" });
     await expect(interruptor).toHaveAttribute("aria-checked", "true");
-    await expect(page.getByText(/serão liberadas ao desligar: \d+/)).toBeVisible();
+    // A contagem esperada vem do banco (B já está suspensa por cobrança): a tela tem de somá-la.
+    const suspensas = await db.from("organizations").select("id", { count: "exact", head: true })
+      .eq("status", "suspended").eq("suspended_kind", "cobranca");
+    if (suspensas.error) throw suspensas.error;
+    expect(suspensas.count).toBeGreaterThanOrEqual(1);
+    await expect(page.getByText(`serão liberadas ao desligar: ${suspensas.count}`)).toBeVisible();
     await page.screenshot({ path: `${EVIDENCIA}/sistema-desligar-libera.png`, fullPage: true });
     await interruptor.click();
     await expect.poll(async () => (await estadoDaOrg(orgB)).status).toBe("active");
@@ -227,7 +234,10 @@ test("o dono cria o plano, os limites valem pela tela, e prazo e desligar a chav
       // A chave volta ao que era ANTES desta spec (Review Focus 5).
       const volta = chaveAntes.data
         ? await db.from("platform_config").upsert(
-            { chave: CHAVE, valor: chaveAntes.data.valor, eh_segredo: false, semeado_do_env: false },
+            {
+              chave: CHAVE, valor: chaveAntes.data.valor,
+              eh_segredo: chaveAntes.data.eh_segredo, semeado_do_env: chaveAntes.data.semeado_do_env,
+            },
             { onConflict: "chave" },
           )
         : await db.from("platform_config").delete().eq("chave", CHAVE);
