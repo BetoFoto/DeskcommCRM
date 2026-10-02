@@ -51,18 +51,26 @@ describe("card Cobrança do tenant", () => {
     await u.selectOptions(screen.getByLabelText("Plano da empresa"), PRO.id);
     await u.click(screen.getByRole("button", { name: "Trocar plano" }));
     await waitFor(() => expect(h.patch).toHaveBeenCalledWith(BASE, { plano_id: PRO.id }));
+    await waitFor(() => expect(h.invalidate).toHaveBeenCalledTimes(1));
     await u.type(screen.getByLabelText("Dar prazo até"), "2026-10-20");
     await u.click(screen.getByRole("button", { name: "Dar prazo" }));
     await waitFor(() => expect(h.post).toHaveBeenCalledWith(`${BASE}/prazo`, { ate: fimDoDia("2026-10-20") }));
+    await waitFor(() => expect(h.invalidate).toHaveBeenCalledTimes(2));
     await u.click(screen.getByRole("button", { name: "Tornar isenta" }));
     await waitFor(() => expect(h.del).toHaveBeenCalledWith(BASE));
+    // Ações e banner da página leem o cache ["admin","tenant",id]; o refresh não o toca.
+    await waitFor(() => expect(h.invalidate).toHaveBeenCalledTimes(3));
+    expect(h.invalidate).toHaveBeenLastCalledWith({ queryKey: ["admin", "tenant", ORG] });
   });
 
-  it("suspensa por cobrança sem linha: avisa e ainda oferece tornar isenta (cura a tentativa que caiu)", () => {
+  it("suspensa por cobrança sem linha: avisa e ainda oferece tornar isenta (cura a tentativa que caiu)", async () => {
+    const u = userEvent.setup();
     render(<CardDeCobranca orgId={ORG} planos={[BASICO]} assinatura={null} suspensaPorCobranca rotuloAntigo="pro" />);
     expect(screen.getByRole("status").textContent).toContain("Suspensa por falta de pagamento");
     expect(screen.getByRole("button", { name: "Tornar isenta" })).toBeTruthy();
     expect(screen.getByText(/Rótulo antigo:/).textContent).toContain("pro");
+    await u.click(screen.getByRole("button", { name: "Tornar isenta" }));
+    await waitFor(() => expect(h.invalidate).toHaveBeenCalledWith({ queryKey: ["admin", "tenant", ORG] }));
   });
 
   it("⭐ trocar para um plano onde o uso não cabe: a LISTA do que remover (D-4), sem toast genérico nem refresh", async () => {
