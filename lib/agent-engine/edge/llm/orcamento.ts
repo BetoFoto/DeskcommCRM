@@ -379,6 +379,9 @@ retrata as (
    where organization_id = $1
      and kind in ('budget_exceeded','budget_warning')
      and status = 'open'
+     -- Só os itens do orçamento da ORG, e o legado sem referência. O item do
+     -- teto do PLANO (ref_kind 'plano') tem retratação própria, em SQL_TETO_DO_PLANO.
+     and (ref_kind is null or ref_kind = 'ai_budget')
      and (
        (select teto from orc) is null
        or (select teto from orc) < ${PISO_DE_TETO_CENTS}
