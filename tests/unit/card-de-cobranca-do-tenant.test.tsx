@@ -7,8 +7,9 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({ post: vi.fn(), patch: vi.fn(), del: vi.fn(), refresh: vi.fn(), showApiError: vi.fn() }));
+const h = vi.hoisted(() => ({ post: vi.fn(), patch: vi.fn(), del: vi.fn(), refresh: vi.fn(), invalidate: vi.fn(), showApiError: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: h.invalidate }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/api/client", () => ({ apiClient: { post: h.post, patch: h.patch, delete: h.del } }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: h.showApiError }));
@@ -39,6 +40,7 @@ describe("card Cobrança do tenant", () => {
     await u.click(screen.getByRole("button", { name: "Atribuir plano" }));
     await waitFor(() => expect(h.post).toHaveBeenCalledWith(BASE, { plano_id: PRO.id }));
     expect(h.refresh).toHaveBeenCalled();
+    expect(h.invalidate).toHaveBeenCalledWith({ queryKey: ["admin", "tenant", ORG] });
     expect(screen.queryByRole("button", { name: "Dar prazo" })).toBeNull();
   });
 

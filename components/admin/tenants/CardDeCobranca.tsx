@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -80,6 +81,7 @@ export function CardDeCobranca({
   const t = useT();
   const idioma = useIdioma();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const ativos = planos.filter((p) => p.arquivado_em === null);
   const [escolhido, setEscolhido] = useState(ativos[0]?.id ?? "");
   const [prazo, setPrazo] = useState("");
@@ -96,6 +98,8 @@ export function CardDeCobranca({
       await acao();
       toast.success(sucesso);
       router.refresh();
+      // O refresh só renova o servidor; ações e banner leem o cache do react-query.
+      await queryClient.invalidateQueries({ queryKey: ["admin", "tenant", orgId] });
     } catch (err) {
       const lista = oQueRemover(err);
       if (lista.length > 0) setRemover(lista);
