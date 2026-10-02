@@ -13791,6 +13791,12 @@ export const DICIONARIO: Traducoes = {
   "Para reativar, use o card Cobrança: Dar prazo ou Tornar isenta.": { es: "Para reactivarla, usa la tarjeta Cobro: Dar plazo o Dejar exenta." },
   "Nenhum plano ativo para escolher.": { es: "No hay planes activos para elegir." },
   "Criar um plano em Cobrança": { es: "Crear un plan en Cobro" },
+  // ─── Cobrança do revendedor — painel da assinatura (PR 2) ───
+  "Seu plano": { es: "Tu plan" },
+  "Sua empresa não tem plano de cobrança: não paga e não tem limites.": { es: "Tu empresa no tiene plan de cobro: no paga y no tiene límites." },
+  "{usados} de {limite}": { es: "{usados} de {limite}" },
+  "Uso de IA no mês": { es: "Uso de IA en el mes" },
+  "Para trocar de plano, fale com quem administra este sistema.": { es: "Para cambiar de plan, habla con quien administra este sistema." },
 };
 
 /**
