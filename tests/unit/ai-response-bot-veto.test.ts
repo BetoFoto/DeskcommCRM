@@ -47,6 +47,8 @@ const AGENTE_LEGADO = {
 interface StubTables {
   conversations: Record<string, unknown> | null;
   messages: Record<string, unknown> | null;
+  /** O que `ai_agents` devolve; o padrão é o `rag_bot` legado. */
+  ai_agents?: Record<string, unknown>;
 }
 
 function makeAdminStub(tables: StubTables, queried: string[]) {
@@ -57,7 +59,7 @@ function makeAdminStub(tables: StubTables, queried: string[]) {
         : table === "messages"
           ? tables.messages
           : table === "ai_agents"
-            ? AGENTE_LEGADO
+            ? (tables.ai_agents ?? AGENTE_LEGADO)
             : null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chain: any = {
@@ -163,5 +165,29 @@ describe("guard determinístico do bot — assignee_kind (G3-02)", () => {
 
     const result = await processMessageReceived(eventRow);
     expect(result.reason).toBe("engine_owns_reply");
+  });
+});
+
+describe("sem candidato legado, o worker não olha a conversa", () => {
+  it("org só com agente publicado: uma consulta e sai", async () => {
+    // O caso de quase toda instalação: o engine atende, e este worker recebe
+    // `message.received` de cada mensagem mesmo assim.
+    const queried: string[] = [];
+    vi.mocked(createAdminClient).mockReturnValue(
+      makeAdminStub(
+        {
+          conversations: convRow("ai"),
+          messages: { id: MSG_ID, body: "quero falar com um atendente", direction: "inbound", organization_id: ORG_ID },
+          ai_agents: { ...AGENTE_LEGADO, kind: "mcp_agent", published_version_id: "99999999-9999-4999-8999-999999999999" },
+        },
+        queried,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ) as any,
+    );
+
+    const result = await processMessageReceived(eventRow);
+
+    expect(result).toEqual({ status: "skipped", reason: "agent_inactive_or_missing", detail: undefined });
+    expect(queried, "leu a conversa de uma org que este worker não atende").toEqual(["ai_agents"]);
   });
 });
