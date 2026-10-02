@@ -14,16 +14,20 @@
  *  - dentro do webhook, o modelo não é chamado; a linha fica `pending`, sem
  *    contar tentativa, e o outro consumidor da mesma mensagem já entra em
  *    `consumed_by` (não roda de novo);
- *  - o dreno seguinte, de fora do webhook (o laço do worker), pega a linha na
- *    hora — `next_attempt_at` não fica no futuro — e só o sentimento roda.
+ *  - o adiamento põe `next_attempt_at` no futuro: o webhook SEGUINTE não
+ *    reivindica a linha de novo (com "agora", cada inbound a regravava e, numa
+ *    rajada, as adiadas ocupavam o lote do dreno do webhook);
+ *  - vencido o prazo, o dreno de fora do webhook (o laço do worker) roda só o
+ *    sentimento e fecha a linha.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/env", () => ({ env: {} }));
 vi.mock("@/workers/ai-sentiment-worker", () => ({ processSentiment: vi.fn() }));
 
 import { registerHandler, type EventHandler } from "@/lib/event-log/dispatcher";
 import { drainEventLog } from "@/lib/event-log/drain";
+import { ADIAMENTO_DO_DRENO_EM_REQUEST_MS } from "@/lib/escalacao/aviso-ao-suporte";
 import { comOrigemDeRequest } from "@/lib/event-log/origem-do-dreno";
 import { processSentiment } from "@/workers/ai-sentiment-worker";
 import { AI_SENTIMENT_HANDLER_KEY, aiSentimentHandler } from "@/workers/ai-sentiment-worker.handler";
@@ -102,6 +106,10 @@ beforeEach(() => {
   vi.mocked(processSentiment).mockResolvedValue({ skipped: false, sentiment_score: 0.8 });
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("sentimento no dreno de dentro do webhook", () => {
   it("adia sem chamar o modelo, sem contar tentativa e sem perder o evento", async () => {
     const eventos = [evento()];
@@ -115,14 +123,28 @@ describe("sentimento no dreno de dentro do webhook", () => {
     expect(linha).toMatchObject({ status: "pending", attempts: 0, consumed_by: ["outro-consumidor.v1"] });
     expect(
       Date.parse(String(linha!.next_attempt_at)),
-      "o adiamento empurrou a linha para o futuro: o laço do worker não a pegaria na hora",
-    ).toBeLessThanOrEqual(Date.now());
+      "a linha adiada ficou vencida: o próximo webhook a reivindica de novo",
+    ).toBeGreaterThan(Date.now());
   });
 
-  it("o dreno seguinte, fora do webhook, roda só o sentimento e fecha a linha", async () => {
+  it("o webhook seguinte não reivindica de novo a linha adiada", async () => {
+    const eventos = [evento()];
+    await comOrigemDeRequest(() => drainEventLog(fazerAdmin(eventos)));
+    const adiadaPara = eventos[0]!.next_attempt_at;
+
+    const resumo = await comOrigemDeRequest(() => drainEventLog(fazerAdmin(eventos)));
+
+    expect(resumo.scanned, "o segundo webhook pegou a linha que o primeiro adiou").toBe(0);
+    expect(outro).toHaveBeenCalledTimes(1);
+    expect(eventos[0]!.next_attempt_at, "a linha foi regravada pelo segundo webhook").toBe(adiadaPara);
+  });
+
+  it("vencido o adiamento, o dreno de fora do webhook roda só o sentimento e fecha a linha", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
     const eventos = [evento()];
     await comOrigemDeRequest(() => drainEventLog(fazerAdmin(eventos)));
 
+    vi.setSystemTime(Date.now() + ADIAMENTO_DO_DRENO_EM_REQUEST_MS);
     const resumo = await drainEventLog(fazerAdmin(eventos));
 
     expect(processSentiment).toHaveBeenCalledTimes(1);

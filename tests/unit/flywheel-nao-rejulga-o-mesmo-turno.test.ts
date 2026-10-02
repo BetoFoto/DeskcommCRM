@@ -12,8 +12,12 @@
  * aplicando, em JS, só os predicados que o SQL ESCREVE — `not exists` de
  * veredito, a janela `make_interval`, o `distinct on (j.contact_id)` — e
  * guarda os vereditos que o INSERT grava. Tirar um predicado do SQL tira o
- * filtro correspondente daqui, e o caso que depende dele fica vermelho. A
- * sintaxe da consulta contra um banco de verdade NÃO é medida por este arquivo.
+ * filtro correspondente daqui, e o caso que depende dele fica vermelho.
+ *
+ * A POSIÇÃO do `not exists` também é lida do SQL: dentro da subconsulta (antes
+ * do `) t`) ele filtra ANTES do `distinct on`, fora dela, DEPOIS — e é essa
+ * ordem que o caso "um turno por contato" vigia. A sintaxe da consulta contra
+ * um banco de verdade NÃO é medida por este arquivo.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -52,13 +56,15 @@ function poolFalso(turnos: Turno[]) {
       if (/make_interval\(secs => \$2/.test(sql) && janelaS !== null) {
         ls = ls.filter((t) => t.idadeMs < janelaS * 1000);
       }
+      const posNotExists = sql.search(/not exists \(\s*select 1 from flywheel_judge_verdicts/);
+      const naoJulgados = () => (ls = ls.filter((t) => !julgados.has(t.job_id)));
+      const antesDoDistinct = posNotExists >= 0 && posNotExists < sql.indexOf(") t");
+      if (antesDoDistinct) naoJulgados();
       if (/distinct on \(j\.contact_id\)/.test(sql)) {
         const vistos = new Set<string>();
         ls = ls.filter((t) => !vistos.has(t.contact_id) && vistos.add(t.contact_id));
       }
-      if (/not exists \(\s*select 1 from flywheel_judge_verdicts/.test(sql)) {
-        ls = ls.filter((t) => !julgados.has(t.job_id));
-      }
+      if (posNotExists >= 0 && !antesDoDistinct) naoJulgados();
       return { rows: ls.slice(0, params[0] as number), rowCount: ls.length };
     }
     if (sql.includes("insert into flywheel_judge_verdicts")) {
