@@ -13720,6 +13720,9 @@ export const DICIONARIO: Traducoes = {
   "Abrir plano e cobrança": { es: "Abrir plan y facturación" },
   "O uso de IA do plano acabou": { es: "Se agotó el uso de IA del plan" },
   "O uso de IA incluído no plano acabou neste mês. As conversas foram para a equipe. Peça a quem administra o sistema para trocar de plano, cadastre uma chave de IA própria ou aguarde o próximo mês.": { es: "El uso de IA incluido en el plan se agotó este mes. Las conversaciones pasaron al equipo. Pide a quien administra el sistema que cambie el plan, registra una clave de IA propia o espera al próximo mes." },
+  // ─── Cobrança do revendedor — módulo (PR 2) ───
+  "Cobrança dos seus clientes": { es: "Cobro a tus clientes" },
+  "Você cria planos e cobra as empresas desta instalação, com teste grátis e suspensão de quem não paga.": { es: "Creas planes y cobras a las empresas de esta instalación, con prueba gratis y suspensión de quien no paga." },
 };
 
 /**
