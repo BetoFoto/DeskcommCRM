@@ -101,6 +101,10 @@ describe("POST /admin/tenants/[id]/assinatura/prazo — Dar prazo (D-6)", () => 
     m.org = { id: TENANT, status: "suspended", suspended_kind: "cobranca" };
     m.rpc = { data: null, error: { code: "XX000", message: "boom" } };
     expect((await POST(pedido({ ate: em(10) }), ctx())).status).toBe(500);
+    expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "cobranca.prazo_concedido",
+      metadata: expect.objectContaining({ reativada: false }),
+    }));
   });
 
   it("chave desligada → 404; support_readonly → 403; id inválido → 404", async () => {

@@ -69,10 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const reativacao = await reativarSeSuspensaPorCobranca(admin, org, adminCtx.user.id);
-  if (!reativacao) {
-    return fail("internal_error", "O prazo foi gravado, mas a reativação falhou. Tente de novo.", 500, { requestId });
-  }
-
+  // O prazo já foi gravado: a mutação audita mesmo quando a reativação falha.
   void audit({
     action: "cobranca.prazo_concedido",
     actorUserId: adminCtx.user.id,
@@ -82,7 +79,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     resourceType: "cobranca_assinatura",
     resourceId: tenantId,
     requestId,
-    metadata: { ate: ate.toISOString(), reativada: reativacao.reativada },
+    metadata: { ate: ate.toISOString(), reativada: reativacao?.reativada ?? false },
   });
+  if (!reativacao) {
+    return fail("internal_error", "O prazo foi gravado, mas a reativação falhou. Tente de novo.", 500, { requestId });
+  }
   return ok({ prazo_extra_ate: ate.toISOString(), reativada: reativacao.reativada }, { requestId });
 }
