@@ -24,7 +24,7 @@ import { logger } from "@/lib/logger";
 import { assertProspectingDelivery } from "./guard";
 import { campaignConfigSchema } from "./schema";
 import { ProspectingError } from "./provider";
-import { OrgNaoOperanteError, idsDeOrgsParadas } from "@/lib/organizacao/operante";
+import { OrgNaoOperanteError } from "@/lib/organizacao/operante";
 import {
   withProspectingLock,
   synchronizeSearch,
@@ -348,13 +348,13 @@ export async function sendNextCandidate(
 
 export async function tickProspecting(pool: pg.Pool, admin: SupabaseClient) {
   // Organização parada (suspensa, redigida, arquivada) não prospecta: a busca é
-  // paga e a abordagem sai para fora. O corte é no SQL, ANTES do `limit 20`: a
-  // ordem é `min(updated_at)`, e a org pulada nunca toca `updated_at` — filtrar
-  // depois a deixaria no topo para sempre, com as operantes esperando atrás.
-  const paradas = await idsDeOrgsParadas(admin);
+  // paga e a abordagem sai para fora. O corte é no SQL, antes do `limit 20`:
+  // a ordem é `min(updated_at)`, e a org pulada nunca toca `updated_at` —
+  // filtrar depois a deixaria no topo para sempre. A régua é a SQL
+  // `fn_org_operante` (mesma de `organizations.status = 'active'`) — não se
+  // trafega a lista de ids das paradas na consulta (cortaria em `max_rows`).
   const { rows: organizations } = await pool.query<{ organization_id: string }>(
-    "select organization_id from prospecting_campaigns where (status='running' or search_status in ('starting','running')) and organization_id <> all($1::uuid[]) group by organization_id order by min(updated_at) limit 20",
-    [paradas],
+    "select pc.organization_id from prospecting_campaigns pc where (pc.status='running' or pc.search_status in ('starting','running')) and public.fn_org_operante(pc.organization_id) group by pc.organization_id order by min(pc.updated_at) limit 20",
   );
   const deadline = Date.now() + 180000;
   let processed = 0;
