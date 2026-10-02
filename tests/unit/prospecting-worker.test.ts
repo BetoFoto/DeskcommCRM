@@ -236,15 +236,16 @@ describe("gradual outreach", () => {
 });
 
 describe("tick da prospecção × organização parada", () => {
-  it("exclui as paradas NO SQL, antes do limit — filtrar depois deixaria a parada no topo para sempre", async () => {
-    const parada = "20000000-0000-4000-8000-000000000002";
-    mocks.paradas.mockResolvedValue([parada]);
+  it("exclui as paradas NO SQL, via fn_org_operante, antes do limit — sem lista de ids na query (issue #2015)", async () => {
     const query = vi.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }));
     await tickProspecting({ query } as never, {} as never);
     const [sql, params] = query.mock.calls[0]!;
-    expect(sql).toMatch(/organization_id <> all\(\$1::uuid\[\]\)/);
-    expect(sql.indexOf("<> all")).toBeLessThan(sql.indexOf("limit 20"));
-    expect(params).toEqual([[parada]]);
+    expect(sql).toMatch(/fn_org_operante/);
+    expect(sql.indexOf("fn_org_operante")).toBeLessThan(sql.indexOf("limit 20"));
+    // Nenhuma lista de ids de org parada é carregada nem passada à query — a
+    // régua SQL decide no banco, e a query não cortaria em `max_rows`.
+    expect(sql).not.toMatch(/organization_id <> all/);
+    expect(params ?? []).toEqual([]);
   });
 });
 
