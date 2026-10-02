@@ -13797,6 +13797,10 @@ export const DICIONARIO: Traducoes = {
   "{usados} de {limite}": { es: "{usados} de {limite}" },
   "Uso de IA no mês": { es: "Uso de IA en el mes" },
   "Para trocar de plano, fale com quem administra este sistema.": { es: "Para cambiar de plan, habla con quien administra este sistema." },
+  // ─── Cobrança do revendedor — faixa de teste (PR 2) ───
+  "Seu teste grátis termina em {n} dias.": { es: "Tu prueba gratis termina en {n} días." },
+  "Seu teste grátis termina nas próximas 24 horas.": { es: "Tu prueba gratis termina en las próximas 24 horas." },
+  "Ver o plano": { es: "Ver el plan" },
 };
 
 /**
