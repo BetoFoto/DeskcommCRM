@@ -13711,6 +13711,15 @@ export const DICIONARIO: Traducoes = {
   // ─── Cobrança do revendedor — aviso da volta (PR 2) ───
   "A conta foi reativada — há o que revisar": { es: "La cuenta fue reactivada — hay algo para revisar" },
   "A IA não respondeu nem vai responder sozinha às conversas que chegaram durante a suspensão: abra o Inbox e procure-as nas abas Fila e Automático. Os agendamentos e os passos de follow-up que este aviso cita também não voltam sozinhos: confira em IA › Follow-ups.": { es: "La IA no respondió ni responderá sola a las conversaciones que llegaron durante la suspensión: abre el Inbox y búscalas en las pestañas Cola y Automático. Las programaciones y los pasos de seguimiento que cita este aviso tampoco vuelven solos: revísalos en IA › Seguimientos." },
+  // ─── Limites do plano de cobrança (spec cobrança do revendedor §5) ───
+  "Seu plano permite {n} pessoas e todas as vagas estão ocupadas. Revogue o acesso de alguém em Equipe ou peça a quem administra o sistema para trocar de plano.": { es: "Tu plan permite {n} personas y todas las plazas están ocupadas. Revoca el acceso de alguien en Equipo o pide a quien administra el sistema que cambie el plan." },
+  "Seu plano permite {n} números conectados. Exclua um número em Conexões ou peça a quem administra o sistema para trocar de plano.": { es: "Tu plan permite {n} números conectados. Elimina un número en Conexiones o pide a quien administra el sistema que cambie el plan." },
+  "Seu plano permite 1 pessoa e a vaga está ocupada. Revogue o acesso de alguém em Equipe ou peça a quem administra o sistema para trocar de plano.": { es: "Tu plan permite 1 persona y la plaza está ocupada. Revoca el acceso de alguien en Equipo o pide a quien administra el sistema que cambie el plan." },
+  "Seu plano permite 1 número conectado. Exclua um número em Conexões ou peça a quem administra o sistema para trocar de plano.": { es: "Tu plan permite 1 número conectado. Elimina un número en Conexiones o pide a quien administra el sistema que cambie el plan." },
+  "A empresa que te convidou atingiu o limite de pessoas do plano. Avise quem te convidou.": { es: "La empresa que te invitó alcanzó el límite de personas de su plan. Avisa a quien te invitó." },
+  "Abrir plano e cobrança": { es: "Abrir plan y facturación" },
+  "O uso de IA do plano acabou": { es: "Se agotó el uso de IA del plan" },
+  "O uso de IA incluído no plano acabou neste mês. As conversas foram para a equipe. Peça a quem administra o sistema para trocar de plano, cadastre uma chave de IA própria ou aguarde o próximo mês.": { es: "El uso de IA incluido en el plan se agotó este mes. Las conversaciones pasaron al equipo. Pide a quien administra el sistema que cambie el plan, registra una clave de IA propia o espera al próximo mes." },
 };
 
 /**
