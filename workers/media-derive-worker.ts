@@ -11,6 +11,7 @@ import { extractPdfText } from "@/lib/ai/rag/extractors/pdf";
 import { visaoEmVigor } from "@/lib/ai/pontos/capacidade-em-vigor";
 import { PONTO_TRANSCRICAO_DE_AUDIO, PONTO_VISAO_DE_IMAGEM } from "@/lib/ai/pontos/registro";
 import { costCents } from "@/lib/agent-engine/edge/llm/pricing";
+import { normalizarErro } from "@/lib/agent-engine/edge/llm/run-model-call";
 import { resolveOrgLlmConfig, type LlmEdgeConfig } from "@/lib/agent-engine/edge/llm/credentials";
 import { createDefaultRegistry } from "@/lib/agent-engine/edge/llm/providers";
 import { createPool } from "@/lib/agent-engine/db/pool";
@@ -452,20 +453,28 @@ function buildDeriveDeps(
     }
     const modelo = llm.defaultModel ?? "";
     const inicio = Date.now();
-    const res = await generateText({
-      model: factory(llm.apiKey, modelo, baseUrlDaVisao ?? undefined),
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Descreva objetivamente esta imagem em 1-2 frases, em português, para um atendente de vendas entender o que o cliente enviou." },
-            // AI SDK v7: file part com mediaType (o antigo image part é deprecated).
-            { type: "file", data: buffer, mediaType: mime.split(";")[0]! },
-          ],
-        },
-      ],
-    });
-    registrarChamadaPaga(admin, orgId, () => {
+    let res: Awaited<ReturnType<typeof generateText>>;
+    try {
+      res = await generateText({
+        model: factory(llm.apiKey, modelo, baseUrlDaVisao ?? undefined),
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Descreva objetivamente esta imagem em 1-2 frases, em português, para um atendente de vendas entender o que o cliente enviou." },
+              // AI SDK v7: file part com mediaType (o antigo image part é deprecated).
+              { type: "file", data: buffer, mediaType: mime.split(";")[0]! },
+            ],
+          },
+        ],
+      });
+    } catch (err) {
+      registrarChamadaDeMidia(admin, orgId, () =>
+        linhaDeFalha(err, { purpose: PONTO_VISAO_DE_IMAGEM, provider: llm.provider, model: modelo, inicio }),
+      );
+      throw err;
+    }
+    registrarChamadaDeMidia(admin, orgId, () => {
       const uso = {
         inputTokens: res.usage.inputTokens ?? 0,
         outputTokens: res.usage.outputTokens ?? 0,
@@ -586,8 +595,8 @@ function buildDeriveDeps(
   };
 }
 
-/** A linha de `llm_calls` de uma chamada paga deste worker, sem os campos fixos. */
-interface ChamadaPagaDeMidia {
+/** A linha de `llm_calls` de uma chamada deste worker, sem a organização. */
+interface ChamadaDeMidia {
   purpose: typeof PONTO_VISAO_DE_IMAGEM | typeof PONTO_TRANSCRICAO_DE_AUDIO;
   provider: string;
   model: string;
@@ -598,22 +607,53 @@ interface ChamadaPagaDeMidia {
   /** null = preço desconhecido; 0 diria "grátis" à tela de uso e ao teto. */
   cost_cents: number | null;
   latency_ms: number;
+  /** Ausente = `ok`. */
+  status?: "erro";
+  error_code?: string;
+  error_message?: string;
+  http_status?: number | null;
 }
 
 /**
- * Grava em `llm_calls` uma chamada que JÁ saiu e foi paga — visão, transcrição
- * e os frames de vídeo, que passam pelas mesmas deps. Sem esta linha o gasto de
- * mídia ficava fora da tela de uso e do teto de orçamento, que leem `llm_calls`.
+ * A linha de uma chamada que SAIU e falhou no provedor. Sem ela a tabela que
+ * explica ficava vazia justo no caso que precisa de explicação (a mesma lição
+ * de `registrarFalha` em `run-model-call.ts`, cuja classificação é reusada para
+ * as duas telas darem o mesmo nome ao mesmo erro).
+ */
+function linhaDeFalha(
+  err: unknown,
+  d: { purpose: ChamadaDeMidia["purpose"]; provider: string; model: string; inicio: number },
+): ChamadaDeMidia {
+  return {
+    purpose: d.purpose,
+    provider: d.provider,
+    model: d.model,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+    cost_cents: null,
+    latency_ms: Date.now() - d.inicio,
+    status: "erro",
+    ...normalizarErro(err),
+  };
+}
+
+/**
+ * Grava em `llm_calls` uma chamada que JÁ saiu — visão, transcrição e os frames
+ * de vídeo, que passam pelas mesmas deps —, deu certo ou falhou. Sem esta linha
+ * o gasto de mídia ficava fora da tela de uso e do teto de orçamento, que leem
+ * `llm_calls`, e a falha ficava fora de Execuções.
  *
  * Insert direto, não `logInvocation`: o `InvocationKind` de lá espelha o CHECK
  * de `ai_invocations` (invariante de vocabulário), e `llm_calls.purpose` não
  * tem CHECK. Fire-and-forget: a linha de custo nunca derruba a derivação — e
  * por isso a montagem também fica dentro do try.
  */
-function registrarChamadaPaga(
+function registrarChamadaDeMidia(
   admin: ReturnType<typeof createAdminClient>,
   orgId: string,
-  montar: () => ChamadaPagaDeMidia,
+  montar: () => ChamadaDeMidia,
 ): void {
   try {
     const linha = montar();
@@ -658,8 +698,16 @@ function comCustoRegistrado(
   return {
     transcribe: async (audio, mime) => {
       const inicio = Date.now();
-      const texto = await servico.transcribe(audio, mime);
-      registrarChamadaPaga(ctx.admin, ctx.orgId, () => ({
+      let texto: string;
+      try {
+        texto = await servico.transcribe(audio, mime);
+      } catch (err) {
+        registrarChamadaDeMidia(ctx.admin, ctx.orgId, () =>
+          linhaDeFalha(err, { purpose: PONTO_TRANSCRICAO_DE_AUDIO, provider: ctx.provider, model: ctx.model, inicio }),
+        );
+        throw err;
+      }
+      registrarChamadaDeMidia(ctx.admin, ctx.orgId, () => ({
         purpose: PONTO_TRANSCRICAO_DE_AUDIO,
         provider: ctx.provider,
         model: ctx.model,

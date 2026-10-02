@@ -252,13 +252,42 @@ describe("worker de mídia: chamada paga grava em llm_calls", () => {
     expect(llmCallsInsertMock).not.toHaveBeenCalled();
   });
 
-  it("transcrição que falha no provedor não grava linha de sucesso", async () => {
+  it("transcrição que falha no provedor grava a linha de erro e o erro continua subindo", async () => {
     comAudio();
     transcribeDoSvcMock.mockRejectedValueOnce(new Error("transcription_401"));
 
     await deriveMessageMedia(eventRow());
-    await expect(depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg")).rejects.toThrow();
+    await expect(depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg")).rejects.toThrow(
+      "transcription_401",
+    );
 
-    expect(llmCallsInsertMock).not.toHaveBeenCalled();
+    expect(llmCallsInsertMock).toHaveBeenCalledTimes(1);
+    const linha = llmCallsInsertMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(linha).toMatchObject({
+      organization_id: "org1",
+      purpose: PONTO_TRANSCRICAO_DE_AUDIO,
+      status: "erro",
+      cost_cents: null,
+      input_tokens: 0,
+    });
+    expect(String(linha.error_message)).toContain("transcription_401");
+    expect(typeof linha.error_code).toBe("string");
+  });
+
+  it("visão que falha no provedor grava a linha de erro e o erro continua subindo", async () => {
+    const { generateText } = await import("ai");
+    vi.mocked(generateText).mockRejectedValueOnce(Object.assign(new Error("invalid x-api-key"), { statusCode: 401 }));
+
+    await deriveMessageMedia(eventRow());
+    await expect(depsDaChamada().describeImage(Buffer.from("jpeg"), "image/jpeg")).rejects.toThrow("invalid x-api-key");
+
+    expect(llmCallsInsertMock).toHaveBeenCalledTimes(1);
+    expect(llmCallsInsertMock.mock.calls[0]![0]).toMatchObject({
+      organization_id: "org1",
+      purpose: PONTO_VISAO_DE_IMAGEM,
+      status: "erro",
+      cost_cents: null,
+      http_status: 401,
+    });
   });
 });

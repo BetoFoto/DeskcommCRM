@@ -42,7 +42,8 @@ select purpose,
        round(100.0 * sum(cache_read_tokens) / nullif(sum(input_tokens), 0), 1)
                                                            as taxa_de_cache_pct,
        round(sum(cost_cents) / 100.0, 4)                   as custo_usd,
-       count(*) filter (where cost_cents is null)          as chamadas_sem_preco
+       count(*) filter (where cost_cents is null and status = 'ok')
+                                                           as chamadas_sem_preco
   from llm_calls
  where organization_id = :'org'
    and created_at >= now() - interval '7 days'
@@ -58,13 +59,16 @@ Como ler:
   candidato a investigação.
 - **`chamadas_sem_preco`** maior que zero quer dizer que `custo_usd` está
   **abaixo** do real. Acontece com modelo que a tabela de preços não conhece, e
-  sempre com a transcrição de áudio (abaixo).
+  sempre com a transcrição de áudio (abaixo). A linha de erro fica de fora: ela
+  também tem custo vazio, mas o provedor recusou e não cobrou token.
 - **`visao_de_imagem`** e **`transcricao_de_audio`** são as chamadas do worker
   de mídia (descrição de foto, áudio e os quadros de vídeo). Elas só aparecem
   a partir da versão que trouxe este runbook — antes, esse gasto não deixava
   linha nenhuma. A transcrição é cobrada por minuto e o serviço não devolve
   tokens: ela aparece com a contagem de chamadas e a latência, e com o custo
-  vazio.
+  vazio — e por isso **não conta para o teto de orçamento**. A visão conta.
+  Chamada de mídia que falhou no provedor também grava linha, com
+  `status = 'erro'`.
 
 ## 2. Atendimentos por dia e custo médio de cada um
 
@@ -174,7 +178,11 @@ produto faz para proteger o seu número e para não responder pela metade:
   de escrever antes de responder (`INBOUND_DEBOUNCE_MS`, com teto);
 - o **atraso humano** antes da primeira bolha, que imita o tempo de digitação.
 
-Reduzir qualquer uma das duas é decisão de anti-banimento, não conserto de
+Ele também carrega o adiamento: mensagem que chegou fora da janela de envio
+ou do horário do agente só é respondida quando a janela abre, e essas horas
+entram aqui. A seção 4 as deixa de fora.
+
+Reduzir qualquer uma das duas esperas é decisão de anti-banimento, não conserto de
 desempenho. Para saber quanto de cada parcela é espera deliberada e quanto é
 trabalho, use a seção 4.
 
@@ -207,9 +215,13 @@ etapas as (
     left join metrics t on t.organization_id = :'org' and t.name = 'run_wall_ms'
                        and t.created_at >= now() - interval '8 days'
                        and t.labels->>'job_id' = j.id::text
-   -- só job que rodou de primeira e nunca foi segurado: retry, adiamento e a
-   -- espera de sessão reescrevem run_after, e aí run_after deixa de ser debounce
+   -- só job que nunca voltou para a fila: o retry soma tentativa (attempts > 1);
+   -- o adiamento (janela anti-ban, horário do agente, teto de envio, espera de
+   -- saldo, agenda, envio que a sessão pôs em espera) devolve a tentativa e
+   -- reescreve run_after, mas grava last_error, que ninguém limpa depois. O hold de sessão NÃO é excluído
+   -- aqui: ao liberar, o watchdog devolve o run_after original e apaga a marca.
    where j.attempts = 1
+     and j.last_error is null
      and not (j.payload ? 'held_run_after')
 )
 select 'webhook (mensagem → despacho)'       as etapa, count(webhook_ms) as n,
@@ -238,9 +250,9 @@ O que cada etapa mede, e o que ela não mede:
 | etapa | régua | observação |
 |---|---|---|
 | webhook | `event_log.created_at` do despacho − `messages.created_at` da mensagem | trabalho síncrono do recebimento |
-| espera do dreno | `job_queue.created_at` − despacho | quanto o despacho esperou o worker o ler |
+| espera do dreno | `job_queue.created_at` − despacho | quanto o despacho esperou o worker o ler. **Em mensagem de áudio, foto ou vídeo inclui a espera pela transcrição ou descrição** (teto de cerca de 120 s): o job só nasce quando a mídia mais recente terminou de ser lida |
 | **debounce** | `job_queue.run_after` − `job_queue.created_at` | **espera deliberada**: o cliente pode estar digitando |
-| fila | `run_queue_wait_ms` − debounce | o job já podia rodar e não havia vaga, ou outro turno do mesmo contato estava rodando |
+| fila | `run_queue_wait_ms` − debounce | o job já podia rodar e não havia vaga, ou outro turno do mesmo contato estava rodando — **ou a sessão do WhatsApp estava fora** (ver abaixo) |
 | turno | `run_wall_ms` | do worker pegar o job até fechá-lo: leituras, chamadas de modelo, envio das bolhas **e o atraso humano** |
 
 Limites honestos desta medição:
@@ -257,6 +269,14 @@ Limites honestos desta medição:
 
   (`atraso_ms` é o que o agente esperou de propósito naquele turno; quando o
   modelo já demorou mais que o alvo, ele é zero.)
+- O tempo em que o job ficou **segurado porque a sessão do WhatsApp estava
+  fora** aparece dentro de `fila`. Ao liberar o job, o watchdog de sessão
+  devolve o horário original e apaga a marca de que segurou, então depois não
+  há como separar as duas esperas. Uma `fila` de minutos ou horas num dia em
+  que o WhatsApp caiu é a sessão, não falta de vaga no worker.
+- Turno adiado (fora da janela de envio, fora do horário do agente, teto de
+  envio, espera de saldo) fica **fora** da consulta: o tempo dele é agenda, não
+  demora.
 - `job_queue.locked_at` não serve de marca de tempo: ele volta a vazio quando
   o job termina. É por isso que `run_queue_wait_ms` e `run_wall_ms` existem.
 
