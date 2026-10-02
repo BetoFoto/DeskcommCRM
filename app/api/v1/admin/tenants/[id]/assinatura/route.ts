@@ -239,6 +239,11 @@ export async function DELETE(_req: NextRequest, rota: Rota) {
   // uma tentativa anterior apagou a linha e caiu antes de reativar.
   const reativacao = await reativarSeSuspensaPorCobranca(admin, org, ator);
   if (!reativacao) {
+    // A linha já foi apagada: a remoção é mutação bem-sucedida e audita aqui,
+    // senão o plano que a empresa tinha se perde (na nova tentativa apagada = null).
+    if (apagada) {
+      auditar(a, "cobranca.isencao_definida", { plano_id: (apagada as { plano_id: string }).plano_id, reativada: false });
+    }
     return fail("internal_error", "A reativação da empresa falhou. Tente de novo.", 500, { requestId });
   }
   const changed = !!apagada || reativacao.reativada;

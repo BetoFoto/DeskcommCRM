@@ -244,5 +244,8 @@ describe("DELETE — tornar isenta (PR 2: sem lerSituacao)", () => {
     m.org = { id: TENANT, status: "suspended", suspended_kind: "cobranca" };
     m.rpc = { data: null, error: { code: "XX000", message: "boom" } };
     expect((await DELETE(pedido("DELETE"), ctx())).status).toBe(500);
+    expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "cobranca.isencao_definida", metadata: { plano_id: BASICO.id, reativada: false },
+    }));
   });
 });
