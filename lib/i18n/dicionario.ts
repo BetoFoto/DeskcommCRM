@@ -13723,6 +13723,10 @@ export const DICIONARIO: Traducoes = {
   // ─── Cobrança do revendedor — módulo (PR 2) ───
   "Cobrança dos seus clientes": { es: "Cobro a tus clientes" },
   "Você cria planos e cobra as empresas desta instalação, com teste grátis e suspensão de quem não paga.": { es: "Creas planes y cobras a las empresas de esta instalación, con prueba gratis y suspensión de quien no paga." },
+  "Ligado, você cria planos e cobra as empresas hospedadas aqui, com teste grátis e suspensão automática de quem não paga. Empresas que já existem ficam isentas; você escolhe quem passa a pagar. Desligado, os limites dos planos deixam de valer e as empresas suspensas por falta de pagamento são liberadas; nada é cancelado no provedor de pagamento.": { es: "Activado, creas planes y cobras a las empresas alojadas aquí, con prueba gratis y suspensión automática de quien no paga. Las empresas que ya existen quedan exentas; tú eliges quién pasa a pagar. Desactivado, los límites de los planes dejan de valer y las empresas suspendidas por falta de pago quedan liberadas; nada se cancela en el proveedor de pago." },
+  "Empresas suspensas por falta de pagamento que serão liberadas ao desligar:": { es: "Empresas suspendidas por falta de pago que se liberarán al desactivar:" },
+  "Não deu para contar as empresas suspensas por falta de pagamento. Desligar libera todas.": { es: "No se pudo contar las empresas suspendidas por falta de pago. Desactivar libera a todas." },
+  "A cobrança continua ligada: não deu para liberar as empresas suspensas por falta de pagamento, e nada foi mudado. Tente desligar de novo em instantes.": { es: "El cobro sigue activado: no se pudo liberar a las empresas suspendidas por falta de pago y no se cambió nada. Intenta desactivarlo de nuevo en unos instantes." },
 };
 
 /**
