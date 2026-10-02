@@ -19,6 +19,8 @@ function fakeDb(opts: { vivos: Set<string>; insert: SilenceSweepDb["insertEnroll
     ],
     loadSilentContactIds: async () => ["vivo", "livre"],
     loadContatosComRetornoVivo: async () => new Set<string>(),
+    loadEncerramentosDoFluxo: async () => new Map(),
+    loadContatosComPessoaNoComando: async () => new Set<string>(),
     loadContatosComInscricaoViva: async () => opts.vivos,
     loadTriggerNode: async () => ({ id: "t-1", pedeAgente: false }),
     loadContactIdsEmCooldown: async () => new Set<string>(),
