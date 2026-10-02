@@ -13727,6 +13727,14 @@ export const DICIONARIO: Traducoes = {
   "Empresas suspensas por falta de pagamento que serão liberadas ao desligar:": { es: "Empresas suspendidas por falta de pago que se liberarán al desactivar:" },
   "Não deu para contar as empresas suspensas por falta de pagamento. Desligar libera todas.": { es: "No se pudo contar las empresas suspendidas por falta de pago. Desactivar libera a todas." },
   "A cobrança continua ligada: não deu para liberar as empresas suspensas por falta de pagamento, e nada foi mudado. Tente desligar de novo em instantes.": { es: "El cobro sigue activado: no se pudo liberar a las empresas suspendidas por falta de pago y no se cambió nada. Intenta desactivarlo de nuevo en unos instantes." },
+  // ─── Cobrança do revendedor — novo tenant (PR 2) ───
+  "Plano de cobrança": { es: "Plan de cobro" },
+  "Sem cobrança (isenta)": { es: "Sin cobro (exenta)" },
+  "por mês": { es: "por mes" },
+  "por ano": { es: "por año" },
+  "dias de teste": { es: "días de prueba" },
+  "Com um plano, a empresa começa em teste grátis pelos dias do plano. Isenta, ela não paga e não tem limites.": { es: "Con un plan, la empresa empieza en prueba gratis por los días del plan. Exenta, no paga y no tiene límites." },
+  "Nenhum plano criado ainda: a empresa nasce isenta. Crie planos em Cobrança e atribua um no painel da empresa.": { es: "Todavía no hay planes: la empresa nace exenta. Crea planes en Cobro y asigna uno en el panel de la empresa." },
 };
 
 /**
