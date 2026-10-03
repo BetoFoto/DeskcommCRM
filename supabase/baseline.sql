@@ -42847,7 +42847,7 @@ returns void
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $prov$
+as $f$
 begin
 
   -- ─── a comanda ───────────────────────────────────────────────────────────────
@@ -43066,12 +43066,63 @@ begin
       foreign key (sale_id) references public.sales(id) on delete set null;
   end if;
 
+  -- ── RLS das cinco tabelas, declarada por ESTA função (#1906 + D5) ──────────
+  -- A rotina 0325 (`fn_proteger_tabelas_de_organizacao`) só enxerga tabela com
+  -- RLS DESLIGADA: ligando aqui a decisão do módulo prevalece, e o `revoke` de
+  -- `anon` vem junto porque é a MESMA rotina que o faria — se ela não enxerga a
+  -- tabela, ela não faz por nós.
+  --
+  -- Cada `create policy` deste corpo ocupa DUAS linhas de propósito (issue
+  -- #1906): a conferência antiga do `update.sh` (v1.39.0 a v1.63.0) casava o
+  -- nome da policy e o `on public.` na MESMA linha e abortava a atualização
+  -- de quem tem o módulo instalado. É a quebra entre as duas linhas que tira
+  -- a regra do olhar daquela varredura sem tirar a regra da tabela.
+  alter table public.sales enable row level security;
+  revoke all on public.sales from anon;
+  drop policy if exists tenant_isolation_sales_all on public.sales;
+  create policy tenant_isolation_sales_all
+    on public.sales for all
+    using (organization_id in (select * from public.fn_user_org_ids()))
+    with check (organization_id in (select * from public.fn_user_org_ids()));
+
+  alter table public.sale_items enable row level security;
+  revoke all on public.sale_items from anon;
+  drop policy if exists tenant_isolation_sale_items_all on public.sale_items;
+  create policy tenant_isolation_sale_items_all
+    on public.sale_items for all
+    using (organization_id in (select * from public.fn_user_org_ids()))
+    with check (organization_id in (select * from public.fn_user_org_ids()));
+
+  alter table public.commission_rules enable row level security;
+  revoke all on public.commission_rules from anon;
+  drop policy if exists tenant_isolation_commission_rules_all on public.commission_rules;
+  create policy tenant_isolation_commission_rules_all
+    on public.commission_rules for all
+    using (organization_id in (select * from public.fn_user_org_ids()))
+    with check (organization_id in (select * from public.fn_user_org_ids()));
+
+  alter table public.commissions enable row level security;
+  revoke all on public.commissions from anon;
+  drop policy if exists tenant_isolation_commissions_all on public.commissions;
+  create policy tenant_isolation_commissions_all
+    on public.commissions for all
+    using (organization_id in (select * from public.fn_user_org_ids()))
+    with check (organization_id in (select * from public.fn_user_org_ids()));
+
+  alter table public.loyalty_ledger enable row level security;
+  revoke all on public.loyalty_ledger from anon;
+  drop policy if exists tenant_isolation_loyalty_ledger_all on public.loyalty_ledger;
+  create policy tenant_isolation_loyalty_ledger_all
+    on public.loyalty_ledger for all
+    using (organization_id in (select * from public.fn_user_org_ids()))
+    with check (organization_id in (select * from public.fn_user_org_ids()));
+
     -- D5: a proteção na MESMA transação. Sem esta linha a tabela nasce com a anon
     -- key podendo ler tudo — `baseline.sql:4748` dá, por
     -- `alter default privileges`, privilégio total a `anon` no que nasce depois.
     perform public.fn_proteger_modulo_provisionado();
   end
-  $prov$;
+$f$;
 revoke execute on function public.fn_financeiro_provisionar() from public, anon, authenticated;
 grant execute on function public.fn_financeiro_provisionar() to service_role;
 
