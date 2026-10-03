@@ -259,3 +259,31 @@ describe("D8 — a anonimização alcança as seções de módulo declaradas", (
     expect(posVarredura).toBeGreaterThan(posFuncao);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #1906 — o update.sh ANTIGO não pode enxergar regra de módulo no texto
+// ---------------------------------------------------------------------------
+describe("#1906 — regra de módulo não fica visível à conferência antiga do update.sh", () => {
+  // A regex é a da conferência de v1.39.0 a v1.63.0 (`hostgator-setup-kit/update.sh`),
+  // que lê o baseline LINHA A LINHA, sem saber o que é corpo de função. Esse script
+  // antigo é o que roda na atualização (fica no disco durante o `git checkout`), então
+  // consertá-lo não alcança quem atualiza: numa instalação sem o módulo, a regra com
+  // nome e tabela na mesma linha era cobrada e a atualização abortava com o CRM parado.
+  const REGRA_DA_CONFERENCIA_ANTIGA = /create policy "?[a-zA-Z0-9_]+"? on public\.[a-zA-Z0-9_]+/;
+
+  function corpoAteODelimitador(sql: string, nome: string): string {
+    const inicio = sql.indexOf(`create or replace function public.${nome}()`);
+    const fim = sql.indexOf("\n$f$;", inicio);
+    return inicio < 0 || fim < 0 ? "" : sql.slice(inicio, fim);
+  }
+
+  it("nenhuma linha do corpo de provisionadora casa a regex da conferência antiga", () => {
+    expect(provisionadoras(BASELINE).length).toBeGreaterThan(0);
+    for (const nome of provisionadoras(BASELINE)) {
+      const corpo = corpoAteODelimitador(BASELINE, nome);
+      expect(corpo, `corpo de ${nome} não encontrado`).toContain("create policy");
+      const visiveis = corpo.split("\n").filter((l) => REGRA_DA_CONFERENCIA_ANTIGA.test(l));
+      expect(visiveis, `${nome}: parta em duas linhas (create policy X / on public.Y)`).toEqual([]);
+    }
+  });
+});

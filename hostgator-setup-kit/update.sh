@@ -407,6 +407,45 @@ if [ -f supabase/baseline.sql ]; then
     END { for (k in estado) if (estado[k] == "create") print k }
   ' supabase/baseline.sql | LC_ALL=C sort -u)"
 
+  # ── E SÓ SE COBRE QUEM TEM A RELAÇÃO NO BANCO ──────────────────────────────
+  #
+  # MEDIDO na issue #1897: as 8 regras de honorários moram DENTRO do corpo de
+  # public.fn_honorarios_provisionar() (supabase/baseline.sql:36801, primeira
+  # policy em :36896), e essa função só executa quando um administrador chama
+  # fn_modulo_instalar('honorarios', …) — criar a função não cria tabela nenhuma,
+  # como a própria migration 0480 / ADR-0002 avisa. Num VPS SEM o módulo,
+  # honorarios_contratos e honorarios_parcelas não existem: o awk de cima enxerga
+  # o `create policy` no TEXTO do arquivo, a recriação responde
+  # `relation does not exist`, a segunda conferência acusa as MESMAS 8 e o script
+  # sai em 1 com o CRM parado — era a atualização inteira de toda instalação sem
+  # o módulo de honorários (a tela mostrava as 8 e mais nada).
+  #
+  # A régua passa a cobrir só policy cuja RELAÇÃO já existe em `public`. É mais
+  # genérico do que caçar `$f$`/`$$` no texto: cobre os próximos módulos da
+  # ADR-0002, venham eles por corpo de função, por migration ou por qualquer
+  # outra forma de escrever o baseline. E NÃO afrouxa nada: policy de tabela que
+  # EXISTE continua sendo cobrada, que é o caso para o qual o aviso existe — a
+  # regra que some do banco com a tabela de pé continua derrubando a atualização.
+  #
+  # ⚠️ Se a consulta vier VAZIA (banco fora do ar, URL trocada), NÃO se filtra.
+  # Sem a lista de relações, filtrar derrubaria `esperadas` inteira e o ✓ sairia
+  # com "0 declaradas" — o aviso viraria mudo exatamente quando ninguém consegue
+  # ler o banco. Vale o comportamento antigo, que é barulhento: tudo é cobrado e
+  # a conferência para. Surdo nunca.
+  tabelas="$(pg_container -i postgres:17-alpine psql "$(url_do_schema)" -t -A -c \
+    "select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
+       where n.nspname='public';" 2>/dev/null | LC_ALL=C sort -u)"
+
+  if [ -n "$tabelas" ]; then
+    # `esperadas` é `regra|tabela`; o filtro olha só a tabela. A saída do awk
+    # segue a ordem do SEGUNDO arquivo (o `esperadas` já ordenado), e o
+    # segundo `sort` reforça o MESMO pino de antes (LC_ALL=C): o `comm` logo
+    # abaixo lê em `LC_ALL=C` e não perdoa entrada fora de ordem.
+    esperadas="$(awk 'NR == FNR { existe[$0] = 1; next }
+      { split($0, par, "[|]"); if (existe[par[2]]) print }' \
+      <(printf '%s\n' "$tabelas") <(printf '%s\n' "$esperadas") | LC_ALL=C sort -u)"
+  fi
+
   existentes="$(pg_container -i postgres:17-alpine psql "$(url_do_schema)" -t -A -F'|' -c \
     "select p.polname, c.relname from pg_policy p join pg_class c on c.oid=p.polrelid
        join pg_namespace n on n.oid=c.relnamespace where n.nspname='public';" 2>/dev/null | LC_ALL=C sort -u)"
@@ -687,11 +726,11 @@ step "Conferindo se o app voltou no ar"
 ok=""
 wait_app_healthy 20 3 >/dev/null && ok=1
 if [ -n "$ok" ]; then
-  # O marcador que a guarda de ARM lê (#1778). Instalação ARM nova é recusada,
-  # então toda instalação ARM que existe veio de antes do marcador e só seria
-  # reconhecida pelo contêiner — que um `down` sem `-v` apaga. Gravar aqui, com
-  # o app saudável, fecha esse caso a partir desta atualização. Falhar em
-  # gravar não desfaz nada: a guarda segue caindo no sinal do contêiner.
+  # O marcador que a guarda de arquitetura lê (#1778). Instalações antigas só
+  # seriam reconhecidas pelo contêiner — que um `down` sem `-v` apaga. Gravar
+  # aqui, com o app saudável, fecha esse caso a partir desta atualização.
+  # Falhar em gravar não desfaz nada: a guarda segue caindo no sinal do
+  # contêiner para arquiteturas que ainda não têm imagens publicadas.
   marcar_instalacao_feita "$TARGET_TAG" || true
   if [ -n "$BANCO_INCOMPLETO" ]; then
     c_ylw "⚠ App no ar e saudável, mas o banco NÃO terminou limpo — o que fazer está no fim desta saída."
