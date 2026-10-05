@@ -5,8 +5,7 @@ import type { ReactNode } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "@/hooks/i18n/useT";
 
-export const ABAS_DA_COBRANCA = ["visao-geral", "conexao", "regua", "planos", "clientes"] as const;
-export type AbaDaCobranca = (typeof ABAS_DA_COBRANCA)[number];
+import { ABAS_DA_COBRANCA, type AbaDaCobranca } from "./_abas-lista";
 
 const ROTULO: Record<AbaDaCobranca, string> = {
   "visao-geral": "Visão geral",

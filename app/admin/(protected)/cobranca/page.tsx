@@ -12,7 +12,8 @@ import { moduloLigado } from "@/lib/instalacao/modulos";
 import { COLUNAS_DO_PLANO } from "@/lib/schemas/cobranca-plano";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-import { ABAS_DA_COBRANCA, AbasDaCobranca, type AbaDaCobranca } from "./_abas";
+import { AbasDaCobranca } from "./_abas";
+import { ABAS_DA_COBRANCA, type AbaDaCobranca } from "./_abas-lista";
 import { ConexaoDaCobranca } from "./_conexao";
 import { CopiarLinkDePagamento } from "./_copiar-link";
 import { PlanosDaInstalacao, type PlanoDaTela } from "./_planos";
