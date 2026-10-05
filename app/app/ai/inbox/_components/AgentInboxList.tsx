@@ -156,6 +156,13 @@ function InboxRow({
             <Link href={item.destination.href}>{t(item.destination.rotulo)}</Link>
           </Button>
         ) : null}
+        {item.link_de_pagamento ? (
+          <Button asChild size="sm" className="ml-3 mt-1">
+            <a href={item.link_de_pagamento} target="_blank" rel="noopener noreferrer">
+              {t("Pagar agora")}
+            </a>
+          </Button>
+        ) : null}
       </div>
       {canResolve ? (
         item.status === "resolved" ? (
