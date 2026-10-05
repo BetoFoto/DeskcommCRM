@@ -178,6 +178,21 @@ const paramsSchema = z
   })
   .passthrough();
 
+/**
+ * Teto de saída quando nem a organização (`settings.llm.params.maxOutputTokens`)
+ * nem a chamada dizem um. Sem teto o pedido sai sem `max_tokens`, e o OpenRouter
+ * reserva o MÁXIMO do modelo (64000 no Haiku 4.5) contra o saldo da chave: uma
+ * chave com crédito para milhares de respostas curtas recusava todas com
+ * "You requested up to 64000 tokens, but can only afford 7978" — medido em
+ * produção. Uma resposta de WhatsApp com ferramentas cabe com folga em 4096.
+ */
+export const TETO_DE_SAIDA_PADRAO = 4096;
+
+export function tetoDeSaida(daOrganizacao: number | undefined, daChamada: number | undefined): number {
+  const base = daOrganizacao ?? TETO_DE_SAIDA_PADRAO;
+  return daChamada === undefined ? base : Math.min(base, daChamada);
+}
+
 export interface RunModelCallInput {
   tenantId: string;
   leadId?: string | null;
@@ -714,9 +729,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       temperature,
       topP,
       topK,
-      maxOutputTokens: input.maxOutputTokens === undefined
-        ? maxOutputTokens
-        : Math.min(maxOutputTokens ?? Infinity, input.maxOutputTokens),
+      maxOutputTokens: tetoDeSaida(maxOutputTokens, input.maxOutputTokens),
       ...cacheDaCauda(config.provider, input.maxSteps),
     });
   } catch (err) {
