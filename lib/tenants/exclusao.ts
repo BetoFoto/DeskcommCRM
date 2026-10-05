@@ -52,6 +52,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
+import { estaSuspensa } from "@/lib/organizacao/operante";
 import {
   desligarCanaisInventariados,
   inventariarCanaisDaOrganizacao,
@@ -306,7 +307,7 @@ export async function excluirOrganizacao(
     .maybeSingle();
   if (orgErr) throw new Error(`exclusao_leitura: ${orgErr.message}`);
   if (!org) return retomar(admin, entrada);
-  if (org.status !== "suspended") {
+  if (!estaSuspensa(org.status)) {
     throw new ExclusaoRecusada(
       "state_conflict",
       "Só uma organização suspensa pode ser excluída. Suspenda-a antes.",
