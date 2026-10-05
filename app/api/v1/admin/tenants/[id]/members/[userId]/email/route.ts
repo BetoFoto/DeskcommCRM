@@ -114,14 +114,13 @@ export async function PATCH(
 
   const admin = createAdminClient();
 
-  // Todos os vínculos ATIVOS do login (o e-mail vale para todos eles), cada um
-  // com o fuso da sua organização. A pessoa precisa ter acesso ativo a ESTE
-  // tenant: a rota é da gestão de tenants, e o par do path é o que o admin
-  // escolheu na tela.
+  // Todos os vínculos ATIVOS do login (o e-mail vale para todos eles). A
+  // pessoa precisa ter acesso ativo a ESTE tenant: a rota é da gestão de
+  // tenants, e o par do path é o que o admin escolheu na tela.
   const [lidoVinculos, lidoAdmin] = await Promise.all([
     admin
       .from("user_organizations")
-      .select("organization_id, organizations(timezone)")
+      .select("organization_id")
       .eq("user_id", userId)
       .is("revoked_at", null),
     admin
@@ -142,13 +141,9 @@ export async function PATCH(
     });
     return fail("internal_error", "Não foi possível trocar o e-mail agora.", 500, { requestId });
   }
-  const vinculos = ((lidoVinculos.data ?? []) as Array<{
-    organization_id: string;
-    organizations: { timezone: string | null } | null;
-  }>).map((v) => ({ orgId: v.organization_id, fuso: v.organizations?.timezone ?? null }));
+  const orgIds: string[] = (lidoVinculos.data ?? []).map((v: { organization_id: string }) => v.organization_id);
   const ehAdmin = lidoAdmin.data;
-  const doPath = vinculos.find((v) => v.orgId === id);
-  if (!doPath) {
+  if (!orgIds.includes(id)) {
     return fail("not_found", "Membro sem acesso ativo neste tenant.", 404, { requestId });
   }
   if (ehAdmin) {
@@ -169,8 +164,26 @@ export async function PATCH(
     return fail("state_conflict", "Este já é o e-mail desta pessoa.", 409, { requestId });
   }
 
+  // O fuso de cada empresa a avisar (a data do aviso é a do relógio dela).
+  const { data: fusos, error: fusosErr } = await admin
+    .from("organizations")
+    .select("id, timezone")
+    .in("id", orgIds);
+  if (fusosErr) {
+    logger.error("[admin.members.email] leitura dos fusos falhou; e-mail NÃO trocado", {
+      requestId,
+      organization_id: id,
+      erro: fusosErr.message,
+    });
+    return fail("internal_error", "Não foi possível trocar o e-mail agora.", 500, { requestId });
+  }
+  const fusoDe = new Map<string, string | null>(
+    (fusos ?? []).map((o: { id: string; timezone: string | null }) => [o.id, o.timezone]),
+  );
+  const vinculos = orgIds.map((orgId) => ({ orgId, fuso: fusoDe.get(orgId) ?? null }));
+
   // (a) A Central ANTES do GoTrue: troca invisível para a empresa não acontece.
-  const fusoDaOrg = doPath.fuso;
+  const fusoDaOrg = fusoDe.get(id) ?? null;
   const nome = nomeParaOAviso(atual.user.user_metadata);
   const { data: itens, error: centralErr } = await admin
     .from("agent_inbox_items")

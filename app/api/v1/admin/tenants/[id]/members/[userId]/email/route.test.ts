@@ -118,7 +118,6 @@ function adminFalso(opts: {
       user_id: ALVO,
       organization_id: v.organization_id,
       revoked_at: v.revoked_at,
-      organizations: { timezone: v.timezone ?? "America/Sao_Paulo" },
     }));
     const b: Record<string, unknown> = {};
     b.select = () => b;
@@ -171,6 +170,23 @@ function adminFalso(opts: {
   const admin = {
     from: (t: string) => {
       if (t === "user_organizations") return leituraDeVinculos();
+      if (t === "organizations") {
+        const b: Record<string, unknown> = {};
+        let ids: string[] = [];
+        b.select = () => b;
+        b.in = (_col: string, vals: string[]) => {
+          ids = vals;
+          return b;
+        };
+        b.then = (r: (v: unknown) => unknown) =>
+          Promise.resolve({
+            data: vinculos
+              .filter((v) => ids.includes(v.organization_id))
+              .map((v) => ({ id: v.organization_id, timezone: v.timezone ?? "America/Sao_Paulo" })),
+            error: null,
+          }).then(r);
+        return b;
+      }
       if (t === "platform_admins")
         return leitura(
           opts.ehAdminDaPlataforma ? { user_id: ALVO } : null,
