@@ -3285,26 +3285,37 @@ Spec: `tests/e2e/mapas-em-provedores.spec.ts`.
 | J40.7 | O pino com endereço aproximado, aberto na conversa pela equipe | o cartão do pino mostra «Rua, Cidade, Estado (aprox.)», com o texto inteiro no `title` (o cartão corta com …) e o toque abre as COORDENADAS no mapa | **PASS pela tela** — Evidência: `evidence/triagem-16set-l12/mapas-03-pino-na-conversa.png` |
 | J40.8 | A API do canal intermediado não responde a tempo na ingestão do pino (medido 29/09/2026: timeout duas vezes seguidas) | a mensagem entra com o marcador e pede nova busca (`message.location_retry_requested`); 1 min depois, e a cada 2 min até 15, busca de novo e grava tipo `location` + link (+ endereço aproximado com chave); nunca rebaixa um pino que já tem coordenadas; desiste sem virar incidente | **PASS (unit)** — `tests/unit/pino-reintento.test.ts`, `tests/unit/channel-ingest-zernio.test.ts` |
 
-## J37 — Gestão de tenants pelo admin da plataforma `[P1]` (2026-09-29)
+## J42 — Gestão de tenants pelo admin da plataforma `[P1]` (2026-09-29, recortada em 2026-10-05)
 
-Suspender, corrigir o e-mail de acesso, reativar, editar e excluir um tenant pela
-tela de `/admin/tenants/<id>`, com um membro do tenant logado ao mesmo tempo.
-Spec: `tests/e2e/admin-gestao-de-tenants.spec.ts` (job e2e, parte 5; cria o próprio
-tenant e o próprio login e se desfaz deles). Evidência: `evidence/admin-gestao-de-tenants/01-tenant-ativo.png`, `evidence/admin-gestao-de-tenants/02-tenant-suspenso.png`, `evidence/admin-gestao-de-tenants/03-membro-ve-conta-suspensa.png`, `evidence/admin-gestao-de-tenants/04-email-corrigido.png`, `evidence/admin-gestao-de-tenants/05-membro-de-volta.png`, `evidence/admin-gestao-de-tenants/06-dados-editados.png`, `evidence/admin-gestao-de-tenants/07-confirmacao-da-exclusao.png`, `evidence/admin-gestao-de-tenants/08-lista-depois-da-exclusao.png`. Medido localmente em 29/09/2026, Supabase
-local do `baseline.sql` (pg15), `next build` + `next start`, sem chave de IA e sem
-Redis: `1 passed (42.9s)`. A transação da exclusão e o corte da RLS têm prova
-própria em `tests/invariants/gestao-de-tenants.test.ts`.
+Corrigir o e-mail de acesso de um membro, editar o cadastro e excluir um tenant pela
+tela de `/admin/tenants/<id>` — PR #1967 (@Draven9), recortado: a suspensão é a da
+`main` (J37/`suspensao-administrativa.spec.ts`) e saiu desta jornada. Spec:
+`tests/e2e/admin-gestao-de-tenants.spec.ts` (job e2e, parte 5; cria o próprio tenant
+e o próprio login e se desfaz deles), em instalação sem envio de e-mail configurado.
+
+**Estado da medição: os casos abaixo ainda NÃO rodaram na forma recortada.** A spec foi
+reescrita sem rodar localmente (pedido do dono: máquina sem memória para `next build` +
+`next start`); a primeira medição é a do job `e2e` deste PR. As fotos versionadas
+`evidence/admin-gestao-de-tenants/01-ativo.png`,
+`evidence/admin-gestao-de-tenants/02-email-corrigido.png`,
+`evidence/admin-gestao-de-tenants/04-dados-editados.png`,
+`evidence/admin-gestao-de-tenants/06-confirmacao-da-exclusao.png` e
+`evidence/admin-gestao-de-tenants/07-lista-depois.png` são da versão de 29/09 do PR
+(renomeadas para a numeração nova) e são regravadas na primeira rodada; as da Central
+e da recusa por cobrança só existem depois dela. A transação da exclusão tem prova
+própria em `tests/invariants/gestao-de-tenants.test.ts` e
+`tests/invariants/exclusao-recusa-cobranca.test.ts`.
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
-| J37.1 | Tenant ativo | cabeçalho com o nome; o e-mail de login do membro na lista; sem "Excluir tenant", com a instrução "suspenda-o primeiro" | PASS |
-| J37.2 | Suspender com motivo | faixa com o motivo; "Excluir tenant" aparece | PASS |
-| J37.3 | O membro logado depois da suspensão | a próxima navegação cai em `/account-suspended`; `GET /api/v1/contacts` → `403 tenant_suspended` | PASS |
-| J37.4 | Corrigir o e-mail de acesso | a lista mostra o novo; o login com o NOVO entra (e cai na tela de suspensão); o login com o ANTIGO é recusado | PASS |
-| J37.5 | Reativar com motivo | banco volta a `active`; o membro entra em `/app` | PASS |
-| J37.6 | Editar dados | o nome novo aparece no cabeçalho e está gravado no banco | PASS |
-| J37.7 | Excluir | aviso de irreversível; botão travado com identificador errado; com o certo, a organização some do banco, a lápide `organization.deleted` fica na auditoria e o login que só pertencia a ela é removido | PASS |
+| J42.1 | Tenant ativo | cabeçalho com o nome; o e-mail de login do membro na lista; sem "Excluir tenant", com a instrução "suspenda-o primeiro" | a medir (CI) |
+| J42.2 | Corrigir o e-mail de acesso | a lista mostra o novo; o login com o NOVO entra em `/app`; o ANTIGO é recusado; a troca segue sem envio de e-mail configurado | a medir (CI) |
+| J42.3 | A empresa fica sabendo | a Central (`/app/ai/inbox`) do tenant, vista pelo membro, mostra UM aviso com o nome da pessoa, sem nenhum `@`, e o botão "Abrir a equipe" | a medir (CI) |
+| J42.4 | Editar dados | o nome novo aparece no cabeçalho e está gravado no banco | a medir (CI) |
+| J42.5 | Suspensa por cobrança | sem "Excluir tenant", com a explicação; `POST …/delete` → `409 exclusao_com_cobranca_pendente`; a organização continua no banco | a medir (CI) |
+| J42.6 | Suspensa administrativa pela tela, e excluída | botão travado com identificador errado; com o certo, a organização some do banco, a lápide `organization.deleted` fica e o login que só pertencia a ela é removido | a medir (CI) |
 
-Não provado pela tela: o desligamento externo da exclusão (WAHA, Meta, Nuvemshop),
-porque o tenant de teste não tem canal conectado — medido por unidade em
-`lib/tenants/exclusao.test.ts`.
+Não provado pela tela: o desligamento externo da exclusão (WhatsApp, voz, loja), que
+agora só acontece depois do commit — o tenant de teste não tem canal conectado; a ordem
+é medida por unidade em `lib/tenants/exclusao.test.ts`. O e-mail ao endereço antigo,
+que sem envio configurado não sai: medido por unidade na rota.
