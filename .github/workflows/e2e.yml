@@ -2140,6 +2140,19 @@ jobs:
             test-results/
           retention-days: 7
 
+      # A EVIDÊNCIA VISUAL TAMBÉM QUANDO PASSA. As specs gravam capturas em
+      # evidence/<feature>/ (doutrina de QA Visual, DoD 12); sem este passo elas
+      # morrem com o runner, e a prova pela tela só existe localmente, num ambiente
+      # que nem toda máquina consegue subir. Quem precisa delas baixa o artefato da
+      # parte e commita as que a jornada cita. Sem pasta = sem artefato (warn).
+      - uses: actions/upload-artifact@v7
+        if: success()
+        with:
+          name: evidencia-parte-${{ matrix.parte }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
       # ── ONDE A MEDIÇÃO FICA ───────────────────────────────────────────────
       # A medição que só existe no log se perde: quem decide repartir as listas
       # é quem olha o resumo do job, e o resumo é este. Os três relógios saem
