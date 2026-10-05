@@ -130,13 +130,15 @@ export async function POST(req: NextRequest) {
     }
     return ok({ url: url.url }, { requestId });
   } catch (e) {
-    await liberarReserva(admin, orgId, reserva).catch(() => undefined);
+    await liberarReserva(admin, orgId, reserva);
     if (!(e instanceof ErroDoProvedor)) {
       // Defeito nosso (banco, adaptador, link não gravado): envelope e X-Request-Id, e só o nome/código no log.
       logger.error("cobranca: checkout falhou fora do provedor", {
         requestId,
         organizationId: orgId,
         erro: e instanceof Error ? e.name : "desconhecido",
+        // As nossas ("cobranca: …") só levam o código do PostgREST: separam reserva perdida de incidente de banco.
+        motivo: e instanceof Error && e.message.startsWith("cobranca:") ? e.message : null,
         codigo: (e as { code?: unknown } | null)?.code ?? null,
       });
       return recusar(500, "internal_error", "Não foi possível gerar o link de pagamento. Tente de novo em instantes.");
@@ -146,13 +148,19 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/** Não lança: a reserva que não sai expira sozinha em RESERVA_MS, mas fica no log (o próximo clique vê `checkout_em_preparo`). */
 async function liberarReserva(admin: SupabaseClient, orgId: string, reserva: string): Promise<void> {
-  await admin
-    .from("cobranca_assinaturas")
-    .update({ checkout_expira_em: null })
-    .eq("organization_id", orgId)
-    .eq("checkout_expira_em", reserva)
-    .is("checkout_url", null);
+  try {
+    const { error } = await admin
+      .from("cobranca_assinaturas")
+      .update({ checkout_expira_em: null })
+      .eq("organization_id", orgId)
+      .eq("checkout_expira_em", reserva)
+      .is("checkout_url", null);
+    if (error) logger.error("cobranca: reserva do checkout não liberada", { organizationId: orgId, codigo: error.code });
+  } catch (e) {
+    logger.error("cobranca: reserva do checkout não liberada", { organizationId: orgId, erro: e instanceof Error ? e.name : "desconhecido" });
+  }
 }
 
 /** Fases 2 e 3. Lança `ErroDoProvedor` (quem chama libera a reserva) ou erro de banco. */
