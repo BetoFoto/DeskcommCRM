@@ -34,6 +34,10 @@ export async function POST() {
   }
   const r = await sincronizar(admin, orgId);
   if (r.tipo === "isenta") return fail("not_found", "Sua empresa não tem plano de cobrança.", 404, { requestId });
+  if (r.tipo === "falhou" && !r.transitorio) {
+    // Chave inválida ou leitura inválida é do dono do sistema: esperar não resolve.
+    return fail("provedor_recusou", "O provedor de pagamento recusou a conferência. Fale com quem administra o sistema.", 502, { requestId });
+  }
   if (r.tipo === "falhou") {
     return fail("provedor_indisponivel", "Não conseguimos falar com o provedor de pagamento agora. Tente de novo em alguns minutos.", 503, { requestId });
   }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { bancoFalso, type BancoFalso } from "@/tests/helpers/banco-falso-da-cobranca";
+import { argumentos, bancoFalso, operacao, type BancoFalso } from "@/tests/helpers/banco-falso-da-cobranca";
 
 const h = vi.hoisted(() => ({
   papel: vi.fn(),
@@ -66,5 +66,19 @@ describe("cancelar a assinatura", () => {
     h.taxaOk = false;
     expect((await POST()).status).toBe(429);
     expect(h.cancelar).not.toHaveBeenCalled();
+  });
+
+  it("⭐ sincronizar que lança depois do cancelamento no provedor: o audit com o ator já saiu e a resposta é 200", async () => {
+    h.sincronizar.mockRejectedValue(new Error("banco caiu"));
+    const res = await POST();
+    expect(res.status).toBe(200);
+    expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "cobranca.assinatura_cancelada", actorUserId: "admin-1" }));
+  });
+
+  it("⭐ a rota grava cancela_no_fim=true sem depender da releitura (que pode falhar)", async () => {
+    h.sincronizar.mockResolvedValue({ tipo: "falhou", erro: "provedor_fora", transitorio: true });
+    await POST();
+    const escrita = h.banco.cadeias.find((c) => c.tabela === "cobranca_assinaturas" && operacao(c) === "update");
+    expect(argumentos(escrita!, "update")?.[0]).toMatchObject({ cancela_no_fim: true });
   });
 });

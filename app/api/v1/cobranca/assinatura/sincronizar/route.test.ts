@@ -68,4 +68,14 @@ describe("sincronizar pela tela", () => {
     h.sincronizar.mockResolvedValue({ tipo: "isenta" });
     expect((await POST()).status).toBe(404);
   });
+
+  it("⭐ falha que NÃO é transitória (chave inválida): 502 provedor_recusou mandando falar com quem administra, nunca 'tente de novo'", async () => {
+    h.sincronizar.mockResolvedValue({ tipo: "falhou", erro: "credencial_invalida", transitorio: false });
+    const res = await POST();
+    expect(res.status).toBe(502);
+    const e = (await res.json()).error as { code: string; message: string };
+    expect(e.code).toBe("provedor_recusou");
+    expect(e.message).toMatch(/administra/);
+    expect(e.message).not.toMatch(/tente de novo/i);
+  });
 });

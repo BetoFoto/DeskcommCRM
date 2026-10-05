@@ -1,7 +1,7 @@
 /**
  * POST /api/v1/cobranca/assinatura/cancelar — a empresa cancela (spec §7f,
  * D-14): o acesso segue até o fim do período pago e não há reembolso
- * automático. Depois de cancelar no provedor, relê: a tela já mostra
+ * automático. Depois de cancelar no provedor, grava a marca e audita; relê (melhor esforço): a tela já mostra
  * "Cancelada, acesso até DD/MM" sem esperar o aviso do provedor.
  */
 import { randomUUID } from "node:crypto";
@@ -15,6 +15,7 @@ import { sincronizar } from "@/lib/cobranca/sincronizar";
 import type { ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +54,13 @@ export async function POST() {
     const r = recusaDoProvedor(e);
     return fail(r.code, r.message, r.status, { requestId });
   }
-  await sincronizar(admin, orgId);
+  // O provedor já cancelou: o resto é nosso. Grava a marca direto (como o ramo
+  // `cancelar_no_provedor` de sincronizar) e audita COM o ator antes de qualquer releitura.
+  const { error: erroDaMarca } = await admin
+    .from("cobranca_assinaturas")
+    .update({ cancela_no_fim: true, updated_at: new Date().toISOString() })
+    .eq("organization_id", orgId);
+  if (erroDaMarca) logger.error("cobranca: cancelamento feito no provedor mas não gravado", { requestId, organizationId: orgId, codigo: erroDaMarca.code ?? null });
   void audit({
     action: "cobranca.assinatura_cancelada",
     actorUserId: authz.user.id,
@@ -63,6 +70,10 @@ export async function POST() {
     requestId,
     metadata: { motivo: "pedido_da_empresa" },
   });
+  // Melhor esforço: a tela só quer a data; o webhook e o cron reconciliam o resto.
+  await sincronizar(admin, orgId).catch((e: unknown) =>
+    logger.error("cobranca: releitura depois de cancelar falhou", { requestId, organizationId: orgId, erro: e instanceof Error ? e.name : "desconhecido" }),
+  );
   const depois = await lerLinha();
   const ate = (depois.data as { proximo_vencimento: string | null } | null)?.proximo_vencimento ?? linha.proximo_vencimento;
   return ok({ changed: true, acesso_ate: ate }, { requestId });
