@@ -23,7 +23,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 
 import { test, expect, type BrowserContext } from "./helpers/test";
-import { extractAuthConfirmLink, uniqueEmail, waitForEmail } from "./helpers/auth";
+import { extractAuthConfirmLink, seguirLinkDeAcesso, uniqueEmail, waitForEmail } from "./helpers/auth";
 import {
   assinaturaDe, contarAuditoria, criarPessoa, db, diasAtras, drenarAte, entrar, estadoDaOrg, fotografarChaves,
   horasAtras, inserir, recuar, restaurarChaves, rodarCronDaCobranca, saidasDe, senha, type FotoDasChaves,
@@ -135,7 +135,8 @@ test("[P0] primeira cobrança: conectar, assinar, atrasar, suspender e voltar so
     await pB.getByRole("button", { name: "Criar conta" }).click();
     await expect(pB.getByText("Confirme seu e-mail")).toBeVisible();
     const confirmacao = extractAuthConfirmLink(await waitForEmail(emailB, "Confirme seu e-mail"), test.info().project.use.baseURL!);
-    await pB.goto(confirmacao);
+    // Abrir o link não gasta o token (protege do verificador de links do e-mail): a pessoa aperta "Continuar".
+    await seguirLinkDeAcesso(pB, confirmacao);
     await pB.waitForURL(/\/onboarding\//);
     const nova = await db.from("organizations").select("id, created_by").or(`display_name.eq.${EMPRESA},legal_name.eq.${EMPRESA}`).single();
     if (nova.error) throw nova.error;
