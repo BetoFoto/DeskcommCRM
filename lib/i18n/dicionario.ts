@@ -14521,6 +14521,25 @@ export const DICIONARIO: Traducoes = {
   "Seu plano permite 1 número conectado. Exclua um número em Conexões ou troque de plano em Configurações › Plano e cobrança.": { es: "Tu plan permite 1 número conectado. Elimina un número en Conexiones o cambia de plan en Configuración › Plan y facturación." },
   "Seu plano permite {n} números conectados. Exclua um número em Conexões ou troque de plano em Configurações › Plano e cobrança.": { es: "Tu plan permite {n} números conectados. Elimina un número en Conexiones o cambia de plan en Configuración › Plan y facturación." },
   "O uso de IA incluído no plano acabou neste mês. As conversas foram para a equipe. Troque de plano em Configurações › Plano e cobrança, cadastre uma chave de IA própria ou aguarde o próximo mês.": { es: "El uso de IA incluido en el plan se agotó este mes. Las conversaciones pasaron al equipo. Cambia de plan en Configuración › Plan y facturación, registra una clave de IA propia o espera al próximo mes." },
+  // ─── Cobrança do revendedor — visão geral (PR 3a) ───
+  "Conecte sua conta do provedor de pagamento": { es: "Conecta tu cuenta del proveedor de pago" },
+  "Na aba Conexão, cole a chave secreta de teste e clique em Testar e conectar.": { es: "En la pestaña Conexión, pega la clave secreta de prueba y haz clic en Probar y conectar." },
+  "Receba o primeiro aviso de pagamento": { es: "Recibe el primer aviso de pago" },
+  "Ele chega sozinho quando alguém paga. Faça a compra de teste do passo seguinte.": { es: "Llega solo cuando alguien paga. Haz la compra de prueba del paso siguiente." },
+  "Conclua uma compra de teste": { es: "Completa una compra de prueba" },
+  "Crie uma empresa de teste com outro e-mail seu (ex.: voce+teste@seudominio.com), abra o convite numa janela anônima, clique em Assinar em Plano e cobrança e pague com o cartão 4242 4242 4242 4242 (qualquer validade futura e qualquer CVC).": { es: "Crea una empresa de prueba con otro correo tuyo (ej.: tu+prueba@tudominio.com), abre la invitación en una ventana de incógnito, haz clic en Suscribirse en Plan y facturación y paga con la tarjeta 4242 4242 4242 4242 (cualquier vencimiento futuro y cualquier CVC)." },
+  "Em produção, faça uma compra real de valor baixo com uma empresa sua e cancele depois — ou pule este passo.": { es: "En producción, haz una compra real de bajo valor con una empresa tuya y cancélala después, o salta este paso." },
+  "Antes: seu sistema precisa estar num endereço https público (ex.: https://crm.suaempresa.com.br). Configure o domínio com HTTPS e volte aqui.": { es: "Antes: tu sistema necesita estar en una dirección https pública (ej.: https://crm.tuempresa.com). Configura el dominio con HTTPS y vuelve aquí." },
+  "Crie um plano e marque o do cadastro": { es: "Crea un plan y marca el del registro" },
+  "Na aba Planos, crie o plano que as empresas vão assinar e clique em Usar no cadastro. Sem ele, quem se cadastra não ganha teste grátis nem tem o que assinar.": { es: "En la pestaña Planes, crea el plan que las empresas van a contratar y haz clic en Usar en el registro. Sin él, quien se registra no recibe prueba gratis ni tiene qué contratar." },
+  "Troque para a chave de produção": { es: "Cambia a la clave de producción" },
+  "Quando a compra de teste der certo, cole em Conexão a chave de produção (sk_live_ ou rk_live_). Até lá, clientes reais NÃO conseguem pagar.": { es: "Cuando la compra de prueba funcione, pega en Conexión la clave de producción (sk_live_ o rk_live_). Hasta entonces, los clientes reales NO pueden pagar." },
+  "Configure o envio de e-mail": { es: "Configura el envío de correo" },
+  "Sem e-mail, os avisos de atraso só aparecem dentro do sistema.": { es: "Sin correo, los avisos de atraso solo aparecen dentro del sistema." },
+  "A chave não funciona mais": { es: "La clave ya no funciona" },
+  "Provedor fora do ar": { es: "Proveedor fuera de servicio" },
+  "Pagou uma assinatura já cancelada": { es: "Pagó una suscripción ya cancelada" },
+  "Cliente não encontrado no provedor": { es: "Cliente no encontrado en el proveedor" },
 };
 
 /**
