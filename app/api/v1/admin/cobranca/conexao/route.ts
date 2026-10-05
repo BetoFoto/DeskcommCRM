@@ -211,17 +211,25 @@ export async function POST(req: NextRequest) {
           logger.error("cobranca.conexao_nao_restaurada", { chave: n, motivo: volta.motivo });
         }
       }
-      // Se a volta falhou, a credencial MUDOU sem passar pelo caminho feliz: a troca não pode ficar sem registro.
+      // Se a volta falhou, a credencial MUDOU sem passar pelo caminho feliz: auditar e avisar os donos (o "Se não foi você" do §7a).
       if (!restaurada) {
         void audit({ actorUserId: ctx.user.id, actingAsPlatformAdmin: true, bypassedRls: true, resourceType: "platform_config", requestId,
           action: "cobranca.provedor_conectado",
           metadata: { provedor, modo: teste.modo, resultado: "gravacao_incompleta", last4_antigo: last4Antigo, last4_novo: chave.slice(-4) } });
+        await avisarTrocaDeChave(admin, { antigo: last4Antigo, novo: chave.slice(-4) });
       }
-      // O antigo, com o segredo que voltou ao banco, segue valendo: some só o novo.
+      // Com tudo restaurado, o antigo, com o segredo que voltou ao banco, segue valendo: some só o novo.
       await preparo.desfazer().catch((e: unknown) =>
         logger.warn("cobranca.webhook_novo_nao_desfeito", { codigo: e instanceof ErroDoProvedor ? e.codigo : "desconhecido" }),
       );
-      return fail("internal_error", "A chave foi aceita pelo provedor, mas não foi possível guardá-la. Conecte de novo.", 500, { requestId });
+      return fail(
+        "internal_error",
+        restaurada
+          ? "A chave foi aceita pelo provedor, mas não foi possível guardá-la. Nada mudou; conecte de novo."
+          : "A chave foi aceita pelo provedor, mas foi guardada só em parte e a anterior não pôde ser restaurada. Conecte de novo agora.",
+        500,
+        { requestId },
+      );
     }
     gravadas.push(g);
   }

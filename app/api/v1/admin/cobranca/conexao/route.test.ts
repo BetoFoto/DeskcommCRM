@@ -158,6 +158,10 @@ describe("conexão da cobrança", () => {
     expect((await conectar()).status).toBe(500);
     expect(h.desfazer).toHaveBeenCalledOnce();
     expect(h.confirmar).not.toHaveBeenCalled();
+    // A chave nova (1ª gravação) não fica no banco: sem anterior, volta ao ambiente; nada auditado nem avisado, nada mudou.
+    expect(h.voltar).toHaveBeenCalledWith("STRIPE_SECRET_KEY");
+    expect(h.audit).not.toHaveBeenCalled();
+    expect(h.donos).not.toHaveBeenCalled();
   });
 
   it("⭐ gravação falha no meio: a chave nova NÃO fica com o segredo velho (volta ao valor anterior; sem anterior, ao ambiente)", async () => {
@@ -180,6 +184,7 @@ describe("conexão da cobrança", () => {
       metadata: expect.objectContaining({ resultado: "gravacao_incompleta", last4_novo: CHAVE.slice(-4) }),
     }));
     expect(JSON.stringify(h.audit.mock.calls)).not.toContain(CHAVE);
+    expect(h.donos).toHaveBeenCalledWith(expect.anything(), { antigo: "9999", novo: "0001" });
   });
 
   it("⭐ publicar falha depois das gravações: 500, mas a troca de chave já foi auditada e os donos avisados", async () => {
