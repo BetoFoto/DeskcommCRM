@@ -34,17 +34,19 @@ export const STRIPE_API_BASE = "https://api.stripe.com/v1";
  * que o revendedor muda no painel — e `current_period_end` (no item desde a
  * basil) ou `invoice.parent` sumiriam sem erro nenhum.
  *
- * DECISÃO (05/10/2026): fica em 2026-03-25.dahlia, de propósito. A Stripe honra
- * a versão fixada, então não há pressa. O changelog, consultado na revisão da
- * Task 14, lista como GA mais recente a 2026-09-30.endive, que REMOVE
- * `payment_method_types` do Checkout Session e unifica `billing_cycle_anchor`
- * entre Subscription e Invoice; e há dahlias posteriores (04-22 … 08-26), que só
- * acrescentam. Nenhum código daqui usa esses dois campos (grep em 05/10/2026),
- * mas a Task 22 e o checkout vão — subir de versão é decisão dela, relendo as
- * quebras da versão-alvo. A prova contra a conta de teste ainda NÃO existe: o
- * scripts/smoke-stripe.ts nasce na Task 22.
+ * DECISÃO (05/10/2026, docs.stripe.com/changelog lido nesse dia): a última da
+ * família dahlia, 2026-08-26.dahlia. A Stripe declara na página da dahlia que
+ * as versões depois de 2026-03-25.dahlia "will include only additive changes",
+ * então o código escrito contra a 03-25 segue valendo. A GA mais recente é
+ * 2026-09-30.endive, uma major, e ficou de fora: das quebras dela, duas caem no
+ * escopo da cobrança — unifica o formato de `billing_cycle_anchor` entre
+ * Subscription e Invoice, e passa a responder erro "Failed Tax Calculation" em
+ * Billing/Checkout. (Remover `payment_method_types` do Checkout não nos pega:
+ * nenhum código ou brief o envia.) Subir para a endive é decisão da Task 22, que
+ * prova contra a conta de teste; essa prova (scripts/smoke-stripe.ts) ainda NÃO
+ * existe.
  */
-export const STRIPE_VERSION = "2026-03-25.dahlia";
+export const STRIPE_VERSION = "2026-08-26.dahlia";
 
 /**
  * Marca o que ESTA instalação criou na conta (endpoint e portal), para achar de
