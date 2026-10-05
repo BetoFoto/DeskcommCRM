@@ -10777,7 +10777,12 @@ export type Database = {
         Returns: number
       }
       fn_arquivos_da_organizacao: {
-        Args: { p_org: string }
+        Args: {
+          p_apos_bucket?: string
+          p_apos_nome?: string
+          p_limite?: number
+          p_org: string
+        }
         Returns: {
           bucket_id: string
           name: string

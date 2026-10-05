@@ -181,10 +181,27 @@ grant execute on function public.fn_excluir_organizacao(uuid, uuid, text, text, 
 -- Todo bucket tenant-aware guarda sob `<organization_id>/…` (whatsapp-media,
 -- ai-policy, lgpd-exports, skill-assets, brand-logos, catalog-photos,
 -- org-sounds). A API do Storage só lista uma pasta por vez; esta função devolve
--- o inventário inteiro pelo prefixo, para a exclusão remover pela API (apagar
+-- o inventário pelo prefixo, para a exclusão remover pela API (apagar
 -- `storage.objects` direto deixaria o arquivo no backend).
+--
+-- EM PÁGINAS, por cursor (bucket, nome). O PostgREST corta toda resposta de
+-- função em `max_rows` (1000 em `supabase/config.toml` e no Supabase Cloud)
+-- sem erro nem aviso: devolvendo o conjunto inteiro, uma organização com mais
+-- de 1000 arquivos tinha só os 1000 primeiros removidos, e o resultado dizia
+-- "1000/1000". Quem chama repete com o último par da página até vir uma
+-- página curta. O teto de 1000 aqui dentro é o mesmo do PostgREST: pedir mais
+-- seria pedir um corte silencioso.
 
-create or replace function public.fn_arquivos_da_organizacao(p_org uuid)
+-- A assinatura de uma entrada só (a versão anterior deste PR) sai: com os
+-- padrões abaixo, `rpc(..., { p_org })` ficaria ambígua entre as duas.
+drop function if exists public.fn_arquivos_da_organizacao(uuid);
+
+create or replace function public.fn_arquivos_da_organizacao(
+  p_org uuid,
+  p_apos_bucket text default null,
+  p_apos_nome text default null,
+  p_limite integer default 500
+)
 returns table (bucket_id text, name text)
 language sql
 stable
@@ -193,11 +210,14 @@ set search_path = public, storage
 as $f$
   select o.bucket_id, o.name
     from storage.objects o
-   where o.name like p_org::text || '/%';
+   where o.name like p_org::text || '/%'
+     and (p_apos_bucket is null or (o.bucket_id, o.name) > (p_apos_bucket, p_apos_nome))
+   order by o.bucket_id, o.name
+   limit least(greatest(coalesce(p_limite, 500), 1), 1000);
 $f$;
 
-revoke execute on function public.fn_arquivos_da_organizacao(uuid) from public, anon, authenticated;
-grant execute on function public.fn_arquivos_da_organizacao(uuid) to service_role;
+revoke execute on function public.fn_arquivos_da_organizacao(uuid, text, text, integer) from public, anon, authenticated;
+grant execute on function public.fn_arquivos_da_organizacao(uuid, text, text, integer) to service_role;
 
 -- ── C. agent_inbox_items.kind ganha 'email_de_login_trocado' ─────────────────
 -- A troca do e-mail de login de um membro pelo admin da plataforma

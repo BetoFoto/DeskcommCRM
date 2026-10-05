@@ -98,7 +98,7 @@ function adminFalso(c: Cenario) {
       }
       throw new Error(`tabela inesperada: ${tabela}`);
     },
-    rpc: vi.fn(async (fn: string) => {
+    rpc: vi.fn(async (fn: string, args?: unknown) => {
       passos.push(`rpc:${fn}`);
       if (fn === "fn_excluir_organizacao") {
         if (c.rpcErro) return { data: null, error: c.rpcErro };
@@ -111,7 +111,22 @@ function adminFalso(c: Cenario) {
           error: null,
         };
       }
-      if (fn === "fn_arquivos_da_organizacao") return { data: c.arquivos ?? [], error: null };
+      if (fn === "fn_arquivos_da_organizacao") {
+        // Como o PostgREST: o conjunto vem ordenado por (bucket, nome), a partir
+        // do cursor, e cortado em `max_rows` (1000, supabase/config.toml) sem
+        // erro nem aviso — além do `p_limite` que a função aplica.
+        const a = args as { p_apos_bucket?: string | null; p_apos_nome?: string | null; p_limite?: number };
+        const ordenados = [...(c.arquivos ?? [])].sort((x, y) =>
+          x.bucket_id === y.bucket_id ? (x.name < y.name ? -1 : 1) : x.bucket_id < y.bucket_id ? -1 : 1,
+        );
+        const depois = ordenados.filter(
+          (o) =>
+            a.p_apos_bucket == null ||
+            o.bucket_id > a.p_apos_bucket ||
+            (o.bucket_id === a.p_apos_bucket && o.name > (a.p_apos_nome ?? "")),
+        );
+        return { data: depois.slice(0, Math.min(a.p_limite ?? Infinity, 1000)), error: null };
+      }
       throw new Error(`rpc inesperada: ${fn}`);
     }),
     storage: {
@@ -241,6 +256,22 @@ describe("a ordem", () => {
     const r = await excluirOrganizacao(admin as never, entrada);
     expect(r.usuarios.removidos).toEqual(["u1"]);
     expect(r.usuarios.mantidos.map((m) => m.id)).toEqual(["u2"]);
+  });
+});
+
+describe("Storage além de uma página", () => {
+  it("1.200 arquivos: todos removidos — o corte de 1000 linhas do PostgREST não vira 'terminou'", async () => {
+    const arquivos = Array.from({ length: 1200 }, (_, i) => ({
+      bucket_id: i % 3 === 0 ? "brand-logos" : "whatsapp-media",
+      name: `${ORG}/f/${String(i).padStart(5, "0")}.bin`,
+    }));
+    const admin = adminFalso({ status: "suspended", arquivos });
+    const r = await excluirOrganizacao(admin as never, entrada);
+    expect(r.arquivos).toEqual({ encontrados: 1200, removidos: 1200, falhas: 0 });
+    const removidos = passos
+      .filter((p) => p.startsWith("storage:"))
+      .reduce((n, p) => n + Number(p.split(":")[2]), 0);
+    expect(removidos).toBe(1200);
   });
 });
 

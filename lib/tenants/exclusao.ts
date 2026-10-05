@@ -23,8 +23,8 @@
  *      Desligar antes e o banco recusar era pior: a empresa ficava sem
  *      WhatsApp e continuava existindo.
  *   4. Os arquivos no Storage (prefixo `<org>/` em todos os buckets) pela API
- *      — apagar `storage.objects` direto deixaria o arquivo no disco.
- *      Repetível: o prefixo é determinístico.
+ *      — apagar `storage.objects` direto deixaria o arquivo no disco. O
+ *      inventário vem em páginas (o PostgREST corta em 1000 linhas sem avisar).
  *   5. Os logins que pertenciam só a esta organização, pelo GoTrue (limpa
  *      sessões, fatores e identidades). Quem o banco ainda referencia fica, e
  *      isso é registrado — não é erro.
@@ -84,6 +84,12 @@ interface Entrada {
 }
 
 const LOTE_DO_STORAGE = 100;
+/**
+ * Página do inventário do Storage. Abaixo do `max_rows` do PostgREST (1000,
+ * `supabase/config.toml`), que corta a resposta de função em silêncio: uma
+ * chamada só devolvia os 1000 primeiros e o resultado dizia "terminou".
+ */
+const PAGINA_DO_INVENTARIO = 500;
 
 function mensagemDe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -170,34 +176,51 @@ async function desligarNuvemshop(
   return falhou ? "falhou" : "ok";
 }
 
-/** Passo 4 — arquivos pelo prefixo `<org>/`, em lotes, pela API do Storage. */
+/**
+ * Passo 4 — arquivos pelo prefixo `<org>/`, pela API do Storage. O inventário
+ * vem em páginas por cursor (bucket, nome) até uma página curta; cada página é
+ * removida em lotes antes de pedir a seguinte.
+ */
 async function limparArquivos(
   admin: SupabaseClient,
   orgId: string,
 ): Promise<ResultadoDaExclusao["arquivos"]> {
-  const { data, error } = await admin.rpc("fn_arquivos_da_organizacao", { p_org: orgId });
-  if (error) {
-    logger.warn("[exclusao] inventário do Storage falhou", {
-      organization_id: orgId,
-      erro: error.message,
-    });
-    return { encontrados: 0, removidos: 0, falhas: 1 };
-  }
-  const porBucket = new Map<string, string[]>();
-  for (const o of (data ?? []) as Array<{ bucket_id: string; name: string }>) {
-    porBucket.set(o.bucket_id, [...(porBucket.get(o.bucket_id) ?? []), o.name]);
-  }
+  let encontrados = 0;
   let removidos = 0;
   let falhas = 0;
-  for (const [bucket, nomes] of porBucket) {
-    for (let i = 0; i < nomes.length; i += LOTE_DO_STORAGE) {
-      const lote = nomes.slice(i, i + LOTE_DO_STORAGE);
-      const { error: remErr } = await admin.storage.from(bucket).remove(lote);
-      if (remErr) falhas += lote.length;
-      else removidos += lote.length;
+  let cursor: { bucket_id: string; name: string } | null = null;
+  for (;;) {
+    const { data, error } = await admin.rpc("fn_arquivos_da_organizacao", {
+      p_org: orgId,
+      p_apos_bucket: cursor?.bucket_id ?? null,
+      p_apos_nome: cursor?.name ?? null,
+      p_limite: PAGINA_DO_INVENTARIO,
+    });
+    if (error) {
+      logger.warn("[exclusao] inventário do Storage falhou", {
+        organization_id: orgId,
+        erro: error.message,
+      });
+      return { encontrados, removidos, falhas: falhas + 1 };
     }
+    const pagina = (data ?? []) as Array<{ bucket_id: string; name: string }>;
+    encontrados += pagina.length;
+    const porBucket = new Map<string, string[]>();
+    for (const o of pagina) {
+      porBucket.set(o.bucket_id, [...(porBucket.get(o.bucket_id) ?? []), o.name]);
+    }
+    for (const [bucket, nomes] of porBucket) {
+      for (let i = 0; i < nomes.length; i += LOTE_DO_STORAGE) {
+        const lote = nomes.slice(i, i + LOTE_DO_STORAGE);
+        const { error: remErr } = await admin.storage.from(bucket).remove(lote);
+        if (remErr) falhas += lote.length;
+        else removidos += lote.length;
+      }
+    }
+    if (pagina.length < PAGINA_DO_INVENTARIO) break;
+    cursor = pagina[pagina.length - 1]!;
   }
-  return { encontrados: (data ?? []).length, removidos, falhas };
+  return { encontrados, removidos, falhas };
 }
 
 /** Passo 5 — só quem o banco apontou como sem nenhum outro vínculo. */

@@ -259,4 +259,42 @@ describe("fn_arquivos_da_organizacao", () => {
       comoUsuario(USER_A, "select * from public.fn_arquivos_da_organizacao($1)", [ORG_A]),
     ).rejects.toThrow(/permission denied/i);
   });
+
+  // O PostgREST corta resposta de função em `max_rows` (1000) sem erro: a
+  // função pagina por cursor (bucket, nome), e a exclusão repete até a página
+  // curta. Aqui: o cursor percorre tudo uma vez só, e o teto não passa de 1000.
+  it("pagina por cursor (bucket, nome): todo arquivo da org uma vez, nenhum de outra, teto de 1000", async () => {
+    await pool.query(
+      `insert into storage.buckets (id, name) values ('gt-a', 'gt-a'), ('gt-b', 'gt-b') on conflict (id) do nothing`,
+    );
+    await pool.query(
+      `insert into storage.objects (bucket_id, name)
+       select case when g % 2 = 0 then 'gt-a' else 'gt-b' end, $1 || '/p/' || lpad(g::text, 5, '0')
+         from generate_series(1, 1005) g`,
+      [ORG_A],
+    );
+    await pool.query(`insert into storage.objects (bucket_id, name) values ('gt-a', $1 || '/alheio')`, [ORG_B]);
+    try {
+      const vistos: string[] = [];
+      let apos: { bucket_id: string; name: string } | null = null;
+      for (let voltas = 0; voltas < 20; voltas++) {
+        const { rows }: { rows: Array<{ bucket_id: string; name: string }> } = await pool.query(
+          "select * from public.fn_arquivos_da_organizacao($1, $2, $3, 300)",
+          [ORG_A, apos?.bucket_id ?? null, apos?.name ?? null],
+        );
+        vistos.push(...rows.map((r) => `${r.bucket_id}:${r.name}`));
+        if (rows.length < 300) break;
+        apos = rows[rows.length - 1]!;
+      }
+      expect(vistos).toHaveLength(1005);
+      expect(new Set(vistos).size).toBe(1005);
+      expect(vistos.some((v) => v.includes(ORG_B))).toBe(false);
+
+      const teto = await pool.query("select * from public.fn_arquivos_da_organizacao($1, null, null, 5000)", [ORG_A]);
+      expect(teto.rowCount).toBe(1000);
+    } finally {
+      await pool.query("delete from storage.objects where bucket_id in ('gt-a', 'gt-b')");
+      await pool.query("delete from storage.buckets where id in ('gt-a', 'gt-b')");
+    }
+  });
 });
