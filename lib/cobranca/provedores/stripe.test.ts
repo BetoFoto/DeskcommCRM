@@ -469,7 +469,12 @@ describe("garantirCliente e iniciarAssinatura", () => {
 });
 
 describe("lerSituacao", () => {
-  type Assinatura = typeof objetos.assinatura;
+  // O JSON tem estes três como `null`, e o tipo inferido fica `null`; na Stripe são `number | null`.
+  type Assinatura = Omit<typeof objetos.assinatura, "trial_end" | "ended_at" | "cancel_at"> & {
+    trial_end: number | null;
+    ended_at: number | null;
+    cancel_at: number | null;
+  };
   type Fatura = typeof objetos.fatura;
   const sub = (o: Partial<Assinatura> & { id?: string }): Assinatura => ({ ...objetos.assinatura, ...o });
   const fatura = (o: Partial<Fatura>): Fatura => ({ ...objetos.fatura, ...o });
