@@ -14612,6 +14612,8 @@ export const DICIONARIO: Traducoes = {
   "Sua assinatura foi cancelada.": { es: "Tu suscripción fue cancelada." },
   "Seu teste grátis acabou em {data}. Assine para continuar usando.": { es: "Tu prueba gratis terminó el {data}. Suscríbete para seguir usando." },
   "Há um pagamento pendente desta empresa. Avise quem administra para evitar a suspensão.": { es: "Hay un pago pendiente de esta empresa. Avisa a quien administra para evitar la suspensión." },
+  // ─── Cobrança do revendedor — hub (PR 3a) ───
+  "A conta foi suspensa por falta de pagamento. Assim que o pagamento for confirmado, tudo volta a funcionar na hora.": { es: "La cuenta fue suspendida por falta de pago. En cuanto se confirme el pago, todo vuelve a funcionar al instante." },
 };
 
 /**
