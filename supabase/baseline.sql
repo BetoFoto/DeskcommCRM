@@ -46000,6 +46000,41 @@ create unique index if not exists uniq_webhook_events_log_cobranca
   on public.webhook_events_log (provider, external_id)
   where provider in ('stripe', 'asaas');
 
+-- ── D. quem a reconciliação relê: um predicado só ────────────────────────────
+-- A reconciliação (cron da cobrança, §8) relê pela API as assinaturas com
+-- provedor cujo estado ainda pode mudar sem aviso nosso: toda não cancelada; a
+-- cancelada de org suspensa POR COBRANÇA (pode ter reassinado e pago por boleto
+-- com o webhook perdido); e a cancelada com checkout dos últimos 30 dias (o
+-- checkout pode ter virado pagamento). `precisa_reler` diz quem entra na
+-- rodada: nunca lida, lida há mais de 6h, ou com o aviso final dado em org
+-- ativa e sem leitura da última hora (a régua só suspende com leitura < 1h).
+-- A Visão geral de /admin/cobranca lê max(relida_em) deste MESMO conjunto.
+-- INVOKER: quem chama é o service_role, que já lê as duas tabelas.
+create or replace function public.fn_cobranca_reconciliaveis()
+returns table (organization_id uuid, relida_em timestamptz, precisa_reler boolean)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select a.organization_id,
+         a.relida_em,
+         (a.relida_em is null
+          or a.relida_em < now() - interval '6 hours'
+          or (o.status = 'active'
+              and a.ultimo_aviso = 'suspende_em_breve'
+              and a.relida_em < now() - interval '1 hour')) as precisa_reler
+    from public.cobranca_assinaturas a
+    join public.organizations o on o.id = a.organization_id
+   where a.provedor is not null
+     and (a.estado <> 'cancelada'
+          or (o.status = 'suspended' and o.suspended_kind = 'cobranca')
+          or a.checkout_expira_em > now() - interval '30 days');
+$$;
+
+revoke execute on function public.fn_cobranca_reconciliaveis() from public, anon, authenticated;
+grant execute on function public.fn_cobranca_reconciliaveis() to service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria

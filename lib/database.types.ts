@@ -10692,6 +10692,10 @@ export type Database = {
         }
       }
       fn_cobranca_liberar_suspensoes: { Args: { p_ator: string | null }; Returns: number }
+      fn_cobranca_reconciliaveis: {
+        Args: never
+        Returns: { organization_id: string; relida_em: string | null; precisa_reler: boolean }[]
+      }
       fn_cobranca_ligada: { Args: never; Returns: boolean }
       fn_configurar_pre_go_live_canal: {
         Args: {
