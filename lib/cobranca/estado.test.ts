@@ -124,6 +124,7 @@ describe("aplicarLeitura — período pago e plano agendado", () => {
     expect(r.planoId).toBe("plano-b");
     expect(r.planoAgendadoId).toBeNull();
     expect(r.planoAplicado).toBe(true);
+    expect(r.descartarAgendado).toBe(false);
   });
 
   it("⭐ reassinar depois de cancelar descarta o agendado: o checkout cobrou o plano atual", () => {
@@ -136,6 +137,39 @@ describe("aplicarLeitura — período pago e plano agendado", () => {
     expect(r.planoId).toBe("plano-a");
     expect(r.planoAgendadoId).toBeNull();
     expect(r.planoAplicado).toBe(false);
+    // Quem grava só escreve o plano quando planoAplicado: o descarte precisa de sinal próprio.
+    expect(r.descartarAgendado).toBe(true);
+  });
+
+  it("⭐ a assinatura que carregava o agendado foi cancelada: ele é descartado já na entrada", () => {
+    const r = aplicarLeitura(
+      atual({ estado: "ativa", planoAgendadoId: "plano-b", proximoVencimento: AMANHA }),
+      situacao({ cancelada: true, jaPagou: true }),
+      AGORA,
+    );
+    expect(r.estado).toBe("cancelada");
+    expect(r.planoId).toBe("plano-a");
+    expect(r.planoAgendadoId).toBeNull();
+    expect(r.planoAplicado).toBe(false);
+    expect(r.descartarAgendado).toBe(true);
+  });
+
+  it("⭐ reassinar e cair em atraso antes da 1ª releitura em dia: o agendado velho não vira ao pagar", () => {
+    const linha = atual({ estado: "cancelada", planoAgendadoId: "plano-b", proximoVencimento: AMANHA });
+    const emAtraso = aplicarLeitura(
+      linha,
+      situacao({ existe: true, emAtraso: true, assinaturasVivas: 1, proximoVencimento: MES_QUE_VEM }),
+      AGORA,
+    );
+    expect(emAtraso.estado).toBe("em_atraso");
+    expect(emAtraso.descartarAgendado).toBe(true);
+    const pago = aplicarLeitura(
+      { ...linha, estado: emAtraso.estado, planoAgendadoId: emAtraso.planoAgendadoId, proximoVencimento: emAtraso.proximoVencimento },
+      situacao({ existe: true, assinaturasVivas: 1, proximoVencimento: MES_QUE_VEM }),
+      AGORA,
+    );
+    expect(pago.planoId).toBe("plano-a");
+    expect(pago.planoAplicado).toBe(false);
   });
 
   it("controle: mesmo período (nada pago de novo), o agendado espera", () => {
@@ -147,6 +181,7 @@ describe("aplicarLeitura — período pago e plano agendado", () => {
     expect(r.planoId).toBe("plano-a");
     expect(r.planoAgendadoId).toBe("plano-b");
     expect(r.planoAplicado).toBe(false);
+    expect(r.descartarAgendado).toBe(false);
   });
 
   it("período avançou mas em atraso (a Stripe abre o período antes de cobrar): o agendado espera", () => {

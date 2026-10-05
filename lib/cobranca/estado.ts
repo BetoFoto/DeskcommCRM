@@ -8,7 +8,8 @@
  *     ativa/trial (cancelar e reassinar não reinicia o relógio);
  *   - o período pago nunca é apagado por leitura nula;
  *   - transição PARA ativa/trial zera o aviso da régua;
- *   - o plano agendado vira só quando um período novo foi PAGO.
+ *   - o plano agendado vira só quando um período novo foi PAGO, e morre com a
+ *     assinatura que o carregava (cancelada, ou saindo de cancelada).
  * Sem banco e sem relógio: `lidoEm` é injetado. Quem grava é `sincronizar`.
  */
 import type { Situacao } from "@/lib/cobranca/provedores/contrato";
@@ -52,6 +53,13 @@ export interface LeituraAplicada {
   readonly zerarAviso: boolean;
   /** true → `checkout_url = null, checkout_expira_em = null`. */
   readonly limparCheckout: boolean;
+  /**
+   * true → `plano_agendado_id = null` SEM tocar `plano_id` e sem audit de troca.
+   * Separado de `planoAplicado` porque quem grava só escreve o plano quando ele vira:
+   * sem este sinal o descarte ficaria só no retorno e o agendado velho viraria
+   * na renovação seguinte.
+   */
+  readonly descartarAgendado: boolean;
 }
 
 function menor(a: Date, b: Date): Date {
@@ -77,10 +85,11 @@ export function aplicarLeitura(atual: AssinaturaAtual, s: Situacao, lidoEm: Date
     estado === "ativa" &&
     s.proximoVencimento !== null &&
     (atual.proximoVencimento === null || s.proximoVencimento > atual.proximoVencimento || atual.estado === "em_atraso");
-  // Cancelada → ativa é assinatura NOVA, cobrada pelo plano do checkout: o agendado
-  // pertencia à assinatura antiga (trocarPlano mexeu no preço dela), então é descartado.
-  const reassinou = atual.estado === "cancelada" && estado === "ativa";
-  const agendado = periodoNovoPago && !reassinou ? atual.planoAgendadoId : null;
+  // O agendado pertence à assinatura em que trocarPlano mexeu no preço. Cancelada,
+  // ela morreu; saindo de cancelada, a assinatura é NOVA e cobra o plano do checkout
+  // (inclusive cancelada → em_atraso → ativa). Nos dois lados o agendado é descartado.
+  const assinaturaMorreu = estado === "cancelada" || atual.estado === "cancelada";
+  const agendado = periodoNovoPago && !assinaturaMorreu ? atual.planoAgendadoId : null;
 
   return {
     estado,
@@ -89,7 +98,7 @@ export function aplicarLeitura(atual: AssinaturaAtual, s: Situacao, lidoEm: Date
     proximoVencimento: s.proximoVencimento ?? atual.proximoVencimento,
     cancelaNoFim: s.cancelaNoFim,
     planoId: agendado ?? atual.planoId,
-    planoAgendadoId: agendado || reassinou ? null : atual.planoAgendadoId,
+    planoAgendadoId: agendado || assinaturaMorreu ? null : atual.planoAgendadoId,
     planoAplicado: agendado !== null,
     provedorAssinaturaId: s.assinaturaRef ?? atual.provedorAssinaturaId,
     assinaturasVivas: s.assinaturasVivas,
@@ -97,5 +106,6 @@ export function aplicarLeitura(atual: AssinaturaAtual, s: Situacao, lidoEm: Date
     ultimoErro: s.pagamentoSemAssinaturaViva ? "pagamento_de_assinatura_cancelada" : null,
     zerarAviso: emDia && estado !== atual.estado,
     limparCheckout: s.assinaturasVivas > 0,
+    descartarAgendado: assinaturaMorreu && atual.planoAgendadoId !== null,
   };
 }
