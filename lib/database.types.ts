@@ -4453,6 +4453,7 @@ export type Database = {
           max_canais: number | null
           moeda: string
           nome: string
+          oferecido_ao_cliente: boolean
           padrao_no_cadastro: boolean
           preco_cents: number
           teto_ia_usd_cents: number | null
@@ -4469,6 +4470,7 @@ export type Database = {
           max_canais?: number | null
           moeda?: string
           nome: string
+          oferecido_ao_cliente?: boolean
           padrao_no_cadastro?: boolean
           preco_cents: number
           teto_ia_usd_cents?: number | null
@@ -4485,6 +4487,7 @@ export type Database = {
           max_canais?: number | null
           moeda?: string
           nome?: string
+          oferecido_ao_cliente?: boolean
           padrao_no_cadastro?: boolean
           preco_cents?: number
           teto_ia_usd_cents?: number | null

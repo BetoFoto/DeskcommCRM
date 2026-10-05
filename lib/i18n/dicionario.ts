@@ -14464,6 +14464,10 @@ export const DICIONARIO: Traducoes = {
   // ─── Cobrança do revendedor — Central (PR 3a) ───
   "Plano e cobrança da empresa precisam de atenção": { es: "El plan y la facturación de la empresa necesitan atención" },
   "Abra Plano e cobrança: lá estão o link para pagar, a troca do cartão e a troca de plano. Só quem administra a empresa vê essa tela.": { es: "Abre Plan y facturación: allí están el enlace para pagar, el cambio de tarjeta y el cambio de plan. Solo quien administra la empresa ve esa pantalla." },
+  // ─── cobranca-plano-oferecido ───
+  "Só você atribui": { es: "Solo usted lo asigna" },
+  "Esconder das empresas": { es: "Ocultar a las empresas" },
+  "Mostrar às empresas": { es: "Mostrar a las empresas" },
 };
 
 /**

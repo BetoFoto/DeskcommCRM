@@ -46128,6 +46128,13 @@ $$;
 revoke execute on function public.fn_cobranca_suspender_se_devendo(uuid, text) from public, anon, authenticated;
 grant execute on function public.fn_cobranca_suspender_se_devendo(uuid, text) to service_role;
 
+-- ── F. o plano que a empresa pode escolher sozinha ───────────────────────────
+-- false = só o dono atribui (plano negociado, com desconto): a tela da empresa
+-- não o lista e a rota da empresa o recusa. Padrão true: o plano que já existia
+-- segue aparecendo depois do update.sh.
+alter table public.cobranca_planos
+  add column if not exists oferecido_ao_cliente boolean not null default true;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria

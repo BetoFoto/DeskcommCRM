@@ -1,6 +1,6 @@
 -- 0562 — COBRANÇA DO REVENDEDOR, PR 3a: o webhook, os avisos e a reconciliação
 --        (spec docs/superpowers/specs/2026-09-29-cobranca-do-revendedor-design.md §2.4, §2.5, §8, §11)
--- manifest: **Cobrança do revendedor, PR 3a: o webhook, os avisos e a reconciliação.** (A) `webhook_events_log_provider_check` ganha `stripe` e `asaas`, editado no bloco único do baseline (alargamento puro, issue #159). (B) `uniq_webhook_events_log_cobranca`: `(provider, external_id)` único só para os provedores de cobrança — a rota do webhook trata o `23505` (linha `processed` responde 200; `received` reemite o sinal). A linha de cobrança nasce com `organization_id` nulo e corpo `{id,type}`, invisível ao tenant pela própria policy. Apêndice antes da VARREDURA anon, depois do bloco do PR 2. (C) `agent_inbox_items_kind_check` ganha `cobranca` no bloco único do baseline (lista completa; esta passa a ser a última migration que a reconstrói): avisos da régua à empresa, sem referência, e o de 80% do teto de IA do plano, com `ref_kind='plano'`; os dois abrem Plano e cobrança, só para o admin. (D) `fn_cobranca_reconciliaveis()` — o predicado único de quem a reconciliação relê (§8): o cron filtra `precisa_reler` e a Visão geral lê `max(relida_em)` do mesmo conjunto; INVOKER, EXECUTE só do `service_role`. (E) `cobranca_assinaturas.link_de_pagamento` (o link em aberto da última releitura; faixa, hub, Central e e-mail leem dele, nenhuma tela chama o provedor) e três funções INVOKER, EXECUTE só do `service_role`: `fn_cobranca_registrar_aviso` grava `ultimo_aviso` e o item `cobranca` da Central na mesma transação (o mesmo aviso da mesma dívida ganha uma vez; o novo fecha o anterior), `fn_cobranca_avisar_teto_de_ia` (um aviso de 80% por org por mês, com trava consultiva) e `fn_cobranca_suspender_se_devendo` (trava a linha e só suspende quem AINDA deve: o pagamento gravado no meio vence). Gate da 0562: `tests/invariants/cobranca-avisos.test.ts`, `tests/invariants/cobranca-reconciliacao.test.ts`, `tests/unit/kind-check-migration-x-baseline.test.ts`, `tests/invariants/vocabulario-banco-x-typescript.test.ts`, `tests/invariants/cobranca-webhook-e-avisos.test.ts`.
+-- manifest: **Cobrança do revendedor, PR 3a: o webhook, os avisos e a reconciliação.** (A) `webhook_events_log_provider_check` ganha `stripe` e `asaas`, editado no bloco único do baseline (alargamento puro, issue #159). (B) `uniq_webhook_events_log_cobranca`: `(provider, external_id)` único só para os provedores de cobrança — a rota do webhook trata o `23505` (linha `processed` responde 200; `received` reemite o sinal). A linha de cobrança nasce com `organization_id` nulo e corpo `{id,type}`, invisível ao tenant pela própria policy. Apêndice antes da VARREDURA anon, depois do bloco do PR 2. (C) `agent_inbox_items_kind_check` ganha `cobranca` no bloco único do baseline (lista completa; esta passa a ser a última migration que a reconstrói): avisos da régua à empresa, sem referência, e o de 80% do teto de IA do plano, com `ref_kind='plano'`; os dois abrem Plano e cobrança, só para o admin. (D) `fn_cobranca_reconciliaveis()` — o predicado único de quem a reconciliação relê (§8): o cron filtra `precisa_reler` e a Visão geral lê `max(relida_em)` do mesmo conjunto; INVOKER, EXECUTE só do `service_role`. (E) `cobranca_assinaturas.link_de_pagamento` (o link em aberto da última releitura; faixa, hub, Central e e-mail leem dele, nenhuma tela chama o provedor) e três funções INVOKER, EXECUTE só do `service_role`: `fn_cobranca_registrar_aviso` grava `ultimo_aviso` e o item `cobranca` da Central na mesma transação (o mesmo aviso da mesma dívida ganha uma vez; o novo fecha o anterior), `fn_cobranca_avisar_teto_de_ia` (um aviso de 80% por org por mês, com trava consultiva) e `fn_cobranca_suspender_se_devendo` (trava a linha e só suspende quem AINDA deve: o pagamento gravado no meio vence). (F) `cobranca_planos.oferecido_ao_cliente` (padrão true): o plano que a empresa pode escolher sozinha; false = só o dono atribui (plano negociado). Gate da 0562: `tests/invariants/cobranca-plano-oferecido.test.ts`, `tests/invariants/cobranca-avisos.test.ts`, `tests/invariants/cobranca-reconciliacao.test.ts`, `tests/unit/kind-check-migration-x-baseline.test.ts`, `tests/invariants/vocabulario-banco-x-typescript.test.ts`, `tests/invariants/cobranca-webhook-e-avisos.test.ts`.
 --
 -- ── A causa ───────────────────────────────────────────────────────────────────
 -- A cobrança passa a falar com um provedor de pagamento (Stripe nesta PR; o
@@ -14,6 +14,7 @@
 -- C. `agent_inbox_items_kind_check` ganha 'cobranca': avisos da régua e do teto de IA.
 -- D. `fn_cobranca_reconciliaveis()`: quem a reconciliação relê, num predicado só.
 -- E. `link_de_pagamento`, `fn_cobranca_registrar_aviso`, `fn_cobranca_avisar_teto_de_ia` e `fn_cobranca_suspender_se_devendo`.
+-- F. `cobranca_planos.oferecido_ao_cliente`: o plano que a empresa pode escolher sozinha.
 --
 -- No baseline, as seções que ALARGAM constraint de vocabulário editam o bloco
 -- único dela (regra da issue #159); as demais entram no apêndice desta
@@ -21,7 +22,7 @@
 -- Idempotente (`drop constraint if exists` + `add`, `if not exists`, `create or
 -- replace`); sem BEGIN/COMMIT.
 -- Toda função nova perde EXECUTE de public, anon e authenticated.
--- Gates: tests/invariants/cobranca-webhook-e-avisos.test.ts, cobranca-reconciliacao.test.ts, cobranca-avisos.test.ts.
+-- Gates: tests/invariants/cobranca-webhook-e-avisos.test.ts, cobranca-reconciliacao.test.ts, cobranca-avisos.test.ts, cobranca-plano-oferecido.test.ts.
 
 -- ── A. o arquivo do webhook aceita os provedores de cobrança ─────────────────
 -- Lista COMPLETA do bloco único do baseline (0151, alargado pela 0387) mais
@@ -201,3 +202,10 @@ $$;
 
 revoke execute on function public.fn_cobranca_suspender_se_devendo(uuid, text) from public, anon, authenticated;
 grant execute on function public.fn_cobranca_suspender_se_devendo(uuid, text) to service_role;
+
+-- ── F. o plano que a empresa pode escolher sozinha ───────────────────────────
+-- false = só o dono atribui (plano negociado, com desconto): a tela da empresa
+-- não o lista e a rota da empresa o recusa. Padrão true: o plano que já existia
+-- segue aparecendo depois do update.sh.
+alter table public.cobranca_planos
+  add column if not exists oferecido_ao_cliente boolean not null default true;
