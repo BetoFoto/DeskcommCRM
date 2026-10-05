@@ -1,7 +1,10 @@
--- 0492 — Gestão de tenants pelo admin da plataforma: exclusão completa e
--- transacional, e o inventário de arquivos da organização no Storage.
+-- 0556 — Gestão de tenants pelo admin da plataforma: exclusão completa e
+-- transacional, o inventário de arquivos da organização no Storage e o aviso
+-- de troca de e-mail de login na Central (PR #1967, de @Draven9; nasceu com
+-- outro número e foi renumerada no recorte — a suspensão e o corte de RLS que
+-- ela trazia saíram: a suspensão é a da 0501, e o corte vira item de revisão).
 --
--- ── 2. EXCLUSÃO COMPLETA DA ORGANIZAÇÃO ──────────────────────────────────────
+-- ── A. EXCLUSÃO COMPLETA DA ORGANIZAÇÃO ──────────────────────────────────────
 --
 -- Não existia exclusão de tenant. Um `delete from organizations` avulso
 -- cascateia por ~155 tabelas, mas tem três armadilhas medidas no mapa de
@@ -19,9 +22,15 @@
 --    a organização — é por ela que a trilha continua achável — e o resumo do que
 --    a LGPD exige guardar (`lgpd_requests`, que o cascade apaga).
 --
--- Pré-condição: a organização precisa estar SUSPENSA. A exclusão é o segundo
--- passo de uma decisão, nunca o primeiro — e a suspensão já deixou o tenant
--- parado (nada entra pela RLS, nada sai pelos workers) antes de sumir.
+-- Pré-condição: a organização precisa estar SUSPENSA, e a suspensão precisa ser
+-- ADMINISTRATIVA. A exclusão é o segundo passo de uma decisão, nunca o primeiro
+-- — e a suspensão já deixou o tenant parado (nada sai pelos workers, 0501)
+-- antes de sumir. Suspensão por COBRANÇA é recusada (`PT409`
+-- `organizacao_com_cobranca_pendente`): excluir a empresa deixaria a assinatura
+-- cobrando no provedor. Tipo nulo vale como administrativa (regra de
+-- `lib/organizacao/operante.ts`). A rota confere o mesmo antes de tocar em
+-- nada; aqui é conferido de novo porque `fn_suspender_organizacao` pode trocar
+-- o tipo entre a leitura da rota e esta transação.
 --
 -- Roda SÓ como servidor (service_role, `auth.uid()` nulo): o gatilho
 -- `fn_followup_generation_write` recusa DELETE em `job_queue` vindo de sessão
@@ -56,7 +65,7 @@ begin
     raise exception 'organizacao_exclusao_sem_motivo' using errcode = '22023';
   end if;
 
-  select id, slug, display_name, legal_name, cnpj, status, created_at
+  select id, slug, display_name, legal_name, cnpj, status, suspended_kind, created_at
     into v_org
     from public.organizations
    where id = p_org
@@ -66,6 +75,9 @@ begin
   end if;
   if v_org.status <> 'suspended' then
     raise exception 'organizacao_nao_suspensa' using errcode = 'PT409';
+  end if;
+  if coalesce(v_org.suspended_kind, 'administrativa') = 'cobranca' then
+    raise exception 'organizacao_com_cobranca_pendente' using errcode = 'PT409';
   end if;
   if p_confirmacao is distinct from v_org.slug then
     raise exception 'organizacao_confirmacao_divergente' using errcode = '22023';
@@ -112,6 +124,7 @@ begin
        'slug', v_org.slug, 'display_name', v_org.display_name,
        'legal_name', v_org.legal_name, 'cnpj', v_org.cnpj,
        'criada_em', v_org.created_at, 'motivo', btrim(p_motivo),
+       'suspended_kind', coalesce(v_org.suspended_kind, 'administrativa'),
        'contagens', v_contagens, 'lgpd_requests', v_lgpd,
        'acompanhamentos_de_suporte', v_suporte));
 
@@ -163,7 +176,7 @@ $f$;
 revoke execute on function public.fn_excluir_organizacao(uuid, uuid, text, text, text) from public, anon, authenticated;
 grant execute on function public.fn_excluir_organizacao(uuid, uuid, text, text, text) to service_role;
 
--- ── 3. ARQUIVOS DA ORGANIZAÇÃO NO STORAGE ────────────────────────────────────
+-- ── B. ARQUIVOS DA ORGANIZAÇÃO NO STORAGE ────────────────────────────────────
 --
 -- Todo bucket tenant-aware guarda sob `<organization_id>/…` (whatsapp-media,
 -- ai-policy, lgpd-exports, skill-assets, brand-logos, catalog-photos,
@@ -185,3 +198,36 @@ $f$;
 
 revoke execute on function public.fn_arquivos_da_organizacao(uuid) from public, anon, authenticated;
 grant execute on function public.fn_arquivos_da_organizacao(uuid) to service_role;
+
+-- ── C. agent_inbox_items.kind ganha 'email_de_login_trocado' ─────────────────
+-- A troca do e-mail de login de um membro pelo admin da plataforma
+-- (`PATCH /api/v1/admin/tenants/[id]/members/[userId]/email`) abre um aviso na
+-- Central da empresa — com o nome da pessoa e a data, NUNCA o endereço —, para
+-- que uma troca indevida não passe em silêncio. Lista COMPLETA da 0501 (a
+-- última que reconstruiu a constraint) mais o kind novo: esta passa a ser a
+-- última migration que a reconstrói (kind-check-migration-x-baseline). No
+-- baseline, o kind entra no bloco único da constraint, não num bloco novo.
+alter table public.agent_inbox_items
+  drop constraint if exists agent_inbox_items_kind_check;
+alter table public.agent_inbox_items
+  add constraint agent_inbox_items_kind_check check (kind in (
+    'appointment_outcome_required','appointment_recovery_review','qr_rescan','routing_unassigned',
+    'job_dead','event_dead','budget_exceeded','handoff','promotion_review','judge_unaligned',
+    'followup_dead','snooze_expired','next_action_ambiguous','risk_backlog_seeded',
+    'reactivation_expired','capabilities_missing','message_send_stuck','midia_nao_lida',
+    'channel_template_review','channel_number_alert','promise_unfulfilled','contact_proposal_expired',
+    'budget_warning','conhecimento_nao_indexado','voice_call_missed','case_stale',
+    'aviso_de_caso_nao_entregue','followup_sem_agente','canal_mudo_sem_numero',
+    'proposal_expired_notice','proposal_acceptance_rate_drop','proposal_promised_not_created',
+    'proposta_travada',
+    'proposta_pronta_para_revisao',
+    -- (migration 0500) os dois avisos do Jev.
+    'jev_pedido_de_humano',
+    'jev_parar_de_receber',
+    -- (migration 0501) a organização voltou de uma suspensão e há conversas para revisar.
+    'org_reativada',
+    -- (migration 0556) o admin da plataforma trocou o e-mail de login de uma
+    -- pessoa da equipe: a empresa fica sabendo pela Central (sem endereço).
+    'email_de_login_trocado',
+    'other'
+  ));

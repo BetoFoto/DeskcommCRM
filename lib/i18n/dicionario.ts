@@ -10764,6 +10764,14 @@ export const DICIONARIO: Traducoes = {
       es: "La IA no respondió ni responderá sola a las conversaciones que llegaron durante la suspensión. Abre el Inbox y búscalas en las pestañas Cola y Automático.",
     },
   "Abrir o Inbox": { es: "Abrir el Inbox" },
+  "O e-mail de login de uma pessoa da equipe foi trocado": {
+    es: "Se cambió el correo de inicio de sesión de una persona del equipo",
+  },
+  "Confirme com a pessoa que ela reconhece a troca. Se não reconhece, fale com quem administra o servidor.":
+    {
+      es: "Confirma con la persona que reconoce el cambio. Si no lo reconoce, habla con quien administra el servidor.",
+    },
+  "Abrir a equipe": { es: "Abrir el equipo" },
   // Diálogo de exclusão de canal (`frasesDoImpacto`): singular e plural.
   "chamada de voz": { es: "llamada de voz" },
   "chamadas de voz": { es: "llamadas de voz" },

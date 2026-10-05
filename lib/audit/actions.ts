@@ -1023,7 +1023,7 @@ export const AUDIT_ACTIONS = [
   // (#2098): gravada pela tela de Conversões, em `organizations.settings.conversions`.
   "conversions.meta_identity_updated",
 
-  // Gestão de tenants pelo admin da plataforma (migration 0492).
+  // Gestão de tenants pelo admin da plataforma (migration 0556).
   // A LÁPIDE, gravada pelo banco dentro de `fn_excluir_organizacao`, com
   // `organization_id` nulo e `resource_id` = a organização excluída.
   "organization.deleted",

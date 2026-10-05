@@ -10166,6 +10166,10 @@ alter table public.agent_inbox_items
     -- lista pelas razões de sempre (#159; a janela do `midia-nao-lida.test.ts`).
     'jev_pedido_de_humano',
     'jev_parar_de_receber',
+    -- (migration 0556) o admin da plataforma trocou o e-mail de login de uma
+    -- pessoa da equipe (PATCH .../members/[userId]/email): a empresa fica
+    -- sabendo pela Central — com o nome e a data, nunca o endereço.
+    'email_de_login_trocado',
     'other'
   ));
 
@@ -45024,10 +45028,12 @@ grant execute on function public.fn_expurgar_observacoes_do_jev(int,int) to serv
 
 notify pgrst, 'reload schema';
 
--- ---- gestão de tenants: exclusão completa, arquivos da organização (migration 0492) ----
--- Idempotente (create or replace + revoke/grant). Corpo e porquê: a migration 0492.
+-- ---- gestão de tenants: exclusão completa e arquivos da organização (migration 0556) ----
+-- Idempotente (create or replace + revoke/grant). Corpo e porquê: a migration 0556.
+-- A parte C dela (o kind 'email_de_login_trocado') entra no bloco único de
+-- `agent_inbox_items_kind_check`, não aqui.
 --
--- ── 2. EXCLUSÃO COMPLETA DA ORGANIZAÇÃO ──────────────────────────────────────
+-- ── A. EXCLUSÃO COMPLETA DA ORGANIZAÇÃO ──────────────────────────────────────
 --
 -- Não existia exclusão de tenant. Um `delete from organizations` avulso
 -- cascateia por ~155 tabelas, mas tem três armadilhas medidas no mapa de
@@ -45045,9 +45051,15 @@ notify pgrst, 'reload schema';
 --    a organização — é por ela que a trilha continua achável — e o resumo do que
 --    a LGPD exige guardar (`lgpd_requests`, que o cascade apaga).
 --
--- Pré-condição: a organização precisa estar SUSPENSA. A exclusão é o segundo
--- passo de uma decisão, nunca o primeiro — e a suspensão já deixou o tenant
--- parado (nada entra pela RLS, nada sai pelos workers) antes de sumir.
+-- Pré-condição: a organização precisa estar SUSPENSA, e a suspensão precisa ser
+-- ADMINISTRATIVA. A exclusão é o segundo passo de uma decisão, nunca o primeiro
+-- — e a suspensão já deixou o tenant parado (nada sai pelos workers, 0501)
+-- antes de sumir. Suspensão por COBRANÇA é recusada (`PT409`
+-- `organizacao_com_cobranca_pendente`): excluir a empresa deixaria a assinatura
+-- cobrando no provedor. Tipo nulo vale como administrativa (regra de
+-- `lib/organizacao/operante.ts`). A rota confere o mesmo antes de tocar em
+-- nada; aqui é conferido de novo porque `fn_suspender_organizacao` pode trocar
+-- o tipo entre a leitura da rota e esta transação.
 --
 -- Roda SÓ como servidor (service_role, `auth.uid()` nulo): o gatilho
 -- `fn_followup_generation_write` recusa DELETE em `job_queue` vindo de sessão
@@ -45082,7 +45094,7 @@ begin
     raise exception 'organizacao_exclusao_sem_motivo' using errcode = '22023';
   end if;
 
-  select id, slug, display_name, legal_name, cnpj, status, created_at
+  select id, slug, display_name, legal_name, cnpj, status, suspended_kind, created_at
     into v_org
     from public.organizations
    where id = p_org
@@ -45092,6 +45104,9 @@ begin
   end if;
   if v_org.status <> 'suspended' then
     raise exception 'organizacao_nao_suspensa' using errcode = 'PT409';
+  end if;
+  if coalesce(v_org.suspended_kind, 'administrativa') = 'cobranca' then
+    raise exception 'organizacao_com_cobranca_pendente' using errcode = 'PT409';
   end if;
   if p_confirmacao is distinct from v_org.slug then
     raise exception 'organizacao_confirmacao_divergente' using errcode = '22023';
@@ -45138,6 +45153,7 @@ begin
        'slug', v_org.slug, 'display_name', v_org.display_name,
        'legal_name', v_org.legal_name, 'cnpj', v_org.cnpj,
        'criada_em', v_org.created_at, 'motivo', btrim(p_motivo),
+       'suspended_kind', coalesce(v_org.suspended_kind, 'administrativa'),
        'contagens', v_contagens, 'lgpd_requests', v_lgpd,
        'acompanhamentos_de_suporte', v_suporte));
 
@@ -45189,7 +45205,7 @@ $f$;
 revoke execute on function public.fn_excluir_organizacao(uuid, uuid, text, text, text) from public, anon, authenticated;
 grant execute on function public.fn_excluir_organizacao(uuid, uuid, text, text, text) to service_role;
 
--- ── 3. ARQUIVOS DA ORGANIZAÇÃO NO STORAGE ────────────────────────────────────
+-- ── B. ARQUIVOS DA ORGANIZAÇÃO NO STORAGE ────────────────────────────────────
 --
 -- Todo bucket tenant-aware guarda sob `<organization_id>/…` (whatsapp-media,
 -- ai-policy, lgpd-exports, skill-assets, brand-logos, catalog-photos,
