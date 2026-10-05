@@ -101,6 +101,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.query("delete from organizations where id = any($1)", [[ORG_A, ORG_B, ORG_X]]);
   await pool.query("delete from api_audit_log where resource_id = $1", [ORG_X]);
+  await pool.query("delete from api_audit_log where action like 'lgpd.%' and actor_user_id = $1", [USER_SO_X]);
   // `platform_admins.granted_by` é RESTRICT, e o fixture concede a si mesmo.
   await pool.query("delete from platform_admins where user_id = $1", [ADMIN_PLAT]);
   await pool.query("delete from auth.users where id = any($1)", [
@@ -155,6 +156,18 @@ describe("fn_excluir_organizacao", () => {
       `insert into webhook_events_log (organization_id, channel_session_id, raw_body)
        values ($1, $2, '{"telefone":"5511999999999"}')`,
       [ORG_X, SESS_X],
+    );
+  });
+
+  // A trilha que a org deixa: duas linhas de auditoria dela, como as que a
+  // LGPD exige guardar. A FK `organization_id` é SET NULL — elas sobrevivem e
+  // perdem a org; a lápide guarda o que DELIMITA essa trilha.
+  beforeAll(async () => {
+    await pool.query(
+      `insert into api_audit_log (organization_id, actor_user_id, action, resource_type, resource_id, created_at)
+       values ($1, $2, 'lgpd.redact_executed', 'contact', gen_random_uuid(), now() - interval '3 days'),
+              ($1, $2, 'lgpd.export_generated', 'contact', gen_random_uuid(), now() - interval '1 day')`,
+      [ORG_X, USER_SO_X],
     );
   });
 
@@ -239,6 +252,30 @@ describe("fn_excluir_organizacao", () => {
     expect(lapide.rows[0]!.metadata.slug).toBe("gestao-tenants-x");
     // A prova de atendimento LGPD, que o cascade apagou, fica na lápide.
     expect(lapide.rows[0]!.metadata.lgpd_requests as unknown[]).toHaveLength(1);
+  });
+
+  it("a lápide delimita a trilha que perdeu a org: ids dos membros, contagem e intervalo das linhas", async () => {
+    const { rows } = await pool.query<{ metadata: Record<string, unknown> }>(
+      `select metadata from api_audit_log where action = 'organization.deleted' and resource_id = $1`,
+      [ORG_X],
+    );
+    const m = rows[0]!.metadata as {
+      membros: string[];
+      auditoria: { linhas: number; primeira_em: string; ultima_em: string };
+    };
+    expect(new Set(m.membros)).toEqual(new Set([USER_SO_X, USER_X_E_B, ADMIN_PLAT]));
+    // As duas semeadas e o que os gatilhos da própria org gravaram no caminho.
+    expect(m.auditoria.linhas).toBeGreaterThanOrEqual(2);
+    expect(new Date(m.auditoria.primeira_em).getTime()).toBeLessThan(new Date(m.auditoria.ultima_em).getTime());
+
+    // As linhas sobreviveram SEM a org (SET NULL) e cabem no que a lápide diz.
+    const trilha = await pool.query<{ n: string }>(
+      `select count(*) as n from api_audit_log
+        where organization_id is null and action like 'lgpd.%'
+          and actor_user_id = any($1::uuid[]) and created_at between $2 and $3`,
+      [m.membros, m.auditoria.primeira_em, m.auditoria.ultima_em],
+    );
+    expect(Number(trilha.rows[0]!.n)).toBe(2);
   });
 
   it("organização inexistente é recusada com PT404", async () => {

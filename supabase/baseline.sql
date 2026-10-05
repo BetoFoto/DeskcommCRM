@@ -45046,10 +45046,16 @@ notify pgrst, 'reload schema';
 --    caminho da cascata.
 --  * `webhook_events_log` não tem FK para `organizations`: sobraria com o corpo
 --    cru dos webhooks (telefones, textos). É apagada explicitamente.
---  * A auditoria sobrevive (FK `set null`), mas perde a atribuição. Por isso a
+--  * A auditoria sobrevive (FK `set null`), mas perde a atribuição: a cascata
+--    zera a org de toda linha da empresa, e o GoTrue, ao remover depois os
+--    logins que só pertenciam a ela, zera também o ator dessas linhas. A
 --    função grava ANTES uma lápide (`organization.deleted`) com `resource_id` =
---    a organização — é por ela que a trilha continua achável — e o resumo do que
---    a LGPD exige guardar (`lgpd_requests`, que o cascade apaga).
+--    a organização, o resumo do que a LGPD exige guardar (`lgpd_requests`, que
+--    o cascade apaga) e o que DELIMITA a trilha órfã: os ids dos membros e a
+--    contagem e o intervalo (`primeira_em`/`ultima_em`) das linhas da org.
+--    Delimitar não é reatribuir: uma linha órfã de ator removido não volta a
+--    dizer de que empresa era. Atribuição exata (manter os logins com
+--    histórico, ou a org copiada na linha) é decisão do dono, não deste PR.
 --
 -- Pré-condição: a organização precisa estar SUSPENSA, e a suspensão precisa ser
 -- ADMINISTRATIVA. A exclusão é o segundo passo de uma decisão, nunca o primeiro
@@ -45095,6 +45101,7 @@ declare
   v_contagens jsonb;
   v_lgpd jsonb;
   v_suporte jsonb;
+  v_auditoria jsonb;
   v_tabela regclass;
   v_sobra bigint;
 begin
@@ -45157,6 +45164,12 @@ begin
     into v_suporte
     from public.platform_support_sessions where organization_id = p_org;
 
+  -- A trilha que vai perder a org no SET NULL: quantas linhas e de quando.
+  select jsonb_build_object('linhas', count(*), 'primeira_em', min(created_at),
+                            'ultima_em', max(created_at))
+    into v_auditoria
+    from public.api_audit_log where organization_id = p_org;
+
   -- A lápide: `organization_id` nulo de propósito (a linha sobrevive à
   -- exclusão sem depender do SET NULL), `resource_id` = a organização.
   insert into public.api_audit_log
@@ -45171,7 +45184,8 @@ begin
        'criada_em', v_org.created_at, 'motivo', btrim(p_motivo),
        'suspended_kind', coalesce(v_org.suspended_kind, 'administrativa'),
        'contagens', v_contagens, 'lgpd_requests', v_lgpd,
-       'acompanhamentos_de_suporte', v_suporte));
+       'acompanhamentos_de_suporte', v_suporte,
+       'membros', to_jsonb(v_membros), 'auditoria', v_auditoria));
 
   -- R1: tira o caminho agente → lead → event_log da cascata.
   delete from public.crm_leads where organization_id = p_org;

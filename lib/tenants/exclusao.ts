@@ -331,8 +331,10 @@ export async function excluirOrganizacao(
     usuarios,
   };
 
-  // 6. O registro final. `organizationId` nulo: a organização não existe mais,
-  // e a trilha dela é achada por `resource_id` (como a lápide).
+  // 6. O registro final. `organizationId` nulo: a organização não existe mais.
+  // Ele e a lápide são achados por `resource_id`; as linhas antigas da org,
+  // que perderam a atribuição no SET NULL, só são DELIMITADAS pela lápide
+  // (membros, contagem e intervalo) — ver o cabeçalho da migration 0556.
   await audit({
     action: "organization.deletion_completed",
     actorUserId: entrada.atorId,
