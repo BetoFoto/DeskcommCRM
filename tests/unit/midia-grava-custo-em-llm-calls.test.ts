@@ -291,3 +291,11 @@ describe("worker de mídia: chamada paga grava em llm_calls", () => {
     });
   });
 });
+
+describe("as constantes de purpose da mídia casam com o registro de pontos", () => {
+  it("cada uma é o id de uma entrada — senão a linha em llm_calls fica sem rótulo em Execuções", async () => {
+    const { PONTO_POR_ID } = await import("@/lib/ai/pontos/registro");
+    expect(PONTO_POR_ID.get(PONTO_TRANSCRICAO_DE_AUDIO)?.registraEm).toBe("llm_calls");
+    expect(PONTO_POR_ID.get(PONTO_VISAO_DE_IMAGEM)).toBeDefined();
+  });
+});

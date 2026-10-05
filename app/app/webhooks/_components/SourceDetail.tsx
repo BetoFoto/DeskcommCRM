@@ -161,7 +161,11 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
       const res = await fetch(`/api/v1/webhooks/in/${source.path_token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: "Lead de Teste", telefone: "11999990000", utm_source: "teste" }),
+        body: JSON.stringify({
+          nome: "Lead de Teste",
+          telefone: "11999990000",
+          utm_source: "teste",
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -246,7 +250,21 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
               </summary>
               <div className="mt-3 space-y-4 text-sm text-muted-foreground">
                 <div>
-                  <p className="font-medium text-text">WordPress / Elementor</p>
+                  <p className="font-medium text-text">Elementor Pro</p>
+                  <p>
+                    {t(
+                      'Em "Ações após o envio", adicione "Webhook" e cole o endereço acima em "URL do Webhook".',
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium text-text">JetFormBuilder</p>
+                  <p>
+                    {t('Adicione a ação "Call Webhook" ao formulário e cole o endereço acima.')}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium text-text">WordPress</p>
                   <p>
                     {t(
                       'Cole o endereço acima no campo "Action" (ou "URL de envio") do seu formulário.',
@@ -416,7 +434,9 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
           <section className="space-y-2">
             <p className="text-sm font-medium text-text">{t("Últimos recebimentos")}</p>
             {events.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("Ainda não chegou nada por aqui.")}</p>
+              <p className="text-sm text-muted-foreground">
+                {t("Ainda não chegou nada por aqui.")}
+              </p>
             ) : (
               <ul className="space-y-1">
                 {events.map((ev) => (
@@ -427,7 +447,9 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
                         ev.valid_signature === false ? "bg-error" : "bg-success",
                       )}
                     />
-                    <span className="text-muted-foreground">{relativeReceivedAt(ev.created_at, localeDaData)}</span>
+                    <span className="text-muted-foreground">
+                      {relativeReceivedAt(ev.created_at, localeDaData)}
+                    </span>
                     {ev.valid_signature === false ? (
                       <span className="text-xs text-error">{t("assinatura inválida")}</span>
                     ) : null}
