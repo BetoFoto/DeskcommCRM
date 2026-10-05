@@ -46176,6 +46176,46 @@ grant execute on function public.fn_cobranca_suspender_se_devendo(uuid, text) to
 alter table public.cobranca_planos
   add column if not exists oferecido_ao_cliente boolean not null default true;
 
+-- ── G. a empresa com assinatura viva no provedor não sai do banco ───────────
+-- Apagar a organização leva `cobranca_assinaturas` em cascata, e o provedor
+-- seguiria cobrando o cliente final sem ninguém do lado de cá para cancelar
+-- (pendência do recorte do #1967). A trava mora na PRÓPRIA exclusão: vale para
+-- a função do painel, para script e para SQL à mão. "Viva" é o que a última
+-- releitura gravou (`sincronizar`): mais de uma assinatura não terminal, ou uma
+-- que não cancela no fim do período. Quem exclui pelo painel relê o provedor
+-- ANTES (`lerSituacao`); isto é a segunda linha. Para liberar: cancelar no
+-- provedor e deixar o aviso dele (ou a reconciliação) reler. Sem HTTP: só
+-- leitura de linha. DEFINER de propósito: gatilho roda com o papel de quem
+-- apaga, e um admin de plataforma apagando pela sessão (policy
+-- `orgs_write_platform_admin`) leria `cobranca_assinaturas` sob RLS e não
+-- veria a assinatura de outra empresa — a trava abriria justo nesse caminho.
+create or replace function public.fn_cobranca_trava_exclusao_com_assinatura_viva()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if exists (
+    select 1 from public.cobranca_assinaturas a
+     where a.organization_id = old.id
+       and a.provedor is not null
+       and (a.assinaturas_vivas > 1 or (a.assinaturas_vivas = 1 and not a.cancela_no_fim))
+  ) then
+    raise exception 'organizacao_com_assinatura_viva' using errcode = 'PT409';
+  end if;
+  return old;
+end;
+$$;
+
+revoke execute on function public.fn_cobranca_trava_exclusao_com_assinatura_viva() from public, anon, authenticated;
+grant execute on function public.fn_cobranca_trava_exclusao_com_assinatura_viva() to service_role;
+
+drop trigger if exists trg_cobranca_trava_exclusao_com_assinatura_viva on public.organizations;
+create trigger trg_cobranca_trava_exclusao_com_assinatura_viva
+  before delete on public.organizations
+  for each row execute function public.fn_cobranca_trava_exclusao_com_assinatura_viva();
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria

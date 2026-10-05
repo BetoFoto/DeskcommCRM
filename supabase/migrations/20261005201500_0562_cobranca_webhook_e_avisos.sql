@@ -1,6 +1,6 @@
 -- 0562 — COBRANÇA DO REVENDEDOR, PR 3a: o webhook, os avisos e a reconciliação
 --        (spec docs/superpowers/specs/2026-09-29-cobranca-do-revendedor-design.md §2.4, §2.5, §8, §11)
--- manifest: **Cobrança do revendedor, PR 3a: o webhook, os avisos e a reconciliação.** (A) `webhook_events_log_provider_check` ganha `stripe` e `asaas`, editado no bloco único do baseline (alargamento puro, issue #159). (B) `uniq_webhook_events_log_cobranca`: `(provider, external_id)` único só para os provedores de cobrança — a rota do webhook trata o `23505` (linha `processed` responde 200; `received` reemite o sinal). A linha de cobrança nasce com `organization_id` nulo e corpo `{id,type}`, invisível ao tenant pela própria policy. Apêndice antes da VARREDURA anon, depois do bloco do PR 2. (C) `agent_inbox_items_kind_check` ganha `cobranca` no bloco único do baseline (lista completa; esta passa a ser a última migration que a reconstrói): avisos da régua à empresa, sem referência, e o de 80% do teto de IA do plano, com `ref_kind='plano'`; os dois abrem Plano e cobrança, só para o admin. (D) `fn_cobranca_reconciliaveis()` — o predicado único de quem a reconciliação relê (§8): o cron filtra `precisa_reler` e a Visão geral lê `max(relida_em)` do mesmo conjunto; INVOKER, EXECUTE só do `service_role`. (E) `cobranca_assinaturas.link_de_pagamento` (o link em aberto da última releitura; faixa, hub, Central e e-mail leem dele, nenhuma tela chama o provedor) e três funções INVOKER, EXECUTE só do `service_role`: `fn_cobranca_registrar_aviso` grava `ultimo_aviso` e o item `cobranca` da Central na mesma transação (o mesmo aviso da mesma dívida ganha uma vez; o novo fecha o anterior), `fn_cobranca_avisar_teto_de_ia` (um aviso de 80% por org por mês, com trava consultiva) e `fn_cobranca_suspender_se_devendo` (trava a linha e só suspende quem AINDA deve: o pagamento gravado no meio vence). (F) `cobranca_planos.oferecido_ao_cliente` (padrão true): o plano que a empresa pode escolher sozinha; false = só o dono atribui (plano negociado). Gate da 0562: `tests/invariants/cobranca-plano-oferecido.test.ts`, `tests/invariants/cobranca-avisos.test.ts`, `tests/invariants/cobranca-reconciliacao.test.ts`, `tests/unit/kind-check-migration-x-baseline.test.ts`, `tests/invariants/vocabulario-banco-x-typescript.test.ts`, `tests/invariants/cobranca-webhook-e-avisos.test.ts`.
+-- manifest: **Cobrança do revendedor, PR 3a: o webhook, os avisos e a reconciliação.** (A) `webhook_events_log_provider_check` ganha `stripe` e `asaas`, editado no bloco único do baseline (alargamento puro, issue #159). (B) `uniq_webhook_events_log_cobranca`: `(provider, external_id)` único só para os provedores de cobrança — a rota do webhook trata o `23505` (linha `processed` responde 200; `received` reemite o sinal). A linha de cobrança nasce com `organization_id` nulo e corpo `{id,type}`, invisível ao tenant pela própria policy. Apêndice antes da VARREDURA anon, depois do bloco do PR 2. (C) `agent_inbox_items_kind_check` ganha `cobranca` no bloco único do baseline (lista completa; esta passa a ser a última migration que a reconstrói): avisos da régua à empresa, sem referência, e o de 80% do teto de IA do plano, com `ref_kind='plano'`; os dois abrem Plano e cobrança, só para o admin. (D) `fn_cobranca_reconciliaveis()` — o predicado único de quem a reconciliação relê (§8): o cron filtra `precisa_reler` e a Visão geral lê `max(relida_em)` do mesmo conjunto; INVOKER, EXECUTE só do `service_role`. (E) `cobranca_assinaturas.link_de_pagamento` (o link em aberto da última releitura; faixa, hub, Central e e-mail leem dele, nenhuma tela chama o provedor) e três funções INVOKER, EXECUTE só do `service_role`: `fn_cobranca_registrar_aviso` grava `ultimo_aviso` e o item `cobranca` da Central na mesma transação (o mesmo aviso da mesma dívida ganha uma vez; o novo fecha o anterior), `fn_cobranca_avisar_teto_de_ia` (um aviso de 80% por org por mês, com trava consultiva) e `fn_cobranca_suspender_se_devendo` (trava a linha e só suspende quem AINDA deve: o pagamento gravado no meio vence). (F) `cobranca_planos.oferecido_ao_cliente` (padrão true): o plano que a empresa pode escolher sozinha; false = só o dono atribui (plano negociado). (G) gatilho `trg_cobranca_trava_exclusao_com_assinatura_viva` (`BEFORE DELETE` em `organizations`): a empresa com assinatura viva no provedor — mais de uma não terminal, ou uma que não cancela no fim do período, pelo que a última releitura gravou — não sai do banco (`PT409 organizacao_com_assinatura_viva`), por qualquer caminho de exclusão; pendência do recorte do #1967. Gate da 0562: `tests/invariants/cobranca-exclusao-com-assinatura-viva.test.ts`, `tests/invariants/cobranca-plano-oferecido.test.ts`, `tests/invariants/cobranca-avisos.test.ts`, `tests/invariants/cobranca-reconciliacao.test.ts`, `tests/unit/kind-check-migration-x-baseline.test.ts`, `tests/invariants/vocabulario-banco-x-typescript.test.ts`, `tests/invariants/cobranca-webhook-e-avisos.test.ts`.
 --
 -- ── A causa ───────────────────────────────────────────────────────────────────
 -- A cobrança passa a falar com um provedor de pagamento (Stripe nesta PR; o
@@ -15,6 +15,7 @@
 -- D. `fn_cobranca_reconciliaveis()`: quem a reconciliação relê, num predicado só.
 -- E. `link_de_pagamento`, `fn_cobranca_registrar_aviso`, `fn_cobranca_avisar_teto_de_ia` e `fn_cobranca_suspender_se_devendo`.
 -- F. `cobranca_planos.oferecido_ao_cliente`: o plano que a empresa pode escolher sozinha.
+-- G. A empresa com assinatura viva no provedor não sai do banco (gatilho na exclusão).
 --
 -- No baseline, as seções que ALARGAM constraint de vocabulário editam o bloco
 -- único dela (regra da issue #159); as demais entram no apêndice desta
@@ -22,7 +23,7 @@
 -- Idempotente (`drop constraint if exists` + `add`, `if not exists`, `create or
 -- replace`); sem BEGIN/COMMIT.
 -- Toda função nova perde EXECUTE de public, anon e authenticated.
--- Gates: tests/invariants/cobranca-webhook-e-avisos.test.ts, cobranca-reconciliacao.test.ts, cobranca-avisos.test.ts, cobranca-plano-oferecido.test.ts.
+-- Gates: tests/invariants/cobranca-webhook-e-avisos.test.ts, cobranca-reconciliacao.test.ts, cobranca-avisos.test.ts, cobranca-plano-oferecido.test.ts, cobranca-exclusao-com-assinatura-viva.test.ts.
 
 -- ── A. o arquivo do webhook aceita os provedores de cobrança ─────────────────
 -- Lista COMPLETA do bloco único do baseline (0151, alargado pela 0387) mais
@@ -209,3 +210,43 @@ grant execute on function public.fn_cobranca_suspender_se_devendo(uuid, text) to
 -- segue aparecendo depois do update.sh.
 alter table public.cobranca_planos
   add column if not exists oferecido_ao_cliente boolean not null default true;
+
+-- ── G. a empresa com assinatura viva no provedor não sai do banco ───────────
+-- Apagar a organização leva `cobranca_assinaturas` em cascata, e o provedor
+-- seguiria cobrando o cliente final sem ninguém do lado de cá para cancelar
+-- (pendência do recorte do #1967). A trava mora na PRÓPRIA exclusão: vale para
+-- a função do painel, para script e para SQL à mão. "Viva" é o que a última
+-- releitura gravou (`sincronizar`): mais de uma assinatura não terminal, ou uma
+-- que não cancela no fim do período. Quem exclui pelo painel relê o provedor
+-- ANTES (`lerSituacao`); isto é a segunda linha. Para liberar: cancelar no
+-- provedor e deixar o aviso dele (ou a reconciliação) reler. Sem HTTP: só
+-- leitura de linha. DEFINER de propósito: gatilho roda com o papel de quem
+-- apaga, e um admin de plataforma apagando pela sessão (policy
+-- `orgs_write_platform_admin`) leria `cobranca_assinaturas` sob RLS e não
+-- veria a assinatura de outra empresa — a trava abriria justo nesse caminho.
+create or replace function public.fn_cobranca_trava_exclusao_com_assinatura_viva()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if exists (
+    select 1 from public.cobranca_assinaturas a
+     where a.organization_id = old.id
+       and a.provedor is not null
+       and (a.assinaturas_vivas > 1 or (a.assinaturas_vivas = 1 and not a.cancela_no_fim))
+  ) then
+    raise exception 'organizacao_com_assinatura_viva' using errcode = 'PT409';
+  end if;
+  return old;
+end;
+$$;
+
+revoke execute on function public.fn_cobranca_trava_exclusao_com_assinatura_viva() from public, anon, authenticated;
+grant execute on function public.fn_cobranca_trava_exclusao_com_assinatura_viva() to service_role;
+
+drop trigger if exists trg_cobranca_trava_exclusao_com_assinatura_viva on public.organizations;
+create trigger trg_cobranca_trava_exclusao_com_assinatura_viva
+  before delete on public.organizations
+  for each row execute function public.fn_cobranca_trava_exclusao_com_assinatura_viva();
