@@ -32,6 +32,18 @@ export interface PropsDasAcoes {
 }
 
 const BASE = "/api/v1/cobranca/assinatura";
+/** Código da API → frase do dicionário. Nunca a `message` do servidor, que não é traduzida. */
+const FRASE_DO_ERRO: Record<string, string> = {
+  rate_limited: "Muitas tentativas seguidas. Aguarde um minuto e tente de novo.",
+  provedor_indisponivel: "O provedor de pagamento não respondeu. Nada mudou; tente de novo em alguns minutos.",
+  provedor_recusou: "O provedor de pagamento recusou o pedido. Fale com quem administra o sistema.",
+  checkout_em_preparo: "Já estamos gerando o seu link de pagamento. Aguarde alguns segundos.",
+  pagamento_em_andamento: "Você já tem um pagamento em andamento. Use o link para concluir.",
+  sem_link_de_pagamento: "Não há cobrança aberta para pagar agora. Atualize o cartão em Gerenciar pagamento: a próxima tentativa sai sozinha.",
+  provedor_nao_conectado: "O administrador do sistema ainda não conectou a cobrança.",
+  not_found: "Sua empresa não tem plano de cobrança.",
+};
+const FRASE_GENERICA = "Não foi possível concluir agora. Tente de novo.";
 type Leitura = { estado: EstadoDaAssinatura | null; assinaturas_vivas: number; org_operante: boolean };
 
 /**
@@ -49,6 +61,14 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
   const [novo, setNovo] = useState(p.planosParaTroca[0]?.id ?? "");
   const [cancelando, setCancelando] = useState(false);
   const releu = useRef(false);
+  // Falso depois do desmonte: a espera da volta do checkout para, sem setState nem router.
+  const montado = useRef(true);
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+    };
+  }, []);
   const dia = (v: string | null) => (v ? formatadorDeData(idioma, p.fuso ?? null, { day: "2-digit", month: "2-digit" }).format(new Date(v)) : "");
 
   const emDivida = p.estado === "em_atraso" || p.estado === "cancelada";
@@ -74,18 +94,19 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
           .map((r) => t(FRASE_DO_EXCEDENTE[r]).replace("{n}", String(excedente[r])));
         setRecado([t("O uso atual não cabe no plano escolhido. Para trocar, primeiro:"), ...passos].join(" "));
       } else if (e instanceof ApiError) {
-        setRecado(e.message);
+        setRecado(t(FRASE_DO_ERRO[e.code] ?? FRASE_GENERICA));
       } else {
         showApiError(e);
       }
     } finally {
-      setOcupado(false);
+      if (montado.current) setOcupado(false);
     }
   }
 
   /** Relê o provedor. `true` = a empresa voltou a operar no hub (e já foi levada ao sistema). */
   async function reler(): Promise<boolean> {
     const { data: r } = await apiClient.post<{ data: Leitura }>(`${BASE}/sincronizar`, {});
+    if (!montado.current) return true;
     if (p.noHub && r.org_operante) {
       router.push("/app");
       return true;
@@ -105,8 +126,10 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
   async function confirmarNaVolta(): Promise<boolean> {
     for (let tentativa = 0; tentativa < (p.noHub ? 4 : 1); tentativa += 1) {
       if (tentativa > 0) {
+        if (!montado.current) return true;
         setRecado(t("Confirmando seu pagamento…"));
         await new Promise((pronto) => setTimeout(pronto, 30_000));
+        if (!montado.current) return true;
       }
       if (await reler()) return true;
     }

@@ -14616,6 +14616,14 @@ export const DICIONARIO: Traducoes = {
   "A conta foi suspensa por falta de pagamento. Assim que o pagamento for confirmado, tudo volta a funcionar na hora.": { es: "La cuenta fue suspendida por falta de pago. En cuanto se confirme el pago, todo vuelve a funcionar al instante." },
   // ─── Cobrança do revendedor — card do tenant (PR 3a) ───
   "Troca agendada: o novo plano vale a partir da próxima cobrança paga.": { es: "Cambio programado: el nuevo plan vale a partir del próximo cobro pagado." },
+  // ─── cobrança: erros da API na tela (44B) ───
+  "Muitas tentativas seguidas. Aguarde um minuto e tente de novo.": { es: "Demasiados intentos seguidos. Espera un minuto e inténtalo de nuevo." },
+  "O provedor de pagamento não respondeu. Nada mudou; tente de novo em alguns minutos.": { es: "El proveedor de pago no respondió. Nada cambió; inténtalo de nuevo en unos minutos." },
+  "O provedor de pagamento recusou o pedido. Fale com quem administra o sistema.": { es: "El proveedor de pago rechazó la solicitud. Habla con quien administra el sistema." },
+  "Já estamos gerando o seu link de pagamento. Aguarde alguns segundos.": { es: "Ya estamos generando tu enlace de pago. Espera unos segundos." },
+  "Você já tem um pagamento em andamento. Use o link para concluir.": { es: "Ya tienes un pago en curso. Usa el enlace para completarlo." },
+  "O administrador do sistema ainda não conectou a cobrança.": { es: "El administrador del sistema aún no conectó el cobro." },
+  "Sua empresa não tem plano de cobrança.": { es: "Tu empresa no tiene plan de cobro." },
 };
 
 /**

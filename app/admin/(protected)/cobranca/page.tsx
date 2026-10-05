@@ -111,9 +111,11 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
                   <td className={a.estado === "em_atraso" ? "pr-4 text-error-fg" : "pr-4"}>{a.estado === "em_atraso" ? quando(a.vencida_desde) : "—"}</td>
                   <td className={atrasada ? "pr-4 text-error-fg" : "pr-4"}>{a.provedor ? quando(a.relida_em) : "—"}</td>
                   <td className="pr-4">{a.ultimo_erro ? t(ROTULO_DO_ERRO[a.ultimo_erro]) : "—"}</td>
-                  <td className="flex flex-wrap items-center gap-2 py-1">
-                    {a.link_de_pagamento && <CopiarLinkDePagamento link={a.link_de_pagamento} />}
-                    <Link href={`/admin/tenants/${c.id}`} className="underline">{t("Abrir")}</Link>
+                  <td className="py-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {a.link_de_pagamento && <CopiarLinkDePagamento link={a.link_de_pagamento} />}
+                      <Link href={`/admin/tenants/${c.id}`} className="underline">{t("Abrir")}</Link>
+                    </div>
                   </td>
                 </tr>
               );

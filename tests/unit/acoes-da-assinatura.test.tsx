@@ -13,6 +13,7 @@ vi.mock("@/lib/api/client", () => ({ apiClient: { post: h.post } }));
 vi.mock("@/lib/cobranca/navegar", () => ({ abrirNoNavegador: h.abrir }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: h.showApiError }));
 
+import { ApiError } from "@/lib/api/types";
 import { AcoesDaAssinatura, type PropsDasAcoes } from "@/components/cobranca/AcoesDaAssinatura";
 import { PainelDaAssinatura } from "@/components/cobranca/PainelDaAssinatura";
 import type { DadosDoPainel } from "@/lib/cobranca/painel";
@@ -132,5 +133,38 @@ describe("AcoesDaAssinatura", () => {
     expect(recado.textContent).not.toContain("1ª cobrança agendada");
     expect(h.post).toHaveBeenCalledTimes(1);
     expect(h.replace).toHaveBeenCalledWith("/app/settings/billing");
+  });
+
+  it("⭐ no hub, desmontar para a espera da volta do checkout: nenhuma releitura nem redirecionamento depois", async () => {
+    vi.useFakeTimers();
+    try {
+      h.post.mockResolvedValue({ data: { estado: "em_atraso", assinaturas_vivas: 1, org_operante: false } });
+      const { unmount } = render(<AcoesDaAssinatura {...acoes({ estado: "em_atraso", voltouDoCheckout: true, noHub: true })} />);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.post).toHaveBeenCalledTimes(1);
+      unmount();
+      h.post.mockResolvedValue({ data: { estado: "ativa", assinaturas_vivas: 1, org_operante: true } });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(h.post).toHaveBeenCalledTimes(1);
+      expect(h.push).not.toHaveBeenCalled();
+      expect(h.replace).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("⭐ erro da API conhecido sai pelo dicionário (nunca a mensagem crua do servidor); desconhecido cai numa frase genérica", async () => {
+    const user = userEvent.setup();
+    h.post.mockRejectedValueOnce(new ApiError(429, "rate_limited", undefined, "req-1", "mensagem crua do servidor"));
+    const { unmount } = render(<AcoesDaAssinatura {...acoes({ estado: "trial", temProvedor: false, assinaturasVivas: 0 })} />);
+    await user.click(screen.getByRole("button", { name: "Assinar" }));
+    expect((await screen.findByRole("status")).textContent).toBe("Muitas tentativas seguidas. Aguarde um minuto e tente de novo.");
+    unmount();
+    h.post.mockRejectedValueOnce(new ApiError(500, "codigo_que_ninguem_mapeou", undefined, "req-2", "stack interna vazando"));
+    render(<AcoesDaAssinatura {...acoes({ estado: "trial", temProvedor: false, assinaturasVivas: 0 })} />);
+    await user.click(screen.getByRole("button", { name: "Assinar" }));
+    const recado = (await screen.findByRole("status")).textContent;
+    expect(recado).toBe("Não foi possível concluir agora. Tente de novo.");
+    expect(recado).not.toContain("stack interna");
   });
 });
