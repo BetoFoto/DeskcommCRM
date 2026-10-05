@@ -718,6 +718,14 @@ jobs:
       #
       # Se um dia uma spec de follow-up entrar na PARTE_1 com nome depois de
       # `relogio-`, é aqui que se olha: ou ela vai para a PARTE_2, ou esta vai.
+      #
+      # `cobranca-revendedor` [P0] entrou em 2026-09-30 (PR 3a da cobrança do
+      # revendedor) nesta parte, a de menor duração medida no run 37356008162
+      # (1077 s, entre as partes 1, 2, 3, 5 e 6). Semeia orgs, pessoas e planos
+      # pelo service role e pela tela, sobe o dublê da Stripe em 127.0.0.1:3995
+      # (COBRANCA_API_BASE_URL_TESTE do .env.e2e) e devolve as chaves da
+      # instalação como achou.
+      # PREVISÃO, não medida: ~5 min de caso.
       SPECS_PARTE_2: >-
         agente-marca-consulta.spec.ts
         agenda-marcar-pela-tela.spec.ts
@@ -733,6 +741,7 @@ jobs:
         escalacao-ciclo.spec.ts
         distribuicao-atendimento.spec.ts
         capacidades-do-agente.spec.ts
+        cobranca-revendedor.spec.ts
         escopo-de-funil-do-agente.spec.ts
         followup-tempo-adaptativo.spec.ts
         gatilho-de-etapa.spec.ts
