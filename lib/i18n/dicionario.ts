@@ -14512,6 +14512,9 @@ export const DICIONARIO: Traducoes = {
   "A empresa volta a funcionar sozinha, na hora, assim que o pagamento for confirmado.": { es: "La empresa vuelve a funcionar sola, al instante, en cuanto se confirme el pago." },
   "Sua conta foi liberada": { es: "Tu cuenta fue liberada" },
   "Recebemos o pagamento e tudo voltou a funcionar. As conversas que chegaram durante a suspensão estão na Central, para revisão.": { es: "Recibimos el pago y todo volvió a funcionar. Las conversaciones que llegaron durante la suspensión están en la Central, para revisión." },
+  // ─── Cobrança do revendedor — e-mails (PR 3a) ───
+  "Pagar agora": { es: "Pagar ahora" },
+  "Você recebe este aviso porque administra esta empresa.": { es: "Recibes este aviso porque administras esta empresa." },
 };
 
 /**
