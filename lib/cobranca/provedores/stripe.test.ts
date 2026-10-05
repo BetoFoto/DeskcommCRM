@@ -462,3 +462,149 @@ describe("garantirCliente e iniciarAssinatura", () => {
     expect(chaves).toEqual(Array(3).fill(`${base.chaveIdempotencia}:checkout`));
   });
 });
+
+describe("lerSituacao", () => {
+  type Assinatura = typeof objetos.assinatura;
+  type Fatura = typeof objetos.fatura;
+  const sub = (o: Partial<Assinatura> & { id?: string }): Assinatura => ({ ...objetos.assinatura, ...o });
+  const fatura = (o: Partial<Fatura>): Fatura => ({ ...objetos.fatura, ...o });
+  const lista = (...data: unknown[]) => ({ corpo: { object: "list", data, has_more: false } });
+  const FIM_DO_ITEM = new Date(1792592000 * 1000);
+
+  function ler(assinaturas: Assinatura[], pagas: Fatura[], abertas: Fatura[] = [], incobraveis: Fatura[] = []) {
+    return montar({
+      "GET /subscriptions": lista(...assinaturas),
+      "GET /invoices": (url) => {
+        const status = url.searchParams.get("status");
+        return status === "paid" ? lista(...pagas) : status === "uncollectible" ? lista(...incobraveis) : lista(...abertas);
+      },
+    });
+  }
+
+  it("⭐ active pago: existe, em dia, fim do período = current_period_end do ITEM", async () => {
+    const { adaptador, chamadas } = ler([sub({})], [fatura({})]);
+    expect(await adaptador.lerSituacao({ clienteRef: "cus_QfixtureCliente" })).toEqual({
+      assinaturaRef: "sub_1QfixtureAtiva",
+      existe: true,
+      assinaturasVivas: 1,
+      cancelada: false,
+      cancelaNoFim: false,
+      emAtraso: false,
+      vencidaDesde: null,
+      proximoVencimento: FIM_DO_ITEM,
+      jaPagou: true,
+      emTesteNoProvedorAte: null,
+      pagamentoSemAssinaturaViva: false,
+      linkDePagamento: null,
+      statusBruto: "active",
+    });
+    const subs = chamadas.find((c) => c.rota === "GET /subscriptions");
+    expect(Object.fromEntries(subs?.url.searchParams ?? [])).toEqual({ customer: "cus_QfixtureCliente", status: "all", limit: "10" });
+  });
+
+  it.each(["past_due", "unpaid", "paused"])("%s: existe e está em atraso", async (status) => {
+    const s = await ler([sub({ status })], [fatura({})]).adaptador.lerSituacao({ clienteRef: "cus_QfixtureCliente" });
+    expect(s).toMatchObject({ existe: true, emAtraso: true, vencidaDesde: null });
+  });
+
+  it("⭐ unpaid sem fatura aberta, com fatura INCOBRÁVEL: o link é o dela (ainda se paga pela página)", async () => {
+    const incobravel = fatura({ id: "in_incobravel", amount_paid: 0, hosted_invoice_url: "https://invoice.stripe.com/i/incobravel" });
+    const s = await ler([sub({ status: "unpaid" })], [fatura({})], [], [incobravel]).adaptador.lerSituacao({ clienteRef: "c" });
+    expect(s).toMatchObject({ emAtraso: true, linkDePagamento: "https://invoice.stripe.com/i/incobravel" });
+  });
+
+  it("paused sem fatura nenhuma: em atraso e sem link (o caminho é o portal)", async () => {
+    const s = await ler([sub({ status: "paused" })], [fatura({})], [], []).adaptador.lerSituacao({ clienteRef: "c" });
+    expect(s).toMatchObject({ emAtraso: true, linkDePagamento: null });
+  });
+
+  it("em dia não pergunta pelas incobráveis", async () => {
+    const { adaptador, chamadas } = ler([sub({})], [fatura({})]);
+    await adaptador.lerSituacao({ clienteRef: "c" });
+    expect(chamadas.some((c) => c.url.searchParams.get("status") === "uncollectible")).toBe(false);
+  });
+
+  it("⭐ hosted_invoice_url que não é https → linkDePagamento null (nunca vira href nem botão de e-mail)", async () => {
+    const adulterada = fatura({ id: "in_x", amount_paid: 0, hosted_invoice_url: "javascript:alert(1)" });
+    const s = await ler([sub({ status: "past_due" })], [fatura({})], [adulterada]).adaptador.lerSituacao({ clienteRef: "c" });
+    expect(s.linkDePagamento).toBeNull();
+  });
+
+  it("⭐ active com boleto aberto dentro da validade: EM DIA, com o link da fatura mais antiga", async () => {
+    const nova = fatura({ id: "in_nova", created: 1790000900, amount_paid: 0, hosted_invoice_url: "https://invoice.stripe.com/i/nova" });
+    const velha = fatura({ id: "in_velha", created: 1790000500, amount_paid: 0, hosted_invoice_url: "https://invoice.stripe.com/i/velha" });
+    const s = await ler([sub({})], [fatura({})], [nova, velha]).adaptador.lerSituacao({ clienteRef: "c" });
+    expect(s).toMatchObject({ emAtraso: false, existe: true, linkDePagamento: "https://invoice.stripe.com/i/velha" });
+  });
+
+  it("incomplete (1º pagamento pendente): não existe, mas conta como viva", async () => {
+    const s = await ler([sub({ status: "incomplete" })], []).adaptador.lerSituacao({ clienteRef: "c" });
+    expect(s).toMatchObject({ existe: false, assinaturasVivas: 1, emAtraso: false, cancelada: false, proximoVencimento: null, jaPagou: false });
+  });
+
+  it("trialing: não existe; o fim do teste lá vira emTesteNoProvedorAte", async () => {
+    const s = await ler([sub({ status: "trialing", trial_end: 1791000000 })], []).adaptador.lerSituacao({ clienteRef: "c" });
+    expect(s).toMatchObject({ existe: false, assinaturasVivas: 1, emTesteNoProvedorAte: new Date(1791000000 * 1000), proximoVencimento: new Date(1791000000 * 1000) });
+  });
+
+  it("fatura de teste de R$ 0 não conta em jaPagou", async () => {
+    const s = await ler([sub({ status: "trialing", trial_end: 1791000000 })], [fatura({ amount_paid: 0 })]).adaptador.lerSituacao({ clienteRef: "c" });
+    expect(s.jaPagou).toBe(false);
+  });
+
+  it("⭐ auto-cancelada + reassinatura paga + fatura antiga aberta → ativa, e as faturas abertas são da NOVA", async () => {
+    const velha = sub({ id: "sub_velha", status: "canceled", created: 1780000000, ended_at: 1785000000 });
+    const nova = sub({ id: "sub_nova", created: 1790000000 });
+    const { adaptador, chamadas } = ler([velha, nova], [fatura({ parent: { type: "subscription_details", subscription_details: { subscription: "sub_nova", metadata: {} } } })]);
+    const s = await adaptador.lerSituacao({ clienteRef: "c" });
+    expect(s).toMatchObject({ assinaturaRef: "sub_nova", existe: true, emAtraso: false, cancelada: false, assinaturasVivas: 1, linkDePagamento: null });
+    const abertas = chamadas.find((c) => c.rota === "GET /invoices" && c.url.searchParams.get("status") === "open");
+    expect(abertas?.url.searchParams.get("subscription")).toBe("sub_nova");
+  });
+
+  it("só canceladas: cancelada, sem link, sem pedir faturas abertas", async () => {
+    const { adaptador, chamadas } = ler([sub({ status: "canceled", ended_at: 1795000000 })], [fatura({})]);
+    const s = await adaptador.lerSituacao({ clienteRef: "c" });
+    expect(s).toMatchObject({ cancelada: true, existe: false, assinaturaRef: "sub_1QfixtureAtiva", linkDePagamento: null, proximoVencimento: null, statusBruto: "canceled:encerrada" });
+    expect(chamadas.some((c) => c.url.searchParams.get("status") === "open")).toBe(false);
+  });
+
+  it("cancel_at_period_end ou cancel_at marcam cancelaNoFim, e ela segue existindo", async () => {
+    expect(await ler([sub({ cancel_at_period_end: true })], [fatura({})]).adaptador.lerSituacao({ clienteRef: "c" })).toMatchObject({ cancelaNoFim: true, existe: true, statusBruto: "active:cancela_no_fim" });
+    expect(await ler([sub({ cancel_at: 1792592000 })], [fatura({})]).adaptador.lerSituacao({ clienteRef: "c" })).toMatchObject({ cancelaNoFim: true });
+  });
+
+  it("cliente sem assinatura nenhuma", async () => {
+    expect(await ler([], []).adaptador.lerSituacao({ clienteRef: "c" })).toMatchObject({ assinaturaRef: null, existe: false, cancelada: false, assinaturasVivas: 0, statusBruto: "sem_assinatura" });
+  });
+
+  it("pagou fatura de assinatura DEPOIS de ela terminar → pagamentoSemAssinaturaViva; antes, não", async () => {
+    const encerrada = sub({ id: "sub_fim", status: "canceled", ended_at: 1790000000 });
+    const paga = (pagaEm: number) => fatura({ status_transitions: { paid_at: pagaEm }, parent: { type: "subscription_details", subscription_details: { subscription: "sub_fim", metadata: {} } } });
+    expect((await ler([encerrada], [paga(1790000500)]).adaptador.lerSituacao({ clienteRef: "c" })).pagamentoSemAssinaturaViva).toBe(true);
+    expect((await ler([encerrada], [paga(1789999000)]).adaptador.lerSituacao({ clienteRef: "c" })).pagamentoSemAssinaturaViva).toBe(false);
+  });
+
+  it("duas vivas: conta 2 e a principal é a mais recente", async () => {
+    const s = await ler([sub({ id: "sub_a", created: 1780000000 }), sub({ id: "sub_b", created: 1790000000 })], [fatura({})]).adaptador.lerSituacao({ clienteRef: "c" });
+    expect(s).toMatchObject({ assinaturasVivas: 2, assinaturaRef: "sub_b" });
+  });
+
+  it("forma inesperada (sem items) → resposta_invalida, não transitória", async () => {
+    const { items: _semItens, ...quebrada } = objetos.assinatura;
+    const erro = await montar({ "GET /subscriptions": lista(quebrada), "GET /invoices": lista() }).adaptador.lerSituacao({ clienteRef: "c" }).catch((e: unknown) => e);
+    expect(erro).toMatchObject({ codigo: "resposta_invalida", transitorio: false });
+  });
+
+  it("sem chave → credencialInvalida (sincronizar grava credencial_invalida), sem chamar", async () => {
+    const { adaptador, chamadas } = montar({}, { lerChave: async () => null });
+    expect(await adaptador.lerSituacao({ clienteRef: "c" }).catch((e: unknown) => e)).toMatchObject({ codigo: "sem_chave", credencialInvalida: true });
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("503 persistente → ErroDoProvedor transitório (estado intacto, retry do drain)", async () => {
+    const erro = await montar({ "GET /subscriptions": { status: 503 }, "GET /invoices": { status: 503 } }).adaptador.lerSituacao({ clienteRef: "c" }).catch((e: unknown) => e);
+    expect(erro).toBeInstanceOf(ErroDoProvedor);
+    expect(erro).toMatchObject({ transitorio: true });
+  });
+});

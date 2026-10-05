@@ -31,6 +31,7 @@ import {
   type Modo,
   type PlanoParaProvedor,
   type SinalDoWebhook,
+  type Situacao,
 } from "./contrato";
 
 export const STRIPE_API_BASE = "https://api.stripe.com/v1";
@@ -89,7 +90,7 @@ export interface DependenciasDaStripe {
 
 export type AdaptadorStripe = Pick<
   AdaptadorDeCobranca,
-  "id" | "testarChave" | "verificarWebhook" | "garantirCliente" | "iniciarAssinatura"
+  "id" | "testarChave" | "verificarWebhook" | "garantirCliente" | "iniciarAssinatura" | "lerSituacao"
 >;
 
 /** `teste`/`producao` pelo prefixo; `null` = não é chave secreta nem restrita (inclusive `pk_`). */
@@ -158,6 +159,46 @@ const sessaoDeCheckout = z.object({ url: z.string(), expires_at: z.number().int(
 const UUID = z.string().uuid();
 /** A Stripe só aceita `trial_end` a 48 h ou mais no futuro. */
 const TESTE_MINIMO_MS = 48 * 3600 * 1000;
+
+const TERMINAIS = new Set(["canceled", "incomplete_expired"]);
+/** Com o 1º pagamento confirmado. `trialing` e `incomplete` ficam fora (§6.1 passo 2). */
+const COM_PAGAMENTO = new Set(["active", "past_due", "unpaid", "paused"]);
+/** Os três destinos do painel depois das tentativas (§16, 3.3). Boleto aberto de `active` NÃO é atraso. */
+const EM_ATRASO = new Set(["past_due", "unpaid", "paused"]);
+
+const assinaturaDaStripe = z.object({
+  id: z.string(),
+  status: z.string(),
+  created: z.number(),
+  cancel_at_period_end: z.boolean(),
+  cancel_at: z.number().nullish(),
+  ended_at: z.number().nullish(),
+  trial_end: z.number().nullish(),
+  items: z.object({ data: z.array(z.object({ id: z.string(), current_period_end: z.number() })) }),
+});
+type AssinaturaDaStripe = z.infer<typeof assinaturaDaStripe>;
+
+const faturaDaStripe = z.object({
+  id: z.string(),
+  created: z.number(),
+  amount_paid: z.number(),
+  hosted_invoice_url: z.string().nullish(),
+  status_transitions: z.object({ paid_at: z.number().nullish() }),
+  parent: z.object({ subscription_details: z.object({ subscription: z.string() }).nullish() }).nullish(),
+});
+type FaturaDaStripe = z.infer<typeof faturaDaStripe>;
+
+const listaDe = <T extends z.ZodType>(item: T) => z.object({ data: z.array(item) });
+const emData = (segundos: number) => new Date(segundos * 1000);
+
+/** A fatura paga MAIS RECENTE é de uma assinatura já terminal, e foi paga depois do fim dela. */
+function pagouAssinaturaEncerrada(pagas: FaturaDaStripe[], assinaturas: AssinaturaDaStripe[]): boolean {
+  const ultima = [...pagas].sort((a, b) => (b.status_transitions.paid_at ?? 0) - (a.status_transitions.paid_at ?? 0))[0];
+  const pagaEm = ultima?.status_transitions.paid_at ?? null;
+  const dona = assinaturas.find((s) => s.id === ultima?.parent?.subscription_details?.subscription);
+  const fim = dona?.ended_at ?? null;
+  return dona !== undefined && TERMINAIS.has(dona.status) && pagaEm !== null && fim !== null && pagaEm > fim;
+}
 
 function precoRecorrente(plano: PlanoParaProvedor, produto: string) {
   return {
@@ -396,11 +437,66 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorStripe
     return { url, expiraEm: new Date(sessao.expires_at * 1000), assinaturaRef: null };
   }
 
+  // ponytail: 10 assinaturas e 10 faturas por cliente, sem paginar. Um cliente
+  // de revendedor tem 1 ou 2; paginar quando `has_more` aparecer medido.
+  async function lerSituacao(p: { clienteRef: string }): Promise<Situacao> {
+    const cliente = encodeURIComponent(p.clienteRef);
+    const [assinaturas, pagas] = await Promise.all([
+      chamar("GET", `/subscriptions?customer=${cliente}&status=all&limit=10`).then((d) => ler(listaDe(assinaturaDaStripe), d).data),
+      chamar("GET", `/invoices?customer=${cliente}&status=paid&limit=10`).then((d) =>
+        ler(listaDe(faturaDaStripe), d).data.filter((f) => f.amount_paid > 0),
+      ),
+    ]);
+    const recentes = [...assinaturas].sort((a, b) => b.created - a.created);
+    const vivas = recentes.filter((s) => !TERMINAIS.has(s.status));
+    const principal = vivas[0] ?? null;
+    const referencia = principal ?? recentes[0] ?? null;
+    const faturasDaPrincipal = async (status: "open" | "uncollectible") =>
+      principal
+        ? ler(
+            listaDe(faturaDaStripe),
+            await chamar("GET", `/invoices?subscription=${encodeURIComponent(principal.id)}&status=${status}&limit=10`),
+          ).data.sort((a, b) => a.created - b.created)
+        : [];
+    const emAtraso = principal !== null && EM_ATRASO.has(principal.status);
+    let link = linkSeguro((await faturasDaPrincipal("open"))[0]?.hosted_invoice_url);
+    // Depois das tentativas, o painel da Stripe pode marcar a fatura como
+    // incobrável ("Manage failed payments"): ela sai de `open`, mas a página
+    // hospedada ainda recebe o pagamento. Sem isto, quem deve e quer pagar não
+    // tem por onde (o "Assinar" some com assinatura viva).
+    if (link === null && emAtraso) link = linkSeguro((await faturasDaPrincipal("uncollectible"))[0]?.hosted_invoice_url);
+    const existe = principal !== null && COM_PAGAMENTO.has(principal.status);
+    const fimDoTeste = principal?.status === "trialing" ? (principal.trial_end ?? null) : null;
+    const fimDoItem = principal?.items.data[0]?.current_period_end ?? null;
+    const cancelaNoFim = principal !== null && (principal.cancel_at_period_end || (principal.cancel_at ?? null) !== null);
+    const fimDoPeriodo = existe ? fimDoItem : fimDoTeste;
+    return {
+      assinaturaRef: referencia?.id ?? null,
+      existe,
+      assinaturasVivas: vivas.length,
+      cancelada: recentes.length > 0 && principal === null,
+      cancelaNoFim,
+      emAtraso,
+      vencidaDesde: null,
+      proximoVencimento: fimDoPeriodo === null ? null : emData(fimDoPeriodo),
+      jaPagou: pagas.length > 0,
+      emTesteNoProvedorAte: fimDoTeste === null ? null : emData(fimDoTeste),
+      pagamentoSemAssinaturaViva: pagouAssinaturaEncerrada(pagas, recentes),
+      linkDePagamento: link,
+      statusBruto: principal
+        ? `${principal.status}${cancelaNoFim ? ":cancela_no_fim" : ""}`
+        : referencia
+          ? `${referencia.status}:encerrada`
+          : "sem_assinatura",
+    };
+  }
+
   return {
     id: "stripe",
     testarChave,
     verificarWebhook: verificarWebhookStripe,
     garantirCliente,
     iniciarAssinatura,
+    lerSituacao,
   };
 }
