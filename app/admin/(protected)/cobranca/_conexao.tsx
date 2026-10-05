@@ -73,7 +73,7 @@ export function ConexaoDaCobranca({
         // Antes do clique, não depois de um 422: o endereço vem da instalação, fora desta tela.
         <p role="alert" className="rounded-md border p-3 text-sm">
           {t(
-            "A Stripe só avisa pagamentos num endereço https público (ex.: https://crm.suaempresa.com.br). Configure o domínio do sistema com HTTPS e volte aqui.",
+            "A Stripe só avisa pagamentos num endereço https público (ex.: https://crm.example.com). Configure o domínio do sistema com HTTPS e volte aqui.",
           )}
         </p>
       )}

@@ -14529,7 +14529,7 @@ export const DICIONARIO: Traducoes = {
   "Conclua uma compra de teste": { es: "Completa una compra de prueba" },
   "Crie uma empresa de teste com outro e-mail seu (ex.: voce+teste@seudominio.com), abra o convite numa janela anônima, clique em Assinar em Plano e cobrança e pague com o cartão 4242 4242 4242 4242 (qualquer validade futura e qualquer CVC).": { es: "Crea una empresa de prueba con otro correo tuyo (ej.: tu+prueba@tudominio.com), abre la invitación en una ventana de incógnito, haz clic en Suscribirse en Plan y facturación y paga con la tarjeta 4242 4242 4242 4242 (cualquier vencimiento futuro y cualquier CVC)." },
   "Em produção, faça uma compra real de valor baixo com uma empresa sua e cancele depois — ou pule este passo.": { es: "En producción, haz una compra real de bajo valor con una empresa tuya y cancélala después, o salta este paso." },
-  "Antes: seu sistema precisa estar num endereço https público (ex.: https://crm.suaempresa.com.br). Configure o domínio com HTTPS e volte aqui.": { es: "Antes: tu sistema necesita estar en una dirección https pública (ej.: https://crm.tuempresa.com). Configura el dominio con HTTPS y vuelve aquí." },
+  "Antes: seu sistema precisa estar num endereço https público (ex.: https://crm.example.com). Configure o domínio com HTTPS e volte aqui.": { es: "Antes: tu sistema necesita estar en una dirección https pública (ej.: https://crm.example.com). Configura el dominio con HTTPS y vuelve aquí." },
   "Crie um plano e marque o do cadastro": { es: "Crea un plan y marca el del registro" },
   "Na aba Planos, crie o plano que as empresas vão assinar e clique em Usar no cadastro. Sem ele, quem se cadastra não ganha teste grátis nem tem o que assinar.": { es: "En la pestaña Planes, crea el plan que las empresas van a contratar y haz clic en Usar en el registro. Sin él, quien se registra no recibe prueba gratis ni tiene qué contratar." },
   "Troque para a chave de produção": { es: "Cambia a la clave de producción" },
@@ -14581,7 +14581,7 @@ export const DICIONARIO: Traducoes = {
   "Em atraso desde": { es: "Atrasada desde" },
   "Copiar link de pagamento": { es: "Copiar enlace de pago" },
   "Link copiado. Mande para a empresa pelo WhatsApp.": { es: "Enlace copiado. Envíalo a la empresa por WhatsApp." },
-  "A Stripe só avisa pagamentos num endereço https público (ex.: https://crm.suaempresa.com.br). Configure o domínio do sistema com HTTPS e volte aqui.": { es: "Stripe solo avisa pagos en una dirección https pública (ej.: https://crm.tuempresa.com). Configura el dominio del sistema con HTTPS y vuelve aquí." },
+  "A Stripe só avisa pagamentos num endereço https público (ex.: https://crm.example.com). Configure o domínio do sistema com HTTPS e volte aqui.": { es: "Stripe solo avisa pagos en una dirección https pública (ej.: https://crm.example.com). Configura el dominio del sistema con HTTPS y vuelve aquí." },
   "Modo de teste: suas empresas reais ainda não conseguem pagar. Quando a compra de teste der certo, troque para a chave de produção em Conexão.": { es: "Modo de prueba: tus empresas reales todavía no pueden pagar. Cuando la compra de prueba funcione, cambia a la clave de producción en Conexión." },
   "{n} aviso(s) de pagamento recusado(s) nas últimas 24 h: a assinatura não confere. Conecte a chave de novo na aba Conexão.": { es: "{n} aviso(s) de pago rechazado(s) en las últimas 24 h: la firma no coincide. Conecta la clave de nuevo en la pestaña Conexión." },
   // ─── Cobrança do revendedor — Plano e cobrança (PR 3a) ───

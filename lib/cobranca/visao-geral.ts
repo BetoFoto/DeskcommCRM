@@ -124,7 +124,7 @@ export function montarChecklist(d: DadosDaVisaoGeral): PassoDoChecklist[] {
       titulo: "Conecte sua conta do provedor de pagamento",
       comoFazer:
         d.urlDoWebhook === null
-          ? "Antes: seu sistema precisa estar num endereço https público (ex.: https://crm.suaempresa.com.br). Configure o domínio com HTTPS e volte aqui."
+          ? "Antes: seu sistema precisa estar num endereço https público (ex.: https://crm.example.com). Configure o domínio com HTTPS e volte aqui."
           : "Na aba Conexão, cole a chave secreta de teste e clique em Testar e conectar.",
       href: "/admin/cobranca?aba=conexao",
     },
