@@ -14498,6 +14498,20 @@ export const DICIONARIO: Traducoes = {
   "A chave que deixa o sistema criar assinaturas e ler pagamentos na sua conta Stripe. Prefira a chave restrita, que começa com rk_.": { es: "La clave que permite al sistema crear suscripciones y leer pagos en tu cuenta de Stripe. Prefiere la clave restringida, que empieza con rk_." },
   "Segredo dos avisos de pagamento da Stripe": { es: "Secreto de los avisos de pago de Stripe" },
   "Confere que um aviso de pagamento veio mesmo da Stripe. É criado sozinho quando você conecta a chave.": { es: "Comprueba que un aviso de pago vino realmente de Stripe. Se crea solo cuando conectas la clave." },
+  // ─── Cobrança do revendedor — avisos da régua (PR 3a) ───
+  "Seu teste grátis termina em {data}": { es: "Tu prueba gratis termina el {data}" },
+  "Assine em Plano e cobrança para continuar usando sem interrupção.": { es: "Suscríbete en Plan y facturación para seguir usando sin interrupción." },
+  "Seu teste grátis acabou em {data}": { es: "Tu prueba gratis terminó el {data}" },
+  "Assine em Plano e cobrança para continuar usando. Sem a assinatura, a conta é suspensa em alguns dias.": { es: "Suscríbete en Plan y facturación para seguir usando. Sin la suscripción, la cuenta se suspende en unos días." },
+  "Não identificamos o pagamento de {data}": { es: "No identificamos el pago del {data}" },
+  "Se você pagou por boleto, aguarde a compensação (até 1 dia útil). Se ainda não pagou, use o link de pagamento.": { es: "Si pagaste con boleto, espera la compensación (hasta 1 día hábil). Si aún no pagaste, usa el enlace de pago." },
+  "Sua conta será suspensa em {data}": { es: "Tu cuenta será suspendida el {data}" },
+  "Você cancelou a assinatura. Assine de novo em Plano e cobrança para continuar usando.": { es: "Cancelaste la suscripción. Suscríbete de nuevo en Plan y facturación para seguir usando." },
+  "A suspensão acontece se o pagamento não for confirmado até lá. Pague pelo link para evitar.": { es: "La suspensión ocurre si el pago no se confirma hasta entonces. Paga por el enlace para evitarla." },
+  "Conta suspensa por falta de pagamento": { es: "Cuenta suspendida por falta de pago" },
+  "A empresa volta a funcionar sozinha, na hora, assim que o pagamento for confirmado.": { es: "La empresa vuelve a funcionar sola, al instante, en cuanto se confirme el pago." },
+  "Sua conta foi liberada": { es: "Tu cuenta fue liberada" },
+  "Recebemos o pagamento e tudo voltou a funcionar. As conversas que chegaram durante a suspensão estão na Central, para revisão.": { es: "Recibimos el pago y todo volvió a funcionar. Las conversaciones que llegaron durante la suspensión están en la Central, para revisión." },
 };
 
 /**
