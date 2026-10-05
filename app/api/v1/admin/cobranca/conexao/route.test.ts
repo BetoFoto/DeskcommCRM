@@ -171,6 +171,17 @@ describe("conexão da cobrança", () => {
     expect(h.voltar).toHaveBeenCalledWith("STRIPE_SECRET_KEY");
   });
 
+  it("⭐ gravação parcial cuja restauração também falha: a troca fica auditada como incompleta", async () => {
+    h.gravar.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false, motivo: "banco" }).mockResolvedValue({ ok: false, motivo: "banco" });
+    h.voltar.mockResolvedValue({ ok: false, motivo: "banco" });
+    expect((await conectar()).status).toBe(500);
+    expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "cobranca.provedor_conectado",
+      metadata: expect.objectContaining({ resultado: "gravacao_incompleta", last4_novo: CHAVE.slice(-4) }),
+    }));
+    expect(JSON.stringify(h.audit.mock.calls)).not.toContain(CHAVE);
+  });
+
   it("⭐ publicar falha depois das gravações: 500, mas a troca de chave já foi auditada e os donos avisados", async () => {
     h.ad.testarChave.mockResolvedValue({ ok: true, modo: "producao" });
     m.comProvedor = [{ provedor: "stripe", modo: "teste" }];

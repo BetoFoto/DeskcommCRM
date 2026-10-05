@@ -203,9 +203,19 @@ export async function POST(req: NextRequest) {
     if (!gravado.ok) {
       logger.error("cobranca.conexao_nao_gravada", { chave: nome, motivo: gravado.motivo });
       // Chave nova com segredo velho leria os avisos da conta errada: desfaz o que já entrou.
+      let restaurada = true;
       for (const [n, , segredo, antes] of gravadas) {
         const volta = antes === null ? await voltarAoAmbiente(n) : await gravarPelaTela(n, antes, { ehSegredo: segredo, ator: ctx.user.id });
-        if (!volta.ok) logger.error("cobranca.conexao_nao_restaurada", { chave: n, motivo: volta.motivo });
+        if (!volta.ok) {
+          restaurada = false;
+          logger.error("cobranca.conexao_nao_restaurada", { chave: n, motivo: volta.motivo });
+        }
+      }
+      // Se a volta falhou, a credencial MUDOU sem passar pelo caminho feliz: a troca não pode ficar sem registro.
+      if (!restaurada) {
+        void audit({ actorUserId: ctx.user.id, actingAsPlatformAdmin: true, bypassedRls: true, resourceType: "platform_config", requestId,
+          action: "cobranca.provedor_conectado",
+          metadata: { provedor, modo: teste.modo, resultado: "gravacao_incompleta", last4_antigo: last4Antigo, last4_novo: chave.slice(-4) } });
       }
       // O antigo, com o segredo que voltou ao banco, segue valendo: some só o novo.
       await preparo.desfazer().catch((e: unknown) =>
