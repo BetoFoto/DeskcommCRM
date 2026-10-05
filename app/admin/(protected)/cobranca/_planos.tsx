@@ -194,8 +194,8 @@ export function PlanosDaInstalacao({ planos }: { planos: readonly PlanoDaTela[] 
                 <div className="min-w-0 space-y-0.5">
                   <p className="font-medium">
                     {p.nome}
-                    {p.padrao_no_cadastro && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs">{t("Plano do cadastro")}</span>}
-                    {p.arquivado_em && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs">{t("Arquivado")}</span>}
+                    {p.padrao_no_cadastro && <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-xs">{t("Plano do cadastro")}</span>}
+                    {p.arquivado_em && <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-xs">{t("Arquivado")}</span>}
                   </p>
                   <p className="text-muted-foreground">
                     {brl.format(p.preco_cents / 100)} {p.intervalo === "mes" ? t("por mês") : t("por ano")} · {p.trial_dias} {t("dias de teste")}
