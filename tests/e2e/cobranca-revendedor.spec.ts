@@ -282,6 +282,20 @@ test("[P0] primeira cobrança: conectar, assinar, atrasar, suspender e voltar so
     falhaDoCenario = erro;
     throw erro;
   } finally {
+    // Primeiro o que vaza para as specs seguintes do MESMO job (workers: 1, mesmo banco):
+    // as chaves da instalação (cobrança ligada, provedor apontando para o dublê) e a porta
+    // do dublê. Cada um no seu try: uma falha adiante não pode pular estes dois.
+    const errosDaLimpeza: unknown[] = [];
+    try {
+      await restaurarChaves(foto);
+    } catch (e) {
+      errosDaLimpeza.push(e);
+    }
+    try {
+      await duble?.fechar();
+    } catch (e) {
+      errosDaLimpeza.push(e);
+    }
     try {
       const fechamentos = await Promise.allSettled(contextos.map((c) => c.close()));
       const falhas = fechamentos.filter((r) => r.status === "rejected");
@@ -293,7 +307,6 @@ test("[P0] primeira cobrança: conectar, assinar, atrasar, suspender e voltar so
       }
       const rastro = await db.from("webhook_events_log").delete().eq("provider", "stripe").eq("valid_signature", false).gte("received_at", INICIO);
       if (rastro.error) throw rastro.error;
-      await duble?.fechar();
       // A trava da Task 33A recusa apagar empresa com assinatura viva no provedor
       // (o dublê não cancela nada): a assinatura sai antes, a empresa depois.
       const assinaturas = await db.from("cobranca_assinaturas").delete().in("organization_id", orgs);
@@ -304,16 +317,19 @@ test("[P0] primeira cobrança: conectar, assinar, atrasar, suspender e voltar so
       }
       const planos = await db.from("cobranca_planos").delete().in("nome", [ESSENCIAL, PROFISSIONAL]);
       if (planos.error) throw planos.error;
-      await restaurarChaves(foto);
       const pa = await db.from("platform_admins").delete().in("user_id", pessoas);
       if (pa.error) throw pa.error;
       for (const id of pessoas) {
         const r = await db.auth.admin.deleteUser(id);
         if (r.error) throw r.error;
       }
-    } catch (erroDaLimpeza) {
-      test.info().annotations.push({ type: "cleanup", description: `limpeza incompleta: orgs ${orgs.join(",")}` });
-      if (!falhaDoCenario) throw erroDaLimpeza;
+    } catch (e) {
+      errosDaLimpeza.push(e);
+    }
+    if (errosDaLimpeza.length) {
+      const motivos = errosDaLimpeza.map((e) => (e instanceof Error ? e.message : String(e))).join(" | ");
+      test.info().annotations.push({ type: "cleanup", description: `limpeza incompleta: orgs ${orgs.join(",")} — ${motivos}` });
+      if (!falhaDoCenario) throw errosDaLimpeza[0];
     }
   }
 });
