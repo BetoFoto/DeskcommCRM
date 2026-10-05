@@ -19,6 +19,7 @@ import { IDIOMAS_VISIVEIS } from "@/lib/i18n/registro";
 import { MOEDAS_SERVIDAS, simboloDaMoeda, type MoedaServida } from "@/lib/money";
 import { paisesOferecidos } from "@/lib/legal/perfil-do-pais";
 import { tenantSchema, type Locale, type TenantInput } from "@/lib/schemas/settings";
+import { FUSOS_OFERECIDOS } from "@/lib/tempo/fusos";
 
 interface Props {
   initial: TenantInput;
@@ -32,16 +33,8 @@ interface Props {
   onSaved?: () => void;
 }
 
-const TIMEZONES = [
-  "Africa/Luanda",
-  "America/Sao_Paulo",
-  "America/Manaus",
-  "America/Belem",
-  "America/Recife",
-  "America/Fortaleza",
-  "Europe/Lisbon",
-  "UTC",
-];
+// A mesma lista de toda tela de fuso — ver `lib/tempo/fusos.ts`.
+const TIMEZONES = FUSOS_OFERECIDOS.map((f) => f.codigo);
 
 export function TenantForm({ initial, onSave, onSaved }: Props) {
   const t = useT();
