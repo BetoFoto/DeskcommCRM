@@ -343,3 +343,122 @@ describe("verificarWebhook", () => {
     expect(adaptador.verificarWebhook(CORPO, cab(`t=${T},v1=${hmac(SEGREDO, T)}`), SEGREDO, AGORA)).toEqual(SINAL);
   });
 });
+
+describe("garantirCliente e iniciarAssinatura", () => {
+  const ORG = "11111111-1111-4111-8111-111111111111";
+  const PLANO = { id: "22222222-2222-4222-8222-222222222222", nome: "Pro", precoCents: 4990, intervalo: "mes" as const };
+  const PRODUTO = `dc_plano_${PLANO.id}`;
+  const SESSAO = { corpo: { id: "cs_test_1", url: "https://checkout.stripe.com/c/pay/cs_test_1", expires_at: 1790086400 } };
+  const base = {
+    clienteRef: "cus_QfixtureCliente",
+    orgId: ORG,
+    plano: PLANO,
+    trialAte: null,
+    urlDeVolta: "https://crm.example.com/app/settings/billing",
+    chaveIdempotencia: "3f1c2d4e-0000-4000-8000-000000000001",
+  };
+
+  it("reusa o cliente que a busca por organization_id acha, sem criar outro", async () => {
+    const { adaptador, chamadas } = montar({
+      "GET /customers/search": { corpo: { object: "search_result", data: [{ id: "cus_existente" }] } },
+    });
+    expect(await adaptador.garantirCliente({ id: ORG, nome: "Loja", email: "a@example.com", documento: null })).toBe("cus_existente");
+    expect(chamadas.map((c) => c.rota)).toEqual(["GET /customers/search"]);
+    expect(chamadas[0]?.url.searchParams.get("query")).toBe(`metadata['organization_id']:'${ORG}'`);
+  });
+
+  it("⭐ sem cliente: cria com e-mail, nome e organization_id, com Idempotency-Key DA ORG (a busca demora ~1 min a enxergar o novo)", async () => {
+    const criar = () =>
+      montar({
+        "GET /customers/search": { corpo: { object: "search_result", data: [] } },
+        "POST /customers": { corpo: { id: "cus_novo" } },
+      });
+    const primeiro = criar();
+    expect(await primeiro.adaptador.garantirCliente({ id: ORG, nome: "Loja", email: "a@example.com", documento: "12345678909" })).toBe("cus_novo");
+    const post = primeiro.chamadas[1];
+    expect(Object.fromEntries(post?.corpo ?? [])).toEqual({ email: "a@example.com", name: "Loja", "metadata[organization_id]": ORG });
+    // Segundo clique dentro do atraso do índice de busca: a MESMA chave faz a Stripe devolver o mesmo cliente (24 h).
+    const segundo = criar();
+    await segundo.adaptador.garantirCliente({ id: ORG, nome: "Loja", email: "a@example.com", documento: null });
+    expect(post?.headers.get("idempotency-key")).toBe(`cliente:${ORG}`);
+    expect(segundo.chamadas[1]?.headers.get("idempotency-key")).toBe(`cliente:${ORG}`);
+  });
+
+  it("URL do Checkout que não é https → resposta_invalida (nunca vira redirect)", async () => {
+    const { adaptador } = montar({
+      "POST /products": { corpo: { id: PRODUTO } },
+      "POST /checkout/sessions": { corpo: { id: "cs_x", url: "javascript:alert(1)", expires_at: 1790086400 } },
+    });
+    expect(await adaptador.iniciarAssinatura(base).catch((e: unknown) => e)).toMatchObject({ codigo: "resposta_invalida" });
+  });
+
+  it("id de org que não é uuid nunca entra na consulta", async () => {
+    const { adaptador, chamadas } = montar({});
+    await expect(adaptador.garantirCliente({ id: "x' OR '1", nome: "L", email: "a@example.com", documento: null })).rejects.toThrow();
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("⭐ o Checkout: assinatura, cliente reutilizado, metadados da org e do plano, formas de pagamento da conta", async () => {
+    const { adaptador, chamadas } = montar({ "POST /products": { corpo: { id: PRODUTO } }, "POST /checkout/sessions": SESSAO });
+    expect(await adaptador.iniciarAssinatura(base)).toEqual({
+      url: "https://checkout.stripe.com/c/pay/cs_test_1",
+      expiraEm: new Date(1790086400 * 1000),
+      assinaturaRef: null,
+    });
+    const checkout = chamadas.find((c) => c.rota === "POST /checkout/sessions");
+    expect(Object.fromEntries(checkout?.corpo ?? [])).toEqual({
+      mode: "subscription",
+      customer: "cus_QfixtureCliente",
+      client_reference_id: ORG,
+      "line_items[0][price_data][currency]": "brl",
+      "line_items[0][price_data][unit_amount]": "4990",
+      "line_items[0][price_data][recurring][interval]": "month",
+      "line_items[0][price_data][product]": PRODUTO,
+      "line_items[0][quantity]": "1",
+      "subscription_data[metadata][organization_id]": ORG,
+      "subscription_data[metadata][plano_id]": PLANO.id,
+      "metadata[organization_id]": ORG,
+      "metadata[plano_id]": PLANO.id,
+      success_url: "https://crm.example.com/app/settings/billing?voltou=1",
+      cancel_url: "https://crm.example.com/app/settings/billing",
+      locale: "pt-BR",
+    });
+    // Sem payment_method_types: cartão e boleto aparecem conforme o painel da conta.
+    expect(checkout?.headers.get("idempotency-key")).toBe(`${base.chaveIdempotencia}:checkout`);
+  });
+
+  it("teste grátis ≥ 48 h vai como trial_end; 47 h não vai (a Stripe recusaria)", async () => {
+    const agora = new Date("2026-10-01T12:00:00Z").getTime();
+    const com = montar({ "POST /products": { corpo: { id: PRODUTO } }, "POST /checkout/sessions": SESSAO });
+    await com.adaptador.iniciarAssinatura({ ...base, trialAte: new Date(agora + 48 * 3600_000) });
+    expect(com.chamadas[1]?.corpo.get("subscription_data[trial_end]")).toBe(String(Math.floor(agora / 1000) + 48 * 3600));
+    const sem = montar({ "POST /products": { corpo: { id: PRODUTO } }, "POST /checkout/sessions": SESSAO });
+    await sem.adaptador.iniciarAssinatura({ ...base, trialAte: new Date(agora + 47 * 3600_000) });
+    expect(sem.chamadas[1]?.corpo.has("subscription_data[trial_end]")).toBe(false);
+  });
+
+  it("plano anual vira interval=year", async () => {
+    const { adaptador, chamadas } = montar({ "POST /products": { corpo: { id: PRODUTO } }, "POST /checkout/sessions": SESSAO });
+    await adaptador.iniciarAssinatura({ ...base, plano: { ...PLANO, intervalo: "ano" } });
+    expect(chamadas[1]?.corpo.get("line_items[0][price_data][recurring][interval]")).toBe("year");
+  });
+
+  it("produto que já existe (resource_already_exists) é atualizado com o nome e o fluxo segue", async () => {
+    const { adaptador, chamadas } = montar({
+      "POST /products": { status: 400, corpo: { error: { code: "resource_already_exists" } } },
+      [`POST /products/${PRODUTO}`]: { corpo: { id: PRODUTO } },
+      "POST /checkout/sessions": SESSAO,
+    });
+    await adaptador.iniciarAssinatura(base);
+    expect(chamadas.map((c) => c.rota)).toEqual(["POST /products", `POST /products/${PRODUTO}`, "POST /checkout/sessions"]);
+    expect(chamadas[1]?.corpo.get("name")).toBe("Pro");
+  });
+
+  it("⭐ Checkout fora do ar: 3 tentativas com a MESMA Idempotency-Key, e lança transitório", async () => {
+    const { adaptador, chamadas } = montar({ "POST /products": { corpo: { id: PRODUTO } }, "POST /checkout/sessions": { status: 502 } });
+    const erro = await adaptador.iniciarAssinatura(base).catch((e: unknown) => e);
+    expect(erro).toMatchObject({ status: 502, transitorio: true });
+    const chaves = chamadas.filter((c) => c.rota === "POST /checkout/sessions").map((c) => c.headers.get("idempotency-key"));
+    expect(chaves).toEqual(Array(3).fill(`${base.chaveIdempotencia}:checkout`));
+  });
+});

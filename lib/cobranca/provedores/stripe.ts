@@ -25,7 +25,13 @@ import { z } from "zod";
 
 import { logger } from "@/lib/logger";
 
-import { ErroDoProvedor, type AdaptadorDeCobranca, type Modo, type SinalDoWebhook } from "./contrato";
+import {
+  ErroDoProvedor,
+  type AdaptadorDeCobranca,
+  type Modo,
+  type PlanoParaProvedor,
+  type SinalDoWebhook,
+} from "./contrato";
 
 export const STRIPE_API_BASE = "https://api.stripe.com/v1";
 
@@ -81,7 +87,10 @@ export interface DependenciasDaStripe {
   marca: string;
 }
 
-export type AdaptadorStripe = Pick<AdaptadorDeCobranca, "id" | "testarChave" | "verificarWebhook">;
+export type AdaptadorStripe = Pick<
+  AdaptadorDeCobranca,
+  "id" | "testarChave" | "verificarWebhook" | "garantirCliente" | "iniciarAssinatura"
+>;
 
 /** `teste`/`producao` pelo prefixo; `null` = não é chave secreta nem restrita (inclusive `pk_`). */
 export function modoDaChaveStripe(chave: string): Modo | null {
@@ -143,6 +152,21 @@ function ler<T>(schema: z.ZodType<T>, dados: unknown): T {
 }
 
 const listaQualquer = z.object({ object: z.literal("list") });
+const comId = z.object({ id: z.string().min(1) });
+const listaDeIds = z.object({ data: z.array(comId) });
+const sessaoDeCheckout = z.object({ url: z.string(), expires_at: z.number().int() });
+const UUID = z.string().uuid();
+/** A Stripe só aceita `trial_end` a 48 h ou mais no futuro. */
+const TESTE_MINIMO_MS = 48 * 3600 * 1000;
+
+function precoRecorrente(plano: PlanoParaProvedor, produto: string) {
+  return {
+    currency: "brl",
+    unit_amount: plano.precoCents,
+    recurring: { interval: plano.intervalo === "ano" ? "year" : "month" },
+    product: produto,
+  };
+}
 
 /** Janela da assinatura, nos DOIS sentidos: o relógio da VPS pode estar atrás da Stripe. */
 export const TOLERANCIA_DO_WEBHOOK_S = 300;
@@ -212,6 +236,7 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorStripe
   const buscar = dep.fetch ?? fetch;
   const esperar = dep.esperar ?? ((ms: number) => new Promise<void>((pronto) => setTimeout(pronto, ms)));
   const novaChave = dep.novaChaveDeIdempotencia ?? randomUUID;
+  const agora = dep.agora ?? (() => new Date());
 
   async function chaveUsavel(): Promise<string> {
     const chave = await dep.lerChave();
@@ -293,9 +318,89 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorStripe
     }
   }
 
+  /**
+   * Link do provedor que vira href, redirect ou botão de e-mail: só https (http
+   * só com a base de teste em loopback). Defesa em profundidade num caminho de
+   * dinheiro: uma resposta adulterada com `javascript:` nunca chega à tela.
+   */
+  function linkSeguro(u: string | null | undefined): string | null {
+    if (!u || !URL.canParse(u)) return null;
+    const esquema = new URL(u).protocol;
+    if (esquema === "https:" || (esquema === "http:" && base !== STRIPE_API_BASE)) return u;
+    logger.warn("cobranca.link_invalido", { esquema });
+    return null;
+  }
+
+  /** Um produto por PLANO, id previsível: criar de novo é `resource_already_exists`, e o nome é atualizado. */
+  async function garantirProduto(plano: PlanoParaProvedor): Promise<string> {
+    const id = `dc_plano_${UUID.parse(plano.id)}`;
+    try {
+      await chamar("POST", "/products", { id, name: plano.nome, metadata: { plano_id: plano.id } });
+    } catch (e) {
+      if (!(e instanceof ErroDoProvedor) || e.codigo !== "resource_already_exists") throw e;
+      await chamar("POST", `/products/${id}`, { name: plano.nome, active: true });
+    }
+    return id;
+  }
+
+  async function garantirCliente(org: Parameters<AdaptadorDeCobranca["garantirCliente"]>[0]): Promise<string> {
+    const orgId = UUID.parse(org.id);
+    // A busca cura o cliente que já existe na conta (linha local zerada, retomada
+    // depois de isentar); a reserva de 2 min do checkout (§7b) segura o clique duplo.
+    const consulta = new URLSearchParams({ query: `metadata['organization_id']:'${orgId}'`, limit: "1" });
+    const achado = ler(listaDeIds, await chamar("GET", `/customers/search?${consulta}`)).data[0];
+    if (achado) return achado.id;
+    // Chave de idempotência DA ORG (não aleatória): o índice da busca da Stripe
+    // atrasa ~1 min, e um 2º clique depois de uma fase 2 que falhou criaria um
+    // cliente duplicado — e `lerSituacao` passaria a ler só um dos dois.
+    return ler(
+      comId,
+      await chamar("POST", "/customers", { email: org.email, name: org.nome, metadata: { organization_id: orgId } }, `cliente:${orgId}`),
+    ).id;
+  }
+
+  async function iniciarAssinatura(
+    p: Parameters<AdaptadorDeCobranca["iniciarAssinatura"]>[0],
+  ): ReturnType<AdaptadorDeCobranca["iniciarAssinatura"]> {
+    const orgId = UUID.parse(p.orgId);
+    const produto = await garantirProduto(p.plano);
+    const trialEnd =
+      p.trialAte !== null && p.trialAte.getTime() - agora().getTime() >= TESTE_MINIMO_MS
+        ? Math.floor(p.trialAte.getTime() / 1000)
+        : undefined;
+    const sucesso = new URL(p.urlDeVolta);
+    sucesso.searchParams.set("voltou", "1");
+    const metadados = { organization_id: orgId, plano_id: p.plano.id };
+    const sessao = ler(
+      sessaoDeCheckout,
+      await chamar(
+        "POST",
+        "/checkout/sessions",
+        {
+          mode: "subscription",
+          customer: p.clienteRef,
+          client_reference_id: orgId,
+          line_items: [{ price_data: precoRecorrente(p.plano, produto), quantity: 1 }],
+          subscription_data: { metadata: metadados, trial_end: trialEnd },
+          metadata: metadados,
+          success_url: sucesso.toString(),
+          cancel_url: p.urlDeVolta,
+          locale: "pt-BR",
+        },
+        `${p.chaveIdempotencia}:checkout`,
+      ),
+    );
+    const url = linkSeguro(sessao.url);
+    if (url === null) throw new ErroDoProvedor(200, "resposta_invalida", false);
+    // A assinatura só nasce depois do pagamento (Checkout desde a basil): sem ref aqui.
+    return { url, expiraEm: new Date(sessao.expires_at * 1000), assinaturaRef: null };
+  }
+
   return {
     id: "stripe",
     testarChave,
     verificarWebhook: verificarWebhookStripe,
+    garantirCliente,
+    iniciarAssinatura,
   };
 }
