@@ -45057,9 +45057,20 @@ notify pgrst, 'reload schema';
 -- antes de sumir. Suspensão por COBRANÇA é recusada (`PT409`
 -- `organizacao_com_cobranca_pendente`): excluir a empresa deixaria a assinatura
 -- cobrando no provedor. Tipo nulo vale como administrativa (regra de
--- `lib/organizacao/operante.ts`). A rota confere o mesmo antes de tocar em
+-- `lib/organizacao/operante.ts`). A rota confere o tipo antes de tocar em
 -- nada; aqui é conferido de novo porque `fn_suspender_organizacao` pode trocar
 -- o tipo entre a leitura da rota e esta transação.
+--
+-- O TIPO SOZINHO NÃO BASTA. Numa org já suspensa por cobrança,
+-- `fn_suspender_organizacao` aceita a administrativa e TROCA o tipo ("a
+-- administrativa prevalece"), mantendo `suspended_at`. Sem mais nada, duas
+-- chamadas — `/suspend` e `/delete` — apagavam a empresa com a assinatura
+-- cobrando. Por isso a função também recusa quando houve um `tenant.suspended`
+-- de tipo cobrança desde o início da suspensão ATUAL (`event_log`, que ninguém
+-- expurga); uma suspensão nova, depois de reativar, não herda a de antes.
+-- LIMITE declarado: a cobrança que falha DEPOIS de uma suspensão
+-- administrativa volta com `administrativa_prevalece` e não emite evento —
+-- esse caso só a assinatura viva responde, e é a recusa do PR 2 da cobrança.
 --
 -- Roda SÓ como servidor (service_role, `auth.uid()` nulo): o gatilho
 -- `fn_followup_generation_write` recusa DELETE em `job_queue` vindo de sessão
@@ -45094,7 +45105,7 @@ begin
     raise exception 'organizacao_exclusao_sem_motivo' using errcode = '22023';
   end if;
 
-  select id, slug, display_name, legal_name, cnpj, status, suspended_kind, created_at
+  select id, slug, display_name, legal_name, cnpj, status, suspended_kind, suspended_at, created_at
     into v_org
     from public.organizations
    where id = p_org
@@ -45105,7 +45116,12 @@ begin
   if v_org.status <> 'suspended' then
     raise exception 'organizacao_nao_suspensa' using errcode = 'PT409';
   end if;
-  if coalesce(v_org.suspended_kind, 'administrativa') = 'cobranca' then
+  if coalesce(v_org.suspended_kind, 'administrativa') = 'cobranca'
+     or exists (select 1 from public.event_log e
+                 where e.organization_id = p_org
+                   and e.event_type = 'tenant.suspended'
+                   and e.payload->>'kind' = 'cobranca'
+                   and e.created_at >= v_org.suspended_at) then
     raise exception 'organizacao_com_cobranca_pendente' using errcode = 'PT409';
   end if;
   if p_confirmacao is distinct from v_org.slug then

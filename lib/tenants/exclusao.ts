@@ -33,6 +33,9 @@
  * Pré-condição dura, conferida aqui e de novo no banco: a organização está
  * SUSPENSA, a suspensão é ADMINISTRATIVA (a por cobrança é recusada — excluir
  * deixaria a assinatura cobrando no provedor) e a confirmação é o slug dela.
+ * Aqui se olha só o tipo; o banco olha também o histórico da suspensão atual,
+ * porque uma administrativa por cima da cobrança troca o tipo (migration 0556)
+ * — essa recusa chega como `PT409 organizacao_com_cobranca_pendente`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 

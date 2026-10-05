@@ -116,3 +116,78 @@ describe("agent_inbox_items aceita email_de_login_trocado", () => {
     ).rejects.toThrow(/agent_inbox_items_kind_check/);
   });
 });
+
+/**
+ * A COBRANÇA NÃO SE APAGA TROCANDO O RÓTULO. `fn_suspender_organizacao`, numa
+ * org já suspensa por cobrança, aceita a administrativa e TROCA o tipo ("a
+ * administrativa prevalece", mantendo o início da suspensão). Olhando só o
+ * tipo, duas chamadas (/suspend e /delete) apagavam a empresa com a assinatura
+ * cobrando. A exclusão confere o `tenant.suspended` de tipo cobrança desde o
+ * início da suspensão atual — e uma suspensão nova, depois de reativar, não
+ * herda a de antes.
+ */
+describe("fn_excluir_organizacao: a suspensão administrativa por cima da cobrança não libera", () => {
+  const ORG_TROCA = "7e0b0000-0000-4000-8000-0000000000c1";
+  const ORG_NOVO_EPISODIO = "7e0b0000-0000-4000-8000-0000000000c2";
+  // A lápide referencia o ator (FK para auth.users): aqui ele existe.
+  const ATOR_REAL = "7e0b1111-0000-4000-8000-0000000000fe";
+  const suspender = (org: string, kind: string) =>
+    pool.query("select public.fn_suspender_organizacao($1, $2, 'motivo do teste', null) as r", [org, kind]);
+
+  beforeAll(async () => {
+    await pool.query(
+      `insert into auth.users (id, email) values ($1, 'exclusao-troca@invariant.test') on conflict (id) do nothing`,
+      [ATOR_REAL],
+    );
+    for (const [id, slug] of [
+      [ORG_TROCA, "exclusao-troca-de-rotulo"],
+      [ORG_NOVO_EPISODIO, "exclusao-novo-episodio"],
+    ] as const) {
+      await pool.query(
+        `insert into organizations (id, slug, legal_name, display_name)
+         values ($1, $2, $3, $3) on conflict (id) do nothing`,
+        [id, slug, `Exclusão ${slug}`],
+      );
+    }
+  });
+
+  afterAll(async () => {
+    await pool.query("delete from organizations where id = any($1)", [[ORG_TROCA, ORG_NOVO_EPISODIO]]);
+    await pool.query("delete from api_audit_log where resource_id = any($1)", [[ORG_TROCA, ORG_NOVO_EPISODIO]]);
+    await pool.query("delete from auth.users where id = $1", [ATOR_REAL]);
+  });
+
+  it("cobrança → /suspend administrativa troca o tipo, e a exclusão continua recusada (PT409)", async () => {
+    await suspender(ORG_TROCA, "cobranca");
+    const troca = await suspender(ORG_TROCA, "administrativa");
+    expect(troca.rows[0]!.r).toMatchObject({ changed: true });
+    const { rows } = await pool.query<{ suspended_kind: string }>(
+      "select suspended_kind from organizations where id = $1",
+      [ORG_TROCA],
+    );
+    // Controle: o rótulo, sozinho, já não diz cobrança.
+    expect(rows[0]!.suspended_kind).toBe("administrativa");
+
+    await expect(
+      pool.query("select public.fn_excluir_organizacao($1, $2, $3, $4)", [
+        ORG_TROCA,
+        ATOR_REAL,
+        "exclusao-troca-de-rotulo",
+        MOTIVO,
+      ]),
+    ).rejects.toMatchObject({ code: "PT409", message: "organizacao_com_cobranca_pendente" });
+    const { rows: ainda } = await pool.query("select 1 from organizations where id = $1", [ORG_TROCA]);
+    expect(ainda).toHaveLength(1);
+  });
+
+  it("controle: cobrança resolvida (reativada) e suspensão administrativa NOVA — a exclusão segue", async () => {
+    await suspender(ORG_NOVO_EPISODIO, "cobranca");
+    await pool.query("select public.fn_reativar_organizacao($1, 'cobranca', null)", [ORG_NOVO_EPISODIO]);
+    await suspender(ORG_NOVO_EPISODIO, "administrativa");
+    const { rows } = await pool.query<{ r: { slug: string } }>(
+      "select public.fn_excluir_organizacao($1, $2, $3, $4) as r",
+      [ORG_NOVO_EPISODIO, ATOR_REAL, "exclusao-novo-episodio", MOTIVO],
+    );
+    expect(rows[0]!.r.slug).toBe("exclusao-novo-episodio");
+  });
+});
