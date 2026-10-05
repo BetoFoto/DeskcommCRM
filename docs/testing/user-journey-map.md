@@ -3318,4 +3318,7 @@ própria em `tests/invariants/gestao-de-tenants.test.ts` e
 Não provado pela tela: o desligamento externo da exclusão (WhatsApp, voz, loja), que
 agora só acontece depois do commit — o tenant de teste não tem canal conectado; a ordem
 é medida por unidade em `lib/tenants/exclusao.test.ts`. O e-mail ao endereço antigo,
-que sem envio configurado não sai: medido por unidade na rota.
+que sem envio configurado não sai: medido por unidade na rota. O aviso em CADA empresa em
+que o login tem acesso ativo (não só na do path) e o 404 para vínculo revogado — com o
+botão "Alterar e-mail" travado para quem tem o selo "Acesso revogado": medidos por
+unidade na rota (`…/members/[userId]/email/route.test.ts`).

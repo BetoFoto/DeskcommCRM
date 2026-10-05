@@ -6,12 +6,13 @@
  *  - a troca vai ao GoTrue com `email_confirm: true` (sem SMTP, a confirmação
  *    no endereço novo nunca chegaria);
  *  - e-mail já usado por outro login vira 409 com mensagem clara, não 500;
- *  - o alvo precisa pertencer ao tenant do path;
+ *  - o alvo precisa ter acesso ATIVO ao tenant do path (vínculo revogado é 404);
  *  - admin da plataforma não tem o e-mail trocado por outro admin (tomada de conta);
  *  - a auditoria guarda só HASH, nunca o endereço em claro;
  *  - as três guardas da decisão do dono: (a) a troca abre um aviso na Central
- *    da empresa, com o nome e a data e NUNCA um endereço, antes do GoTrue — e o
- *    aviso é desfeito se o GoTrue recusar; (b) o endereço ANTIGO é avisado,
+ *    de CADA empresa em que a pessoa tem acesso ativo (o login é um só na
+ *    instalação), com o nome e a data e NUNCA um endereço, antes do GoTrue — e
+ *    os avisos são desfeitos se o GoTrue recusar; (b) o endereço ANTIGO é avisado,
  *    com a marca da instalação, e a falta de envio configurado não derruba a
  *    troca; (c) quem tem fator prova a segunda etapa nesta sessão.
  */
@@ -73,13 +74,22 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PATCH } from "./route";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
+const OUTRA_ORG = "44444444-4444-4444-8444-444444444444";
 const ALVO = "33333333-3333-4333-8333-333333333333";
 const ADMIN = "11111111-1111-4111-8111-111111111111";
 
 const passos: string[] = [];
 
+interface Vinculo {
+  organization_id: string;
+  revoked_at: string | null;
+  timezone?: string;
+}
+
 function adminFalso(opts: {
   membro?: boolean;
+  /** Todos os vínculos do alvo, revogados inclusive; o falso aplica `.eq`/`.is` de verdade. */
+  vinculos?: Vinculo[];
   ehAdminDaPlataforma?: boolean;
   emailAtual?: string;
   nome?: string | null;
@@ -101,38 +111,71 @@ function adminFalso(opts: {
     b.maybeSingle = async () => ({ data: error ? null : data, error });
     return b;
   };
+  const vinculos: Vinculo[] =
+    opts.vinculos ?? (opts.membro === false ? [] : [{ organization_id: ORG, revoked_at: null }]);
+  const leituraDeVinculos = () => {
+    let linhas = vinculos.map((v) => ({
+      user_id: ALVO,
+      organization_id: v.organization_id,
+      revoked_at: v.revoked_at,
+      organizations: { timezone: v.timezone ?? "America/Sao_Paulo" },
+    }));
+    const b: Record<string, unknown> = {};
+    b.select = () => b;
+    b.eq = (col: string, val: string) => {
+      linhas = linhas.filter((l) => (l as Record<string, unknown>)[col] === val);
+      return b;
+    };
+    b.is = (col: string, val: null) => {
+      linhas = linhas.filter((l) => (l as Record<string, unknown>)[col] === val);
+      return b;
+    };
+    b.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: linhas, error: null }).then(r);
+    return b;
+  };
   const central = () => {
     const b: Record<string, unknown> = {};
-    b.insert = (linha: Record<string, unknown>) => {
+    let inseridas: Array<Record<string, unknown>> = [];
+    let removendo = false;
+    b.insert = (linhas: Array<Record<string, unknown>>) => {
       passos.push("central.insert");
-      insercoes.push(linha);
+      inseridas = linhas;
+      insercoes.push(...linhas);
       return b;
     };
     b.select = () => b;
-    b.single = async () =>
-      opts.erroNaCentral
-        ? { data: null, error: { message: "boom" } }
-        : { data: { id: "item-1" }, error: null };
-    b.delete = () => b;
-    b.eq = (col: string, val: string) => {
+    b.delete = () => {
+      removendo = true;
+      return b;
+    };
+    b.in = (col: string, vals: string[]) => {
       if (col === "id") {
         passos.push("central.delete");
-        remocoes.push(val);
+        remocoes.push(...vals);
       }
       return b;
     };
-    b.then = (r: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(r);
+    b.then = (r: (v: unknown) => unknown) =>
+      Promise.resolve(
+        removendo
+          ? { error: null }
+          : opts.erroNaCentral
+            ? { data: null, error: { message: "boom" } }
+            : {
+                data: inseridas.map((l, i) => ({ id: `item-${i + 1}`, organization_id: l.organization_id })),
+                error: null,
+              },
+      ).then(r);
     return b;
   };
   const admin = {
     from: (t: string) => {
-      if (t === "user_organizations") return leitura(opts.membro === false ? null : { user_id: ALVO });
+      if (t === "user_organizations") return leituraDeVinculos();
       if (t === "platform_admins")
         return leitura(
           opts.ehAdminDaPlataforma ? { user_id: ALVO } : null,
           opts.erroEmPlatformAdmins ? { message: "statement timeout" } : null,
         );
-      if (t === "organizations") return leitura({ timezone: "America/Sao_Paulo" });
       if (t === "agent_inbox_items") return central();
       throw new Error(`tabela inesperada: ${t}`);
     },
@@ -283,6 +326,46 @@ describe("troca de e-mail de membro", () => {
     expect(texto).not.toContain("@");
   });
 
+  it("(a) vínculo REVOGADO no tenant do path: 404 — a empresa avisada não pode ser uma em que a pessoa já não está", async () => {
+    const { updateUserById, insercoes } = adminFalso({
+      vinculos: [
+        { organization_id: ORG, revoked_at: "2026-09-01T00:00:00Z" },
+        { organization_id: OUTRA_ORG, revoked_at: null },
+      ],
+    });
+    expect((await pedir("novo@exemplo.com")).status).toBe(404);
+    expect(insercoes).toHaveLength(0);
+    expect(updateUserById).not.toHaveBeenCalled();
+  });
+
+  it("(a) o login é um só: TODA empresa com acesso ativo recebe o aviso; a revogada, não", async () => {
+    const TERCEIRA = "55555555-5555-4555-8555-555555555555";
+    const { insercoes } = adminFalso({
+      vinculos: [
+        { organization_id: ORG, revoked_at: null },
+        { organization_id: OUTRA_ORG, revoked_at: null, timezone: "Europe/Lisbon" },
+        { organization_id: TERCEIRA, revoked_at: "2026-09-01T00:00:00Z" },
+      ],
+    });
+    expect((await pedir("novo@exemplo.com")).status).toBe(200);
+    expect(insercoes.map((i) => i.organization_id).sort()).toEqual([ORG, OUTRA_ORG].sort());
+    for (const i of insercoes) expect(`${String(i.title)} ${String(i.body)}`).not.toContain("@");
+    const chamada = vi.mocked(audit).mock.calls[0]![0] as { metadata: Record<string, unknown> };
+    expect(chamada.metadata.avisos_na_central).toEqual(["item-1", "item-2"]);
+  });
+
+  it("(a) o GoTrue recusa com duas empresas avisadas: os DOIS avisos são desfeitos", async () => {
+    const { remocoes } = adminFalso({
+      vinculos: [
+        { organization_id: ORG, revoked_at: null },
+        { organization_id: OUTRA_ORG, revoked_at: null },
+      ],
+      erroNoUpdate: { code: "email_exists", message: "already been registered" },
+    });
+    expect((await pedir("ocupado@exemplo.com")).status).toBe(409);
+    expect(remocoes).toEqual(["item-1", "item-2"]);
+  });
+
   it("(a) sem nome no cadastro, o aviso diz 'uma pessoa da equipe' — nunca cai para o e-mail", async () => {
     const { insercoes } = adminFalso({ nome: null });
     await pedir("novo@exemplo.com");
@@ -332,7 +415,7 @@ describe("troca de e-mail de membro", () => {
     expect(updateUserById).toHaveBeenCalledTimes(1);
     const chamada = vi.mocked(audit).mock.calls[0]![0] as { metadata: Record<string, unknown> };
     expect(chamada.metadata).toMatchObject({
-      aviso_na_central: "item-1",
+      avisos_na_central: ["item-1"],
       aviso_ao_endereco_antigo: "sem_envio_configurado",
     });
   });

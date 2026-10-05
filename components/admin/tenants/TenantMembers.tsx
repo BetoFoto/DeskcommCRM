@@ -76,13 +76,17 @@ export function TenantMembers({ organizationId, readOnly = false }: TenantMember
                 size="sm"
                 variant="outline"
                 onClick={() => setEditando(m)}
-                disabled={m.is_platform_admin}
+                disabled={m.is_platform_admin || !!m.revoked_at}
                 title={
                   m.is_platform_admin
                     ? t(
                         "O e-mail de um administrador da plataforma só é trocado pelo próprio dono da conta.",
                       )
-                    : undefined
+                    : m.revoked_at
+                      ? t(
+                          "Quem perdeu o acesso a este tenant não tem o e-mail trocado por aqui: a empresa avisada seria uma em que a pessoa já não está.",
+                        )
+                      : undefined
                 }
               >
                 {t("Alterar e-mail")}

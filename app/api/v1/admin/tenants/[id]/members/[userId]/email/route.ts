@@ -26,11 +26,15 @@
  *
  * As três guardas que a decisão do dono exigiu para a troca (recorte do #1967):
  *
- *  (a) A EMPRESA FICA SABENDO. Um aviso `email_de_login_trocado` na Central da
- *      organização, com o nome da pessoa e a data — NUNCA um endereço (a Central
- *      é lida por toda a empresa). Gravado ANTES do GoTrue: se o aviso não
- *      grava, nada é trocado (falha fechada na ação); se o GoTrue recusar
- *      depois, o aviso recém-criado é desfeito.
+ *  (a) A EMPRESA FICA SABENDO. Um aviso `email_de_login_trocado` na Central de
+ *      CADA organização em que a pessoa tem acesso ATIVO — o login é um só na
+ *      instalação, então toda empresa que ele abre precisa saber, não só a que
+ *      o admin escolheu na URL. Com o nome da pessoa e a data — NUNCA um
+ *      endereço (a Central é lida por toda a empresa). O tenant do path também
+ *      precisa ser um desses: vínculo revogado é 404, para que a empresa avisada
+ *      não seja uma em que a pessoa já não está. Gravados ANTES do GoTrue: se
+ *      os avisos não gravam, nada é trocado (falha fechada na ação); se o
+ *      GoTrue recusar depois, os avisos recém-criados são desfeitos.
  *  (b) O ENDEREÇO ANTIGO FICA SABENDO. Depois da troca, um e-mail à caixa
  *      anterior, com a marca da instalação (`marcaDaSaida`) e sem o endereço
  *      novo. Falha ABERTA: sem envio configurado (o estado de um primeiro
@@ -110,26 +114,26 @@ export async function PATCH(
 
   const admin = createAdminClient();
 
-  // A pessoa precisa pertencer a ESTE tenant: a rota é da gestão de tenants, e
-  // o par (organização, usuário) do path é o que o admin escolheu na tela.
-  const [lidoVinculo, lidoAdmin, lidoOrg] = await Promise.all([
+  // Todos os vínculos ATIVOS do login (o e-mail vale para todos eles), cada um
+  // com o fuso da sua organização. A pessoa precisa ter acesso ativo a ESTE
+  // tenant: a rota é da gestão de tenants, e o par do path é o que o admin
+  // escolheu na tela.
+  const [lidoVinculos, lidoAdmin] = await Promise.all([
     admin
       .from("user_organizations")
-      .select("user_id")
-      .eq("organization_id", id)
+      .select("organization_id, organizations(timezone)")
       .eq("user_id", userId)
-      .maybeSingle(),
+      .is("revoked_at", null),
     admin
       .from("platform_admins")
       .select("user_id")
       .eq("user_id", userId)
       .is("revoked_at", null)
       .maybeSingle(),
-    admin.from("organizations").select("timezone").eq("id", id).maybeSingle(),
   ]);
   // Falha FECHADA: sem saber se o alvo é admin da plataforma, a guarda contra
   // tomada de conta não decide — e um `null` de erro leria como "não é".
-  const erroDeLeitura = lidoVinculo.error ?? lidoAdmin.error ?? lidoOrg.error;
+  const erroDeLeitura = lidoVinculos.error ?? lidoAdmin.error;
   if (erroDeLeitura) {
     logger.error("[admin.members.email] leitura das guardas falhou; e-mail NÃO trocado", {
       requestId,
@@ -138,10 +142,15 @@ export async function PATCH(
     });
     return fail("internal_error", "Não foi possível trocar o e-mail agora.", 500, { requestId });
   }
-  const vinculo = lidoVinculo.data;
+  const vinculos = ((lidoVinculos.data ?? []) as Array<{
+    organization_id: string;
+    organizations: { timezone: string | null } | null;
+  }>).map((v) => ({ orgId: v.organization_id, fuso: v.organizations?.timezone ?? null }));
   const ehAdmin = lidoAdmin.data;
-  const org = lidoOrg.data;
-  if (!vinculo) return fail("not_found", "Membro não encontrado neste tenant.", 404, { requestId });
+  const doPath = vinculos.find((v) => v.orgId === id);
+  if (!doPath) {
+    return fail("not_found", "Membro sem acesso ativo neste tenant.", 404, { requestId });
+  }
   if (ehAdmin) {
     return fail(
       "forbidden",
@@ -161,19 +170,21 @@ export async function PATCH(
   }
 
   // (a) A Central ANTES do GoTrue: troca invisível para a empresa não acontece.
-  const fusoDaOrg = (org as { timezone?: string | null } | null)?.timezone;
-  const { data: item, error: centralErr } = await admin
+  const fusoDaOrg = doPath.fuso;
+  const nome = nomeParaOAviso(atual.user.user_metadata);
+  const { data: itens, error: centralErr } = await admin
     .from("agent_inbox_items")
-    .insert({
-      organization_id: id,
-      kind: "email_de_login_trocado",
-      severity: "warn",
-      title: "E-mail de login trocado pelo administrador da plataforma",
-      body: `O e-mail de login de ${nomeParaOAviso(atual.user.user_metadata)} foi trocado pelo administrador da plataforma em ${dataNoFuso("pt-BR", fusoDaOrg)}.`,
-    })
-    .select("id")
-    .single();
-  if (centralErr || !item) {
+    .insert(
+      vinculos.map((v) => ({
+        organization_id: v.orgId,
+        kind: "email_de_login_trocado",
+        severity: "warn",
+        title: "E-mail de login trocado pelo administrador da plataforma",
+        body: `O e-mail de login de ${nome} foi trocado pelo administrador da plataforma em ${dataNoFuso("pt-BR", v.fuso)}.`,
+      })),
+    )
+    .select("id");
+  if (centralErr || !itens || itens.length !== vinculos.length) {
     logger.error("[admin.members.email] aviso na Central falhou; e-mail NÃO trocado", {
       requestId,
       organization_id: id,
@@ -181,21 +192,20 @@ export async function PATCH(
     });
     return fail("internal_error", "Não foi possível trocar o e-mail agora.", 500, { requestId });
   }
-  const avisoNaCentral = (item as { id: string }).id;
+  const avisosNaCentral = (itens as Array<{ id: string }>).map((i) => i.id);
 
   const { error } = await admin.auth.admin.updateUserById(userId, {
     email,
     email_confirm: true,
   });
   if (error) {
-    // Compensação: o aviso dizia que a troca aconteceu, e ela não aconteceu.
+    // Compensação: os avisos diziam que a troca aconteceu, e ela não aconteceu.
     const { error: desfazerErr } = await admin
       .from("agent_inbox_items")
       .delete()
-      .eq("id", avisoNaCentral)
-      .eq("organization_id", id);
+      .in("id", avisosNaCentral);
     if (desfazerErr) {
-      logger.warn("[admin.members.email] aviso na Central ficou sem troca", {
+      logger.warn("[admin.members.email] avisos na Central ficaram sem troca", {
         requestId,
         organization_id: id,
         erro: desfazerErr.message,
@@ -266,7 +276,7 @@ export async function PATCH(
     metadata: {
       email_hash_anterior: anterior ? hashEmail(anterior) : null,
       email_hash_novo: hashEmail(email),
-      aviso_na_central: avisoNaCentral,
+      avisos_na_central: avisosNaCentral,
       aviso_ao_endereco_antigo: avisoAoAntigo,
     },
   });

@@ -4850,6 +4850,7 @@ export const DICIONARIO: Traducoes = {
   "Dono": { es: "Dueño" },
   "Admin da plataforma": { es: "Admin de la plataforma" },
   "O e-mail de um administrador da plataforma só é trocado pelo próprio dono da conta.": { es: "El correo de un administrador de la plataforma solo lo cambia el propio dueño de la cuenta." },
+  "Quem perdeu o acesso a este tenant não tem o e-mail trocado por aqui: a empresa avisada seria uma em que a pessoa já não está.": { es: "A quien perdió el acceso a este tenant no se le cambia el correo por aquí: la empresa avisada sería una en la que la persona ya no está." },
   "Alterar e-mail": { es: "Cambiar correo" },
   "E-mail alterado.": { es: "Correo cambiado." },
   "A pessoa já entra com o novo endereço, e a recuperação de senha vai para ele. A empresa foi avisada na Central.": { es: "La persona ya entra con la nueva dirección, y la recuperación de contraseña va a ella. La empresa fue avisada en la Central." },
