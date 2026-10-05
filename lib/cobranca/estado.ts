@@ -77,7 +77,10 @@ export function aplicarLeitura(atual: AssinaturaAtual, s: Situacao, lidoEm: Date
     estado === "ativa" &&
     s.proximoVencimento !== null &&
     (atual.proximoVencimento === null || s.proximoVencimento > atual.proximoVencimento || atual.estado === "em_atraso");
-  const agendado = periodoNovoPago ? atual.planoAgendadoId : null;
+  // Cancelada → ativa é assinatura NOVA, cobrada pelo plano do checkout: o agendado
+  // pertencia à assinatura antiga (trocarPlano mexeu no preço dela), então é descartado.
+  const reassinou = atual.estado === "cancelada" && estado === "ativa";
+  const agendado = periodoNovoPago && !reassinou ? atual.planoAgendadoId : null;
 
   return {
     estado,
@@ -86,7 +89,7 @@ export function aplicarLeitura(atual: AssinaturaAtual, s: Situacao, lidoEm: Date
     proximoVencimento: s.proximoVencimento ?? atual.proximoVencimento,
     cancelaNoFim: s.cancelaNoFim,
     planoId: agendado ?? atual.planoId,
-    planoAgendadoId: agendado ? null : atual.planoAgendadoId,
+    planoAgendadoId: agendado || reassinou ? null : atual.planoAgendadoId,
     planoAplicado: agendado !== null,
     provedorAssinaturaId: s.assinaturaRef ?? atual.provedorAssinaturaId,
     assinaturasVivas: s.assinaturasVivas,

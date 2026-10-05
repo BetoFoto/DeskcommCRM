@@ -126,6 +126,18 @@ describe("aplicarLeitura — período pago e plano agendado", () => {
     expect(r.planoAplicado).toBe(true);
   });
 
+  it("⭐ reassinar depois de cancelar descarta o agendado: o checkout cobrou o plano atual", () => {
+    const r = aplicarLeitura(
+      atual({ estado: "cancelada", planoAgendadoId: "plano-b", proximoVencimento: AMANHA }),
+      situacao({ existe: true, assinaturasVivas: 1, proximoVencimento: MES_QUE_VEM }),
+      AGORA,
+    );
+    expect(r.estado).toBe("ativa");
+    expect(r.planoId).toBe("plano-a");
+    expect(r.planoAgendadoId).toBeNull();
+    expect(r.planoAplicado).toBe(false);
+  });
+
   it("controle: mesmo período (nada pago de novo), o agendado espera", () => {
     const r = aplicarLeitura(
       atual({ estado: "ativa", planoAgendadoId: "plano-b", proximoVencimento: AMANHA }),
