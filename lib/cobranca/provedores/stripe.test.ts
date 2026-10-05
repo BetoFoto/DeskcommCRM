@@ -311,6 +311,10 @@ describe("verificarWebhook", () => {
     expect(verificarWebhookStripe(CORPO, headers, SEGREDO, AGORA)).toBeNull();
   });
 
+  it("relógio inválido (NaN) recusa em vez de pular a janela", () => {
+    expect(verificarWebhookStripe(CORPO, cab(`t=${T},v1=${hmac(SEGREDO, T)}`), SEGREDO, new Date(Number.NaN))).toBeNull();
+  });
+
   it("segredo vazio nunca valida", () => {
     expect(verificarWebhookStripe(CORPO, cab(`t=${T},v1=${hmac("", T)}`), "", AGORA)).toBeNull();
   });
@@ -427,13 +431,14 @@ describe("garantirCliente e iniciarAssinatura", () => {
     expect(checkout?.headers.get("idempotency-key")).toBe(`${base.chaveIdempotencia}:checkout`);
   });
 
-  it("teste grátis ≥ 48 h vai como trial_end; 47 h não vai (a Stripe recusaria)", async () => {
+  it("teste grátis ≥ 48 h + 10 min vai como trial_end; 48 h cravadas não vão (relógio e novas tentativas comem a margem)", async () => {
     const agora = new Date("2026-10-01T12:00:00Z").getTime();
+    const LIMITE_S = 48 * 3600 + 10 * 60;
     const com = montar({ "POST /products": { corpo: { id: PRODUTO } }, "POST /checkout/sessions": SESSAO });
-    await com.adaptador.iniciarAssinatura({ ...base, trialAte: new Date(agora + 48 * 3600_000) });
-    expect(com.chamadas[1]?.corpo.get("subscription_data[trial_end]")).toBe(String(Math.floor(agora / 1000) + 48 * 3600));
+    await com.adaptador.iniciarAssinatura({ ...base, trialAte: new Date(agora + LIMITE_S * 1000) });
+    expect(com.chamadas[1]?.corpo.get("subscription_data[trial_end]")).toBe(String(Math.floor(agora / 1000) + LIMITE_S));
     const sem = montar({ "POST /products": { corpo: { id: PRODUTO } }, "POST /checkout/sessions": SESSAO });
-    await sem.adaptador.iniciarAssinatura({ ...base, trialAte: new Date(agora + 47 * 3600_000) });
+    await sem.adaptador.iniciarAssinatura({ ...base, trialAte: new Date(agora + 48 * 3600_000) });
     expect(sem.chamadas[1]?.corpo.has("subscription_data[trial_end]")).toBe(false);
   });
 
@@ -674,7 +679,10 @@ describe("trocarPlano, cancelarNoFim, prepararWebhook e portal", () => {
       }
       if (metodo === "DELETE" && caminho.startsWith("/webhook_endpoints/")) {
         const id = caminho.split("/")[2];
-        endpoints.splice(endpoints.findIndex((e) => e.id === id), 1);
+        const i = endpoints.findIndex((e) => e.id === id);
+        // Como a Stripe: apagar o que não existe é 404 (splice(-1) apagaria o último).
+        if (i < 0) return Response.json({ error: { code: "resource_missing", type: "invalid_request_error" } }, { status: 404 });
+        endpoints.splice(i, 1);
         return Response.json({ id, deleted: true });
       }
       if (metodo === "GET" && caminho === "/billing_portal/configurations") return Response.json({ object: "list", data: portais });
@@ -725,6 +733,9 @@ describe("trocarPlano, cancelarNoFim, prepararWebhook e portal", () => {
     const preparado = await preparar(conta.adaptador);
     expect(conta.endpoints.map((e) => e.id)).toEqual(["we_nosso_antes", "we_1"]);
     await preparado.desfazer();
+    expect(conta.endpoints.map((e) => e.id)).toEqual(["we_nosso_antes"]);
+    // Segunda tentativa (ou alguém apagou no painel): 404 da Stripe não é falha.
+    await expect(preparado.desfazer()).resolves.toBeUndefined();
     expect(conta.endpoints.map((e) => e.id)).toEqual(["we_nosso_antes"]);
   });
 

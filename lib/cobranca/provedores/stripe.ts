@@ -167,6 +167,12 @@ const sessaoDeCheckout = z.object({ url: z.string(), expires_at: z.number().int(
 const UUID = z.string().uuid();
 /** A Stripe só aceita `trial_end` a 48 h ou mais no futuro. */
 const TESTE_MINIMO_MS = 48 * 3600 * 1000;
+/**
+ * Folga sobre as 48 h: o relógio da VPS pode estar atrás do da Stripe e `chamar`
+ * pode levar ~70 s em novas tentativas. Sem ela, quem assina com 48 h + segundos
+ * de teste recebe 400 não transitório. Custo: nessa faixa a cobrança é imediata.
+ */
+const FOLGA_DO_TESTE_MS = 10 * 60 * 1000;
 
 const TERMINAIS = new Set(["canceled", "incomplete_expired"]);
 /** Com o 1º pagamento confirmado. `trialing` e `incomplete` ficam fora (§6.1 passo 2). */
@@ -266,7 +272,8 @@ export function verificarWebhookStripe(
     else if (nome === "v1" && /^[0-9a-f]{64}$/.test(valor)) assinaturas.push(Buffer.from(valor, "hex"));
   }
   if (t === null || assinaturas.length === 0) return null;
-  if (Math.abs(agora.getTime() / 1000 - t) > TOLERANCIA_DO_WEBHOOK_S) return null;
+  // Falha fechada: com `agora` inválido (NaN) a comparação `>` daria false e pularia a janela.
+  if (!(Math.abs(agora.getTime() / 1000 - t) <= TOLERANCIA_DO_WEBHOOK_S)) return null;
   const esperada = createHmac("sha256", segredo).update(`${t}.${corpoCru}`, "utf8").digest();
   // Todas comparadas, sem atalho; o tamanho (32 bytes) já foi garantido pelo regex.
   if (!assinaturas.map((a) => timingSafeEqual(a, esperada)).includes(true)) return null;
@@ -426,7 +433,7 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorDeCobr
     const orgId = UUID.parse(p.orgId);
     const produto = await garantirProduto(p.plano);
     const trialEnd =
-      p.trialAte !== null && p.trialAte.getTime() - agora().getTime() >= TESTE_MINIMO_MS
+      p.trialAte !== null && p.trialAte.getTime() - agora().getTime() >= TESTE_MINIMO_MS + FOLGA_DO_TESTE_MS
         ? Math.floor(p.trialAte.getTime() / 1000)
         : undefined;
     const sucesso = new URL(p.urlDeVolta);
@@ -546,8 +553,17 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorDeCobr
     const nossos = ler(listaDe(marcado), await chamar("GET", "/webhook_endpoints?limit=100")).data.filter(
       (e) => e.id !== exceto && (e.url === url || ehNosso(e.metadata)),
     );
-    for (const e of nossos) await chamar("DELETE", `/webhook_endpoints/${encodeURIComponent(e.id)}`);
+    for (const e of nossos) await apagarEndpoint(e.id);
     return nossos.length;
+  }
+
+  /** 404 é o efeito desejado (alguém apagou antes, ou é a 2ª tentativa): não é falha. */
+  async function apagarEndpoint(id: string): Promise<void> {
+    try {
+      await chamar("DELETE", `/webhook_endpoints/${encodeURIComponent(id)}`);
+    } catch (e) {
+      if (!(e instanceof ErroDoProvedor && e.status === 404)) throw e;
+    }
   }
 
   /**
@@ -589,7 +605,7 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorDeCobr
         await removerWebhooks(url, criado.id);
       },
       desfazer: async () => {
-        await chamar("DELETE", `/webhook_endpoints/${encodeURIComponent(criado.id)}`);
+        await apagarEndpoint(criado.id);
       },
     };
   }
