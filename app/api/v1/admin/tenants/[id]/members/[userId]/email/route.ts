@@ -24,6 +24,21 @@
  *  - CONVITES pendentes para o endereço antigo continuam amarrados a ele — e é
  *    o certo: o convite é para quem controla aquela caixa.
  *
+ * As três guardas que a decisão do dono exigiu para a troca (recorte do #1967):
+ *
+ *  (a) A EMPRESA FICA SABENDO. Um aviso `email_de_login_trocado` na Central da
+ *      organização, com o nome da pessoa e a data — NUNCA um endereço (a Central
+ *      é lida por toda a empresa). Gravado ANTES do GoTrue: se o aviso não
+ *      grava, nada é trocado (falha fechada na ação); se o GoTrue recusar
+ *      depois, o aviso recém-criado é desfeito.
+ *  (b) O ENDEREÇO ANTIGO FICA SABENDO. Depois da troca, um e-mail à caixa
+ *      anterior, com a marca da instalação (`marcaDaSaida`) e sem o endereço
+ *      novo. Falha ABERTA: sem envio configurado (o estado de um primeiro
+ *      deploy) a troca segue, e o registro diz que o aviso não saiu.
+ *  (c) QUEM TEM FATOR PROVA. `requirePlatformAdminEscrita()` → `mfaEmDivida()`:
+ *      o admin com TOTP cadastrado precisa da sessão `aal2`; sem fator, a
+ *      política de MFA é opcional e a troca segue.
+ *
  * O que fica de fora, de propósito: trocar o e-mail de um ADMIN DA PLATAFORMA.
  * Um admin trocando o e-mail de outro seria o caminho para tomar a conta dele
  * (o endereço novo recebe a recuperação de senha). Isso se faz pelo próprio
@@ -40,12 +55,31 @@ import {
   requirePlatformAdminEscrita,
   type PlatformAdminContext,
 } from "@/lib/auth/requirePlatformAdmin";
+import { marcaDaSaida } from "@/lib/branding/saida";
+import { sendEmail } from "@/lib/email/roteador";
+import { buildAvisoDeTrocaDeEmail } from "@/lib/email/templates/aviso-de-troca-de-email";
+import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { FUSO_PADRAO, fusoValido } from "@/lib/tempo/fusos";
 
 const bodySchema = z.object({
   email: z.string().trim().toLowerCase().email("E-mail inválido").max(254),
 });
+
+type AvisoAoEnderecoAntigo = "enviado" | "sem_envio_configurado" | "sem_endereco_anterior" | "falhou";
+
+/** O nome que vai para a Central. Nunca um endereço — nem quando o nome é um. */
+function nomeParaOAviso(metadata: Record<string, unknown> | undefined): string {
+  const nome = typeof metadata?.full_name === "string" ? metadata.full_name.trim() : "";
+  return nome && !nome.includes("@") ? nome : "uma pessoa da equipe";
+}
+
+function dataNoFuso(idioma: string, fuso: string | null | undefined): string {
+  const timeZone = fuso && fusoValido(fuso) ? fuso : FUSO_PADRAO;
+  return new Intl.DateTimeFormat(idioma, { dateStyle: "short", timeZone }).format(new Date());
+}
 
 export async function PATCH(
   req: NextRequest,
@@ -78,7 +112,7 @@ export async function PATCH(
 
   // A pessoa precisa pertencer a ESTE tenant: a rota é da gestão de tenants, e
   // o par (organização, usuário) do path é o que o admin escolheu na tela.
-  const [{ data: vinculo }, { data: ehAdmin }] = await Promise.all([
+  const [{ data: vinculo }, { data: ehAdmin }, { data: org }] = await Promise.all([
     admin
       .from("user_organizations")
       .select("user_id")
@@ -91,6 +125,7 @@ export async function PATCH(
       .eq("user_id", userId)
       .is("revoked_at", null)
       .maybeSingle(),
+    admin.from("organizations").select("timezone").eq("id", id).maybeSingle(),
   ]);
   if (!vinculo) return fail("not_found", "Membro não encontrado neste tenant.", 404, { requestId });
   if (ehAdmin) {
@@ -111,11 +146,47 @@ export async function PATCH(
     return fail("state_conflict", "Este já é o e-mail desta pessoa.", 409, { requestId });
   }
 
+  // (a) A Central ANTES do GoTrue: troca invisível para a empresa não acontece.
+  const fusoDaOrg = (org as { timezone?: string | null } | null)?.timezone;
+  const { data: item, error: centralErr } = await admin
+    .from("agent_inbox_items")
+    .insert({
+      organization_id: id,
+      kind: "email_de_login_trocado",
+      severity: "warn",
+      title: "E-mail de login trocado pelo administrador da plataforma",
+      body: `O e-mail de login de ${nomeParaOAviso(atual.user.user_metadata)} foi trocado pelo administrador da plataforma em ${dataNoFuso("pt-BR", fusoDaOrg)}.`,
+    })
+    .select("id")
+    .single();
+  if (centralErr || !item) {
+    logger.error("[admin.members.email] aviso na Central falhou; e-mail NÃO trocado", {
+      requestId,
+      organization_id: id,
+      erro: centralErr?.message,
+    });
+    return fail("internal_error", "Não foi possível trocar o e-mail agora.", 500, { requestId });
+  }
+  const avisoNaCentral = (item as { id: string }).id;
+
   const { error } = await admin.auth.admin.updateUserById(userId, {
     email,
     email_confirm: true,
   });
   if (error) {
+    // Compensação: o aviso dizia que a troca aconteceu, e ela não aconteceu.
+    const { error: desfazerErr } = await admin
+      .from("agent_inbox_items")
+      .delete()
+      .eq("id", avisoNaCentral)
+      .eq("organization_id", id);
+    if (desfazerErr) {
+      logger.warn("[admin.members.email] aviso na Central ficou sem troca", {
+        requestId,
+        organization_id: id,
+        erro: desfazerErr.message,
+      });
+    }
     // GoTrue: `email_exists` (422) quando outro login já usa o endereço.
     const code = (error as { code?: string }).code;
     if (
@@ -139,6 +210,35 @@ export async function PATCH(
     return fail("internal_error", "Não foi possível trocar o e-mail agora.", 500, { requestId });
   }
 
+  // (b) O endereço antigo, depois da troca. Falha aberta: informar não pode
+  // desfazer a ação que já aconteceu.
+  let avisoAoAntigo: AvisoAoEnderecoAntigo = "sem_endereco_anterior";
+  if (anterior) {
+    try {
+      const idioma = normalizarIdioma(
+        typeof atual.user.user_metadata?.locale === "string" ? atual.user.user_metadata.locale : null,
+      );
+      const marca = await marcaDaSaida(id);
+      const corpo = buildAvisoDeTrocaDeEmail({ marca, idioma, data: dataNoFuso(idioma, fusoDaOrg) });
+      const envio = await sendEmail({ to: anterior, fromName: marca.nome, ...corpo });
+      avisoAoAntigo = envio.ok ? "enviado" : envio.error === "not_configured" ? "sem_envio_configurado" : "falhou";
+      if (!envio.ok) {
+        logger.warn("[admin.members.email] aviso ao endereço antigo não saiu", {
+          requestId,
+          organization_id: id,
+          erro: envio.error,
+        });
+      }
+    } catch (err) {
+      avisoAoAntigo = "falhou";
+      logger.warn("[admin.members.email] aviso ao endereço antigo lançou", {
+        requestId,
+        organization_id: id,
+        erro: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // Só hash: a auditoria não guarda e-mail em claro (dado pessoal).
   void audit({
     action: "member.email_changed",
@@ -152,6 +252,8 @@ export async function PATCH(
     metadata: {
       email_hash_anterior: anterior ? hashEmail(anterior) : null,
       email_hash_novo: hashEmail(email),
+      aviso_na_central: avisoNaCentral,
+      aviso_ao_endereco_antigo: avisoAoAntigo,
     },
   });
 

@@ -132,7 +132,7 @@ function TrocarEmailDialog({
         onSuccess: () => {
           toast.success(t("E-mail alterado."), {
             description: t(
-              "A pessoa já entra com o novo endereço, e a recuperação de senha vai para ele.",
+              "A pessoa já entra com o novo endereço, e a recuperação de senha vai para ele. A empresa foi avisada na Central.",
             ),
           });
           setEmail("");

@@ -4852,7 +4852,7 @@ export const DICIONARIO: Traducoes = {
   "O e-mail de um administrador da plataforma só é trocado pelo próprio dono da conta.": { es: "El correo de un administrador de la plataforma solo lo cambia el propio dueño de la cuenta." },
   "Alterar e-mail": { es: "Cambiar correo" },
   "E-mail alterado.": { es: "Correo cambiado." },
-  "A pessoa já entra com o novo endereço, e a recuperação de senha vai para ele.": { es: "La persona ya entra con la nueva dirección, y la recuperación de contraseña va a ella." },
+  "A pessoa já entra com o novo endereço, e a recuperação de senha vai para ele. A empresa foi avisada na Central.": { es: "La persona ya entra con la nueva dirección, y la recuperación de contraseña va a ella. La empresa fue avisada en la Central." },
   "Não foi possível alterar o e-mail": { es: "No fue posible cambiar el correo" },
   "Alterar e-mail de acesso": { es: "Cambiar correo de acceso" },
   "O novo endereço passa a ser o login e o destino da recuperação de senha. Confirme que ele pertence mesmo a esta pessoa.": { es: "La nueva dirección pasa a ser el acceso y el destino de la recuperación de contraseña. Confirma que realmente pertenece a esta persona." },
@@ -10772,6 +10772,18 @@ export const DICIONARIO: Traducoes = {
       es: "Confirma con la persona que reconoce el cambio. Si no lo reconoce, habla con quien administra el servidor.",
     },
   "Abrir a equipe": { es: "Abrir el equipo" },
+  "O e-mail de login da sua conta foi trocado": {
+    es: "Se cambió el correo de inicio de sesión de tu cuenta",
+  },
+  "O e-mail de login da sua conta foi trocado pelo administrador da plataforma em {data}.": {
+    es: "El administrador de la plataforma cambió el correo de inicio de sesión de tu cuenta el {data}.",
+  },
+  "Se você não reconhece a mudança, fale com o administrador da sua empresa.": {
+    es: "Si no reconoces el cambio, habla con el administrador de tu empresa.",
+  },
+  "Este endereço deixa de receber os e-mails de acesso desta conta.": {
+    es: "Esta dirección deja de recibir los correos de acceso de esta cuenta.",
+  },
   "Suspensa por falta de pagamento: não pode ser excluída enquanto houver cobrança pendente.": {
     es: "Suspendida por falta de pago: no se puede eliminar mientras haya un cobro pendiente.",
   },
