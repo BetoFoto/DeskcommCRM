@@ -12,8 +12,7 @@ import { Card } from "@/components/ui/card";
 import { orgAtivaSemPortao, requireAuth } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { emailDeSuporte } from "@/lib/branding/saida";
-import { oQueOHubMostra } from "@/lib/cobranca/hub";
-import { lerPainelDaAssinatura } from "@/lib/cobranca/painel";
+import { lerPainelDoHub, oQueOHubMostra } from "@/lib/cobranca/hub";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
@@ -90,9 +89,9 @@ export default async function AccountSuspendedPage({
   const administra =
     (user.is_platform_admin && !user.support) || ROLE_RANK[ativa.role] >= ROLE_RANK.admin;
   // Spec da cobrança §9: suspensa POR FALTA DE PAGAMENTO + quem administra →
-  // o painel de pagamento. Leitura que falha LANÇA (a tela não diz "pague" sem ler).
+  // o painel de pagamento. Leitura do painel que falha NÃO derruba o hub: cai para "contato".
   const cobrancaLigada = administra && tipoDaAtiva === "cobranca" && (await moduloLigado(admin, "cobranca"));
-  const painel = cobrancaLigada ? await lerPainelDaAssinatura(admin, ativa.orgId) : null;
+  const painel = cobrancaLigada ? await lerPainelDoHub(admin, ativa.orgId) : null;
   const mostra = oQueOHubMostra({ administra, tipo: tipoDaAtiva, cobrancaLigada, temAssinatura: painel?.assinatura != null });
   const suporte = administra && mostra === "contato" ? await emailDeSuporte() : "";
   const outras = user.organizations
@@ -154,6 +153,7 @@ export default async function AccountSuspendedPage({
               linkDePagamento={painel.assinatura.link_de_pagamento}
               cancelaNoFim={painel.assinatura.cancela_no_fim}
               planosParaTroca={[]}
+              fuso={painel.fuso}
               voltouDoCheckout={voltou === "1"}
               noHub
             />
