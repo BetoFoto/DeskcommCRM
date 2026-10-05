@@ -14493,7 +14493,11 @@ alter table public.webhook_events_log
   drop constraint if exists webhook_events_log_provider_check;
 alter table public.webhook_events_log
   add constraint webhook_events_log_provider_check check (provider in (
-    'waha', 'nuvemshop', 'generic', 'meta_cloud', 'zernio', 'datafy'
+    'waha', 'nuvemshop', 'generic', 'meta_cloud', 'zernio', 'datafy',
+    -- (migration 0562) os provedores de cobrança do revendedor. A linha deles
+    -- nasce com organization_id nulo e corpo {id,type}: é ponteiro, nunca o
+    -- corpo do provedor, e fica invisível ao tenant pela própria policy.
+    'stripe', 'asaas'
   ));
 
 -- ---- a marca da instalação sai do .env e vai para o banco (migration 0155) ----
@@ -45973,6 +45977,23 @@ $$;
 
 revoke execute on function public.fn_cobranca_liberar_suspensoes(uuid) from public, anon, authenticated;
 grant execute on function public.fn_cobranca_liberar_suspensoes(uuid) to service_role;
+
+-- ---- cobrança do revendedor: webhook, avisos e reconciliação (migration 0562) ----
+-- Spec cobrança do revendedor §2.4, §2.5, §8. Corpo e porquê: a migration
+-- 0562, copiada seção a seção, byte a byte. As seções que alargam CHECK (A e C)
+-- editam o bloco único de cada constraint, mais acima; aqui só o que é novo.
+-- ANTES da VARREDURA anon porque cria função; DEPOIS do bloco do PR 2.
+
+-- ── B. um evento de cobrança, uma linha ─────────────────────────────────────
+-- A rota grava a linha ANTES de emitir o sinal, e o provedor reentrega. O 23505
+-- deste índice é a idempotência: linha `processed` → 200 sem reemitir; linha
+-- `received` → reemite (o emit anterior falhou; o consumidor relê, então
+-- reemitir é inofensivo). Parcial: o arquivo dos canais não muda. Nenhuma
+-- linha desses provedores existia antes do CHECK acima, então não há o que
+-- deduplicar antes de criar o índice.
+create unique index if not exists uniq_webhook_events_log_cobranca
+  on public.webhook_events_log (provider, external_id)
+  where provider in ('stripe', 'asaas');
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
