@@ -744,6 +744,16 @@ describe("trocarPlano, cancelarNoFim, prepararWebhook e portal", () => {
     expect(erro).toMatchObject({ transitorio: true });
   });
 
+  it("⭐ falha do portal NÃO deixa endpoint órfão: nada é criado na conta", async () => {
+    const { adaptador, chamadas } = montar({
+      "GET /billing_portal/configurations": { corpo: { object: "list", data: [] } },
+      "POST /billing_portal/configurations": { status: 403, corpo: { error: { code: "permission_error" } } },
+      "POST /webhook_endpoints": { corpo: { id: "we_new", secret: "whsec_x" } },
+    });
+    await expect(adaptador.prepararWebhook(URL_DO_WEBHOOK, "dono@example.com")).rejects.toBeDefined();
+    expect(chamadas.some((c) => c.rota === "POST /webhook_endpoints")).toBe(false);
+  });
+
   it("⭐ cria ANTES de apagar, com os eventos certos, a versão fixada e nunca invoice.created", async () => {
     const { adaptador, chamadas } = montar({
       "GET /webhook_endpoints": { corpo: { object: "list", data: [{ id: "we_old", url: URL_DO_WEBHOOK, metadata: {} }] } },
@@ -784,6 +794,8 @@ describe("trocarPlano, cancelarNoFim, prepararWebhook e portal", () => {
     const { adaptador, chamadas } = montar({
       "GET /webhook_endpoints": { corpo: { object: "list", data: [{ id: "we_old", url: URL_DO_WEBHOOK, metadata: {} }] } },
       "POST /webhook_endpoints": { corpo: { id: "we_new" } },
+      "GET /billing_portal/configurations": { corpo: { object: "list", data: [] } },
+      "POST /billing_portal/configurations": { corpo: { id: "bpc_1" } },
     });
     expect(await preparar(adaptador).catch((e: unknown) => e)).toMatchObject({ codigo: "resposta_invalida" });
     expect(chamadas.some((c) => c.rota.startsWith("DELETE"))).toBe(false);

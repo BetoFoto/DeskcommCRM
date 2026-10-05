@@ -570,6 +570,9 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorDeCobr
    * O segredo só vem na criação; por isso não se "atualiza" um endpoint existente.
    */
   async function prepararWebhook(url: string): Promise<WebhookPreparado> {
+    // O portal vem ANTES: se ele falhar (chave restrita sem billing_portal, 4xx, 5xx), nada foi criado
+    // e não sobra endpoint órfão cujo segredo nunca foi gravado.
+    await portal(true);
     const criado = ler(
       endpointCriado,
       await chamar("POST", "/webhook_endpoints", {
@@ -580,7 +583,6 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorDeCobr
         metadata: metadadosDaMarca,
       }),
     );
-    await portal(true);
     return {
       segredo: criado.secret,
       confirmar: async () => {
