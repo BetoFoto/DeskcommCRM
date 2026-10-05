@@ -14468,6 +14468,15 @@ export const DICIONARIO: Traducoes = {
   "Só você atribui": { es: "Solo usted lo asigna" },
   "Esconder das empresas": { es: "Ocultar a las empresas" },
   "Mostrar às empresas": { es: "Mostrar a las empresas" },
+  // ─── Cobrança do revendedor — configuração (PR 3a) ───
+  "Provedor de cobrança dos seus clientes": { es: "Proveedor de cobro de tus clientes" },
+  "Por onde as empresas desta instalação pagam a assinatura. É escolhido quando você conecta a chave em Cobrança › Conexão.": { es: "Por dónde las empresas de esta instalación pagan la suscripción. Se elige cuando conectas la clave en Cobro › Conexión." },
+  "Dias de tolerância antes de suspender": { es: "Días de tolerancia antes de suspender" },
+  "Quantos dias depois do vencimento a empresa ainda usa o sistema antes de ser suspensa. De 5 a 30; o padrão é 7.": { es: "Cuántos días después del vencimiento la empresa aún usa el sistema antes de ser suspendida. De 5 a 30; el valor por defecto es 7." },
+  "Chave secreta da Stripe": { es: "Clave secreta de Stripe" },
+  "A chave que deixa o sistema criar assinaturas e ler pagamentos na sua conta Stripe. Prefira a chave restrita, que começa com rk_.": { es: "La clave que permite al sistema crear suscripciones y leer pagos en tu cuenta de Stripe. Prefiere la clave restringida, que empieza con rk_." },
+  "Segredo dos avisos de pagamento da Stripe": { es: "Secreto de los avisos de pago de Stripe" },
+  "Confere que um aviso de pagamento veio mesmo da Stripe. É criado sozinho quando você conecta a chave.": { es: "Comprueba que un aviso de pago vino realmente de Stripe. Se crea solo cuando conectas la clave." },
 };
 
 /**
