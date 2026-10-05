@@ -14584,6 +14584,27 @@ export const DICIONARIO: Traducoes = {
   "A Stripe só avisa pagamentos num endereço https público (ex.: https://crm.suaempresa.com.br). Configure o domínio do sistema com HTTPS e volte aqui.": { es: "Stripe solo avisa pagos en una dirección https pública (ej.: https://crm.tuempresa.com). Configura el dominio del sistema con HTTPS y vuelve aquí." },
   "Modo de teste: suas empresas reais ainda não conseguem pagar. Quando a compra de teste der certo, troque para a chave de produção em Conexão.": { es: "Modo de prueba: tus empresas reales todavía no pueden pagar. Cuando la compra de prueba funcione, cambia a la clave de producción en Conexión." },
   "{n} aviso(s) de pagamento recusado(s) nas últimas 24 h: a assinatura não confere. Conecte a chave de novo na aba Conexão.": { es: "{n} aviso(s) de pago rechazado(s) en las últimas 24 h: la firma no coincide. Conecta la clave de nuevo en la pestaña Conexión." },
+  // ─── Cobrança do revendedor — Plano e cobrança (PR 3a) ───
+  "1ª cobrança agendada": { es: "1.er cobro programado" },
+  "Cancelada, acesso até": { es: "Cancelada, acceso hasta" },
+  "Novo plano a partir de": { es: "Nuevo plan a partir del" },
+  "Modo de teste: nenhum pagamento aqui é real.": { es: "Modo de prueba: ningún pago aquí es real." },
+  "Assinar": { es: "Suscribirse" },
+  "Assinar de novo": { es: "Suscribirse de nuevo" },
+  "Já paguei": { es: "Ya pagué" },
+  "Gerenciar pagamento": { es: "Gestionar pago" },
+  "Trocar de plano": { es: "Cambiar de plan" },
+  "Confirmar troca": { es: "Confirmar cambio" },
+  "Cancelar assinatura": { es: "Cancelar suscripción" },
+  "Confirmar cancelamento": { es: "Confirmar cancelación" },
+  "Você mantém o acesso até o fim do período já pago. Não há reembolso proporcional.": { es: "Mantienes el acceso hasta el fin del período ya pagado. No hay reembolso proporcional." },
+  "Você mantém o acesso até {data}.": { es: "Mantienes el acceso hasta el {data}." },
+  "O novo plano vale a partir de {data}.": { es: "El nuevo plan vale a partir del {data}." },
+  "Pagamento confirmado. Obrigado!": { es: "Pago confirmado. ¡Gracias!" },
+  "Tudo certo: a primeira cobrança sai no fim do teste grátis.": { es: "Todo listo: el primer cobro sale al final de la prueba gratis." },
+  "Ainda não identificamos o pagamento. Se pagou por boleto, a compensação leva até 1 dia útil.": { es: "Aún no identificamos el pago. Si pagaste con boleto, la compensación tarda hasta 1 día hábil." },
+  "Não há cobrança aberta para pagar agora. Atualize o cartão em Gerenciar pagamento: a próxima tentativa sai sozinha.": { es: "No hay cobro abierto para pagar ahora. Actualiza la tarjeta en Gestionar pago: el próximo intento sale solo." },
+  "Confirmando seu pagamento…": { es: "Confirmando tu pago…" },
 };
 
 /**

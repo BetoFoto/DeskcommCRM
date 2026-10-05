@@ -11,12 +11,17 @@ import type { DadosDoPainel } from "@/lib/cobranca/painel";
 
 afterEach(cleanup);
 
-const PLANO = { nome: "Básico", preco_cents: 4990, intervalo: "mes", max_assentos: 1, max_canais: null, teto_ia_usd_cents: 500 };
+const PLANO = { id: "plano-a", nome: "Básico", preco_cents: 4990, intervalo: "mes", max_assentos: 1, max_canais: null, teto_ia_usd_cents: 500 };
+const ASSINATURA_EM_TESTE: NonNullable<DadosDoPainel["assinatura"]> = {
+  estado: "trial", trial_ate: "2026-10-10T12:00:00Z", prazo_extra_ate: null, proximo_vencimento: null, vencida_desde: null,
+  cancela_no_fim: false, modo: null, provedor: null, link_de_pagamento: null, assinaturas_vivas: 0, plano_agendado: null,
+};
 const EM_TESTE: DadosDoPainel = {
-  assinatura: { estado: "trial", trial_ate: "2026-10-10T12:00:00Z", prazo_extra_ate: null },
+  assinatura: ASSINATURA_EM_TESTE,
   plano: PLANO,
   uso: { assentos: 1, canais: 2 },
   gastoIaUsdCents: 120,
+  planosParaTroca: [],
 };
 
 describe("PainelDaAssinatura", () => {
@@ -35,7 +40,7 @@ describe("PainelDaAssinatura", () => {
   });
 
   it("em dia: o rótulo do estado, sem data de teste", () => {
-    render(<PainelDaAssinatura dados={{ ...EM_TESTE, assinatura: { estado: "ativa", trial_ate: null, prazo_extra_ate: null } }} idioma="pt-BR" />);
+    render(<PainelDaAssinatura dados={{ ...EM_TESTE, assinatura: { ...ASSINATURA_EM_TESTE, estado: "ativa", trial_ate: null } }} idioma="pt-BR" />);
     expect(screen.getByText("Em dia")).toBeTruthy();
     expect(screen.queryByText(/Teste grátis até/)).toBeNull();
   });

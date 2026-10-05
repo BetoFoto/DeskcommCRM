@@ -4,6 +4,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { emailDeSuporte } from "@/lib/branding/saida";
 import { Card } from "@/components/ui/card";
+import { AcoesDaAssinatura } from "@/components/cobranca/AcoesDaAssinatura";
 import { PainelDaAssinatura } from "@/components/cobranca/PainelDaAssinatura";
 import { lerPainelDaAssinatura } from "@/lib/cobranca/painel";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
  * Com a cobrança do revendedor ligada (spec §9), o cartão de "em breve" dá
  * lugar ao painel da assinatura, só leitura na PR 2. Desligada, nada muda.
  */
-export default async function BillingPage() {
+export default async function BillingPage({ searchParams }: { searchParams: Promise<{ voltou?: string }> }) {
   // spec 13 §4: billing é admin-only (viewer/agent/manager = none).
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
@@ -37,13 +38,28 @@ export default async function BillingPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
+        {/* Desligada, a tela é a de antes, com o título de antes (cobranca-desligada.spec). */}
+        <h1 className="text-2xl font-semibold tracking-tight">{painel ? traduzir("Plano e cobrança", idioma) : "Billing"}</h1>
         <p className="text-sm text-muted-foreground">
           {traduzir("Planos, faturas e cobrança.", idioma)}
         </p>
       </header>
       {painel ? (
-        <PainelDaAssinatura dados={painel} idioma={idioma} />
+        <>
+          <PainelDaAssinatura dados={painel} idioma={idioma} />
+          {painel.assinatura && (
+            <AcoesDaAssinatura
+              estado={painel.assinatura.estado}
+              temProvedor={painel.assinatura.provedor !== null}
+              assinaturasVivas={painel.assinatura.assinaturas_vivas}
+              linkDePagamento={painel.assinatura.link_de_pagamento}
+              cancelaNoFim={painel.assinatura.cancela_no_fim}
+              planosParaTroca={painel.planosParaTroca}
+              voltouDoCheckout={(await searchParams).voltou === "1"}
+              noHub={false}
+            />
+          )}
+        </>
       ) : (
         <Card className="max-w-xl p-6">
           <h2 className="text-sm font-semibold">{traduzir("Em breve — Fase 2", idioma)}</h2>

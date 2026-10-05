@@ -37,7 +37,7 @@ export function fimDoDia(dia: string): string {
 }
 
 /** A frase de cada recurso que passa do plano; `{n}` é quanto remover. */
-const FRASE_DO_EXCEDENTE = {
+export const FRASE_DO_EXCEDENTE = {
   assentos: "Revogue o acesso de {n} pessoa(s) em Equipe.",
   canais: "Exclua {n} número(s) em Conexões.",
 } as const;
