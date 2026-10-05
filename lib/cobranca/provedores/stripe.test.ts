@@ -608,3 +608,192 @@ describe("lerSituacao", () => {
     expect(erro).toMatchObject({ transitorio: true });
   });
 });
+
+describe("trocarPlano, cancelarNoFim, prepararWebhook e portal", () => {
+  const NOVO = { id: "33333333-3333-4333-8333-333333333333", nome: "Max", precoCents: 9990, intervalo: "mes" as const };
+  const PRODUTO_NOVO = `dc_plano_${NOVO.id}`;
+  const URL_DO_WEBHOOK = "https://crm.example.com/api/v1/webhooks/cobranca/stripe";
+
+  it("⭐ trocarPlano: preço novo no MESMO item, sem proração — vale na próxima fatura (D-3)", async () => {
+    const { adaptador, chamadas } = montar({
+      "GET /subscriptions/sub_1QfixtureAtiva": { corpo: objetos.assinatura },
+      "POST /products": { corpo: { id: PRODUTO_NOVO } },
+      "POST /subscriptions/sub_1QfixtureAtiva": { corpo: objetos.assinatura },
+    });
+    await adaptador.trocarPlano({ assinaturaRef: "sub_1QfixtureAtiva", plano: NOVO });
+    const post = chamadas.find((c) => c.rota === "POST /subscriptions/sub_1QfixtureAtiva");
+    expect(Object.fromEntries(post?.corpo ?? [])).toEqual({
+      "items[0][id]": "si_QfixtureItem",
+      "items[0][price_data][currency]": "brl",
+      "items[0][price_data][unit_amount]": "9990",
+      "items[0][price_data][recurring][interval]": "month",
+      "items[0][price_data][product]": PRODUTO_NOVO,
+      proration_behavior: "none",
+      "metadata[plano_id]": NOVO.id,
+    });
+  });
+
+  it("trocarPlano em assinatura encerrada: a recusa da Stripe sobe não transitória", async () => {
+    const erro = await montar({
+      "GET /subscriptions/sub_x": { corpo: { ...objetos.assinatura, id: "sub_x", status: "canceled" } },
+      "POST /products": { corpo: { id: PRODUTO_NOVO } },
+      "POST /subscriptions/sub_x": { status: 400, corpo: { error: { type: "invalid_request_error" } } },
+    }).adaptador.trocarPlano({ assinaturaRef: "sub_x", plano: NOVO }).catch((e: unknown) => e);
+    expect(erro).toMatchObject({ status: 400, transitorio: false });
+  });
+
+  it("assinatura sem item → assinatura_sem_item, sem mexer em nada", async () => {
+    const { adaptador, chamadas } = montar({ "GET /subscriptions/sub_x": { corpo: { ...objetos.assinatura, items: { data: [] } } } });
+    expect(await adaptador.trocarPlano({ assinaturaRef: "sub_x", plano: NOVO }).catch((e: unknown) => e)).toMatchObject({ codigo: "assinatura_sem_item" });
+    expect(chamadas.filter((c) => c.rota.startsWith("POST"))).toHaveLength(0);
+  });
+
+  it("cancelarNoFim marca cancel_at_period_end (acesso até o fim do pago, D-14)", async () => {
+    const { adaptador, chamadas } = montar({ "POST /subscriptions/sub_x": { corpo: objetos.assinatura } });
+    await adaptador.cancelarNoFim("sub_x");
+    expect(Object.fromEntries(chamadas[0]?.corpo ?? [])).toEqual({ cancel_at_period_end: "true" });
+    expect(chamadas[0]?.headers.get("idempotency-key")).toBe("idem-fixa");
+  });
+
+  /** Uma conta com estado: endpoints e configurações de portal vivem entre as chamadas. */
+  function contaComEstado(inicial: Array<{ id: string; url: string; metadata: Record<string, string> }>) {
+    const endpoints = [...inicial];
+    const portais: Array<{ id: string; metadata: Record<string, string> }> = [];
+    let seq = 0;
+    const fetchComEstado: typeof fetch = async (entrada, init) => {
+      const url = new URL(String(entrada));
+      const caminho = url.pathname.replace(/^\/v1/, "");
+      const metodo = init?.method ?? "GET";
+      const corpo = new URLSearchParams(typeof init?.body === "string" ? init.body : "");
+      if (metodo === "GET" && caminho === "/webhook_endpoints") return Response.json({ object: "list", data: endpoints });
+      if (metodo === "POST" && caminho === "/webhook_endpoints") {
+        seq += 1;
+        const e = { id: `we_${seq}`, url: corpo.get("url") ?? "", metadata: { cobranca_do_revendedor: corpo.get("metadata[cobranca_do_revendedor]") ?? "" } };
+        endpoints.push(e);
+        return Response.json({ ...e, secret: `whsec_novo${seq}` });
+      }
+      if (metodo === "DELETE" && caminho.startsWith("/webhook_endpoints/")) {
+        const id = caminho.split("/")[2];
+        endpoints.splice(endpoints.findIndex((e) => e.id === id), 1);
+        return Response.json({ id, deleted: true });
+      }
+      if (metodo === "GET" && caminho === "/billing_portal/configurations") return Response.json({ object: "list", data: portais });
+      if (metodo === "POST" && caminho === "/billing_portal/configurations") {
+        const p = { id: `bpc_${portais.length + 1}`, metadata: { cobranca_do_revendedor: corpo.get("metadata[cobranca_do_revendedor]") ?? "" } };
+        portais.push(p);
+        return Response.json(p);
+      }
+      if (metodo === "POST" && caminho.startsWith("/billing_portal/configurations/")) return Response.json({ id: caminho.split("/")[3] });
+      if (metodo === "POST" && caminho === "/billing_portal/sessions") {
+        return Response.json({ url: `https://billing.stripe.com/p/session/${corpo.get("configuration")}` });
+      }
+      return Response.json({ error: { code: `rota_nao_declarada:${metodo} ${caminho}` } }, { status: 404 });
+    };
+    const adaptador = criarAdaptadorStripe({ lerChave: async () => CHAVE_TESTE, fetch: fetchComEstado, esperar: async () => undefined, marca: MARCA });
+    return { adaptador, endpoints, portais };
+  }
+
+  /** `prepararWebhook` do adaptador Stripe nunca devolve o ramo `manual` (é do Asaas). */
+  async function preparar(a: ReturnType<typeof criarAdaptadorStripe>, url = URL_DO_WEBHOOK) {
+    const r = await a.prepararWebhook(url, "dono@example.com");
+    if ("manual" in r) throw new Error("stripe não devolve manual");
+    return r;
+  }
+
+  it("⭐ prepararWebhook + confirmar é idempotente: termina com UM endpoint nosso; o alheio e o de OUTRA instalação ficam", async () => {
+    const alheio = { id: "we_alheio", url: "https://outro.example.com/hook", metadata: {} };
+    const daHomologacao = {
+      id: "we_homolog",
+      url: "https://homolog.example.com/api/v1/webhooks/cobranca/stripe",
+      metadata: { cobranca_do_revendedor: "f0f0f0f0f0f0f0f0" },
+    };
+    const nossoDeAntes = { id: "we_nosso_antes", url: "https://crm.example.com/api/v1/webhooks/cobranca/stripe", metadata: { cobranca_do_revendedor: MARCA } };
+    const conta = contaComEstado([alheio, daHomologacao, nossoDeAntes]);
+    const primeira = await preparar(conta.adaptador);
+    expect(primeira.segredo).toBe("whsec_novo1");
+    await primeira.confirmar();
+    const segunda = await preparar(conta.adaptador);
+    expect(segunda.segredo).toBe("whsec_novo2");
+    await segunda.confirmar();
+    expect(conta.endpoints.map((e) => e.id)).toEqual(["we_alheio", "we_homolog", "we_2"]);
+    expect(conta.portais).toHaveLength(1);
+  });
+
+  it("⭐ sem confirmar, o antigo segue valendo; desfazer apaga só o NOVO", async () => {
+    const nossoDeAntes = { id: "we_nosso_antes", url: URL_DO_WEBHOOK, metadata: { cobranca_do_revendedor: MARCA } };
+    const conta = contaComEstado([nossoDeAntes]);
+    const preparado = await preparar(conta.adaptador);
+    expect(conta.endpoints.map((e) => e.id)).toEqual(["we_nosso_antes", "we_1"]);
+    await preparado.desfazer();
+    expect(conta.endpoints.map((e) => e.id)).toEqual(["we_nosso_antes"]);
+  });
+
+  it("removerWebhooks apaga os desta instalação e devolve quantos (a publicação limpa o do modo de teste)", async () => {
+    const alheio = { id: "we_alheio", url: "https://outro.example.com/hook", metadata: {} };
+    const conta = contaComEstado([alheio, { id: "we_nosso", url: URL_DO_WEBHOOK, metadata: { cobranca_do_revendedor: MARCA } }]);
+    expect(await conta.adaptador.removerWebhooks(URL_DO_WEBHOOK)).toBe(1);
+    expect(conta.endpoints.map((e) => e.id)).toEqual(["we_alheio"]);
+  });
+
+  it("⭐ clienteExiste: 200 → true; 404 resource_missing (chave de OUTRA conta) → false; 503 sobe", async () => {
+    expect(await montar({ "GET /customers/cus_1": { corpo: { id: "cus_1", object: "customer" } } }).adaptador.clienteExiste("cus_1")).toBe(true);
+    expect(
+      await montar({ "GET /customers/cus_1": { status: 404, corpo: { error: { code: "resource_missing" } } } }).adaptador.clienteExiste("cus_1"),
+    ).toBe(false);
+    const erro = await montar({ "GET /customers/cus_1": { status: 503 } }).adaptador.clienteExiste("cus_1").catch((e: unknown) => e);
+    expect(erro).toMatchObject({ transitorio: true });
+  });
+
+  it("⭐ cria ANTES de apagar, com os eventos certos, a versão fixada e nunca invoice.created", async () => {
+    const { adaptador, chamadas } = montar({
+      "GET /webhook_endpoints": { corpo: { object: "list", data: [{ id: "we_old", url: URL_DO_WEBHOOK, metadata: {} }] } },
+      "POST /webhook_endpoints": { corpo: { id: "we_new", secret: "whsec_x" } },
+      "DELETE /webhook_endpoints/we_old": { corpo: { id: "we_old", deleted: true } },
+      "GET /billing_portal/configurations": { corpo: { object: "list", data: [] } },
+      "POST /billing_portal/configurations": { corpo: { id: "bpc_1" } },
+    });
+    await (await preparar(adaptador)).confirmar();
+    const rotas = chamadas.map((c) => c.rota);
+    expect(rotas.indexOf("POST /webhook_endpoints")).toBeLessThan(rotas.indexOf("DELETE /webhook_endpoints/we_old"));
+    const criar = chamadas.find((c) => c.rota === "POST /webhook_endpoints");
+    expect(criar?.corpo.getAll("enabled_events[0]")).toEqual(["checkout.session.completed"]);
+    expect([...(criar?.corpo ?? [])].filter(([k]) => k.startsWith("enabled_events")).map(([, v]) => v)).toEqual([
+      "checkout.session.completed",
+      "customer.subscription.created",
+      "customer.subscription.updated",
+      "customer.subscription.deleted",
+      "customer.subscription.paused",
+      "customer.subscription.resumed",
+      "invoice.paid",
+      "invoice.payment_failed",
+    ]);
+    expect(criar?.corpo.get("api_version")).toBe(STRIPE_VERSION);
+    expect(criar?.corpo.get("url")).toBe(URL_DO_WEBHOOK);
+    const portal = chamadas.find((c) => c.rota === "POST /billing_portal/configurations");
+    expect(Object.fromEntries(portal?.corpo ?? [])).toMatchObject({
+      "features[payment_method_update][enabled]": "true",
+      "features[invoice_history][enabled]": "true",
+      "features[subscription_cancel][enabled]": "true",
+      "features[subscription_cancel][mode]": "at_period_end",
+      "features[subscription_update][enabled]": "false",
+      "metadata[cobranca_do_revendedor]": MARCA,
+    });
+  });
+
+  it("criação sem segredo whsec_ na resposta → resposta_invalida, e nada é apagado", async () => {
+    const { adaptador, chamadas } = montar({
+      "GET /webhook_endpoints": { corpo: { object: "list", data: [{ id: "we_old", url: URL_DO_WEBHOOK, metadata: {} }] } },
+      "POST /webhook_endpoints": { corpo: { id: "we_new" } },
+    });
+    expect(await preparar(adaptador).catch((e: unknown) => e)).toMatchObject({ codigo: "resposta_invalida" });
+    expect(chamadas.some((c) => c.rota.startsWith("DELETE"))).toBe(false);
+  });
+
+  it("portal: usa a configuração NOSSA (sem troca de plano); sem ela, cria antes da sessão", async () => {
+    const conta = contaComEstado([]);
+    const url = await conta.adaptador.urlDeGerenciar({ clienteRef: "cus_1", urlDeVolta: "https://crm.example.com/app/settings/billing" });
+    expect(url).toBe("https://billing.stripe.com/p/session/bpc_1");
+    expect(await conta.adaptador.urlDeGerenciar({ clienteRef: "cus_1", urlDeVolta: "https://crm.example.com/x" })).toBe(url);
+    expect(conta.portais).toHaveLength(1);
+  });
+});

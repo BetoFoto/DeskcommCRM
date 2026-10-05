@@ -32,6 +32,7 @@ import {
   type PlanoParaProvedor,
   type SinalDoWebhook,
   type Situacao,
+  type WebhookPreparado,
 } from "./contrato";
 
 export const STRIPE_API_BASE = "https://api.stripe.com/v1";
@@ -88,10 +89,17 @@ export interface DependenciasDaStripe {
   marca: string;
 }
 
-export type AdaptadorStripe = Pick<
-  AdaptadorDeCobranca,
-  "id" | "testarChave" | "verificarWebhook" | "garantirCliente" | "iniciarAssinatura" | "lerSituacao"
->;
+/** Nunca `invoice.created`: resposta não-2xx a ele atrasa em até 72 h a finalização da fatura. */
+export const EVENTOS_DO_WEBHOOK_STRIPE = [
+  "checkout.session.completed",
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "customer.subscription.paused",
+  "customer.subscription.resumed",
+  "invoice.paid",
+  "invoice.payment_failed",
+] as const;
 
 /** `teste`/`producao` pelo prefixo; `null` = não é chave secreta nem restrita (inclusive `pk_`). */
 export function modoDaChaveStripe(chave: string): Modo | null {
@@ -191,6 +199,18 @@ type FaturaDaStripe = z.infer<typeof faturaDaStripe>;
 const listaDe = <T extends z.ZodType>(item: T) => z.object({ data: z.array(item) });
 const emData = (segundos: number) => new Date(segundos * 1000);
 
+const marcado = z.object({ id: z.string(), url: z.string().optional(), metadata: z.record(z.string(), z.string()).nullish() });
+const endpointCriado = z.object({ id: z.string(), secret: z.string().startsWith("whsec_") });
+
+/** Portal SEM troca de plano (§5: troca só pela nossa tela, na virada do ciclo). */
+const RECURSOS_DO_PORTAL = {
+  payment_method_update: { enabled: true },
+  invoice_history: { enabled: true },
+  subscription_cancel: { enabled: true, mode: "at_period_end" },
+  subscription_update: { enabled: false },
+  customer_update: { enabled: false },
+};
+
 /** A fatura paga MAIS RECENTE é de uma assinatura já terminal, e foi paga depois do fim dela. */
 function pagouAssinaturaEncerrada(pagas: FaturaDaStripe[], assinaturas: AssinaturaDaStripe[]): boolean {
   const ultima = [...pagas].sort((a, b) => (b.status_transitions.paid_at ?? 0) - (a.status_transitions.paid_at ?? 0))[0];
@@ -271,7 +291,7 @@ function lerEvento(corpoCru: string): SinalDoWebhook | null {
   };
 }
 
-export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorStripe {
+export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorDeCobranca {
   const base = dep.baseUrl ?? STRIPE_API_BASE;
   if (!baseAceita(base)) throw new Error("base da API da Stripe recusada: só a oficial ou loopback");
   const buscar = dep.fetch ?? fetch;
@@ -491,6 +511,98 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorStripe
     };
   }
 
+  async function trocarPlano(p: { assinaturaRef: string; plano: PlanoParaProvedor }): Promise<void> {
+    const caminho = `/subscriptions/${encodeURIComponent(p.assinaturaRef)}`;
+    const item = ler(assinaturaDaStripe, await chamar("GET", caminho)).items.data[0];
+    if (!item) throw new ErroDoProvedor(null, "assinatura_sem_item", false);
+    const produto = await garantirProduto(p.plano);
+    // Sem proração: o período em curso segue no preço pago; a próxima fatura sai com o novo (D-3).
+    await chamar("POST", caminho, {
+      items: [{ id: item.id, price_data: precoRecorrente(p.plano, produto) }],
+      proration_behavior: "none",
+      metadata: { plano_id: p.plano.id },
+    });
+  }
+
+  async function cancelarNoFim(assinaturaRef: string): Promise<void> {
+    await chamar("POST", `/subscriptions/${encodeURIComponent(assinaturaRef)}`, { cancel_at_period_end: true });
+  }
+
+  const metadadosDaMarca = { cobranca_do_revendedor: dep.marca };
+  const ehNosso = (m: Record<string, string> | null | undefined) => m?.cobranca_do_revendedor === dep.marca;
+
+  async function clienteExiste(clienteRef: string): Promise<boolean> {
+    try {
+      ler(comId, await chamar("GET", `/customers/${encodeURIComponent(clienteRef)}`));
+      return true;
+    } catch (e) {
+      if (e instanceof ErroDoProvedor && e.status === 404) return false;
+      throw e;
+    }
+  }
+
+  /** Apaga os endpoints DESTA instalação (mesma URL ou mesma marca), menos `exceto`. */
+  async function removerWebhooks(url: string, exceto?: string): Promise<number> {
+    const nossos = ler(listaDe(marcado), await chamar("GET", "/webhook_endpoints?limit=100")).data.filter(
+      (e) => e.id !== exceto && (e.url === url || ehNosso(e.metadata)),
+    );
+    for (const e of nossos) await chamar("DELETE", `/webhook_endpoints/${encodeURIComponent(e.id)}`);
+    return nossos.length;
+  }
+
+  /**
+   * A configuração de portal desta instalação, achada pela marca (sem id guardado).
+   * `reaplicar` (na conexão) regrava os recursos; o clique do cliente só cria se faltar.
+   */
+  async function portal(reaplicar: boolean): Promise<string> {
+    const existentes = ler(listaDe(marcado), await chamar("GET", "/billing_portal/configurations?active=true&limit=100")).data;
+    const nosso = existentes.find((c) => ehNosso(c.metadata));
+    if (nosso && !reaplicar) return nosso.id;
+    const caminho = nosso ? `/billing_portal/configurations/${encodeURIComponent(nosso.id)}` : "/billing_portal/configurations";
+    return ler(comId, await chamar("POST", caminho, { features: RECURSOS_DO_PORTAL, metadata: metadadosDaMarca })).id;
+  }
+
+  /**
+   * Cria o endpoint novo e NÃO apaga nada: quem chama grava o segredo e só
+   * então `confirmar()` apaga os antigos. Se a gravação falhar, `desfazer()`
+   * apaga o novo e o antigo, com o segredo que está no banco, segue valendo —
+   * a ordem inversa deixaria todo aviso em 401 até o dono reconectar.
+   * O segredo só vem na criação; por isso não se "atualiza" um endpoint existente.
+   */
+  async function prepararWebhook(url: string): Promise<WebhookPreparado> {
+    const criado = ler(
+      endpointCriado,
+      await chamar("POST", "/webhook_endpoints", {
+        url,
+        enabled_events: [...EVENTOS_DO_WEBHOOK_STRIPE],
+        api_version: STRIPE_VERSION,
+        description: "Cobrança do revendedor",
+        metadata: metadadosDaMarca,
+      }),
+    );
+    await portal(true);
+    return {
+      segredo: criado.secret,
+      confirmar: async () => {
+        await removerWebhooks(url, criado.id);
+      },
+      desfazer: async () => {
+        await chamar("DELETE", `/webhook_endpoints/${encodeURIComponent(criado.id)}`);
+      },
+    };
+  }
+
+  async function urlDeGerenciar(p: { clienteRef: string; urlDeVolta: string }): Promise<string> {
+    const configuracao = await portal(false);
+    const sessao = ler(
+      z.object({ url: z.string() }),
+      await chamar("POST", "/billing_portal/sessions", { customer: p.clienteRef, return_url: p.urlDeVolta, configuration: configuracao }),
+    );
+    const url = linkSeguro(sessao.url);
+    if (url === null) throw new ErroDoProvedor(200, "resposta_invalida", false);
+    return url;
+  }
+
   return {
     id: "stripe",
     testarChave,
@@ -498,5 +610,11 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorStripe
     garantirCliente,
     iniciarAssinatura,
     lerSituacao,
+    trocarPlano,
+    cancelarNoFim,
+    prepararWebhook,
+    removerWebhooks,
+    clienteExiste,
+    urlDeGerenciar,
   };
 }
