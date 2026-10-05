@@ -19,13 +19,13 @@
  *   `leitura_invalida` sem tocar o estado.
  */
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { z } from "zod";
 
 import { logger } from "@/lib/logger";
 
-import { ErroDoProvedor, type AdaptadorDeCobranca, type Modo } from "./contrato";
+import { ErroDoProvedor, type AdaptadorDeCobranca, type Modo, type SinalDoWebhook } from "./contrato";
 
 export const STRIPE_API_BASE = "https://api.stripe.com/v1";
 
@@ -81,7 +81,7 @@ export interface DependenciasDaStripe {
   marca: string;
 }
 
-export type AdaptadorStripe = Pick<AdaptadorDeCobranca, "id" | "testarChave">;
+export type AdaptadorStripe = Pick<AdaptadorDeCobranca, "id" | "testarChave" | "verificarWebhook">;
 
 /** `teste`/`producao` pelo prefixo; `null` = não é chave secreta nem restrita (inclusive `pk_`). */
 export function modoDaChaveStripe(chave: string): Modo | null {
@@ -143,6 +143,68 @@ function ler<T>(schema: z.ZodType<T>, dados: unknown): T {
 }
 
 const listaQualquer = z.object({ object: z.literal("list") });
+
+/** Janela da assinatura, nos DOIS sentidos: o relógio da VPS pode estar atrás da Stripe. */
+export const TOLERANCIA_DO_WEBHOOK_S = 300;
+
+const eventoDaStripe = z.object({
+  id: z.string().startsWith("evt_"),
+  type: z.string().min(1),
+  data: z.object({
+    object: z.object({ customer: z.union([z.string(), z.object({ id: z.string() })]).nullish() }),
+  }),
+});
+
+/**
+ * `Stripe-Signature: t=<unix>,v1=<hex>[,v1=<hex>]` = HMAC-SHA256(segredo,
+ * `${t}.${corpoCru}`). Confere CADA `v1` (na rotação do segredo a Stripe assina
+ * com o velho e o novo por 24 h); `v0` é ignorado. Devolve só ponteiros
+ * (§6: o corpo nunca é fonte de estado) e `null` para tudo que não for evento
+ * assinado. Nunca lança: quem chama responde 401 e segue.
+ */
+export function verificarWebhookStripe(
+  corpoCru: string,
+  headers: Headers,
+  segredo: string,
+  agora: Date,
+): SinalDoWebhook | null {
+  const cabecalho = headers.get("stripe-signature");
+  if (!cabecalho || !segredo) return null;
+  let t: number | null = null;
+  const assinaturas: Buffer[] = [];
+  for (const parte of cabecalho.split(",")) {
+    const i = parte.indexOf("=");
+    if (i <= 0) continue;
+    const nome = parte.slice(0, i).trim();
+    const valor = parte.slice(i + 1).trim();
+    if (nome === "t" && /^\d{1,12}$/.test(valor)) t = Number(valor);
+    else if (nome === "v1" && /^[0-9a-f]{64}$/.test(valor)) assinaturas.push(Buffer.from(valor, "hex"));
+  }
+  if (t === null || assinaturas.length === 0) return null;
+  if (Math.abs(agora.getTime() / 1000 - t) > TOLERANCIA_DO_WEBHOOK_S) return null;
+  const esperada = createHmac("sha256", segredo).update(`${t}.${corpoCru}`, "utf8").digest();
+  // Todas comparadas, sem atalho; o tamanho (32 bytes) já foi garantido pelo regex.
+  if (!assinaturas.map((a) => timingSafeEqual(a, esperada)).includes(true)) return null;
+  return lerEvento(corpoCru);
+}
+
+function lerEvento(corpoCru: string): SinalDoWebhook | null {
+  let json: unknown;
+  try {
+    json = JSON.parse(corpoCru);
+  } catch {
+    // Assinado e não é JSON: a Stripe não manda isso. Recusar é a leitura segura.
+    return null;
+  }
+  const evento = eventoDaStripe.safeParse(json);
+  if (!evento.success) return null;
+  const cliente = evento.data.data.object.customer;
+  return {
+    eventoId: evento.data.id,
+    tipo: evento.data.type,
+    clienteRef: typeof cliente === "string" ? cliente : (cliente?.id ?? null),
+  };
+}
 
 export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorStripe {
   const base = dep.baseUrl ?? STRIPE_API_BASE;
@@ -234,5 +296,6 @@ export function criarAdaptadorStripe(dep: DependenciasDaStripe): AdaptadorStripe
   return {
     id: "stripe",
     testarChave,
+    verificarWebhook: verificarWebhookStripe,
   };
 }

@@ -1,4 +1,10 @@
+import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import objetos from "@/tests/fixtures/stripe/objetos.json";
 
 import { ErroDoProvedor } from "./contrato";
 import {
@@ -9,6 +15,7 @@ import {
   modoDaChaveStripe,
   STRIPE_API_BASE,
   STRIPE_VERSION,
+  verificarWebhookStripe,
   type DependenciasDaStripe,
 } from "./stripe";
 
@@ -256,5 +263,83 @@ describe("testarChave", () => {
     );
     expect(await adaptador.testarChave()).toEqual({ ok: false, motivo: "modo_divergente", modo: "producao" });
     expect(chamadas).toHaveLength(0);
+  });
+});
+
+describe("verificarWebhook", () => {
+  // Montados em tempo de execução: literal whsec_ longo dispara a varredura de segredo no push.
+  const SEGREDO = ["whsec", "fixtureSegredoNovo0000000000"].join("_");
+  const SEGREDO_VELHO = ["whsec", "fixtureSegredoVelho000000000"].join("_");
+  const AGORA = new Date("2026-10-01T12:00:00Z");
+  const T = Math.floor(AGORA.getTime() / 1000);
+  const CORPO = JSON.stringify(objetos.evento);
+  const hmac = (segredo: string, t: number, corpo = CORPO) =>
+    createHmac("sha256", segredo).update(`${t}.${corpo}`, "utf8").digest("hex");
+  const cab = (valor: string) => new Headers({ "stripe-signature": valor });
+  const SINAL = { eventoId: "evt_1QfixtureInvoicePaid", tipo: "invoice.paid", clienteRef: "cus_QfixtureCliente" };
+
+  it("evento assinado vira sinal, só ponteiros, nada do corpo", () => {
+    expect(verificarWebhookStripe(CORPO, cab(`t=${T},v1=${hmac(SEGREDO, T)}`), SEGREDO, AGORA)).toEqual(SINAL);
+  });
+
+  it("rotação: o segundo v1 é conferido; só o velho não passa com o segredo novo", () => {
+    const duplo = `t=${T},v1=${hmac(SEGREDO_VELHO, T)},v1=${hmac(SEGREDO, T)}`;
+    expect(verificarWebhookStripe(CORPO, cab(duplo), SEGREDO, AGORA)).toEqual(SINAL);
+    expect(verificarWebhookStripe(CORPO, cab(`t=${T},v1=${hmac(SEGREDO_VELHO, T)}`), SEGREDO, AGORA)).toBeNull();
+  });
+
+  it("v0 (esquema de teste) é ignorado, mesmo com HMAC certo", () => {
+    expect(verificarWebhookStripe(CORPO, cab(`t=${T},v0=${hmac(SEGREDO, T)}`), SEGREDO, AGORA)).toBeNull();
+  });
+
+  it("relógio: 301 s no passado ou no futuro recusa; 299 s no futuro (nosso relógio atrasado) passa", () => {
+    expect(verificarWebhookStripe(CORPO, cab(`t=${T - 301},v1=${hmac(SEGREDO, T - 301)}`), SEGREDO, AGORA)).toBeNull();
+    expect(verificarWebhookStripe(CORPO, cab(`t=${T + 301},v1=${hmac(SEGREDO, T + 301)}`), SEGREDO, AGORA)).toBeNull();
+    expect(verificarWebhookStripe(CORPO, cab(`t=${T + 299},v1=${hmac(SEGREDO, T + 299)}`), SEGREDO, AGORA)).toEqual(SINAL);
+  });
+
+  it("corpo alterado em um byte recusa", () => {
+    expect(verificarWebhookStripe(`${CORPO} `, cab(`t=${T},v1=${hmac(SEGREDO, T)}`), SEGREDO, AGORA)).toBeNull();
+  });
+
+  it.each([
+    ["sem header", new Headers()],
+    ["header lixo", cab("lixo")],
+    ["v1 curto", cab(`t=${T},v1=abc`)],
+    ["t não numérico", cab(`t=ontem,v1=${hmac(SEGREDO, T)}`)],
+  ])("%s → null, sem lançar", (_nome, headers) => {
+    expect(verificarWebhookStripe(CORPO, headers, SEGREDO, AGORA)).toBeNull();
+  });
+
+  it("segredo vazio nunca valida", () => {
+    expect(verificarWebhookStripe(CORPO, cab(`t=${T},v1=${hmac("", T)}`), "", AGORA)).toBeNull();
+  });
+
+  it("evento repetido devolve o MESMO eventoId — quem deduplica é o (provider, external_id) da rota", () => {
+    const h = cab(`t=${T},v1=${hmac(SEGREDO, T)}`);
+    expect(verificarWebhookStripe(CORPO, h, SEGREDO, AGORA)?.eventoId).toBe(verificarWebhookStripe(CORPO, h, SEGREDO, AGORA)?.eventoId);
+  });
+
+  it("assinado mas não é evento (sem evt_) → null", () => {
+    const corpo = JSON.stringify({ id: "in_1", type: "invoice.paid", data: { object: {} } });
+    expect(verificarWebhookStripe(corpo, cab(`t=${T},v1=${hmac(SEGREDO, T, corpo)}`), SEGREDO, AGORA)).toBeNull();
+  });
+
+  it("customer expandido dá o id; customer nulo dá clienteRef null", () => {
+    const expandido = JSON.stringify({ ...objetos.evento, data: { object: { customer: { id: "cus_X" } } } });
+    const nulo = JSON.stringify({ ...objetos.evento, data: { object: { customer: null } } });
+    expect(verificarWebhookStripe(expandido, cab(`t=${T},v1=${hmac(SEGREDO, T, expandido)}`), SEGREDO, AGORA)?.clienteRef).toBe("cus_X");
+    expect(verificarWebhookStripe(nulo, cab(`t=${T},v1=${hmac(SEGREDO, T, nulo)}`), SEGREDO, AGORA)?.clienteRef).toBeNull();
+  });
+
+  it("a comparação é em tempo constante (timingSafeEqual), nunca === entre strings", () => {
+    const fonte = readFileSync(join(__dirname, "stripe.ts"), "utf8");
+    expect(fonte).toContain("timingSafeEqual(");
+    expect(fonte).not.toMatch(/===\s*esperada|esperada\s*===/);
+  });
+
+  it("o adaptador expõe a mesma função", () => {
+    const { adaptador } = montar({});
+    expect(adaptador.verificarWebhook(CORPO, cab(`t=${T},v1=${hmac(SEGREDO, T)}`), SEGREDO, AGORA)).toEqual(SINAL);
   });
 });
