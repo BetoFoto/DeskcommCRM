@@ -112,7 +112,7 @@ export async function PATCH(
 
   // A pessoa precisa pertencer a ESTE tenant: a rota é da gestão de tenants, e
   // o par (organização, usuário) do path é o que o admin escolheu na tela.
-  const [{ data: vinculo }, { data: ehAdmin }, { data: org }] = await Promise.all([
+  const [lidoVinculo, lidoAdmin, lidoOrg] = await Promise.all([
     admin
       .from("user_organizations")
       .select("user_id")
@@ -127,6 +127,20 @@ export async function PATCH(
       .maybeSingle(),
     admin.from("organizations").select("timezone").eq("id", id).maybeSingle(),
   ]);
+  // Falha FECHADA: sem saber se o alvo é admin da plataforma, a guarda contra
+  // tomada de conta não decide — e um `null` de erro leria como "não é".
+  const erroDeLeitura = lidoVinculo.error ?? lidoAdmin.error ?? lidoOrg.error;
+  if (erroDeLeitura) {
+    logger.error("[admin.members.email] leitura das guardas falhou; e-mail NÃO trocado", {
+      requestId,
+      organization_id: id,
+      erro: erroDeLeitura.message,
+    });
+    return fail("internal_error", "Não foi possível trocar o e-mail agora.", 500, { requestId });
+  }
+  const vinculo = lidoVinculo.data;
+  const ehAdmin = lidoAdmin.data;
+  const org = lidoOrg.data;
   if (!vinculo) return fail("not_found", "Membro não encontrado neste tenant.", 404, { requestId });
   if (ehAdmin) {
     return fail(

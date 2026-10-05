@@ -85,6 +85,7 @@ function adminFalso(opts: {
   nome?: string | null;
   erroNoUpdate?: { code?: string; message: string } | null;
   erroNaCentral?: boolean;
+  erroEmPlatformAdmins?: boolean;
 }) {
   const updateUserById = vi.fn(async () => {
     passos.push("gotrue.update");
@@ -92,12 +93,12 @@ function adminFalso(opts: {
   });
   const insercoes: Array<Record<string, unknown>> = [];
   const remocoes: string[] = [];
-  const leitura = (data: unknown) => {
+  const leitura = (data: unknown, error: { message: string } | null = null) => {
     const b: Record<string, unknown> = {};
     b.select = () => b;
     b.eq = () => b;
     b.is = () => b;
-    b.maybeSingle = async () => ({ data, error: null });
+    b.maybeSingle = async () => ({ data: error ? null : data, error });
     return b;
   };
   const central = () => {
@@ -126,7 +127,11 @@ function adminFalso(opts: {
   const admin = {
     from: (t: string) => {
       if (t === "user_organizations") return leitura(opts.membro === false ? null : { user_id: ALVO });
-      if (t === "platform_admins") return leitura(opts.ehAdminDaPlataforma ? { user_id: ALVO } : null);
+      if (t === "platform_admins")
+        return leitura(
+          opts.ehAdminDaPlataforma ? { user_id: ALVO } : null,
+          opts.erroEmPlatformAdmins ? { message: "statement timeout" } : null,
+        );
       if (t === "organizations") return leitura({ timezone: "America/Sao_Paulo" });
       if (t === "agent_inbox_items") return central();
       throw new Error(`tabela inesperada: ${t}`);
@@ -228,6 +233,13 @@ describe("troca de e-mail de membro", () => {
     const { updateUserById } = adminFalso({ ehAdminDaPlataforma: true });
     expect((await pedir("certo@exemplo.com")).status).toBe(403);
     expect(updateUserById).not.toHaveBeenCalled();
+  });
+
+  it("a leitura de platform_admins falha: 500 e nada é trocado — a guarda contra tomada de conta falha FECHADA", async () => {
+    const { updateUserById, insercoes } = adminFalso({ ehAdminDaPlataforma: true, erroEmPlatformAdmins: true });
+    expect((await pedir("certo@exemplo.com")).status).toBe(500);
+    expect(updateUserById).not.toHaveBeenCalled();
+    expect(insercoes).toHaveLength(0);
   });
 
   it("admin com fator TOTP e sessão aal1: 403 mfa_required, nada é trocado", async () => {
