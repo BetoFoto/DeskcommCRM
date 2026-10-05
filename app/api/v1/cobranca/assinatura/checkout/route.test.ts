@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   ad: { lerSituacao: vi.fn(), garantirCliente: vi.fn(), iniciarAssinatura: vi.fn() },
   taxaOk: true,
   audit: vi.fn(),
+  logError: vi.fn(),
   banco: undefined as unknown as BancoFalso,
 }));
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: h.papel }));
@@ -17,6 +18,7 @@ vi.mock("@/lib/instalacao/modulos", () => ({ moduloLigado: async () => h.ligada 
 vi.mock("@/lib/cobranca/configuracao", () => ({ provedorDaInstalacao: async () => h.provedor }));
 vi.mock("@/lib/cobranca/provedores", () => ({ adaptador: () => h.ad, modoDoProvedor: async () => "teste" }));
 vi.mock("@/lib/audit", () => ({ audit: h.audit }));
+vi.mock("@/lib/logger", () => ({ logger: { error: h.logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() } }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.banco.cliente }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: async () => null }));
 vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({ checkRateLimit: async () => ({ allowed: h.taxaOk }) }));
@@ -151,5 +153,37 @@ describe("checkout da assinatura", () => {
     m.reservaOk = false;
     expect((await codigo(await assinar())).code).toBe("checkout_em_preparo");
     expect(h.ad.garantirCliente).not.toHaveBeenCalled();
+  });
+
+  it("⭐ a liberação e a gravação do link só tocam a reserva DESTA requisição (uma lenta não pisa na reserva da outra)", async () => {
+    h.ad.iniciarAssinatura.mockRejectedValue(new ErroDoProvedor(503, "api_error", true));
+    await assinar();
+    const escritas = h.banco.cadeias.filter((c) => c.tabela === "cobranca_assinaturas" && operacao(c) === "update");
+    const reserva = argumentos(escritas[0]!, "update")?.[0] as { checkout_expira_em: string };
+    const liberacao = escritas.at(-1)!;
+    expect(filtros(liberacao)).toContainEqual(["eq", "checkout_expira_em", reserva.checkout_expira_em]);
+  });
+
+  it("⭐ a gravação do link da fase 3 também filtra pela reserva desta requisição", async () => {
+    await assinar();
+    const escritas = h.banco.cadeias.filter((c) => c.tabela === "cobranca_assinaturas" && operacao(c) === "update");
+    const reserva = argumentos(escritas[0]!, "update")?.[0] as { checkout_expira_em: string };
+    expect(filtros(escritas[1]!)).toContainEqual(["eq", "checkout_expira_em", reserva.checkout_expira_em]);
+  });
+
+  it("⭐ erro que não é do provedor (banco na fase 3): 500 no envelope com X-Request-Id, logado sem segredo, reserva liberada", async () => {
+    let escritas = 0;
+    const base = responder;
+    h.banco = bancoFalso((c) => {
+      if (c.tabela === "cobranca_assinaturas" && operacao(c) === "update" && ++escritas === 2) return { data: null, error: { code: "08006", message: "db caiu sk_test_segredo" } };
+      return base(c);
+    });
+    const res = await assinar();
+    expect(res.status).toBe(500);
+    expect((await codigo(res)).code).toBe("internal_error");
+    expect(res.headers.get("X-Request-Id")).toBeTruthy();
+    expect(h.logError).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(h.logError.mock.calls)).not.toContain("sk_test_segredo");
+    expect(updates().at(-1)).toEqual({ checkout_expira_em: null });
   });
 });

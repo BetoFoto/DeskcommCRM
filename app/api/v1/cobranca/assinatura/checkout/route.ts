@@ -25,10 +25,12 @@ import { requireRole } from "@/lib/auth/require-role";
 import { provedorDaInstalacao } from "@/lib/cobranca/configuracao";
 import { limiteDoProvedorPorOrg, recusaDoProvedor } from "@/lib/cobranca/falhas";
 import { adaptador, modoDoProvedor } from "@/lib/cobranca/provedores";
+import { ErroDoProvedor } from "@/lib/cobranca/provedores/contrato";
 import { urlDoHub, urlDoPainelDaEmpresa } from "@/lib/cobranca/url";
 import type { EstadoDaAssinatura, Intervalo, ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -91,10 +93,13 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Fase 1: a reserva. Quem chegar junto perde o compare-and-set.
+  // Fase 1: a reserva. Quem chegar junto perde o compare-and-set. O ISO dela é a
+  // "posse": liberar e gravar o link filtram por ele, para uma requisição lenta
+  // não soltar nem sobrescrever a reserva de outra.
+  const reserva = new Date(agora.getTime() + RESERVA_MS).toISOString();
   const { data: reservada, error: erroDaReserva } = await admin
     .from("cobranca_assinaturas")
-    .update({ checkout_url: null, checkout_expira_em: new Date(agora.getTime() + RESERVA_MS).toISOString() })
+    .update({ checkout_url: null, checkout_expira_em: reserva })
     .eq("organization_id", orgId)
     .or(`checkout_expira_em.is.null,checkout_expira_em.lt."${agora.toISOString()}"`)
     .select("organization_id")
@@ -104,6 +109,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const url = await gerarCheckout(admin, orgId, lida, provedor, {
+      reserva,
       email: authz.user.email,
       chaveIdempotencia: chave ?? randomUUID(),
       actorUserId: authz.user.id,
@@ -111,7 +117,7 @@ export async function POST(req: NextRequest) {
       urlDeVolta,
     });
     if ("vivo" in url) {
-      await liberarReserva(admin, orgId);
+      await liberarReserva(admin, orgId, reserva);
       if (url.vivo === null) {
         // Assinatura viva sem fatura pagável agora (ex.: pausada): nunca uma frase que promete um link.
         return recusar(
@@ -124,14 +130,29 @@ export async function POST(req: NextRequest) {
     }
     return ok({ url: url.url }, { requestId });
   } catch (e) {
-    await liberarReserva(admin, orgId);
+    await liberarReserva(admin, orgId, reserva).catch(() => undefined);
+    if (!(e instanceof ErroDoProvedor)) {
+      // Defeito nosso (banco, adaptador, link não gravado): envelope e X-Request-Id, e só o nome/código no log.
+      logger.error("cobranca: checkout falhou fora do provedor", {
+        requestId,
+        organizationId: orgId,
+        erro: e instanceof Error ? e.name : "desconhecido",
+        codigo: (e as { code?: unknown } | null)?.code ?? null,
+      });
+      return recusar(500, "internal_error", "Não foi possível gerar o link de pagamento. Tente de novo em instantes.");
+    }
     const r = recusaDoProvedor(e);
     return recusar(r.status, r.code, r.message);
   }
 }
 
-async function liberarReserva(admin: SupabaseClient, orgId: string): Promise<void> {
-  await admin.from("cobranca_assinaturas").update({ checkout_expira_em: null }).eq("organization_id", orgId).is("checkout_url", null);
+async function liberarReserva(admin: SupabaseClient, orgId: string, reserva: string): Promise<void> {
+  await admin
+    .from("cobranca_assinaturas")
+    .update({ checkout_expira_em: null })
+    .eq("organization_id", orgId)
+    .eq("checkout_expira_em", reserva)
+    .is("checkout_url", null);
 }
 
 /** Fases 2 e 3. Lança `ErroDoProvedor` (quem chama libera a reserva) ou erro de banco. */
@@ -140,7 +161,7 @@ async function gerarCheckout(
   orgId: string,
   lida: Lida,
   provedor: ProvedorDeCobranca,
-  quem: { email: string; chaveIdempotencia: string; actorUserId: string; requestId: string; urlDeVolta: string },
+  quem: { reserva: string; email: string; chaveIdempotencia: string; actorUserId: string; requestId: string; urlDeVolta: string },
 ): Promise<{ url: string } | { vivo: string | null }> {
   const ad = adaptador(provedor);
   if (lida.provedor_cliente_id) {
@@ -177,6 +198,7 @@ async function gerarCheckout(
       updated_at: new Date().toISOString(),
     })
     .eq("organization_id", orgId)
+    .eq("checkout_expira_em", quem.reserva)
     .is("checkout_url", null)
     .select("organization_id")
     .maybeSingle();
