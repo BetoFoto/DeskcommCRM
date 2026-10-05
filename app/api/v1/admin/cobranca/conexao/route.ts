@@ -31,7 +31,7 @@ import {
   requirePlatformAdminEscrita,
   type PlatformAdminContext,
 } from "@/lib/auth/requirePlatformAdmin";
-import { chaveDoProvedor, provedorDaInstalacao } from "@/lib/cobranca/configuracao";
+import { chaveDoProvedor, provedorDaInstalacao, segredoDoWebhook } from "@/lib/cobranca/configuracao";
 import { avisarTrocaDeChave } from "@/lib/cobranca/emails";
 import { adaptador, modoDoProvedor } from "@/lib/cobranca/provedores";
 import { baseDeTesteDaCobranca } from "@/lib/cobranca/provedores/base-de-teste";
@@ -42,7 +42,7 @@ import { PROVEDORES_DE_COBRANCA, type ProvedorDeCobranca } from "@/lib/cobranca/
 import { encryptKey } from "@/lib/crypto/aes_gcm";
 import { env } from "@/lib/env";
 import { requireSupportWrite } from "@/lib/impersonate/support";
-import { estadoParaTela, gravarPelaTela } from "@/lib/instalacao/config";
+import { estadoParaTela, gravarPelaTela, voltarAoAmbiente } from "@/lib/instalacao/config";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -188,22 +188,32 @@ export async function POST(req: NextRequest) {
   const last4Antigo = (await estadoParaTela(nomes.chave, true)).last4;
   // Lidos ANTES de gravar: na publicação, a chave de teste velha apaga o aviso do modo de teste.
   const modoAnterior = await modoDoProvedor(provedor);
-  const chaveAnterior = modoAnterior === "teste" && teste.modo === "producao" ? await chaveDoProvedor(provedor) : null;
+  const chaveVelha = await chaveDoProvedor(provedor);
+  const chaveAnterior = modoAnterior === "teste" && teste.modo === "producao" ? chaveVelha : null;
+  // Lidos ANTES de gravar: se uma gravação falhar, as já feitas voltam ao que eram.
   const gravacoes = [
-    [nomes.chave, chave, true],
-    [nomes.segredo, preparo.segredo, true],
-    ["COBRANCA_PROVEDOR", provedor, false],
+    [nomes.chave, chave, true, chaveVelha],
+    [nomes.segredo, preparo.segredo, true, await segredoDoWebhook(provedor)],
+    ["COBRANCA_PROVEDOR", provedor, false, atual],
   ] as const;
-  for (const [nome, valor, ehSegredo] of gravacoes) {
+  const gravadas: Array<(typeof gravacoes)[number]> = [];
+  for (const g of gravacoes) {
+    const [nome, valor, ehSegredo] = g;
     const gravado = await gravarPelaTela(nome, valor, { ehSegredo, ator: ctx.user.id });
     if (!gravado.ok) {
       logger.error("cobranca.conexao_nao_gravada", { chave: nome, motivo: gravado.motivo });
-      // O antigo, com o segredo que está no banco, segue valendo: some só o novo.
+      // Chave nova com segredo velho leria os avisos da conta errada: desfaz o que já entrou.
+      for (const [n, , segredo, antes] of gravadas) {
+        const volta = antes === null ? await voltarAoAmbiente(n) : await gravarPelaTela(n, antes, { ehSegredo: segredo, ator: ctx.user.id });
+        if (!volta.ok) logger.error("cobranca.conexao_nao_restaurada", { chave: n, motivo: volta.motivo });
+      }
+      // O antigo, com o segredo que voltou ao banco, segue valendo: some só o novo.
       await preparo.desfazer().catch((e: unknown) =>
         logger.warn("cobranca.webhook_novo_nao_desfeito", { codigo: e instanceof ErroDoProvedor ? e.codigo : "desconhecido" }),
       );
       return fail("internal_error", "A chave foi aceita pelo provedor, mas não foi possível guardá-la. Conecte de novo.", 500, { requestId });
     }
+    gravadas.push(g);
   }
   // ponytail: se apagar os antigos falhar, eles ficam (recusados com 401 e
   // contados na Visão geral) até a próxima conexão, que os apaga.
@@ -218,6 +228,11 @@ export async function POST(req: NextRequest) {
       );
   }
 
+  // A credencial já mudou: auditar e avisar os donos AQUI, antes de publicar, que pode falhar.
+  const quem = { actorUserId: ctx.user.id, actingAsPlatformAdmin: true, bypassedRls: true, resourceType: "platform_config", requestId };
+  void audit({ ...quem, action: "cobranca.provedor_conectado", metadata: { provedor, modo: teste.modo, last4_antigo: last4Antigo, last4_novo: chave.slice(-4) } });
+  await avisarTrocaDeChave(admin, { antigo: last4Antigo, novo: chave.slice(-4) });
+
   let publicadas = 0;
   if (teste.modo === "producao" && deTeste > 0) {
     try {
@@ -228,10 +243,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const quem = { actorUserId: ctx.user.id, actingAsPlatformAdmin: true, bypassedRls: true, resourceType: "platform_config", requestId };
-  void audit({ ...quem, action: "cobranca.provedor_conectado", metadata: { provedor, modo: teste.modo, last4_antigo: last4Antigo, last4_novo: chave.slice(-4) } });
   if (publicadas > 0) void audit({ ...quem, action: "cobranca.modo_publicado", metadata: { provedor, convertidas: publicadas } });
-  await avisarTrocaDeChave(admin, { antigo: last4Antigo, novo: chave.slice(-4) });
   return ok({ modo: teste.modo, webhook: "automatico", publicadas }, { requestId });
 }
 

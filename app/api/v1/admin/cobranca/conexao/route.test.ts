@@ -11,6 +11,8 @@ const h = vi.hoisted(() => ({
   cifraOk: true,
   chaveUsada: undefined as undefined | (() => Promise<string | null>),
   chaveAntiga: null as string | null,
+  segredoAntigo: null as string | null,
+  voltar: vi.fn(),
   modoAnterior: null as string | null,
   ad: { testarChave: vi.fn(), prepararWebhook: vi.fn(), clienteExiste: vi.fn(), removerWebhooks: vi.fn() },
   confirmar: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock("@/lib/cobranca/provedores/base-de-teste", () => ({ baseDeTesteDaCobranc
 vi.mock("@/lib/cobranca/configuracao", () => ({
   provedorDaInstalacao: async () => h.provedorAtual,
   chaveDoProvedor: async () => h.chaveAntiga,
+  segredoDoWebhook: async () => h.segredoAntigo,
 }));
 vi.mock("@/lib/cobranca/provedores", () => ({
   adaptador: (_id: string, opcoes?: { chave?: () => Promise<string | null> }) => {
@@ -41,6 +44,7 @@ vi.mock("@/lib/cobranca/provedores", () => ({
 }));
 vi.mock("@/lib/instalacao/config", () => ({
   gravarPelaTela: h.gravar,
+  voltarAoAmbiente: h.voltar,
   estadoParaTela: async () => ({ last4: "9999" }),
 }));
 vi.mock("@/lib/crypto/aes_gcm", () => ({
@@ -84,6 +88,7 @@ beforeEach(() => {
   h.cifraOk = true;
   h.chaveUsada = undefined;
   h.chaveAntiga = null;
+  h.segredoAntigo = null;
   h.modoAnterior = null;
   m = { comProvedor: [], deTeste: [] };
   h.banco = bancoFalso(responder);
@@ -92,6 +97,8 @@ beforeEach(() => {
   h.ad.prepararWebhook.mockResolvedValue({ segredo: "whsec_novo", confirmar: h.confirmar, desfazer: h.desfazer });
   h.ad.clienteExiste.mockResolvedValue(true);
   h.ad.removerWebhooks.mockResolvedValue(1);
+  h.voltar.mockResolvedValue({ ok: true });
+  h.regua.mockReset();
   h.confirmar.mockResolvedValue(undefined);
   h.desfazer.mockResolvedValue(undefined);
   h.gravar.mockResolvedValue({ ok: true });
@@ -151,6 +158,28 @@ describe("conexão da cobrança", () => {
     expect((await conectar()).status).toBe(500);
     expect(h.desfazer).toHaveBeenCalledOnce();
     expect(h.confirmar).not.toHaveBeenCalled();
+  });
+
+  it("⭐ gravação falha no meio: a chave nova NÃO fica com o segredo velho (volta ao valor anterior; sem anterior, ao ambiente)", async () => {
+    h.chaveAntiga = "sk_test_51HchaveAnterior0001";
+    h.gravar.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false, motivo: "banco" }).mockResolvedValue({ ok: true });
+    expect((await conectar()).status).toBe(500);
+    expect(h.gravar).toHaveBeenLastCalledWith("STRIPE_SECRET_KEY", "sk_test_51HchaveAnterior0001", expect.objectContaining({ ehSegredo: true }));
+    h.gravar.mockReset().mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false, motivo: "banco" });
+    h.chaveAntiga = null;
+    await conectar();
+    expect(h.voltar).toHaveBeenCalledWith("STRIPE_SECRET_KEY");
+  });
+
+  it("⭐ publicar falha depois das gravações: 500, mas a troca de chave já foi auditada e os donos avisados", async () => {
+    h.ad.testarChave.mockResolvedValue({ ok: true, modo: "producao" });
+    m.comProvedor = [{ provedor: "stripe", modo: "teste" }];
+    m.deTeste = [{ organization_id: "org-1", plano_id: "plano-a" }];
+    h.regua.mockRejectedValue(new Error("regua caiu"));
+    const res = await conectar({ provedor: "stripe", chave: CHAVE, confirmar_publicacao: true });
+    expect(res.status).toBe(500);
+    expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "cobranca.provedor_conectado" }));
+    expect(h.donos).toHaveBeenCalledOnce();
   });
 
   it("⭐ trocar de provedor com assinatura de produção: 409 e nada gravado nem testado", async () => {
