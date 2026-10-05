@@ -1373,6 +1373,16 @@ gravam `platform_config.MODULO_COBRANCA='ligado'` direto no banco pelo fixture.
 | Teto de IA do plano: chave própria nunca bloqueia; finalidade isenta segue; `AI_BUDGET_ENFORCEMENT=off` desliga | `lib/agent-engine/edge/llm/orcamento.test.ts` | unit |
 | O mapa vivo espelha os mapas vizinhos e nenhuma peça é ilha | `tests/unit/mapas-de-arquitetura.test.ts` | unit |
 
+**Evidência** (gerada pelo e2e da PARTE_6 no CI e versionada a partir do artefato
+`evidencia-parte-6`): `evidence/cobranca-planos-e-limites/admin-cobranca-planos.png`,
+`evidence/cobranca-planos-e-limites/tenant-card-cobranca.png`,
+`evidence/cobranca-planos-e-limites/convite-recusado-pelo-plano.png`,
+`evidence/cobranca-planos-e-limites/billing-teste-gratis.png`,
+`evidence/cobranca-planos-e-limites/sistema-desligar-libera.png`,
+`evidence/cobranca-planos-e-limites/desligada-novo-tenant.png`,
+`evidence/cobranca-planos-e-limites/desligada-billing.png`,
+`evidence/cobranca-planos-e-limites/desligada-recursos-opcionais.png`.
+
 **Não coberto pela tela:** ligar a chave pela tela (PR 3a, quando ela sair de
 `MODULOS_AINDA_NAO_LIGAVEIS`); pagamento, régua de avisos e suspensão
 automática por falta de pagamento (PR 3a); o aceite de convite recusado pelo

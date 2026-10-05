@@ -2145,11 +2145,21 @@ jobs:
       # morrem com o runner, e a prova pela tela só existe localmente, num ambiente
       # que nem toda máquina consegue subir. Quem precisa delas baixa o artefato da
       # parte e commita as que a jornada cita. Sem pasta = sem artefato (warn).
+      # Só o que ESTA rodada gerou ou mudou: a pasta inteira passa de 80 MB por
+      # parte, e o que já está versionado não precisa sair do runner.
+      - name: Separar a evidência gerada nesta rodada
+        if: success()
+        run: |
+          mkdir -p evidencia-gerada
+          git ls-files --others --modified --exclude-standard -- evidence/ \
+            | while IFS= read -r f; do mkdir -p "evidencia-gerada/$(dirname "$f")"; cp "$f" "evidencia-gerada/$f"; done
+          echo "capturas geradas: $(find evidencia-gerada -type f | wc -l)"
+
       - uses: actions/upload-artifact@v7
         if: success()
         with:
           name: evidencia-parte-${{ matrix.parte }}
-          path: evidence/
+          path: evidencia-gerada/
           if-no-files-found: warn
           retention-days: 7
 
