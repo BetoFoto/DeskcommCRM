@@ -36,6 +36,11 @@ import React from "react";
 
 import { env } from "@/lib/env";
 import { mascaraCpf } from "@/lib/lgpd/mask";
+import {
+  COPIA_DO_NUMERO_3,
+  DIREITOS_DA_ALINEA_E,
+  NAO_INFORMADO_PELO_CONTROLADOR,
+} from "@/lib/legal/art15";
 
 import type { ExportPayload } from "./export-collector";
 
@@ -235,6 +240,52 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
             </View>
           ) : null}
         </View>
+
+        {/* Art. 15.º, n.º 1 — alínea a alínea (issue #2340, doc 88).
+            Sai SÓ quando o coletor emitiu `art15`: Brasil (documento da LGPD,
+            art. 18 II) e país sem autoridade revisada no perfil ficam byte a
+            byte — os fixtures em tests/fixtures/lgpd-brasil-antes-do-doc88/ é
+            que travam isto, não este comentário. */}
+        {data.art15 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Informações exigidas pelo art. 15.º, n.º 1
+            </Text>
+            <View style={styles.row}>
+              <Text style={styles.label}>a) Finalidades:</Text>
+              <Text style={styles.value}>
+                {data.art15.finalidades ?? NAO_INFORMADO_PELO_CONTROLADOR}
+              </Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>c) Destinatários:</Text>
+              <Text style={styles.value}>
+                {data.art15.destinatarios ?? NAO_INFORMADO_PELO_CONTROLADOR}
+              </Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>d) Conservação:</Text>
+              <Text style={styles.value}>
+                {data.art15.prazo_conservacao ?? NAO_INFORMADO_PELO_CONTROLADOR}
+              </Text>
+            </View>
+            <View style={styles.itemBlock}>
+              <Text style={styles.small}>e) Direitos</Text>
+              <Text>{DIREITOS_DA_ALINEA_E}</Text>
+            </View>
+            <View style={styles.itemBlock}>
+              <Text style={styles.small}>f) Reclamação a uma autoridade de controlo</Text>
+              <Text>
+                {data.art15.autoridade.nome} · {data.art15.autoridade.site}
+              </Text>
+            </View>
+            <View style={styles.itemBlock}>
+              <Text style={styles.small}>h) Decisões automatizadas</Text>
+              <Text>{data.art15.decisoes_automatizadas}</Text>
+            </View>
+            <Text style={styles.small}>{COPIA_DO_NUMERO_3}</Text>
+          </View>
+        ) : null}
 
         {/* Contact */}
         {data.contact ? (

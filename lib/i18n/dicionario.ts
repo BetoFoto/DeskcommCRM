@@ -1503,6 +1503,14 @@ export const DICIONARIO: Traducoes = {
   "Razão social": { es: "Razón social" },
   "DPO email": { es: "Email del DPO" },
   "Retenção de mídia (dias)": { es: "Retención de archivos multimedia (días)" },
+  "Limpeza automática de mídia antiga": { es: "Limpieza automática de multimedia antigua" },
+  "Ligado: apaga a mídia com mais de {n} dias.": {
+    es: "Activado: elimina la multimedia con más de {n} días.",
+  },
+  "Desligado: a mídia das conversas não é apagada por idade.": {
+    es: "Desactivado: la multimedia de las conversaciones no se elimina por antigüedad.",
+  },
+  "Ao ligar, a mídia de mensagem com mais de {n} dias começará a ser apagada.": { es: "Al activarlo, la multimedia de mensajes con más de {n} días comenzará a eliminarse." },
   "URL política de privacidade": { es: "URL de la política de privacidad" },
   "Informações pessoais. Email só pode ser trocado em breve.": {
     es: "Información personal. Pronto podrás cambiar el email.",
@@ -7253,6 +7261,10 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Inbox: mídia (áudio, imagem, figurinha, vídeo, documento) ───
   "Mídia indisponível": { es: "Contenido no disponible" },
+  "Mídia apagada pela política de retenção.": { es: "Multimedia eliminada por la política de retención." },
+  "Mídia apagada pela política de retenção ({n} dias)": {
+    es: "Multimedia eliminada por la política de retención ({n} días)",
+  },
   Áudio: { es: "Audio" },
   Imagem: { es: "Imagen" },
   Figurinha: { es: "Sticker" },
@@ -10089,6 +10101,8 @@ export const DICIONARIO: Traducoes = {
   "sem organização ativa": { es: "sin organización activa" },
   "Sem organização ativa": { es: "Sin organización activa" },
   "Sem organização ativa.": { es: "Sin organización activa." },
+  "Esta aba está numa organização diferente da sessão. Recarregar?": { es: "Esta pestaña está en una organización distinta a la de la sesión. ¿Recargar?" },
+  "Recarregar": { es: "Recargar" },
   "Sessão de canal não encontrada.": { es: "Sesión de canal no encontrada." },
   "Sessão expirada": { es: "Sesión expirada" },
   "Sessão sem token.": { es: "Sesión sin token." },
@@ -12131,6 +12145,13 @@ export const DICIONARIO: Traducoes = {
   "Vinculada": { es: "Vinculada" },
   "Verificar conexão": { es: "Verificar conexión" },
   "Receber no atendimento": { es: "Recibir en atención" },
+  "Remover do atendimento": { es: "Quitar de la atención" },
+  "Desconectar conta": { es: "Desconectar cuenta" },
+  "Desconectar esta conta?": { es: "¿Desconectar esta cuenta?" },
+  "Remover do atendimento?": { es: "¿Quitar de la atención?" },
+  "As mensagens param de chegar e a conta sai do provedor. Para usar de novo, será preciso autorizar a conta outra vez. As conversas já recebidas continuam no CRM.": { es: "Los mensajes dejan de llegar y la cuenta sale del proveedor. Para usarla de nuevo, tendrás que autorizar la cuenta otra vez. Las conversaciones ya recibidas siguen en el CRM." },
+  "As mensagens desta conta param de chegar no atendimento. A conta continua vinculada e pode voltar a receber depois. As conversas já recebidas continuam no CRM.": { es: "Los mensajes de esta cuenta dejan de llegar a la atención. La cuenta sigue vinculada y puede volver a recibir después. Las conversaciones ya recibidas siguen en el CRM." },
+  "Conta removida do atendimento.": { es: "Cuenta quitada de la atención." },
   "Recebimento configurado. Novas mensagens entram na caixa de entrada.": { es: "Recepción configurada. Los nuevos mensajes llegan a la bandeja de entrada." },
   "O recebimento precisa de atenção. Confira a conexão antes de atender.": { es: "La recepción necesita atención. Verifica la conexión antes de atender." },
   "Ative para receber novas conversas. A IA começa pausada para evitar respostas duplicadas com outras automações.": { es: "Activa para recibir nuevas conversaciones. La IA empieza pausada para evitar respuestas duplicadas con otras automatizaciones." },

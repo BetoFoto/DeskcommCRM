@@ -239,6 +239,7 @@ export const AUDIT_ACTIONS = [
   "prospecting.approach_sent",
   "channel.pairing_code_requested",
   "channel.social_configured",
+  "channel.social_disconnected",
   "channel.ai_access_updated",
   "channel.acervo_updated",
   "channel.reconnected",

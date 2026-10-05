@@ -153,6 +153,23 @@ export interface LeiCitada {
   rotuloNoDocumento?: string;
 }
 
+/**
+ * A autoridade de supervisão do país — a alínea f) do art. 15.º, n.º 1.
+ *
+ * Mora no PERFIL, e não no módulo do art. 15.º, porque é propriedade do país:
+ * trocar de país troca a autoridade junto com a lei e com o calendário (mesma
+ * razão de `lei`, `calendario` e `padroesDePii`). Um país sem autoridade
+ * revisada não declara o campo, e o relatório não emite a alínea f) — a mesma
+ * régua de `lei.revisada`: a lei errada, ou a autoridade errada, é pior do que
+ * não citar.
+ */
+export interface AutoridadeDeSupervisao {
+  /** Como a autoridade é conhecida, já com a sigla: "Comissão Nacional de Proteção de Dados (CNPD)". */
+  nome: string;
+  /** Onde o titular reclama. Site oficial, não buscado em runtime. */
+  site: string;
+}
+
 export interface CalendarioDeDiasUteis {
   /** Datas `YYYY-MM-DD` dos feriados nacionais, no formato de `holidays-br.ts`. */
   feriados: readonly string[];
@@ -176,6 +193,14 @@ export interface PerfilDoPais {
   telefoneExemplo: string;
   /** `null` quando o país ainda não tem lei revisada para citar. */
   lei: LeiCitada | null;
+  /**
+   * A autoridade a quem o titular reclama (art. 15.º, n.º 1, al. f)). Ausente
+   * em países cuja citação não foi revisada — e o Brasil, cujo documento segue
+   * a LGPD (art. 18, II) e não a lista do RGPD, não declara este campo: a
+   * regra byte a byte do doc 88 (`tests/fixtures/lgpd-brasil-antes-do-doc88/`)
+   * é o que trava o PDF brasileiro.
+   */
+  autoridadeDeSupervisao?: AutoridadeDeSupervisao;
   calendario: CalendarioDeDiasUteis;
   /** Padrões PRÓPRIOS do país; e-mail/telefone são universais e moram fora. */
   padroesDePii: readonly PadraoDePiiDoPais[];
@@ -290,6 +315,13 @@ const PERFIL_PT: PerfilDoPais = {
     revisada: true,
     revisadaPorIa: true,
     rotuloNoDocumento: "Direito exercido",
+  },
+  // Alínea f) do art. 15.º, n.º 1: a autoridade portuguesa. Conferida em
+  // 2026-10-05 na fonte primária (site oficial da CNPD) junto com o resto da
+  // revisão do doc 88; a mesma ressalva vale — revisão por IA, sem advogado.
+  autoridadeDeSupervisao: {
+    nome: "Comissão Nacional de Proteção de Dados (CNPD)",
+    site: "https://www.cnpd.pt",
   },
   calendario: {
     feriados: HOLIDAYS_PT_ISO,

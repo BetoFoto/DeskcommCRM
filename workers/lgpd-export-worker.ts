@@ -57,7 +57,7 @@ import {
 } from "@/lib/lgpd/email-delivery";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { marcaDaSaida } from "@/lib/branding/saida";
-import { perfilDaOrganizacao } from "@/lib/legal/perfil-do-pais";
+import { PAIS_PADRAO, perfilDaOrganizacao } from "@/lib/legal/perfil-do-pais";
 
 const MAX_ATTEMPTS = 3;
 const BUCKET = "lgpd-exports";
@@ -220,6 +220,23 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
       throw new Error(`signed_url_failed: ${signedErr?.message ?? "no_url"}`);
     }
 
+    // A cópia do art. 15.º, n.º 3 (issue #2340): o `data.json` já subia no
+    // mesmo diretório, mas só o PDF tinha ligação — o titular recebia um
+    // relatório que prometia uma cópia inacessível. Mesma validade do PDF.
+    // SÓ fora do Brasil: o e-mail brasileiro não imprime a ligação (byte a byte
+    // do doc 88), e pedi-la ali só acrescentaria ao export brasileiro um modo
+    // de falha novo — uma assinatura que falha derrubaria um envio que não a usa.
+    let signedUrlDados: string | undefined;
+    if (perfil.codigo !== PAIS_PADRAO) {
+      const { data: signedDados, error: signedDadosErr } = await admin.storage
+        .from(BUCKET)
+        .createSignedUrl(jsonPath, expiresInSec);
+      if (signedDadosErr || !signedDados) {
+        throw new Error(`signed_url_json_failed: ${signedDadosErr?.message ?? "no_url"}`);
+      }
+      signedUrlDados = signedDados.signedUrl;
+    }
+
     // 8. Resolve delivery email.
     const deliveryFromPayload = (req.request_payload as Record<string, unknown>)?.delivery as
       | Record<string, unknown>
@@ -278,6 +295,7 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
         to: deliveryEmail,
         requestId,
         signedUrl: signed.signedUrl,
+        signedUrlDados,
         expiresAt,
         marca: await marcaDaSaida(orgId),
         // O país decide a lei e o idioma do e-mail — o MESMO perfil que o coletor
