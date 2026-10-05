@@ -35,7 +35,11 @@ import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit, hashEmail } from "@/lib/audit";
-import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdminWrite";
+import {
+  falhaDaEscritaDePlatformAdmin,
+  requirePlatformAdminEscrita,
+  type PlatformAdminContext,
+} from "@/lib/auth/requirePlatformAdmin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -56,8 +60,12 @@ export async function PATCH(
   const supportDenied = await requireSupportWrite(id);
   if (supportDenied) return supportDenied;
 
-  const guarda = await requirePlatformAdminWrite(requestId);
-  if (!guarda.ok) return guarda.response;
+  let adminCtx: PlatformAdminContext;
+  try {
+    adminCtx = await requirePlatformAdminEscrita();
+  } catch (err) {
+    return falhaDaEscritaDePlatformAdmin(err, requestId);
+  }
 
   let email: string;
   try {
@@ -134,7 +142,7 @@ export async function PATCH(
   // Só hash: a auditoria não guarda e-mail em claro (dado pessoal).
   void audit({
     action: "member.email_changed",
-    actorUserId: guarda.ctx.user.id,
+    actorUserId: adminCtx.user.id,
     actingAsPlatformAdmin: true,
     bypassedRls: true,
     organizationId: id,

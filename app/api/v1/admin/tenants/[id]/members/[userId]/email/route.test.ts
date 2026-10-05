@@ -13,7 +13,35 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/auth/requirePlatformAdminWrite", () => ({ requirePlatformAdminWrite: vi.fn() }));
+// A guarda de escrita NÃO é mockada: o teste substitui só o que ela consulta
+// (a sessão, a linha de `platform_admins` e a dívida de MFA), e assim trocar
+// `requirePlatformAdminEscrita` por outra guarda reprova aqui.
+const g = vi.hoisted(() => ({
+  linhaDoAdmin: null as Record<string, unknown> | null,
+  mfaEmDivida: vi.fn(async () => false),
+}));
+vi.mock("next/navigation", () => ({
+  redirect: (destino: string) => {
+    throw new Error(`redirect:${destino}`);
+  },
+}));
+vi.mock("@/lib/auth/server", () => ({ mfaEmDivida: g.mfaEmDivida }));
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({
+    auth: {
+      getUser: async () => ({ data: { user: { id: "11111111-1111-4111-8111-111111111111" } } }),
+      mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: "aal1" } }) },
+    },
+    from: () => {
+      const c: Record<string, unknown> = {};
+      c.select = () => c;
+      c.eq = () => c;
+      c.is = () => c;
+      c.maybeSingle = async () => ({ data: g.linhaDoAdmin, error: null });
+      return c;
+    },
+  }),
+}));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({
@@ -22,7 +50,6 @@ vi.mock("@/lib/audit", () => ({
 }));
 
 import { audit } from "@/lib/audit";
-import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdminWrite";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { PATCH } from "./route";
@@ -77,13 +104,8 @@ function pedir(email: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(requirePlatformAdminWrite).mockResolvedValue({
-    ok: true,
-    ctx: {
-      user: { id: ADMIN },
-      platformAdmin: { user_id: ADMIN, scope: "full", mfa_required: false },
-    },
-  } as never);
+  g.linhaDoAdmin = { user_id: ADMIN, scope: "full", mfa_required: false, revoked_at: null };
+  g.mfaEmDivida.mockResolvedValue(false);
 });
 
 describe("troca de e-mail de membro", () => {
@@ -144,13 +166,29 @@ describe("troca de e-mail de membro", () => {
     expect(updateUserById).not.toHaveBeenCalled();
   });
 
-  it("sem escopo full / MFA: a guarda de escrita barra antes de tudo", async () => {
+  it("admin com fator TOTP e sessão aal1: 403 mfa_required, nada é trocado", async () => {
     const { updateUserById } = adminFalso({});
-    vi.mocked(requirePlatformAdminWrite).mockResolvedValue({
-      ok: false,
-      response: new Response(null, { status: 403 }),
-    } as never);
-    expect((await pedir("certo@exemplo.com")).status).toBe(403);
+    g.mfaEmDivida.mockResolvedValue(true);
+    const res = await pedir("certo@exemplo.com");
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe("mfa_required");
+    expect(updateUserById).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("admin sem fator cadastrado: a troca segue — a política de MFA é opcional", async () => {
+    const { updateUserById } = adminFalso({});
+    g.mfaEmDivida.mockResolvedValue(false);
+    expect((await pedir("certo@exemplo.com")).status).toBe(200);
+    expect(updateUserById).toHaveBeenCalledTimes(1);
+  });
+
+  it("acesso de suporte (support_readonly): 403 forbidden_scope, nada é trocado", async () => {
+    const { updateUserById } = adminFalso({});
+    g.linhaDoAdmin = { user_id: ADMIN, scope: "support_readonly", mfa_required: false, revoked_at: null };
+    const res = await pedir("certo@exemplo.com");
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe("forbidden_scope");
     expect(updateUserById).not.toHaveBeenCalled();
   });
 });

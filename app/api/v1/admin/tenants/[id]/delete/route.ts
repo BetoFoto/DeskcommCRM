@@ -18,7 +18,11 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { requirePlatformAdminWrite } from "@/lib/auth/requirePlatformAdminWrite";
+import {
+  falhaDaEscritaDePlatformAdmin,
+  requirePlatformAdminEscrita,
+  type PlatformAdminContext,
+} from "@/lib/auth/requirePlatformAdmin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -51,8 +55,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const supportDenied = await requireSupportWrite(id);
   if (supportDenied) return supportDenied;
 
-  const guarda = await requirePlatformAdminWrite(requestId);
-  if (!guarda.ok) return guarda.response;
+  let adminCtx: PlatformAdminContext;
+  try {
+    adminCtx = await requirePlatformAdminEscrita();
+  } catch (err) {
+    return falhaDaEscritaDePlatformAdmin(err, requestId);
+  }
 
   let body: z.infer<typeof bodySchema>;
   try {
@@ -71,7 +79,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const resultado = await excluirOrganizacao(createAdminClient(), {
       orgId: id,
-      atorId: guarda.ctx.user.id,
+      atorId: adminCtx.user.id,
       confirmacao: body.confirmacao.trim(),
       motivo: body.motivo,
       requestId,
