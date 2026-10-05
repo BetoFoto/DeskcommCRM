@@ -12,7 +12,11 @@
  *   - em dívida, ou teste vencido sem assinatura: recusa ("regularize antes");
  *   - uso acima do plano novo: recusa com a lista do que remover (D-4).
  * O provedor é chamado ANTES da escrita e fora de transação; a escrita é um
- * compare-and-set no plano lido. Quem chama audita (o ator muda).
+ * compare-and-set no plano E no agendamento lidos. Se a escrita não acontece
+ * depois de o provedor ter aceitado, o preço volta ao que o banco registra
+ * (`reconciliar`). Voltar ao plano atual (desfazer o agendamento) não passa pelas
+ * portas de arquivado/oferecido/excedente: é só soltar o que já foi aceito.
+ * Quem chama audita (o ator muda).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -99,34 +103,59 @@ export async function trocarPlanoDaOrg(
 
   const [novo, antigo] = await Promise.all([lerPlanoCompleto(admin, planoId), lerPlanoCompleto(admin, atual.plano_id)]);
   if (novo === "erro" || antigo === "erro") return recusa(500, "internal_error", "Não foi possível ler o plano.");
-  if (!novo || novo.arquivado_em !== null || !antigo || novo.intervalo !== antigo.intervalo) {
+  const desfazendo = novo !== null && novo.id === atual.plano_id;
+  if (!novo || !antigo || (!desfazendo && (novo.arquivado_em !== null || novo.intervalo !== antigo.intervalo))) {
     return recusa(422, "plano_invalido", "Escolha um plano ativo com o mesmo intervalo de cobrança.");
   }
-  // Plano negociado: só o dono atribui (a tela da empresa nem o lista).
-  if ((deps.origem ?? "empresa") === "empresa" && !novo.oferecido_ao_cliente) {
-    return recusa(422, "plano_invalido", "Este plano não está disponível para troca. Fale com quem administra o sistema.");
-  }
-  const uso = await lerUsoDaOrganizacao(admin, orgId);
-  if (!uso) return recusa(500, "internal_error", "Não foi possível medir o uso da empresa.");
-  const excedente = excedenteDoPlano(uso, novo);
-  if (Object.keys(excedente).length > 0) {
-    return recusa(409, "plan_limit_reached", "O uso atual não cabe no plano escolhido.", { excedente });
+  if (!desfazendo) {
+    // Plano negociado: só o dono atribui (a tela da empresa nem o lista).
+    if ((deps.origem ?? "empresa") === "empresa" && !novo.oferecido_ao_cliente) {
+      return recusa(422, "plano_invalido", "Este plano não está disponível para troca. Fale com quem administra o sistema.");
+    }
+    const uso = await lerUsoDaOrganizacao(admin, orgId);
+    if (!uso) return recusa(500, "internal_error", "Não foi possível medir o uso da empresa.");
+    const excedente = excedenteDoPlano(uso, novo);
+    if (Object.keys(excedente).length > 0) {
+      return recusa(409, "plan_limit_reached", "O uso atual não cabe no plano escolhido.", { excedente });
+    }
   }
 
-  if (atual.provedor && atual.provedor_assinatura_id) {
+  const provedorDaTroca = atual.provedor && atual.provedor_assinatura_id ? { provedor: atual.provedor, ref: atual.provedor_assinatura_id } : null;
+  const aoProvedor = (p: Plano) =>
+    (deps.adaptador ?? adaptadorPadrao)(provedorDaTroca!.provedor).trocarPlano({
+      assinaturaRef: provedorDaTroca!.ref,
+      plano: { id: p.id, nome: p.nome, precoCents: p.preco_cents, intervalo: p.intervalo },
+    });
+  // O preço no provedor tem de ser o do que o banco registra (agendado, senão o atual).
+  // Relê a linha (outra troca pode ter vencido a corrida); se a leitura falha, vale o que líamos.
+  // Devolve false quando não conseguiu desfazer: aí a divergência fica dita na resposta.
+  const reconciliar = async (): Promise<boolean> => {
+    let alvo = atual.plano_agendado_id ?? atual.plano_id;
+    const { data: relida } = await admin
+      .from("cobranca_assinaturas").select("plano_id, plano_agendado_id").eq("organization_id", orgId).maybeSingle();
+    if (relida) alvo = (relida as Atual).plano_agendado_id ?? (relida as Atual).plano_id;
+    const p = await lerPlanoCompleto(admin, alvo);
+    if (!p || p === "erro") return false;
+    try { await aoProvedor(p); return true; } catch { return false; }
+  };
+  const divergiu = "O preço no provedor de pagamento pode estar diferente do plano registrado; confira com quem administra o sistema.";
+
+  if (provedorDaTroca) {
     try {
-      await (deps.adaptador ?? adaptadorPadrao)(atual.provedor).trocarPlano({
-        assinaturaRef: atual.provedor_assinatura_id,
-        plano: { id: novo.id, nome: novo.nome, precoCents: novo.preco_cents, intervalo: novo.intervalo },
-      });
+      await aoProvedor(novo);
     } catch (e) {
       if (!(e instanceof ErroDoProvedor)) throw e;
       if (e.codigo === "pagamento_do_periodo_pendente") {
         return recusa(409, "pagamento_pendente", "Aguarde a confirmação do pagamento atual para trocar de plano.");
       }
-      return e.transitorio
-        ? recusa(503, "provedor_indisponivel", "O provedor de pagamento não respondeu. Nada mudou; tente de novo.")
-        : recusa(502, "provedor_recusou", "O provedor de pagamento recusou a troca.");
+      if (e.transitorio) {
+        // A resposta pode ter se perdido com o preço já mudado: não afirme "nada mudou".
+        const ok = await reconciliar();
+        return recusa(503, "provedor_indisponivel", ok
+          ? "O provedor de pagamento não respondeu. A troca não foi feita; tente de novo."
+          : `O provedor de pagamento não respondeu e não foi possível confirmar a troca. ${divergiu}`);
+      }
+      return recusa(502, "provedor_recusou", "O provedor de pagamento recusou a troca.");
     }
   } else if (!emTeste) {
     return recusa(409, "state_conflict", "A assinatura ainda não foi criada no provedor. Conclua o pagamento antes de trocar.");
@@ -142,10 +171,17 @@ export async function trocarPlanoDaOrg(
       }
     : { plano_agendado_id: novo.id === atual.plano_id ? null : novo.id, updated_at: agora.toISOString() };
   let pedido = admin.from("cobranca_assinaturas").update(campos).eq("organization_id", orgId).eq("plano_id", atual.plano_id);
+  pedido = atual.plano_agendado_id ? pedido.eq("plano_agendado_id", atual.plano_agendado_id) : pedido.is("plano_agendado_id", null);
   pedido = atual.provedor ? pedido.eq("provedor", atual.provedor) : pedido.is("provedor", null);
   const { data: gravada, error: erroDaGravacao } = await pedido.select("organization_id").maybeSingle();
-  if (erroDaGravacao) return recusa(500, "internal_error", "Não foi possível trocar o plano.");
-  if (!gravada) return recusa(409, "state_conflict", "A assinatura mudou enquanto você trocava o plano. Recarregue e tente de novo.");
+  if (erroDaGravacao || !gravada) {
+    // O provedor já aceitou o preço novo e o banco não o registrou: desfaz no provedor.
+    const desfeito = !provedorDaTroca || (await reconciliar());
+    const aviso = desfeito ? "" : ` ${divergiu}`;
+    return erroDaGravacao
+      ? recusa(500, "internal_error", `Não foi possível trocar o plano.${aviso}`)
+      : recusa(409, "state_conflict", `A assinatura mudou enquanto você trocava o plano. Recarregue e tente de novo.${aviso}`);
+  }
 
   return emTeste
     ? { ok: true, changed: true, quando: "imediato", planoId: novo.id, planoAgendadoId: null, valeAPartirDe: null, de: atual.plano_id }

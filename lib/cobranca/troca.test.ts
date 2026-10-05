@@ -56,7 +56,7 @@ describe("trocarPlanoDaOrg", () => {
   it("teste grátis sem provedor: vale na hora, por compare-and-set no plano lido", async () => {
     expect(await trocar("pro")).toMatchObject({ ok: true, changed: true, quando: "imediato", planoId: "pro" });
     expect(Object.keys(argumentos(escritas()[0]!, "update")?.[0] as object).sort()).toEqual(["plano_agendado_id", "plano_id", "updated_at"]);
-    expect(filtros(escritas()[0]!)).toEqual([["eq", "organization_id", ORG], ["eq", "plano_id", "basico"], ["is", "provedor", null]]);
+    expect(filtros(escritas()[0]!)).toEqual([["eq", "organization_id", ORG], ["eq", "plano_id", "basico"], ["is", "plano_agendado_id", null], ["is", "provedor", null]]);
     expect(trocarNoProvedor).not.toHaveBeenCalled();
   });
 
@@ -116,5 +116,49 @@ describe("trocarPlanoDaOrg", () => {
   it("⭐ plano negociado (não oferecido): a EMPRESA não o escolhe; o DONO o atribui", async () => {
     expect(await trocar("negociado")).toMatchObject({ ok: false, status: 422, code: "plano_invalido" });
     expect(await trocar("negociado", "dono")).toMatchObject({ ok: true, quando: "imediato", planoId: "negociado" });
+  });
+  it("⭐ CAS perdido depois de o provedor aceitar: 409 e o preço volta ao que o banco registra", async () => {
+    m.linha = { ...PAGANDO };
+    m.casPerdido = true;
+    // outra troca venceu a corrida: a releitura mostra pro agendado
+    trocarNoProvedor.mockImplementationOnce(async () => { m.linha = { ...PAGANDO, plano_agendado_id: "pro" }; });
+    expect(await trocar("mini")).toMatchObject({ ok: false, status: 409, code: "state_conflict" });
+    expect(trocarNoProvedor).toHaveBeenCalledTimes(2);
+    expect(trocarNoProvedor.mock.calls[1]![0].plano.id).toBe("pro");
+    expect(filtros(escritas()[0]!)).toContainEqual(["is", "plano_agendado_id", null]);
+  });
+
+  it("CAS perdido e o desfazer também falha: a divergência é dita", async () => {
+    m.linha = { ...PAGANDO };
+    m.casPerdido = true;
+    trocarNoProvedor.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new ErroDoProvedor(503, "api_error", true));
+    const r = await trocar("pro");
+    expect(r).toMatchObject({ ok: false, status: 409 });
+    expect((r as { message: string }).message).toContain("pode estar diferente");
+  });
+
+  it("provedor transitório: não afirma 'Nada mudou'", async () => {
+    m.linha = { ...PAGANDO };
+    trocarNoProvedor.mockRejectedValueOnce(new ErroDoProvedor(503, "api_error", true));
+    const r = await trocar("pro");
+    expect(r).toMatchObject({ ok: false, status: 503 });
+    expect((r as { message: string }).message).not.toContain("Nada mudou");
+  });
+
+  it.each([
+    ["plano atual arquivado", { arquivado_em: "2026-01-01T00:00:00Z" }],
+    ["plano atual negociado", { oferecido_ao_cliente: false }],
+  ])("⭐ desfazer o agendamento não é recusado por %s", async (_n, extra) => {
+    PLANOS.push(plano("atualx", extra));
+    try {
+      m.linha = { ...PAGANDO, plano_id: "atualx", plano_agendado_id: "pro" };
+      expect(await trocar("atualx")).toMatchObject({ ok: true, quando: "agendado", planoAgendadoId: null });
+    } finally { PLANOS.pop(); }
+  });
+
+  it("desfazer o agendamento com uso acima do plano atual não dá 409 plan_limit_reached", async () => {
+    m.linha = { ...PAGANDO, plano_id: "mini", plano_agendado_id: "pro" };
+    m.assentos = 3;
+    expect(await trocar("mini")).toMatchObject({ ok: true, planoAgendadoId: null });
   });
 });
