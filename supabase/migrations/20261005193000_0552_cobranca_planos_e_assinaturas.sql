@@ -18,6 +18,7 @@
 -- D. Canais: teto de números de mensagem (PT402), na trava de fn_reserve_channel_connection.
 -- E. Teste grátis na criação da org; `fn_create_tenant_with_owner` aceita `plano_id`.
 -- F. Suspensão por cobrança poupa a isenta; reativar zera o aviso; desligar libera.
+-- G. O aviso do teto do PLANO tem índice próprio: o da 0540 deixa de calá-lo.
 --
 -- Idempotente: `if not exists`, `drop policy if exists` + create, `create or
 -- replace`, `drop trigger if exists` + create, `drop column if exists`. Sem
@@ -723,3 +724,39 @@ $$;
 
 revoke execute on function public.fn_cobranca_liberar_suspensoes(uuid) from public, anon, authenticated;
 grant execute on function public.fn_cobranca_liberar_suspensoes(uuid) to service_role;
+
+-- ── G. o aviso do teto do plano não é calado pelo do orçamento ────────────────
+-- A 0540 pôs um índice único parcial em (organization_id, kind) para os dois
+-- kinds de orçamento. O teto do PLANO abre o MESMO kind `budget_exceeded`, com
+-- `ref_kind = 'plano'` (lib/agent-engine/edge/llm/orcamento.ts): com aquele
+-- índice, o aviso do plano e o do orçamento da org se excluíam — quem chegasse
+-- primeiro calava o outro (o insert do engine é `on conflict do nothing`), e a
+-- Central explicava a parada da IA pela causa errada, com o remédio errado.
+--
+-- Duas famílias, dois índices: o da 0540 passa a excluir `ref_kind = 'plano'`
+-- (o resto — `ai_budget` e o nulo das linhas antigas — é a família do
+-- orçamento, a mesma régua de SQL_ORCAMENTO), e o do plano é um por org. Nada
+-- a deduplicar antes: com o índice da 0540 no lugar, nenhum par de linhas
+-- abertas do mesmo kind existe, e as do plano só nascem depois desta migration.
+-- O `do` troca o índice só quando a definição ainda é a da 0540: reaplicar não
+-- derruba nada.
+do $$
+begin
+  if exists (
+    select 1 from pg_indexes
+     where schemaname = 'public'
+       and indexname = 'agent_inbox_budget_aberto_unico'
+       and indexdef not like '%plano%'
+  ) then
+    drop index public.agent_inbox_budget_aberto_unico;
+  end if;
+end $$;
+
+create unique index if not exists agent_inbox_budget_aberto_unico
+  on public.agent_inbox_items (organization_id, kind)
+  where status = 'open' and kind in ('budget_exceeded','budget_warning')
+    and ref_kind is distinct from 'plano';
+
+create unique index if not exists agent_inbox_budget_do_plano_aberto_unico
+  on public.agent_inbox_items (organization_id)
+  where status = 'open' and kind = 'budget_exceeded' and ref_kind = 'plano';

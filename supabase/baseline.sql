@@ -47557,10 +47557,14 @@ create unique index if not exists agent_inbox_other_por_titulo_aberto_unico
 -- Os dois kinds de orçamento deduplicam pelo par (organização, kind) — um
 -- relata que a IA parou, o outro que o gasto passou do aviso e ela segue.
 -- Cabeçalho da 0540 para o racional inteiro.
+-- (migration 0552) A partição separa o aviso do teto do PLANO (`ref_kind =
+-- 'plano'`) do aviso do orçamento da org: os dois podem estar abertos juntos, e
+-- este bloco roda em todo `update.sh`, ANTES do bloco da 0552 no fim do
+-- arquivo — sem a terceira chave, ele resolveria o do plano a cada atualização.
 with repetidas as (
   select id,
          row_number() over (
-           partition by organization_id, kind
+           partition by organization_id, kind, (ref_kind is not distinct from 'plano')
            order by created_at asc, id asc
          ) as ordem
     from public.agent_inbox_items
@@ -47610,3 +47614,28 @@ comment on column public.ai_router_members.pipeline_id is
   'Funil de DESTINO quando esta intenção casa (#2155). NULL = só roteia o agente, como antes.';
 comment on column public.ai_router_members.stage_id is
   'Etapa de destino dentro de pipeline_id (#2155). NULL = a primeira etapa aberta do funil.';
+
+-- ---- cobrança do revendedor: o aviso do teto do plano não é calado pelo do orçamento (migration 0552) ----
+-- Seção G da 0552, byte a byte. No FIM do arquivo, e não no bloco da cobrança
+-- antes da VARREDURA, porque tem de rodar DEPOIS do bloco da 0540, que cria o
+-- índice na forma antiga numa instalação nova. Sem função: nada a varrer.
+do $$
+begin
+  if exists (
+    select 1 from pg_indexes
+     where schemaname = 'public'
+       and indexname = 'agent_inbox_budget_aberto_unico'
+       and indexdef not like '%plano%'
+  ) then
+    drop index public.agent_inbox_budget_aberto_unico;
+  end if;
+end $$;
+
+create unique index if not exists agent_inbox_budget_aberto_unico
+  on public.agent_inbox_items (organization_id, kind)
+  where status = 'open' and kind in ('budget_exceeded','budget_warning')
+    and ref_kind is distinct from 'plano';
+
+create unique index if not exists agent_inbox_budget_do_plano_aberto_unico
+  on public.agent_inbox_items (organization_id)
+  where status = 'open' and kind = 'budget_exceeded' and ref_kind = 'plano';
