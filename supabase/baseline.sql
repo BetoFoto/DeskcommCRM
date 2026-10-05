@@ -10166,6 +10166,11 @@ alter table public.agent_inbox_items
     -- lista pelas razões de sempre (#159; a janela do `midia-nao-lida.test.ts`).
     'jev_pedido_de_humano',
     'jev_parar_de_receber',
+    -- (migration 0562) a cobrança do revendedor fala com a empresa: os avisos
+    -- da régua (teste acabando, venceu, suspende em breve, suspensa) nascem sem
+    -- referência, e o de 80% do teto de IA do plano nasce com ref_kind plano. Os
+    -- dois abrem Configurações › Plano e cobrança, só para quem administra.
+    'cobranca',
     'other'
   ));
 
