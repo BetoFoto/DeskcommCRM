@@ -3321,4 +3321,8 @@ agora só acontece depois do commit — o tenant de teste não tem canal conecta
 que sem envio configurado não sai: medido por unidade na rota. O aviso em CADA empresa em
 que o login tem acesso ativo (não só na do path) e o 404 para vínculo revogado — com o
 botão "Alterar e-mail" travado para quem tem o selo "Acesso revogado": medidos por
-unidade na rota (`…/members/[userId]/email/route.test.ts`).
+unidade na rota (`…/members/[userId]/email/route.test.ts`). A exclusão interrompida depois
+do commit (resposta perdida, processo reiniciado) e retomada pela segunda tentativa a
+partir da lápide, com o 500 que não diz "nada foi apagado": medida por unidade em
+`lib/tenants/exclusao.test.ts` e `…/delete/route.test.ts`, e o inventário da lápide em
+`tests/invariants/gestao-de-tenants.test.ts`.

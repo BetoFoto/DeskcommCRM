@@ -10788,6 +10788,10 @@ export type Database = {
           name: string
         }[]
       }
+      fn_logins_sem_vinculo: {
+        Args: { p_users: string[] }
+        Returns: string[]
+      }
       fn_excluir_organizacao: {
         Args: {
           p_actor: string

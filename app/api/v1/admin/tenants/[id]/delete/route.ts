@@ -14,6 +14,11 @@
  * integrações só depois do commit, o Storage, os logins que ficaram sem
  * organização — mora em
  * `lib/tenants/exclusao.ts`. Esta rota só autoriza e traduz.
+ *
+ * O 500 diz "nada foi apagado" só quando é verdade — erro antes do commit ou
+ * do próprio Postgres. Interrompida depois do commit (ou com a resposta da
+ * transação perdida) é outra frase: tente de novo, que a nova tentativa
+ * retoma a limpeza a partir da lápide.
  */
 import { type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
@@ -28,7 +33,7 @@ import {
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { excluirOrganizacao, ExclusaoRecusada } from "@/lib/tenants/exclusao";
+import { excluirOrganizacao, ExclusaoInterrompida, ExclusaoRecusada } from "@/lib/tenants/exclusao";
 
 const bodySchema = z.object({
   /** O slug da organização, digitado pelo admin — a confirmação de que sabe o que está apagando. */
@@ -91,6 +96,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } catch (err) {
     if (err instanceof ExclusaoRecusada) {
       return fail(err.codigo, err.message, STATUS_DA_RECUSA[err.codigo], { requestId });
+    }
+    if (err instanceof ExclusaoInterrompida) {
+      logger.error("[admin.tenants.delete] exclusão interrompida depois do commit", {
+        requestId,
+        organization_id: id,
+        erro: err.message,
+      });
+      return fail(
+        "internal_error",
+        "A exclusão pode já ter sido confirmada no banco, mas a limpeza (WhatsApp, arquivos, logins) não terminou. Tente de novo com o mesmo identificador: a nova tentativa retoma de onde parou.",
+        500,
+        { requestId },
+      );
     }
     logger.error("[admin.tenants.delete] exclusão falhou", {
       requestId,

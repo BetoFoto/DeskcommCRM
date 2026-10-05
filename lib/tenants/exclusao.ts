@@ -30,6 +30,18 @@
  *      isso é registrado — não é erro.
  *   6. O registro final (`organization.deletion_completed`).
  *
+ * INTERROMPIDA DEPOIS DO COMMIT. Os passos 3 a 6 moram na memória da
+ * requisição: se a resposta da rpc se perde (gateway, rede, restart) ou o
+ * processo morre no meio, nada do que estava em memória sobra. Por isso a
+ * lápide guarda os identificadores sem segredo do que fala com o mundo
+ * (sessões, números, voz, loja) e os membros, e uma nova tentativa sobre a
+ * organização já apagada — lápide `organization.deleted` sem
+ * `organization.deletion_completed` — RETOMA dos passos 3 a 6 a partir dela.
+ * O que precisava de credencial (o webhook do número oficial, os webhooks da
+ * loja) não se refaz: vai para o registro final como `falhou`, com o
+ * identificador na lápide. Esses casos chegam a quem chamou como
+ * `ExclusaoInterrompida`, nunca como "nada foi apagado".
+ *
  * Pré-condição dura, conferida aqui e de novo no banco: a organização está
  * SUSPENSA, a suspensão é ADMINISTRATIVA (a por cobrança é recusada — excluir
  * deixaria a assinatura cobrando no provedor) e a confirmação é o slug dela.
@@ -43,6 +55,9 @@ import { audit } from "@/lib/audit";
 import {
   desligarCanaisInventariados,
   inventariarCanaisDaOrganizacao,
+  inventarioDaLapide,
+  type CanalNaLapide,
+  type InventarioDeCanais,
 } from "@/lib/channels/desligar-da-organizacao";
 import { logger } from "@/lib/logger";
 import { NuvemshopApiClient } from "@/lib/nuvemshop/api-client";
@@ -76,6 +91,29 @@ export class ExclusaoRecusada extends Error {
     super(message);
     this.name = "ExclusaoRecusada";
   }
+}
+
+/**
+ * A exclusão passou do commit — ou pode ter passado, quando a resposta da rpc
+ * se perdeu — e a limpeza de fora não terminou. Repetir com o mesmo
+ * identificador retoma (ou exclui, se o banco não confirmou).
+ */
+export class ExclusaoInterrompida extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExclusaoInterrompida";
+  }
+}
+
+/** O que a lápide da migration 0556 guarda e a retomada lê. */
+interface LapideDaExclusao {
+  slug: string;
+  contagens?: Record<string, number>;
+  membros?: string[];
+  inventario_externo?: {
+    canais?: CanalNaLapide[];
+    nuvemshop_store_id?: string | null;
+  };
 }
 
 interface Entrada {
@@ -235,6 +273,11 @@ async function removerLogins(
   const mantidos: Array<{ id: string; motivo: string }> = [];
   for (const id of candidatos) {
     const { error } = await admin.auth.admin.deleteUser(id);
+    // Na retomada, o login pode já ter saído na tentativa interrompida.
+    if (error && (error as { status?: number }).status === 404) {
+      removidos.push(id);
+      continue;
+    }
     // O banco ainda referencia a pessoa (ex.: autora de um registro que não é
     // da organização excluída): o GoTrue recusa pela FK e o login fica. É o
     // desfecho correto — apagar forçado levaria dado alheio junto.
@@ -262,7 +305,7 @@ export async function excluirOrganizacao(
     .eq("id", entrada.orgId)
     .maybeSingle();
   if (orgErr) throw new Error(`exclusao_leitura: ${orgErr.message}`);
-  if (!org) throw new ExclusaoRecusada("not_found", "Organização não encontrada.");
+  if (!org) return retomar(admin, entrada);
   if (org.status !== "suspended") {
     throw new ExclusaoRecusada(
       "state_conflict",
@@ -286,13 +329,19 @@ export async function excluirOrganizacao(
   const loja = await inventariarNuvemshop(admin, entrada.orgId);
 
   // 2. O banco, numa transação.
-  const { data: resultado, error: rpcErr } = await admin.rpc("fn_excluir_organizacao", {
-    p_org: entrada.orgId,
-    p_actor: entrada.atorId,
-    p_confirmacao: entrada.confirmacao,
-    p_motivo: motivo,
-    p_request_id: entrada.requestId,
-  });
+  let rpc: { data: unknown; error: { code?: string; message: string } | null };
+  try {
+    rpc = await admin.rpc("fn_excluir_organizacao", {
+      p_org: entrada.orgId,
+      p_actor: entrada.atorId,
+      p_confirmacao: entrada.confirmacao,
+      p_motivo: motivo,
+      p_request_id: entrada.requestId,
+    });
+  } catch (err) {
+    throw new ExclusaoInterrompida(`exclusao_banco_sem_resposta: ${mensagemDe(err)}`);
+  }
+  const rpcErr = rpc.error;
   if (rpcErr) {
     // Recusas do próprio banco (corrida com uma reativação, ou com uma
     // suspensão que virou cobrança) viram a mesma recusa que a checagem de
@@ -303,57 +352,132 @@ export async function excluirOrganizacao(
       throw new ExclusaoRecusada("state_conflict", "A organização não está mais suspensa.");
     if (rpcErr.code === "PT404")
       throw new ExclusaoRecusada("not_found", "Organização não encontrada.");
+    // Sem código, o erro não veio do Postgres: a resposta não chegou (rede,
+    // gateway, restart) e o commit PODE ter acontecido.
+    if (!rpcErr.code) throw new ExclusaoInterrompida(`exclusao_banco_sem_resposta: ${rpcErr.message}`);
     throw new Error(`exclusao_banco: ${rpcErr.message}`);
   }
-  const banco = resultado as {
+  const banco = rpc.data as {
     slug: string;
     contagens: Record<string, number>;
     usuarios_removiveis: string[];
   };
 
-  // 3. Depois do commit, o que fala com o mundo — só com o inventário.
-  const canais = await desligarCanaisInventariados(inventario);
-  const voz = await desligarVoz(entrada.orgId, inventario.sessaoDeVoz);
-  const nuvemshop = await desligarNuvemshop(entrada.orgId, loja);
-
-  // 4 e 5. Repetíveis e registrados.
-  const arquivos = await limparArquivos(admin, entrada.orgId);
-  const usuarios = await removerLogins(admin, banco.usuarios_removiveis ?? []);
-
-  const saida: ResultadoDaExclusao = {
-    organizacao: entrada.orgId,
+  return concluirDepoisDoCommit(admin, entrada, {
     slug: banco.slug,
     contagens: banco.contagens ?? {},
-    canais,
-    voz,
-    nuvemshop,
-    arquivos,
-    usuarios,
-  };
-
-  // 6. O registro final. `organizationId` nulo: a organização não existe mais.
-  // Ele e a lápide são achados por `resource_id`; as linhas antigas da org,
-  // que perderam a atribuição no SET NULL, só são DELIMITADAS pela lápide
-  // (membros, contagem e intervalo) — ver o cabeçalho da migration 0556.
-  await audit({
-    action: "organization.deletion_completed",
-    actorUserId: entrada.atorId,
-    actingAsPlatformAdmin: true,
-    bypassedRls: true,
-    organizationId: null,
-    resourceType: "organization",
-    resourceId: entrada.orgId,
-    requestId: entrada.requestId,
-    metadata: {
-      slug: saida.slug,
-      canais: saida.canais,
-      voz: saida.voz,
-      nuvemshop: saida.nuvemshop,
-      arquivos: saida.arquivos,
-      usuarios_removidos: saida.usuarios.removidos.length,
-      usuarios_mantidos: saida.usuarios.mantidos.length,
-    },
+    inventario,
+    loja,
+    removiveis: banco.usuarios_removiveis ?? [],
+    retomada: false,
   });
+}
 
-  return saida;
+/**
+ * A organização já não existe. Se a lápide existe e o registro final não, a
+ * tentativa anterior morreu depois do commit: refaz os passos 3 a 6 a partir
+ * da lápide. Senão, a organização não existe (ou já foi excluída por inteiro).
+ */
+async function retomar(admin: SupabaseClient, entrada: Entrada): Promise<ResultadoDaExclusao> {
+  const { data, error } = await admin
+    .from("api_audit_log")
+    .select("action, metadata")
+    .eq("resource_type", "organization")
+    .eq("resource_id", entrada.orgId)
+    .in("action", ["organization.deleted", "organization.deletion_completed"]);
+  if (error) throw new ExclusaoInterrompida(`exclusao_retomada_leitura: ${error.message}`);
+  const linhas = (data ?? []) as Array<{ action: string; metadata: LapideDaExclusao }>;
+  const lapide = linhas.find((l) => l.action === "organization.deleted")?.metadata;
+  if (!lapide || linhas.some((l) => l.action === "organization.deletion_completed")) {
+    throw new ExclusaoRecusada("not_found", "Organização não encontrada.");
+  }
+  if (entrada.confirmacao !== lapide.slug) {
+    throw new ExclusaoRecusada(
+      "confirmacao_divergente",
+      "A confirmação não confere com o identificador da organização.",
+    );
+  }
+
+  // A mesma régua da exclusão, AGORA: quem ganhou outro vínculo desde a
+  // tentativa interrompida não é mais removível.
+  const { data: removiveis, error: logErr } = await admin.rpc("fn_logins_sem_vinculo", {
+    p_users: lapide.membros ?? [],
+  });
+  if (logErr) throw new ExclusaoInterrompida(`exclusao_retomada_logins: ${logErr.message}`);
+
+  const storeId = lapide.inventario_externo?.nuvemshop_store_id;
+  return concluirDepoisDoCommit(admin, entrada, {
+    slug: lapide.slug,
+    contagens: lapide.contagens ?? {},
+    inventario: inventarioDaLapide(lapide.inventario_externo?.canais ?? []),
+    // O token da loja só existia na memória da tentativa que morreu.
+    loja: storeId ? { storeId, accessToken: null, webhookIds: [] } : null,
+    removiveis: (removiveis ?? []) as string[],
+    retomada: true,
+  });
+}
+
+/** Passos 3 a 6. Qualquer throw aqui é depois do commit: a exclusão está interrompida, não desfeita. */
+async function concluirDepoisDoCommit(
+  admin: SupabaseClient,
+  entrada: Entrada,
+  depois: {
+    slug: string;
+    contagens: Record<string, number>;
+    inventario: InventarioDeCanais;
+    loja: LojaInventariada | null;
+    removiveis: string[];
+    retomada: boolean;
+  },
+): Promise<ResultadoDaExclusao> {
+  try {
+    // 3. Depois do commit, o que fala com o mundo — só com o inventário.
+    const canais = await desligarCanaisInventariados(depois.inventario);
+    const voz = await desligarVoz(entrada.orgId, depois.inventario.sessaoDeVoz);
+    const nuvemshop = await desligarNuvemshop(entrada.orgId, depois.loja);
+
+    // 4 e 5. Registrados.
+    const arquivos = await limparArquivos(admin, entrada.orgId);
+    const usuarios = await removerLogins(admin, depois.removiveis);
+
+    const saida: ResultadoDaExclusao = {
+      organizacao: entrada.orgId,
+      slug: depois.slug,
+      contagens: depois.contagens,
+      canais,
+      voz,
+      nuvemshop,
+      arquivos,
+      usuarios,
+    };
+
+    // 6. O registro final. `organizationId` nulo: a organização não existe mais.
+    // Ele e a lápide são achados por `resource_id`; as linhas antigas da org,
+    // que perderam a atribuição no SET NULL, só são DELIMITADAS pela lápide
+    // (membros, contagem e intervalo) — ver o cabeçalho da migration 0556.
+    await audit({
+      action: "organization.deletion_completed",
+      actorUserId: entrada.atorId,
+      actingAsPlatformAdmin: true,
+      bypassedRls: true,
+      organizationId: null,
+      resourceType: "organization",
+      resourceId: entrada.orgId,
+      requestId: entrada.requestId,
+      metadata: {
+        slug: saida.slug,
+        retomada: depois.retomada,
+        canais: saida.canais,
+        voz: saida.voz,
+        nuvemshop: saida.nuvemshop,
+        arquivos: saida.arquivos,
+        usuarios_removidos: saida.usuarios.removidos.length,
+        usuarios_mantidos: saida.usuarios.mantidos.length,
+      },
+    });
+
+    return saida;
+  } catch (err) {
+    throw new ExclusaoInterrompida(`exclusao_depois_do_commit: ${mensagemDe(err)}`);
+  }
 }

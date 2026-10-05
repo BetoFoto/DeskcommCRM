@@ -45078,9 +45078,39 @@ notify pgrst, 'reload schema';
 -- administrativa volta com `administrativa_prevalece` e não emite evento —
 -- esse caso só a assinatura viva responde, e é a recusa do PR 2 da cobrança.
 --
+-- O que fala com o mundo (sessões de WhatsApp, número oficial, voz, loja) é
+-- desligado pelo app DEPOIS do commit, com um inventário em memória. Se essa
+-- tentativa morre (resposta perdida, processo reiniciado), a memória some: a
+-- lápide guarda os identificadores SEM SEGREDO (`inventario_externo`) e os
+-- membros, e a rota retoma a limpeza a partir dela quando há lápide sem
+-- `organization.deletion_completed` (`lib/tenants/exclusao.ts`). Os logins
+-- removíveis são recalculados na hora por `fn_logins_sem_vinculo` — a mesma
+-- régua desta função, porque alguém pode ter ganho vínculo no intervalo.
+--
 -- Roda SÓ como servidor (service_role, `auth.uid()` nulo): o gatilho
 -- `fn_followup_generation_write` recusa DELETE em `job_queue` vindo de sessão
 -- de usuário, e a exclusão não é ato de membro nenhum.
+
+-- Dos logins dados, os que não têm vínculo nenhum (nem revogado — o CASCADE
+-- de `auth.users` apagaria o histórico de lá), não são admin da plataforma e
+-- não conduziram acompanhamento de suporte. Usada pela exclusão e pela
+-- retomada dela.
+create or replace function public.fn_logins_sem_vinculo(p_users uuid[])
+returns uuid[]
+language sql
+stable
+security definer
+set search_path = public
+as $f$
+  select coalesce(array_agg(u), '{}')
+    from unnest(p_users) as u
+   where not exists (select 1 from public.user_organizations where user_id = u)
+     and not exists (select 1 from public.platform_admins where user_id = u)
+     and not exists (select 1 from public.platform_support_sessions where actor_user_id = u);
+$f$;
+
+revoke execute on function public.fn_logins_sem_vinculo(uuid[]) from public, anon, authenticated;
+grant execute on function public.fn_logins_sem_vinculo(uuid[]) to service_role;
 
 create or replace function public.fn_excluir_organizacao(
   p_org uuid,
@@ -45102,6 +45132,7 @@ declare
   v_lgpd jsonb;
   v_suporte jsonb;
   v_auditoria jsonb;
+  v_inventario jsonb;
   v_tabela regclass;
   v_sobra bigint;
 begin
@@ -45164,6 +45195,21 @@ begin
     into v_suporte
     from public.platform_support_sessions where organization_id = p_org;
 
+  -- O que o app vai desligar lá fora, sem credencial: é a memória da retomada.
+  select jsonb_build_object(
+           'canais', coalesce((
+             select jsonb_agg(jsonb_build_object(
+                      'id', id, 'provider', provider,
+                      'waha_session_name', waha_session_name,
+                      'meta_phone_number_id', meta_phone_number_id,
+                      'wacalls_session_id', wacalls_session_id,
+                      'archived_at', archived_at) order by id)
+               from public.channel_sessions where organization_id = p_org), '[]'::jsonb),
+           'nuvemshop_store_id', (
+             select store_metadata->>'store_id' from public.tenant_integrations
+              where organization_id = p_org and provider = 'nuvemshop' limit 1))
+    into v_inventario;
+
   -- A trilha que vai perder a org no SET NULL: quantas linhas e de quando.
   select jsonb_build_object('linhas', count(*), 'primeira_em', min(created_at),
                             'ultima_em', max(created_at))
@@ -45185,7 +45231,8 @@ begin
        'suspended_kind', coalesce(v_org.suspended_kind, 'administrativa'),
        'contagens', v_contagens, 'lgpd_requests', v_lgpd,
        'acompanhamentos_de_suporte', v_suporte,
-       'membros', to_jsonb(v_membros), 'auditoria', v_auditoria));
+       'membros', to_jsonb(v_membros), 'auditoria', v_auditoria,
+       'inventario_externo', v_inventario));
 
   -- R1: tira o caminho agente → lead → event_log da cascata.
   delete from public.crm_leads where organization_id = p_org;
@@ -45214,14 +45261,8 @@ begin
     end if;
   end loop;
 
-  -- Logins que pertenciam SÓ a esta organização. Quem tem vínculo com outra
-  -- (inclusive revogado — o CASCADE de `auth.users` apagaria o histórico de lá),
-  -- é admin da plataforma ou conduziu acompanhamento em outra org fica.
-  select coalesce(array_agg(u), '{}') into v_removiveis
-    from unnest(v_membros) as u
-   where not exists (select 1 from public.user_organizations where user_id = u)
-     and not exists (select 1 from public.platform_admins where user_id = u)
-     and not exists (select 1 from public.platform_support_sessions where actor_user_id = u);
+  -- Logins que pertenciam SÓ a esta organização (régua em fn_logins_sem_vinculo).
+  v_removiveis := public.fn_logins_sem_vinculo(v_membros);
 
   return jsonb_build_object(
     'organizacao', p_org,

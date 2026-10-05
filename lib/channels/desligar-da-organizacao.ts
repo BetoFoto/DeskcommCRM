@@ -22,6 +22,14 @@
  * preço declarado: um desligamento que falha depois do commit deixa a sessão
  * órfã no provedor, com o desfecho `falhou` no registro final.
  *
+ * Se a tentativa MORRE depois do commit (resposta perdida, processo
+ * reiniciado), o inventário em memória some junto. A lápide da exclusão
+ * guarda os identificadores sem segredo de cada canal (migration 0556), e
+ * `inventarioDaLapide` os devolve para a nova tentativa: a sessão por QR e a
+ * voz voltam a ser desligáveis; o número oficial não — o token só existia na
+ * memória da tentativa que morreu —, e vai para o registro como `falhou`, com
+ * o `phone_number_id` na lápide para quem for desfazer à mão.
+ *
  * Best-effort, canal por canal: um transporte fora do ar não segura a exclusão
  * que o admin pediu, e o desfecho de cada canal volta para o registro final.
  */
@@ -41,14 +49,25 @@ export interface CanalDesligado {
   motivo?: string;
 }
 
-interface LinhaDoCanal {
+/** O que a lápide guarda de cada canal — sem credencial nenhuma. */
+export interface CanalNaLapide {
   id: string;
   provider: string;
   waha_session_name: string | null;
   meta_phone_number_id: string | null;
-  meta_token_encrypted: string | null;
   wacalls_session_id: string | null;
   archived_at: string | null;
+}
+
+interface LinhaDoCanal extends CanalNaLapide {
+  meta_token_encrypted: string | null;
+}
+
+/** A sessão de voz (WaCalls) é a da linha `provider='wacalls'` não arquivada. */
+function sessaoDeVozDa(linha: CanalNaLapide): string | null {
+  return linha.provider === "wacalls" && !linha.archived_at && linha.wacalls_session_id
+    ? linha.wacalls_session_id
+    : null;
 }
 
 /** O que o desligamento precisa saber de um canal, lido antes da transação. */
@@ -86,9 +105,7 @@ export async function inventariarCanaisDaOrganizacao(
   const canais: CanalInventariado[] = [];
   let sessaoDeVoz: string | null = null;
   for (const linha of (data ?? []) as LinhaDoCanal[]) {
-    if (linha.provider === "wacalls" && !linha.archived_at && linha.wacalls_session_id) {
-      sessaoDeVoz = linha.wacalls_session_id;
-    }
+    sessaoDeVoz = sessaoDeVozDa(linha) ?? sessaoDeVoz;
     let meta: CanalInventariado["meta"] = null;
     if (linha.provider !== CHANNEL_PROVIDER_WAHA && linha.meta_token_encrypted && linha.meta_phone_number_id) {
       try {
@@ -102,6 +119,24 @@ export async function inventariarCanaisDaOrganizacao(
     }
     canais.push({ id: linha.id, provider: linha.provider, wahaSessionName: linha.waha_session_name, meta });
   }
+  return { canais, sessaoDeVoz };
+}
+
+/** Metade 1 da RETOMADA — o inventário a partir da lápide, sem banco nem credencial. */
+export function inventarioDaLapide(linhas: CanalNaLapide[]): InventarioDeCanais {
+  let sessaoDeVoz: string | null = null;
+  const canais = linhas.map((linha): CanalInventariado => {
+    sessaoDeVoz = sessaoDeVozDa(linha) ?? sessaoDeVoz;
+    return {
+      id: linha.id,
+      provider: linha.provider,
+      wahaSessionName: linha.waha_session_name,
+      meta:
+        linha.provider !== CHANNEL_PROVIDER_WAHA && linha.meta_phone_number_id
+          ? { phoneNumberId: linha.meta_phone_number_id, token: null, motivo: "credencial_perdida_na_interrupcao" }
+          : null,
+    };
+  });
   return { canais, sessaoDeVoz };
 }
 

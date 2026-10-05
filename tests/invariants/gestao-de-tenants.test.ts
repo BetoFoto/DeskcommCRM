@@ -278,6 +278,30 @@ describe("fn_excluir_organizacao", () => {
     expect(Number(trilha.rows[0]!.n)).toBe(2);
   });
 
+  // Retomada (exclusão interrompida depois do commit): a lápide é a única
+  // memória do que ficou ligado lá fora, e a régua dos logins é recalculada.
+  it("a lápide guarda o inventário externo sem segredo, e fn_logins_sem_vinculo refaz a régua dos logins", async () => {
+    const { rows } = await pool.query<{ metadata: Record<string, unknown> }>(
+      `select metadata from api_audit_log where action = 'organization.deleted' and resource_id = $1`,
+      [ORG_X],
+    );
+    const inv = rows[0]!.metadata.inventario_externo as {
+      canais: Array<Record<string, unknown>>;
+      nuvemshop_store_id: string | null;
+    };
+    expect(inv.canais).toHaveLength(1);
+    expect(inv.canais[0]).toMatchObject({ id: SESS_X, waha_session_name: "gestao-tenants-x" });
+    expect(JSON.stringify(inv)).not.toMatch(/token|secret|encrypted/i);
+    expect(inv.nuvemshop_store_id).toBeNull();
+
+    const membros = rows[0]!.metadata.membros as string[];
+    const r = await pool.query<{ u: string[] }>("select public.fn_logins_sem_vinculo($1::uuid[]) as u", [membros]);
+    expect(r.rows[0]!.u).toEqual([USER_SO_X]);
+    await expect(
+      comoUsuario(USER_A, "select public.fn_logins_sem_vinculo($1::uuid[])", [membros]),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
   it("organização inexistente é recusada com PT404", async () => {
     await expect(
       pool.query("select public.fn_excluir_organizacao($1, $2, $3, $4)", [
@@ -313,15 +337,15 @@ describe("fn_arquivos_da_organizacao", () => {
     await pool.query(`insert into storage.objects (bucket_id, name) values ('gt-a', $1 || '/alheio')`, [ORG_B]);
     try {
       const vistos: string[] = [];
-      let apos: { bucket_id: string; name: string } | null = null;
+      const cursor: { apos: { bucket_id: string; name: string } | null } = { apos: null };
       for (let voltas = 0; voltas < 20; voltas++) {
         const { rows }: { rows: Array<{ bucket_id: string; name: string }> } = await pool.query(
           "select * from public.fn_arquivos_da_organizacao($1, $2, $3, 300)",
-          [ORG_A, apos?.bucket_id ?? null, apos?.name ?? null],
+          [ORG_A, cursor.apos?.bucket_id ?? null, cursor.apos?.name ?? null],
         );
         vistos.push(...rows.map((r) => `${r.bucket_id}:${r.name}`));
         if (rows.length < 300) break;
-        apos = rows[rows.length - 1]!;
+        cursor.apos = rows[rows.length - 1]!;
       }
       expect(vistos).toHaveLength(1005);
       expect(new Set(vistos).size).toBe(1005);

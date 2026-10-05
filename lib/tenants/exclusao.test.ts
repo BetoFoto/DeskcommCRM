@@ -21,6 +21,11 @@ vi.mock("@/lib/audit", () => ({
   }),
 }));
 vi.mock("@/lib/channels/desligar-da-organizacao", () => ({
+  // O mapeamento lápide → inventário mora (e é testado) na fronteira de canais.
+  inventarioDaLapide: vi.fn((linhas: Array<{ id: string }>) => ({
+    canais: linhas.map((l) => ({ id: l.id, provider: "p", wahaSessionName: `sessao-${l.id}`, meta: null })),
+    sessaoDeVoz: "voz-da-lapide",
+  })),
   inventariarCanaisDaOrganizacao: vi.fn(async () => {
     passos.push("canais.inventario");
     return {
@@ -50,8 +55,9 @@ vi.mock("@/lib/webhooks/secrets", () => ({ decryptWebhookSecret: vi.fn(async () 
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
 import { audit } from "@/lib/audit";
+import { desligarCanaisInventariados, inventarioDaLapide } from "@/lib/channels/desligar-da-organizacao";
 
-import { excluirOrganizacao, ExclusaoRecusada } from "./exclusao";
+import { excluirOrganizacao, ExclusaoInterrompida, ExclusaoRecusada } from "./exclusao";
 
 const ORG = "7e0a0000-0000-4000-8000-0000000000ee";
 const ATOR = "7e0a1111-0000-4000-8000-0000000000ff";
@@ -63,6 +69,9 @@ interface Cenario {
   arquivos?: Array<{ bucket_id: string; name: string }>;
   removiveis?: string[];
   deleteUserFalhaPara?: string[];
+  /** Linhas de `api_audit_log` da org (a lápide e o registro final), para a retomada. */
+  auditoria?: Array<{ action: string; metadata: Record<string, unknown> }>;
+  semVinculo?: string[];
 }
 
 function adminFalso(c: Cenario) {
@@ -88,6 +97,16 @@ function adminFalso(c: Cenario) {
               },
         );
       }
+      if (tabela === "api_audit_log") {
+        passos.push("lapide.leitura");
+        const b: Record<string, unknown> = {};
+        b.select = () => b;
+        b.eq = () => b;
+        b.in = () => b;
+        b.then = (r: (v: unknown) => unknown) =>
+          Promise.resolve({ data: c.auditoria ?? [], error: null }).then(r);
+        return b;
+      }
       if (tabela === "tenant_integrations") {
         passos.push("nuvemshop.inventario");
         return leituraSimples({
@@ -111,6 +130,7 @@ function adminFalso(c: Cenario) {
           error: null,
         };
       }
+      if (fn === "fn_logins_sem_vinculo") return { data: c.semVinculo ?? [], error: null };
       if (fn === "fn_arquivos_da_organizacao") {
         // Como o PostgREST: o conjunto vem ordenado por (bucket, nome), a partir
         // do cursor, e cortado em `max_rows` (1000, supabase/config.toml) sem
@@ -301,6 +321,16 @@ describe("o banco recusou — nada lá fora caiu", () => {
     expect(tocouTransporte()).toBe(false);
   });
 
+  it("a resposta da rpc se perdeu (sem código): ExclusaoInterrompida — o commit pode ter acontecido, 'nada foi apagado' seria falso", async () => {
+    const admin = adminFalso({
+      status: "suspended",
+      rpcErro: { code: "", message: "TypeError: fetch failed" },
+    });
+    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toBeInstanceOf(
+      ExclusaoInterrompida,
+    );
+  });
+
   it("erro qualquer da transação: lança, e o WhatsApp, a voz e a loja seguem ligados", async () => {
     const admin = adminFalso({
       status: "suspended",
@@ -308,5 +338,69 @@ describe("o banco recusou — nada lá fora caiu", () => {
     });
     await expect(excluirOrganizacao(admin as never, entrada)).rejects.toThrow(/exclusao_banco/);
     expect(tocouTransporte()).toBe(false);
+  });
+});
+
+describe("interrompida depois do commit — a nova tentativa retoma", () => {
+  const LAPIDE = {
+    action: "organization.deleted",
+    metadata: {
+      slug: "acme",
+      contagens: { membros: 2 },
+      membros: ["u1", "u2"],
+      inventario_externo: {
+        canais: [{ id: "c-1" }, { id: "c-2" }],
+        nuvemshop_store_id: "9",
+      },
+    },
+  };
+
+  it("um throw depois do commit vira ExclusaoInterrompida, não o 'nada foi apagado'", async () => {
+    vi.mocked(desligarCanaisInventariados).mockRejectedValueOnce(new Error("processo caiu"));
+    const admin = adminFalso({ status: "suspended" });
+    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toBeInstanceOf(
+      ExclusaoInterrompida,
+    );
+  });
+
+  it("org já apagada, lápide sem registro final: refaz transporte possível, Storage e logins a partir da lápide", async () => {
+    const admin = adminFalso({
+      auditoria: [LAPIDE],
+      semVinculo: ["u1"],
+      arquivos: [{ bucket_id: "whatsapp-media", name: `${ORG}/x.jpg` }],
+    });
+    const r = await excluirOrganizacao(admin as never, entrada);
+
+    // Os canais da lápide viram o inventário, e é ESSE que vai ao transporte.
+    expect(inventarioDaLapide).toHaveBeenCalledWith([{ id: "c-1" }, { id: "c-2" }]);
+    const inventario = vi.mocked(desligarCanaisInventariados).mock.calls[0]![0];
+    expect(inventario.canais.map((c) => c.wahaSessionName)).toEqual(["sessao-c-1", "sessao-c-2"]);
+    expect(passos).toContain("voz.desligar:voz-da-lapide");
+    // O token da loja só existia em memória: a loja vai para o registro como falha.
+    expect(r.nuvemshop).toBe("falhou");
+    expect(r.arquivos).toEqual({ encontrados: 1, removidos: 1, falhas: 0 });
+    expect(admin.rpc).toHaveBeenCalledWith("fn_logins_sem_vinculo", { p_users: ["u1", "u2"] });
+    expect(r.usuarios.removidos).toEqual(["u1"]);
+    expect(admin.rpc).not.toHaveBeenCalledWith("fn_excluir_organizacao", expect.anything());
+    const final = vi.mocked(audit).mock.calls.at(-1)![0] as { action: string; metadata: Record<string, unknown> };
+    expect(final.action).toBe("organization.deletion_completed");
+    expect(final.metadata.retomada).toBe(true);
+  });
+
+  it("registro final já existe: not_found, nada é refeito", async () => {
+    const admin = adminFalso({
+      auditoria: [LAPIDE, { action: "organization.deletion_completed", metadata: {} }],
+    });
+    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toMatchObject({ codigo: "not_found" });
+    expect(desligarCanaisInventariados).not.toHaveBeenCalled();
+    expect(admin.rpc).not.toHaveBeenCalled();
+  });
+
+  it("retomada com identificador que não é o da lápide: confirmacao_divergente, nada é refeito", async () => {
+    const admin = adminFalso({ auditoria: [LAPIDE] });
+    await expect(
+      excluirOrganizacao(admin as never, { ...entrada, confirmacao: "outra" }),
+    ).rejects.toMatchObject({ codigo: "confirmacao_divergente" });
+    expect(desligarCanaisInventariados).not.toHaveBeenCalled();
   });
 });

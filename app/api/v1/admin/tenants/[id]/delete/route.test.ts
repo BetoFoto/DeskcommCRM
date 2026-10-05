@@ -40,7 +40,7 @@ vi.mock("@/lib/tenants/exclusao", async (importOriginal) => ({
   excluirOrganizacao: h.excluir,
 }));
 
-import { ExclusaoRecusada } from "@/lib/tenants/exclusao";
+import { ExclusaoInterrompida, ExclusaoRecusada } from "@/lib/tenants/exclusao";
 
 import { POST } from "./route";
 
@@ -72,6 +72,22 @@ describe("POST /admin/tenants/[id]/delete", () => {
     const res = await POST(pedido(), ctx);
     expect(res.status).toBe(409);
     expect((await res.json()).error.code).toBe("exclusao_com_cobranca_pendente");
+  });
+
+  it("interrompida depois do commit: 500 que NÃO diz 'nada foi apagado' e manda tentar de novo", async () => {
+    h.excluir.mockRejectedValue(new ExclusaoInterrompida("exclusao_banco_sem_resposta: fetch failed"));
+    const res = await POST(pedido(), ctx);
+    expect(res.status).toBe(500);
+    const msg = (await res.json()).error.message as string;
+    expect(msg).not.toMatch(/nada foi apagado/i);
+    expect(msg).toMatch(/tente de novo/i);
+  });
+
+  it("erro antes do commit: 500 que diz que nada foi apagado", async () => {
+    h.excluir.mockRejectedValue(new Error("exclusao_banco: organizacao_exclusao_incompleta"));
+    const res = await POST(pedido(), ctx);
+    expect(res.status).toBe(500);
+    expect((await res.json()).error.message).toMatch(/nada foi apagado/i);
   });
 
   it("acesso de suporte (support_readonly): 403 forbidden_scope, a exclusão nem começa", async () => {
