@@ -153,7 +153,7 @@ test("[P0] primeira cobrança: conectar, assinar, atrasar, suspender e voltar so
     const conversa = await inserir("conversations", { organization_id: orgB, contact_id: contato, channel_session_id: canal, status: "open" });
 
     await pB.goto("/app");
-    const faixa = pB.getByRole("status").filter({ hasText: /Seu teste grátis termina em [67] dia\(s\)\./ });
+    const faixa = pB.getByRole("status").filter({ hasText: /Seu teste grátis termina em [67] dias\./ });
     await expect(faixa).toBeVisible();
     await faixa.getByRole("link", { name: "Ver o plano" }).click();
     await pB.waitForURL("**/app/settings/billing");
