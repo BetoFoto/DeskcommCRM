@@ -196,6 +196,26 @@ describe("conexão da cobrança", () => {
     expect(res.status).toBe(500);
     expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "cobranca.provedor_conectado" }));
     expect(h.donos).toHaveBeenCalledOnce();
+    // A org-1 foi convertida antes de a régua cair: o 500 também deixa rastro, com quantas mudaram.
+    expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "cobranca.modo_publicado",
+      metadata: { provedor: "stripe", convertidas: 1, resultado: "publicacao_incompleta" },
+    }));
+  });
+
+  it("⭐ publicação (teste → produção) com gravação que falha no meio: a chave de TESTE volta e o aviso do modo de teste NÃO é apagado", async () => {
+    const chaveDeTeste = ["sk", "test", "51HchaveVelhaDeTeste00"].join("_");
+    h.ad.testarChave.mockResolvedValue({ ok: true, modo: "producao" });
+    h.chaveAntiga = chaveDeTeste;
+    h.segredoAntigo = ["whsec", "doTeste"].join("_");
+    h.modoAnterior = "teste";
+    h.gravar.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false, motivo: "banco" }).mockResolvedValue({ ok: true });
+    expect((await conectar()).status).toBe(500);
+    expect(h.gravar).toHaveBeenLastCalledWith("STRIPE_SECRET_KEY", chaveDeTeste, expect.objectContaining({ ehSegredo: true }));
+    expect(h.ad.removerWebhooks).not.toHaveBeenCalled();
+    expect(h.confirmar).not.toHaveBeenCalled();
+    expect(h.desfazer).toHaveBeenCalledOnce();
+    expect(h.audit).not.toHaveBeenCalled();
   });
 
   it("⭐ trocar de provedor com assinatura de produção: 409 e nada gravado nem testado", async () => {

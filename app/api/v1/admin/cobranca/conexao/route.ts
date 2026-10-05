@@ -251,16 +251,19 @@ export async function POST(req: NextRequest) {
   void audit({ ...quem, action: "cobranca.provedor_conectado", metadata: { provedor, modo: teste.modo, last4_antigo: last4Antigo, last4_novo: chave.slice(-4) } });
   await avisarTrocaDeChave(admin, { antigo: last4Antigo, novo: chave.slice(-4) });
 
-  let publicadas = 0;
+  const publicacao = { convertidas: 0 };
   if (teste.modo === "producao" && deTeste > 0) {
     try {
-      publicadas = await publicar(admin, provedor);
+      await publicar(admin, provedor, publicacao);
     } catch (e) {
       logger.error("cobranca.publicacao_incompleta", { erro: e instanceof Error ? e.message : "desconhecido" });
+      // As já convertidas mudaram de verdade: o 500 também fica auditado, com quantas foram.
+      void audit({ ...quem, action: "cobranca.modo_publicado", metadata: { provedor, convertidas: publicacao.convertidas, resultado: "publicacao_incompleta" } });
       return fail("internal_error", "A chave foi conectada, mas nem todas as empresas de teste voltaram ao teste grátis. Conecte de novo para terminar.", 500, { requestId });
     }
   }
 
+  const publicadas = publicacao.convertidas;
   if (publicadas > 0) void audit({ ...quem, action: "cobranca.modo_publicado", metadata: { provedor, convertidas: publicadas } });
   return ok({ modo: teste.modo, webhook: "automatico", publicadas }, { requestId });
 }
@@ -301,8 +304,11 @@ async function contarAssinaturasComProvedor(
   return { contagem, umCliente };
 }
 
-/** D-7: quem assinou em teste volta ao teste grátis com os dias do plano; a régua reativa quem estava suspensa. */
-async function publicar(admin: SupabaseClient, provedor: ProvedorDeCobranca): Promise<number> {
+/**
+ * D-7: quem assinou em teste volta ao teste grátis com os dias do plano; a régua reativa quem estava suspensa.
+ * Conta em `feito` a cada conversão, para que uma falha no meio ainda diga quantas mudaram.
+ */
+async function publicar(admin: SupabaseClient, provedor: ProvedorDeCobranca, feito: { convertidas: number }): Promise<void> {
   const { data, error } = await admin
     .from("cobranca_assinaturas")
     .select("organization_id, plano_id")
@@ -310,14 +316,13 @@ async function publicar(admin: SupabaseClient, provedor: ProvedorDeCobranca): Pr
     .eq("modo", "teste");
   if (error) throw new Error(`assinaturas de teste ilegíveis (${error.code ?? "sem_codigo"})`);
   const linhas = (data ?? []) as Array<{ organization_id: string; plano_id: string }>;
-  if (linhas.length === 0) return 0;
+  if (linhas.length === 0) return;
   const { data: planos, error: erroDosPlanos } = await admin
     .from("cobranca_planos")
     .select("id, trial_dias")
     .in("id", [...new Set(linhas.map((l) => l.plano_id))]);
   if (erroDosPlanos) throw new Error(`planos ilegíveis (${erroDosPlanos.code ?? "sem_codigo"})`);
   const dias = new Map(((planos ?? []) as Array<{ id: string; trial_dias: number }>).map((p) => [p.id, p.trial_dias]));
-  let convertidas = 0;
   for (const l of linhas) {
     const agora = new Date();
     const { data: feita, error: erroDaConversao } = await admin
@@ -337,8 +342,7 @@ async function publicar(admin: SupabaseClient, provedor: ProvedorDeCobranca): Pr
       .maybeSingle();
     if (erroDaConversao) throw new Error(`conversão falhou (${erroDaConversao.code ?? "sem_codigo"})`);
     if (!feita) continue;
-    convertidas += 1;
+    feito.convertidas += 1;
     await aplicarRegua(admin, l.organization_id);
   }
-  return convertidas;
 }
