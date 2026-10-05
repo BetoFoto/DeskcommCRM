@@ -14605,6 +14605,13 @@ export const DICIONARIO: Traducoes = {
   "Ainda não identificamos o pagamento. Se pagou por boleto, a compensação leva até 1 dia útil.": { es: "Aún no identificamos el pago. Si pagaste con boleto, la compensación tarda hasta 1 día hábil." },
   "Não há cobrança aberta para pagar agora. Atualize o cartão em Gerenciar pagamento: a próxima tentativa sai sozinha.": { es: "No hay cobro abierto para pagar ahora. Actualiza la tarjeta en Gestionar pago: el próximo intento sale solo." },
   "Confirmando seu pagamento…": { es: "Confirmando tu pago…" },
+  // ─── Cobrança do revendedor — faixa (PR 3a) ───
+  "Não identificamos o pagamento de {data}.": { es: "No identificamos el pago del {data}." },
+  "Há um pagamento em aberto.": { es: "Hay un pago pendiente." },
+  "Sua assinatura termina em {data}.": { es: "Tu suscripción termina el {data}." },
+  "Sua assinatura foi cancelada.": { es: "Tu suscripción fue cancelada." },
+  "Seu teste grátis acabou em {data}. Assine para continuar usando.": { es: "Tu prueba gratis terminó el {data}. Suscríbete para seguir usando." },
+  "Há um pagamento pendente desta empresa. Avise quem administra para evitar a suspensão.": { es: "Hay un pago pendiente de esta empresa. Avisa a quien administra para evitar la suspensión." },
 };
 
 /**
