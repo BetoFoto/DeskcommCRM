@@ -14614,6 +14614,8 @@ export const DICIONARIO: Traducoes = {
   "Há um pagamento pendente desta empresa. Avise quem administra para evitar a suspensão.": { es: "Hay un pago pendiente de esta empresa. Avisa a quien administra para evitar la suspensión." },
   // ─── Cobrança do revendedor — hub (PR 3a) ───
   "A conta foi suspensa por falta de pagamento. Assim que o pagamento for confirmado, tudo volta a funcionar na hora.": { es: "La cuenta fue suspendida por falta de pago. En cuanto se confirme el pago, todo vuelve a funcionar al instante." },
+  // ─── Cobrança do revendedor — card do tenant (PR 3a) ───
+  "Troca agendada: o novo plano vale a partir da próxima cobrança paga.": { es: "Cambio programado: el nuevo plan vale a partir del próximo cobro pagado." },
 };
 
 /**
