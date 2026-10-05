@@ -256,6 +256,19 @@ describe("situacaoDoRetorno", () => {
       "cancelado",
     );
   });
+
+  it("enabled=false com last_error=org_nao_operante é NÃO disparado: o agente não pode dizer que o retorno saiu", () => {
+    expect(
+      situacaoDoRetorno({ enabled: false, cancelled_at: null, last_error: "org_nao_operante" }),
+    ).toBe("nao_disparado");
+    expect(situacaoDoRetorno({ enabled: false, cancelled_at: null, last_error: null })).toBe("disparado");
+    expect(
+      situacaoDoRetorno({ enabled: false, cancelled_at: "2026-08-04T12:00:00Z", last_error: "org_nao_operante" }),
+    ).toBe("cancelado");
+    expect(
+      situacaoDoRetorno({ enabled: true, cancelled_at: null, last_error: "org_nao_operante" }),
+    ).toBe("agendado");
+  });
 });
 
 describe("listaRetornos", () => {
