@@ -16,6 +16,7 @@ import {
   type AgentInboxItem,
 } from "@/hooks/ai/useAgentInbox";
 import { kindLabel, SEVERITY_LABEL, type AgentInboxSeverity } from "@/lib/ai/agent-inbox-copy";
+import { linkDePagamentoSeguro } from "@/lib/cobranca/link";
 import { Bell, Check } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 import { ApiError } from "@/lib/api/types";
@@ -156,9 +157,9 @@ function InboxRow({
             <Link href={item.destination.href}>{t(item.destination.rotulo)}</Link>
           </Button>
         ) : null}
-        {item.link_de_pagamento ? (
+        {linkDePagamentoSeguro(item.link_de_pagamento) ? (
           <Button asChild size="sm" className="ml-3 mt-1">
-            <a href={item.link_de_pagamento} target="_blank" rel="noopener noreferrer">
+            <a href={linkDePagamentoSeguro(item.link_de_pagamento) ?? undefined} target="_blank" rel="noopener noreferrer">
               {t("Pagar agora")}
             </a>
           </Button>

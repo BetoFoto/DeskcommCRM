@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FaixaDoTesteGratis } from "@/components/cobranca/FaixaDoTesteGratis";
 import { useT } from "@/hooks/i18n/useT";
 import type { FaixaDaCobranca as Faixa } from "@/lib/cobranca/faixa";
+import { linkDePagamentoSeguro } from "@/lib/cobranca/link";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 
 const PAINEL = "/app/settings/billing";
@@ -33,9 +34,10 @@ export function FaixaDaCobranca({ faixa }: { faixa: Exclude<Faixa, null> }) {
           : faixa.tipo === "cancelamento"
             ? t("Sua assinatura termina em {data}.").replace("{data}", dia(faixa.ate))
             : t("Sua assinatura foi cancelada.");
+  const linkSeguro = faixa.tipo === "atraso" ? linkDePagamentoSeguro(faixa.link) : null;
   const acao =
-    faixa.tipo === "avise_o_admin" ? null : faixa.tipo === "atraso" && faixa.link ? (
-      <a href={faixa.link} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
+    faixa.tipo === "avise_o_admin" ? null : linkSeguro ? (
+      <a href={linkSeguro} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
         {t("Pagar agora")}
       </a>
     ) : (
