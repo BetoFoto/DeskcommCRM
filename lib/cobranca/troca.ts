@@ -1,0 +1,156 @@
+/**
+ * TROCAR DE PLANO — um caminho só, para a empresa (Plano e cobrança) e para o
+ * dono (card do tenant). Spec da cobrança do revendedor §7e, §7g; D-3, D-4, D-13.
+ *
+ *   - teste grátis (estado `trial` e `trial_ate` no futuro): vale na hora; com
+ *     provedor, o preço da 1ª cobrança muda junto. Divergência 44: a D-13 vale só
+ *     enquanto nada foi pago — pagou dentro do teste (estado `ativa`), agenda;
+ *   - a empresa só escolhe plano com `oferecido_ao_cliente` (Task 4A); o dono,
+ *     qualquer um ativo (plano negociado);
+ *   - depois do teste, com provedor: fica AGENDADA e vira na próxima cobrança
+ *     paga (`aplicarLeitura`) — subir no dia 1 e descer no dia 28 não compensa;
+ *   - em dívida, ou teste vencido sem assinatura: recusa ("regularize antes");
+ *   - uso acima do plano novo: recusa com a lista do que remover (D-4).
+ * O provedor é chamado ANTES da escrita e fora de transação; a escrita é um
+ * compare-and-set no plano lido. Quem chama audita (o ator muda).
+ */
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { adaptador as adaptadorPadrao } from "@/lib/cobranca/provedores";
+import { ErroDoProvedor, type AdaptadorDeCobranca } from "@/lib/cobranca/provedores/contrato";
+import { excedenteDoPlano, lerUsoDaOrganizacao } from "@/lib/cobranca/uso";
+import type { EstadoDaAssinatura, Intervalo, ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
+
+export type ResultadoDaTroca =
+  | {
+      ok: true;
+      changed: boolean;
+      quando: "imediato" | "agendado" | "nenhum";
+      planoId: string;
+      planoAgendadoId: string | null;
+      valeAPartirDe: string | null;
+      de: string;
+    }
+  | { ok: false; status: number; code: string; message: string; details?: unknown };
+
+interface Atual {
+  plano_id: string;
+  plano_agendado_id: string | null;
+  estado: EstadoDaAssinatura;
+  trial_ate: string | null;
+  provedor: ProvedorDeCobranca | null;
+  provedor_assinatura_id: string | null;
+  proximo_vencimento: string | null;
+  checkout_url: string | null;
+}
+interface Plano {
+  id: string;
+  nome: string;
+  preco_cents: number;
+  intervalo: Intervalo;
+  max_assentos: number | null;
+  max_canais: number | null;
+  arquivado_em: string | null;
+  oferecido_ao_cliente: boolean;
+}
+
+const EM_DIVIDA: readonly EstadoDaAssinatura[] = ["em_atraso", "cancelada"];
+const recusa = (status: number, code: string, message: string, details?: unknown): ResultadoDaTroca => ({
+  ok: false, status, code, message, ...(details === undefined ? {} : { details }),
+});
+
+async function lerPlanoCompleto(admin: SupabaseClient, id: string): Promise<Plano | null | "erro"> {
+  const { data, error } = await admin
+    .from("cobranca_planos")
+    .select("id, nome, preco_cents, intervalo, max_assentos, max_canais, arquivado_em, oferecido_ao_cliente")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) return "erro";
+  return (data as Plano | null) ?? null;
+}
+
+export async function trocarPlanoDaOrg(
+  admin: SupabaseClient,
+  orgId: string,
+  planoId: string,
+  deps: { adaptador?: (id: ProvedorDeCobranca) => AdaptadorDeCobranca; agora?: () => Date; origem?: "empresa" | "dono" } = {},
+): Promise<ResultadoDaTroca> {
+  const agora = (deps.agora ?? (() => new Date()))();
+  const { data: lida, error } = await admin
+    .from("cobranca_assinaturas")
+    .select("plano_id, plano_agendado_id, estado, trial_ate, provedor, provedor_assinatura_id, proximo_vencimento, checkout_url")
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (error) return recusa(500, "internal_error", "Não foi possível ler a assinatura.");
+  const atual = lida as Atual | null;
+  if (!atual) return recusa(404, "not_found", "Esta empresa não tem assinatura (é isenta).");
+
+  const nada = (quando: "nenhum" | "agendado"): ResultadoDaTroca => ({
+    ok: true, changed: false, quando, planoId: atual.plano_id, planoAgendadoId: atual.plano_agendado_id,
+    valeAPartirDe: quando === "agendado" ? atual.proximo_vencimento : null, de: atual.plano_id,
+  });
+  if (planoId === atual.plano_id && atual.plano_agendado_id === null) return nada("nenhum");
+  if (planoId === atual.plano_agendado_id) return nada("agendado");
+  if (EM_DIVIDA.includes(atual.estado)) return recusa(409, "pagamento_pendente", "Regularize o pagamento antes de trocar de plano.");
+  const emTeste = atual.estado === "trial" && atual.trial_ate !== null && Date.parse(atual.trial_ate) > agora.getTime();
+  if (!emTeste && !atual.provedor) {
+    return recusa(409, "pagamento_pendente", "O teste grátis acabou e não há pagamento. A troca de plano vale depois da assinatura.");
+  }
+
+  const [novo, antigo] = await Promise.all([lerPlanoCompleto(admin, planoId), lerPlanoCompleto(admin, atual.plano_id)]);
+  if (novo === "erro" || antigo === "erro") return recusa(500, "internal_error", "Não foi possível ler o plano.");
+  if (!novo || novo.arquivado_em !== null || !antigo || novo.intervalo !== antigo.intervalo) {
+    return recusa(422, "plano_invalido", "Escolha um plano ativo com o mesmo intervalo de cobrança.");
+  }
+  // Plano negociado: só o dono atribui (a tela da empresa nem o lista).
+  if ((deps.origem ?? "empresa") === "empresa" && !novo.oferecido_ao_cliente) {
+    return recusa(422, "plano_invalido", "Este plano não está disponível para troca. Fale com quem administra o sistema.");
+  }
+  const uso = await lerUsoDaOrganizacao(admin, orgId);
+  if (!uso) return recusa(500, "internal_error", "Não foi possível medir o uso da empresa.");
+  const excedente = excedenteDoPlano(uso, novo);
+  if (Object.keys(excedente).length > 0) {
+    return recusa(409, "plan_limit_reached", "O uso atual não cabe no plano escolhido.", { excedente });
+  }
+
+  if (atual.provedor && atual.provedor_assinatura_id) {
+    try {
+      await (deps.adaptador ?? adaptadorPadrao)(atual.provedor).trocarPlano({
+        assinaturaRef: atual.provedor_assinatura_id,
+        plano: { id: novo.id, nome: novo.nome, precoCents: novo.preco_cents, intervalo: novo.intervalo },
+      });
+    } catch (e) {
+      if (!(e instanceof ErroDoProvedor)) throw e;
+      if (e.codigo === "pagamento_do_periodo_pendente") {
+        return recusa(409, "pagamento_pendente", "Aguarde a confirmação do pagamento atual para trocar de plano.");
+      }
+      return e.transitorio
+        ? recusa(503, "provedor_indisponivel", "O provedor de pagamento não respondeu. Nada mudou; tente de novo.")
+        : recusa(502, "provedor_recusou", "O provedor de pagamento recusou a troca.");
+    }
+  } else if (!emTeste) {
+    return recusa(409, "state_conflict", "A assinatura ainda não foi criada no provedor. Conclua o pagamento antes de trocar.");
+  }
+
+  const campos = emTeste
+    ? {
+        plano_id: novo.id,
+        plano_agendado_id: null,
+        updated_at: agora.toISOString(),
+        // Link de checkout pendente saiu com o preço antigo: o próximo "Assinar" gera outro.
+        ...(atual.checkout_url ? { checkout_url: null, checkout_expira_em: null } : {}),
+      }
+    : { plano_agendado_id: novo.id === atual.plano_id ? null : novo.id, updated_at: agora.toISOString() };
+  let pedido = admin.from("cobranca_assinaturas").update(campos).eq("organization_id", orgId).eq("plano_id", atual.plano_id);
+  pedido = atual.provedor ? pedido.eq("provedor", atual.provedor) : pedido.is("provedor", null);
+  const { data: gravada, error: erroDaGravacao } = await pedido.select("organization_id").maybeSingle();
+  if (erroDaGravacao) return recusa(500, "internal_error", "Não foi possível trocar o plano.");
+  if (!gravada) return recusa(409, "state_conflict", "A assinatura mudou enquanto você trocava o plano. Recarregue e tente de novo.");
+
+  return emTeste
+    ? { ok: true, changed: true, quando: "imediato", planoId: novo.id, planoAgendadoId: null, valeAPartirDe: null, de: atual.plano_id }
+    : {
+        ok: true, changed: true, quando: "agendado", planoId: atual.plano_id,
+        planoAgendadoId: novo.id === atual.plano_id ? null : novo.id, valeAPartirDe: atual.proximo_vencimento, de: atual.plano_id,
+      };
+}

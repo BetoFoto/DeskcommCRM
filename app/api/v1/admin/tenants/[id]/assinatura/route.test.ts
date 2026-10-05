@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   audit: vi.fn(),
   ligada: true,
   banco: undefined as unknown as BancoFalso,
+  adaptador: { trocarPlano: vi.fn(), lerSituacao: vi.fn() },
 }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: async () => null }));
 vi.mock("@/lib/auth/server", () => ({ mfaEmDivida: async () => false, loadAuthUser: async () => null }));
@@ -23,8 +24,10 @@ vi.mock("@/lib/instalacao/modulos", async (importOriginal) => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.banco.cliente }));
 vi.mock("@/lib/audit", () => ({ audit: h.audit }));
+vi.mock("@/lib/cobranca/provedores", () => ({ adaptador: () => h.adaptador }));
 
 import { EscritaDePlatformAdminNegada } from "@/lib/auth/requirePlatformAdmin";
+import { ErroDoProvedor } from "@/lib/cobranca/provedores/contrato";
 
 import { DELETE, PATCH, POST } from "./route";
 
@@ -76,6 +79,8 @@ const escritas = () => h.banco.cadeias.filter((c) => c.tabela === "cobranca_assi
 beforeEach(() => {
   vi.clearAllMocks();
   h.ligada = true;
+  h.adaptador.trocarPlano.mockResolvedValue(undefined);
+  h.adaptador.lerSituacao.mockResolvedValue({ assinaturasVivas: 0 });
   h.escrita.mockResolvedValue({ user: { id: h.ator }, platformAdmin: { user_id: h.ator, scope: "full", mfa_required: false } });
   m = {
     org: { id: TENANT, status: "active", suspended_kind: null },
@@ -187,9 +192,18 @@ describe("PATCH — trocar plano (§7e; PR 2 sem provedor)", () => {
     expect((await (await PATCH(pedido("PATCH", { plano_id: PRO.id }), ctx())).json()).error.code).toBe("pagamento_pendente");
     expect(escritas()).toEqual([]);
   });
-  it("com provedor → 409 state_conflict e nada muda (troca agendada chega com o provedor)", async () => {
-    m.assinatura = { ...m.assinatura, provedor: "stripe" };
-    expect((await (await PATCH(pedido("PATCH", { plano_id: PRO.id }), ctx())).json()).error.code).toBe("state_conflict");
+  it("com provedor, depois do teste: agenda para a próxima cobrança paga e muda o preço no provedor", async () => {
+    m.assinatura = { ...m.assinatura, estado: "ativa", trial_ate: null, provedor: "stripe", provedor_assinatura_id: "sub_1", proximo_vencimento: "2026-11-01T00:00:00.000Z" };
+    const res = await PATCH(pedido("PATCH", { plano_id: PRO.id }), ctx());
+    expect((await res.json()).data).toEqual({ changed: true, plano_id: BASICO.id, plano_agendado_id: PRO.id, vale_a_partir_de: "2026-11-01T00:00:00.000Z" });
+    expect(h.adaptador.trocarPlano).toHaveBeenCalledWith(expect.objectContaining({ assinaturaRef: "sub_1" }));
+    expect(Object.keys(argumentos(escritas()[0]!, "update")?.[0] as object).sort()).toEqual(["plano_agendado_id", "updated_at"]);
+    expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({ metadata: { de: BASICO.id, para: PRO.id, quando: "agendado" } }));
+  });
+  it("provedor fora do ar na troca: 503 e nada gravado", async () => {
+    m.assinatura = { ...m.assinatura, estado: "ativa", trial_ate: null, provedor: "stripe", provedor_assinatura_id: "sub_1" };
+    h.adaptador.trocarPlano.mockRejectedValueOnce(new ErroDoProvedor(503, "api_error", true));
+    expect((await PATCH(pedido("PATCH", { plano_id: PRO.id }), ctx())).status).toBe(503);
     expect(escritas()).toEqual([]);
   });
   it("sem linha (isenta) → 404", async () => {

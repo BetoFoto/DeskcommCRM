@@ -4,11 +4,9 @@
  *
  *  - POST {plano_id}: empresa sem linha (isenta) passa a pagar → linha `trial`
  *    com os dias do plano. Linha existente → 409 `state_conflict`.
- *  - PATCH {plano_id}: troca de plano pelas regras de §7e. Nesta versão (PR 2)
- *    nenhuma assinatura tem provedor, e a única troca possível é a do TESTE
- *    GRÁTIS, que vale na hora (D-13). Teste vencido sem pagamento, ou estado
- *    em dívida → 409 `pagamento_pendente`. Linha com provedor → 409 e nada
- *    muda: a troca agendada para a virada paga (`trocarPlano`) chega com o provedor.
+ *  - PATCH {plano_id}: troca de plano pelo MESMO caminho da empresa
+ *    (`lib/cobranca/troca.ts`, §7e): em teste grátis vale na hora; depois do
+ *    teste, com provedor, fica agendada para a próxima cobrança paga.
  *  - DELETE: torna isenta. Linha SEM provedor → apagada (o filtro está no
  *    próprio DELETE: um checkout concorrente não é apagado por baixo). Linha
  *    COM provedor → 409: sem `lerSituacao`, que nasce com o provedor, não há
@@ -33,7 +31,7 @@ import {
   type PlatformAdminContext,
 } from "@/lib/auth/requirePlatformAdmin";
 import { lerOrgDoTenant, lerPlano, reativarSeSuspensaPorCobranca } from "@/lib/cobranca/dono";
-import { excedenteDoPlano, lerUsoDaOrganizacao } from "@/lib/cobranca/uso";
+import { trocarPlanoDaOrg } from "@/lib/cobranca/troca";
 import type { EstadoDaAssinatura } from "@/lib/cobranca/vocabulario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLigado } from "@/lib/instalacao/modulos";
@@ -42,16 +40,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 const corpoSchema = z.strictObject({ plano_id: z.string().uuid() });
 const DIA_MS = 86_400_000;
 const NASCE_EM: EstadoDaAssinatura = "trial";
-const EM_DIVIDA: readonly EstadoDaAssinatura[] = ["em_atraso", "cancelada"];
 const COLUNAS = "organization_id, plano_id, plano_agendado_id, estado, trial_ate, provedor, prazo_extra_ate";
 
-interface AssinaturaLida {
-  organization_id: string;
-  plano_id: string;
-  estado: EstadoDaAssinatura;
-  trial_ate: string | null;
-  provedor: string | null;
-}
 type Rota = { params: Promise<{ id: string }> };
 type Aberta = { admin: SupabaseClient; ator: string; tenantId: string; requestId: string };
 
@@ -142,68 +132,15 @@ export async function PATCH(req: NextRequest, rota: Rota) {
   if (!corpo.success) {
     return fail("validation_failed", "Informe o plano", 400, { requestId, details: corpo.error.flatten() });
   }
-  const { data: lida, error: erroDeLeitura } = await admin
-    .from("cobranca_assinaturas")
-    .select(COLUNAS)
-    .eq("organization_id", tenantId)
-    .maybeSingle();
-  if (erroDeLeitura) return fail("internal_error", "Não foi possível ler a assinatura", 500, { requestId });
-  const atual = lida as AssinaturaLida | null;
-  if (!atual) {
-    return fail("not_found", "Esta empresa não tem assinatura (é isenta). Use Atribuir plano.", 404, { requestId });
-  }
-  if (atual.plano_id === corpo.data.plano_id) return ok({ changed: false, plano_id: atual.plano_id }, { requestId });
-  if (EM_DIVIDA.includes(atual.estado)) {
-    return fail("pagamento_pendente", "Regularize o pagamento antes de trocar de plano.", 409, { requestId });
-  }
-  if (atual.provedor !== null) {
-    return fail(
-      "state_conflict",
-      "Esta assinatura já é cobrada pelo provedor; a troca para a próxima cobrança chega numa próxima versão.",
-      409,
-      { requestId },
-    );
-  }
-  const emTeste = atual.trial_ate !== null && Date.parse(atual.trial_ate) > Date.now();
-  if (!emTeste) {
-    return fail(
-      "pagamento_pendente",
-      "O teste grátis acabou e não há pagamento. A troca de plano vale depois da assinatura.",
-      409,
-      { requestId },
-    );
-  }
-
-  const [novo, antigo] = await Promise.all([lerPlano(admin, corpo.data.plano_id), lerPlano(admin, atual.plano_id)]);
-  if (novo === "erro" || antigo === "erro") return fail("internal_error", "Não foi possível ler o plano", 500, { requestId });
-  if (!novo || novo.arquivado_em !== null || !antigo || novo.intervalo !== antigo.intervalo) {
-    return fail("plano_invalido", "Escolha um plano ativo com o mesmo intervalo de cobrança.", 422, { requestId });
-  }
-
-  // D-4: trocar para um plano menor que o uso é recusado com a lista do que remover.
-  const uso = await lerUsoDaOrganizacao(admin, tenantId);
-  if (!uso) return fail("internal_error", "Não foi possível medir o uso da empresa", 500, { requestId });
-  const excedente = excedenteDoPlano(uso, novo);
-  if (Object.keys(excedente).length > 0) {
-    return fail("plan_limit_reached", "O uso atual não cabe no plano escolhido.", 409, { requestId, details: { excedente } });
-  }
-
-  // Compare-and-set: só troca se o plano e a ausência de provedor são os que foram lidos.
-  const { data: trocada, error } = await admin
-    .from("cobranca_assinaturas")
-    .update({ plano_id: novo.id, plano_agendado_id: null, updated_at: new Date().toISOString() })
-    .eq("organization_id", tenantId)
-    .eq("plano_id", atual.plano_id)
-    .is("provedor", null)
-    .select("organization_id, plano_id")
-    .maybeSingle();
-  if (error) return fail("internal_error", "Não foi possível trocar o plano", 500, { requestId });
-  if (!trocada) {
-    return fail("state_conflict", "A assinatura mudou enquanto você trocava o plano. Recarregue e tente de novo.", 409, { requestId });
-  }
-
-  auditar(a, "cobranca.plano_trocado", { de: atual.plano_id, para: novo.id, quando: "imediato" });
-  return ok({ changed: true, plano_id: novo.id }, { requestId });
+  const r = await trocarPlanoDaOrg(admin, tenantId, corpo.data.plano_id, { origem: "dono" });
+  if (!r.ok) return fail(r.code, r.message, r.status, { requestId, ...(r.details === undefined ? {} : { details: r.details }) });
+  if (r.changed) auditar(a, "cobranca.plano_trocado", { de: r.de, para: corpo.data.plano_id, quando: r.quando });
+  return ok(
+    r.quando === "agendado"
+      ? { changed: r.changed, plano_id: r.planoId, plano_agendado_id: r.planoAgendadoId, vale_a_partir_de: r.valeAPartirDe }
+      : { changed: r.changed, plano_id: r.planoId },
+    { requestId },
+  );
 }
 
 export async function DELETE(_req: NextRequest, rota: Rota) {
