@@ -30,11 +30,19 @@ import { ErroDoProvedor, type AdaptadorDeCobranca, type Modo } from "./contrato"
 export const STRIPE_API_BASE = "https://api.stripe.com/v1";
 
 /**
- * A versão da API em que todo campo lido aqui foi conferido. Sem o header, a
- * Stripe responde na versão da CONTA, que o revendedor muda no painel — e
- * `current_period_end` (no item desde a basil) ou `invoice.parent` sumiriam sem
- * erro nenhum. Conferida no changelog da Stripe em 30/09/2026 e provada contra
- * a conta de teste por scripts/smoke-stripe.ts.
+ * A versão da API fixada. Sem o header, a Stripe responde na versão da CONTA,
+ * que o revendedor muda no painel — e `current_period_end` (no item desde a
+ * basil) ou `invoice.parent` sumiriam sem erro nenhum.
+ *
+ * DECISÃO (05/10/2026): fica em 2026-03-25.dahlia, de propósito. A Stripe honra
+ * a versão fixada, então não há pressa. O changelog, consultado na revisão da
+ * Task 14, lista como GA mais recente a 2026-09-30.endive, que REMOVE
+ * `payment_method_types` do Checkout Session e unifica `billing_cycle_anchor`
+ * entre Subscription e Invoice; e há dahlias posteriores (04-22 … 08-26), que só
+ * acrescentam. Nenhum código daqui usa esses dois campos (grep em 05/10/2026),
+ * mas a Task 22 e o checkout vão — subir de versão é decisão dela, relendo as
+ * quebras da versão-alvo. A prova contra a conta de teste ainda NÃO existe: o
+ * scripts/smoke-stripe.ts nasce na Task 22.
  */
 export const STRIPE_VERSION = "2026-03-25.dahlia";
 
