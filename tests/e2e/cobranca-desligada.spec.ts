@@ -89,7 +89,7 @@ test("sem a chave, nada da cobrança aparece e o que existia segue igual", async
 
     // ── A empresa: Billing como antes, nenhuma faixa, recursos sem cobrança ─
     await page.goto("/app/settings/billing");
-    await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Plano e cobrança" })).toBeVisible();
     await expect(page.getByText("Em breve — Fase 2")).toBeVisible();
     await expect(page.getByText(/teste grátis/i)).toHaveCount(0);
     await page.screenshot({ path: `${EVIDENCIA}/desligada-billing.png`, fullPage: true });

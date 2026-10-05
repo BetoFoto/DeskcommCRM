@@ -86,6 +86,12 @@ describe("AcoesDaAssinatura", () => {
     expect(botoes[0]).toBe("Gerenciar pagamento");
   });
 
+  it("⭐ link que não é https não vira href: sem 'Pagar agora' e o portal assume", () => {
+    render(<AcoesDaAssinatura {...acoes({ estado: "em_atraso", linkDePagamento: "javascript:alert(1)", assinaturasVivas: 1 })} />);
+    expect(screen.queryByRole("link", { name: "Pagar agora" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Gerenciar pagamento" })).toBeTruthy();
+  });
+
   it("teste grátis que acabou sem assinatura (sem provedor): não há 'Já paguei' — o botão é Assinar", () => {
     render(<AcoesDaAssinatura {...acoes({ estado: "em_atraso", temProvedor: false, assinaturasVivas: 0 })} />);
     expect(screen.queryByRole("button", { name: "Já paguei" })).toBeNull();

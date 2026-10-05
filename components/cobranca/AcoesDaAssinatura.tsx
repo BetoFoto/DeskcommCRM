@@ -11,6 +11,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
 import { formatadorDeData } from "@/lib/cobranca/fuso";
+import { linkDePagamentoSeguro } from "@/lib/cobranca/link";
 import { abrirNoNavegador } from "@/lib/cobranca/navegar";
 import type { PlanoParaTroca } from "@/lib/cobranca/painel";
 import type { EstadoDaAssinatura } from "@/lib/cobranca/vocabulario";
@@ -55,6 +56,7 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
   const t = useT();
   const idioma = useIdioma();
   const router = useRouter();
+  const link = linkDePagamentoSeguro(p.linkDePagamento);
   const [ocupado, setOcupado] = useState(false);
   const [recado, setRecado] = useState<string | null>(null);
   const [trocando, setTrocando] = useState(false);
@@ -75,7 +77,7 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
   const podeAssinar = p.assinaturasVivas === 0 && p.estado !== "ativa";
   // Em atraso com assinatura viva e sem fatura pagável agora (pausada; incobrável
   // sem página): o único caminho é trocar o cartão no portal — e a tela diz isso.
-  const soPeloPortal = emDivida && p.temProvedor && p.assinaturasVivas > 0 && !p.linkDePagamento;
+  const soPeloPortal = emDivida && p.temProvedor && p.assinaturasVivas > 0 && !link;
   // "Já paguei" só onde há o que reler: quem nunca assinou (teste que acabou) não pagou nada.
   const podeDizerQuePagou = (emDivida && p.temProvedor) || p.noHub;
   const podeTrocar = p.planosParaTroca.length > 0 && (p.estado === "trial" || p.estado === "ativa") && !p.cancelaNoFim;
@@ -166,9 +168,9 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
             {t("Gerenciar pagamento")}
           </Button>
         )}
-        {p.linkDePagamento && (
+        {link && (
           <Button asChild>
-            <a href={p.linkDePagamento} target="_blank" rel="noopener noreferrer">
+            <a href={link} target="_blank" rel="noopener noreferrer">
               {t("Pagar agora")}
             </a>
           </Button>
@@ -176,7 +178,7 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
         {podeAssinar && (
           <Button
             disabled={ocupado}
-            variant={p.linkDePagamento ? "outline" : "default"}
+            variant={link ? "outline" : "default"}
             onClick={() =>
               void agir(async () => {
                 const { data: r } = await apiClient.post<{ data: { url: string } }>(`${BASE}/checkout`, p.noHub ? { volta: "hub" } : {});

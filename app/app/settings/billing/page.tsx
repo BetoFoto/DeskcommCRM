@@ -38,8 +38,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
-        {/* Desligada, a tela é a de antes, com o título de antes (cobranca-desligada.spec). */}
-        <h1 className="text-2xl font-semibold tracking-tight">{painel ? traduzir("Plano e cobrança", idioma) : "Billing"}</h1>
+        {/* Mesmo nome do item de menu (catalogo.ts), ligada ou não. */}
+        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Plano e cobrança", idioma)}</h1>
         <p className="text-sm text-muted-foreground">
           {traduzir("Planos, faturas e cobrança.", idioma)}
         </p>
