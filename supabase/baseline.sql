@@ -46035,6 +46035,99 @@ $$;
 revoke execute on function public.fn_cobranca_reconciliaveis() from public, anon, authenticated;
 grant execute on function public.fn_cobranca_reconciliaveis() to service_role;
 
+-- ── E. o link de pagamento guardado, e o aviso gravado com o item da Central ─
+-- `link_de_pagamento`: o link da cobrança em aberto que a última releitura viu
+-- (`Situacao.linkDePagamento`). A faixa em /app, o hub do suspenso, a Central e
+-- o e-mail leem daqui — nenhuma tela chama o provedor para desenhar um botão.
+-- Só `sincronizar` escreve (nulo = nada a pagar).
+alter table public.cobranca_assinaturas add column if not exists link_de_pagamento text;
+
+-- O aviso da régua e o item na Central nascem NA MESMA transação (D-5: aviso
+-- "enviado" = gravado com o item). Ganha só quem MUDA o aviso: o mesmo aviso da
+-- mesma dívida (ultimo_aviso_em >= p_desde) devolve false, e cron e sinal
+-- concorrentes não duplicam o item. O aviso novo fecha o anterior na Central.
+create or replace function public.fn_cobranca_registrar_aviso(
+  p_org uuid, p_aviso text, p_desde timestamptz, p_titulo text, p_corpo text, p_severidade text
+) returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_ganhou boolean;
+begin
+  update public.cobranca_assinaturas
+     set ultimo_aviso = p_aviso, ultimo_aviso_em = now(), updated_at = now()
+   where organization_id = p_org
+     and (ultimo_aviso is distinct from p_aviso
+          or ultimo_aviso_em is null
+          or (p_desde is not null and ultimo_aviso_em < p_desde))
+  returning true into v_ganhou;
+  if not coalesce(v_ganhou, false) then
+    return false;
+  end if;
+  update public.agent_inbox_items
+     set status = 'resolved', resolved_at = now()
+   where organization_id = p_org and kind = 'cobranca' and ref_kind is null and status = 'open';
+  insert into public.agent_inbox_items (organization_id, kind, severity, title, body)
+  values (p_org, 'cobranca', p_severidade, p_titulo, p_corpo);
+  return true;
+end;
+$$;
+
+revoke execute on function public.fn_cobranca_registrar_aviso(uuid, text, timestamptz, text, text, text) from public, anon, authenticated;
+grant execute on function public.fn_cobranca_registrar_aviso(uuid, text, timestamptz, text, text, text) to service_role;
+
+-- 80% do teto de IA do plano: um aviso por organização por mês (mês em UTC).
+-- A trava consultiva por org (chave 2284, vizinha das 2281-2282 do PR 2)
+-- faz do "já avisei este mês?" e do INSERT uma coisa só.
+create or replace function public.fn_cobranca_avisar_teto_de_ia(p_org uuid, p_titulo text, p_corpo text)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  perform pg_advisory_xact_lock(hashtextextended(p_org::text, 2284));
+  if exists (select 1 from public.agent_inbox_items
+              where organization_id = p_org and kind = 'cobranca' and ref_kind = 'plano'
+                and created_at >= date_trunc('month', now())) then
+    return false;
+  end if;
+  insert into public.agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
+  values (p_org, 'cobranca', 'warn', p_titulo, p_corpo, 'plano', p_org);
+  return true;
+end;
+$$;
+
+revoke execute on function public.fn_cobranca_avisar_teto_de_ia(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.fn_cobranca_avisar_teto_de_ia(uuid, text, text) to service_role;
+
+-- A régua decide suspender lendo a linha ANTES; um pagamento pode ser gravado
+-- no meio. Esta função trava a linha da assinatura e só suspende se ela AINDA
+-- está em dívida: com a linha travada, a gravação do pagamento espera, e depois
+-- dela a reativação corre como sempre. Sem isto, quem acabou de pagar seria
+-- suspenso e só voltaria na rodada seguinte do cron, com dois e-mails no meio.
+create or replace function public.fn_cobranca_suspender_se_devendo(p_org uuid, p_motivo text)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  perform 1 from public.cobranca_assinaturas
+   where organization_id = p_org and estado in ('em_atraso', 'cancelada')
+   for update;
+  if not found then
+    return jsonb_build_object('changed', false, 'motivo', 'nao_deve');
+  end if;
+  return public.fn_suspender_organizacao(p_org, 'cobranca', p_motivo, null);
+end;
+$$;
+
+revoke execute on function public.fn_cobranca_suspender_se_devendo(uuid, text) from public, anon, authenticated;
+grant execute on function public.fn_cobranca_suspender_se_devendo(uuid, text) to service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria

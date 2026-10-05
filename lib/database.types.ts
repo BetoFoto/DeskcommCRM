@@ -4346,6 +4346,7 @@ export type Database = {
           cancela_no_fim: boolean
           checkout_expira_em: string | null
           checkout_url: string | null
+          link_de_pagamento: string | null
           created_at: string
           estado: string
           modo: string | null
@@ -4371,6 +4372,7 @@ export type Database = {
           cancela_no_fim?: boolean
           checkout_expira_em?: string | null
           checkout_url?: string | null
+          link_de_pagamento?: string | null
           created_at?: string
           estado?: string
           modo?: string | null
@@ -4396,6 +4398,7 @@ export type Database = {
           cancela_no_fim?: boolean
           checkout_expira_em?: string | null
           checkout_url?: string | null
+          link_de_pagamento?: string | null
           created_at?: string
           estado?: string
           modo?: string | null
@@ -10696,6 +10699,12 @@ export type Database = {
         Args: never
         Returns: { organization_id: string; relida_em: string | null; precisa_reler: boolean }[]
       }
+      fn_cobranca_registrar_aviso: {
+        Args: { p_org: string; p_aviso: string; p_desde: string | null; p_titulo: string; p_corpo: string; p_severidade: string }
+        Returns: boolean
+      }
+      fn_cobranca_avisar_teto_de_ia: { Args: { p_org: string; p_titulo: string; p_corpo: string }; Returns: boolean }
+      fn_cobranca_suspender_se_devendo: { Args: { p_org: string; p_motivo: string }; Returns: Json }
       fn_cobranca_ligada: { Args: never; Returns: boolean }
       fn_configurar_pre_go_live_canal: {
         Args: {
