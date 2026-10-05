@@ -1,0 +1,13 @@
+---
+impacto: nada_mudou
+secao: alterado
+titulo: A cobrança dos seus clientes começa a chegar ao sistema, ainda sem poder ser ligada
+---
+
+Esta versão traz a primeira parte da capacidade de o dono de uma instalação cobrar as empresas que atende: planos com limite de pessoas, de números conectados e de uso de IA, e o teste grátis de quem se cadastra. Ela chega desligada e travada: o interruptor só aparece em Admin › Recursos opcionais quando a conexão com o provedor de pagamento chegar, e nada precisa ser ligado nesta versão. Por isso quase nada muda para quem já usa o sistema: o campo Plano do novo cliente, o selo do plano no painel de cada empresa, a tela de Billing e os menus seguem iguais, e nenhuma empresa ganha limite.
+
+Uma coisa muda para todos, com ou sem cobrança: quando uma empresa suspensa é reativada, o aviso da Central passa a citar também os agendamentos de disparo único que venceram sem ser disparados e os passos de follow-up descartados durante a suspensão, e aparece mesmo quando nenhuma conversa chegou nesse período. A orientação do aviso aponta para IA › Follow-ups, além do Inbox.
+
+O aviso de orçamento de IA também foi ajustado: o aviso do teto do plano e o aviso do orçamento da empresa passam a coexistir, em vez de um calar o outro, e o modo de orçamento que apenas avisa não afrouxa o teto do plano. Como a cobrança está travada, nenhuma empresa tem teto de plano hoje e o aviso de orçamento segue igual.
+
+O banco ganha duas tabelas, vazias, para os planos e as assinaturas, e perde duas colunas antigas da tabela de empresas (`rate_limit_rps` e `ai_budget_cents`) que nada no sistema lia; quem consulta o banco diretamente e selecionava essas duas colunas pelo nome deixa de encontrá-las. E um buraco foi fechado: um administrador de empresa não consegue mais criar, direto pela API do banco, um membro provisório que ficava fora de qualquer contagem. Nenhuma configuração ou ação é necessária.
