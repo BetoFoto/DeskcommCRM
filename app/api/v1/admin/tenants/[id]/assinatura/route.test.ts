@@ -65,7 +65,8 @@ function responder(c: Cadeia): Resposta {
     return { data: { organization_id: TENANT, plano_id: (argumentos(c, "update")?.[0] as { plano_id: string }).plano_id } };
   }
   // delete: o dublê respeita o filtro de provedor que a rota manda.
-  return { data: m.assinatura && m.assinatura.provedor === null ? { plano_id: m.assinatura.plano_id } : null };
+  const filtroDoProvedor = valorDoFiltro(c, "eq", "provedor") ?? null;
+  return { data: m.assinatura && (m.assinatura.provedor ?? null) === filtroDoProvedor ? { plano_id: m.assinatura.plano_id } : null };
 }
 
 const ctx = (id = TENANT) => ({ params: Promise.resolve({ id }) });
@@ -158,7 +159,7 @@ describe("PATCH — trocar plano (§7e; PR 2 sem provedor)", () => {
     expect((await res.json()).data).toEqual({ changed: true, plano_id: PRO.id });
     const [update] = escritas();
     expect(Object.keys(argumentos(update!, "update")?.[0] as object).sort()).toEqual(["plano_agendado_id", "plano_id", "updated_at"]);
-    expect(filtros(update!)).toEqual([["eq", "organization_id", TENANT], ["eq", "plano_id", BASICO.id], ["is", "provedor", null]]);
+    expect(filtros(update!)).toEqual([["eq", "organization_id", TENANT], ["eq", "plano_id", BASICO.id], ["is", "plano_agendado_id", null], ["is", "provedor", null]]);
     expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({
       action: "cobranca.plano_trocado", metadata: { de: BASICO.id, para: PRO.id, quando: "imediato" },
     }));
@@ -237,12 +238,26 @@ describe("DELETE — tornar isenta (PR 2: sem lerSituacao)", () => {
     expect((await (await DELETE(pedido("DELETE"), ctx())).json()).data).toEqual({ changed: true, reativada: false });
     expect(h.banco.rpcs).toEqual([]);
   });
-  it("com provedor: 409 state_conflict, nada apagado, nada reativado", async () => {
-    m.assinatura = { ...m.assinatura, provedor: "stripe" };
+  it("com provedor e assinatura viva lá: 409 assinatura_viva_no_provedor, nada apagado nem reativado", async () => {
+    m.assinatura = { ...m.assinatura, provedor: "stripe", provedor_cliente_id: "cus_1" };
     m.org = { id: TENANT, status: "suspended", suspended_kind: "cobranca" };
-    expect((await (await DELETE(pedido("DELETE"), ctx())).json()).error.code).toBe("state_conflict");
+    h.adaptador.lerSituacao.mockResolvedValueOnce({ assinaturasVivas: 1 });
+    expect((await (await DELETE(pedido("DELETE"), ctx())).json()).error.code).toBe("assinatura_viva_no_provedor");
+    expect(escritas()).toEqual([]);
     expect(h.banco.rpcs).toEqual([]);
     expect(h.audit).not.toHaveBeenCalled();
+  });
+  it("⭐ com provedor e nada vivo lá: apaga com o filtro do provedor e do cliente lidos, e reativa", async () => {
+    m.assinatura = { ...m.assinatura, provedor: "stripe", provedor_cliente_id: "cus_1" };
+    m.org = { id: TENANT, status: "suspended", suspended_kind: "cobranca" };
+    expect((await (await DELETE(pedido("DELETE"), ctx())).json()).data).toEqual({ changed: true, reativada: true });
+    expect(filtros(escritas()[0]!)).toEqual([["eq", "organization_id", TENANT], ["eq", "provedor", "stripe"], ["eq", "provedor_cliente_id", "cus_1"]]);
+  });
+  it("leitura do provedor que falha: 503 e nada apagado", async () => {
+    m.assinatura = { ...m.assinatura, provedor: "stripe", provedor_cliente_id: "cus_1" };
+    h.adaptador.lerSituacao.mockRejectedValueOnce(new ErroDoProvedor(503, "api_error", true));
+    expect((await DELETE(pedido("DELETE"), ctx())).status).toBe(503);
+    expect(escritas()).toEqual([]);
   });
   it("já isenta e ativa: 200 changed:false, sem audit (idempotente)", async () => {
     m.assinatura = null;

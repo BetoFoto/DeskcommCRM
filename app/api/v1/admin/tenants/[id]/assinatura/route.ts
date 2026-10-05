@@ -7,11 +7,11 @@
  *  - PATCH {plano_id}: troca de plano pelo MESMO caminho da empresa
  *    (`lib/cobranca/troca.ts`, §7e): em teste grátis vale na hora; depois do
  *    teste, com provedor, fica agendada para a próxima cobrança paga.
- *  - DELETE: torna isenta. Linha SEM provedor → apagada (o filtro está no
- *    próprio DELETE: um checkout concorrente não é apagado por baixo). Linha
- *    COM provedor → 409: sem `lerSituacao`, que nasce com o provedor, não há
- *    como saber se ele ainda cobra, e apagar deixaria uma cobrança viva sem
- *    dono aqui. A suspensão por cobrança sai junto, por `fn_reativar_organizacao`.
+ *  - DELETE: torna isenta. Linha SEM provedor → apagada. Linha COM provedor →
+ *    só depois de `lerSituacao` mostrar zero assinaturas vivas (senão 409
+ *    `assinatura_viva_no_provedor`; leitura que falha → 503, nada apagado). O
+ *    filtro do DELETE repete o que foi lido: um checkout concorrente não é
+ *    apagado por baixo. A suspensão por cobrança sai junto.
  *
  * Nenhuma grava `vencida_desde`, e só o POST grava `estado`/`trial_ate` (no
  * nascimento): quem os escreve depois é `sincronizar` e a régua (§3.2).
@@ -31,10 +31,12 @@ import {
   type PlatformAdminContext,
 } from "@/lib/auth/requirePlatformAdmin";
 import { lerOrgDoTenant, lerPlano, reativarSeSuspensaPorCobranca } from "@/lib/cobranca/dono";
+import { adaptador } from "@/lib/cobranca/provedores";
 import { trocarPlanoDaOrg } from "@/lib/cobranca/troca";
-import type { EstadoDaAssinatura } from "@/lib/cobranca/vocabulario";
+import type { EstadoDaAssinatura, ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const corpoSchema = z.strictObject({ plano_id: z.string().uuid() });
@@ -154,48 +156,64 @@ export async function DELETE(_req: NextRequest, rota: Rota) {
   if (org === "erro") return fail("internal_error", "Não foi possível ler a empresa", 500, { requestId });
   if (!org) return fail("not_found", "Tenant not found", 404, { requestId });
 
-  const { data: apagada, error } = await admin
+  const { data: lida, error: erroDeLeitura } = await admin
     .from("cobranca_assinaturas")
-    .delete()
+    .select("plano_id, provedor, provedor_cliente_id")
     .eq("organization_id", tenantId)
-    .is("provedor", null)
-    .select("plano_id")
     .maybeSingle();
-  if (error) return fail("internal_error", "Não foi possível tornar a empresa isenta", 500, { requestId });
-  if (!apagada) {
-    const { data: resta, error: erroDaSobra } = await admin
-      .from("cobranca_assinaturas")
-      .select("provedor")
-      .eq("organization_id", tenantId)
-      .maybeSingle();
-    if (erroDaSobra) return fail("internal_error", "Não foi possível ler a assinatura", 500, { requestId });
-    if (resta) {
-      return fail(
-        "state_conflict",
-        "Esta assinatura tem cobrança no provedor de pagamento. Isentar essa empresa chega numa próxima versão; até lá, cancele no painel do provedor.",
-        409,
-        { requestId },
-      );
+  if (erroDeLeitura) return fail("internal_error", "Não foi possível ler a assinatura", 500, { requestId });
+  const linha = lida as { plano_id: string; provedor: ProvedorDeCobranca | null; provedor_cliente_id: string | null } | null;
+
+  let apagada: { plano_id: string } | null = null;
+  if (linha) {
+    // O DELETE só é montado depois da leitura do provedor: recusa não deixa pedido pendurado.
+    let alvo: { provedor: ProvedorDeCobranca; clienteId: string } | null = null; // null = linha sem provedor
+    if (linha.provedor && linha.provedor_cliente_id) {
+      let vivas: number;
+      try {
+        vivas = (await adaptador(linha.provedor).lerSituacao({ clienteRef: linha.provedor_cliente_id })).assinaturasVivas;
+      } catch (e) {
+        logger.warn("cobranca.isencao_sem_leitura", { organization_id: tenantId, erro: e instanceof Error ? e.message : "desconhecido" });
+        return fail(
+          "provedor_indisponivel",
+          "Não foi possível confirmar com o provedor de pagamento se ainda há cobrança. Nada foi apagado; tente de novo.",
+          503,
+          { requestId },
+        );
+      }
+      if (vivas > 0) {
+        return fail(
+          "assinatura_viva_no_provedor",
+          "Esta empresa ainda tem assinatura ativa no provedor de pagamento. Cancele lá antes de isentar.",
+          409,
+          { requestId },
+        );
+      }
+      alvo = { provedor: linha.provedor, clienteId: linha.provedor_cliente_id };
     }
+    const base = admin.from("cobranca_assinaturas").delete().eq("organization_id", tenantId);
+    const { data, error } = await (alvo ? base.eq("provedor", alvo.provedor).eq("provedor_cliente_id", alvo.clienteId) : base.is("provedor", null))
+      .select("plano_id")
+      .maybeSingle();
+    if (error) return fail("internal_error", "Não foi possível tornar a empresa isenta", 500, { requestId });
+    if (!data) {
+      return fail("state_conflict", "A assinatura mudou enquanto você isentava. Recarregue e tente de novo.", 409, { requestId });
+    }
+    apagada = data as { plano_id: string };
   }
 
   // Roda mesmo sem linha: cura a empresa que ficou suspensa por cobrança quando
   // uma tentativa anterior apagou a linha e caiu antes de reativar.
   const reativacao = await reativarSeSuspensaPorCobranca(admin, org, ator);
   if (!reativacao) {
-    // A linha já foi apagada: a remoção é mutação bem-sucedida e audita aqui,
-    // senão o plano que a empresa tinha se perde (na nova tentativa apagada = null).
-    if (apagada) {
-      auditar(a, "cobranca.isencao_definida", { plano_id: (apagada as { plano_id: string }).plano_id, reativada: false });
-    }
+    // Como no PR 2: a linha já foi apagada, a remoção é mutação bem-sucedida e
+    // audita aqui, senão o plano que a empresa tinha se perde na nova tentativa.
+    if (apagada) auditar(a, "cobranca.isencao_definida", { plano_id: apagada.plano_id, reativada: false });
     return fail("internal_error", "A reativação da empresa falhou. Tente de novo.", 500, { requestId });
   }
   const changed = !!apagada || reativacao.reativada;
   if (changed) {
-    auditar(a, "cobranca.isencao_definida", {
-      plano_id: (apagada as { plano_id: string } | null)?.plano_id ?? null,
-      reativada: reativacao.reativada,
-    });
+    auditar(a, "cobranca.isencao_definida", { plano_id: apagada?.plano_id ?? null, reativada: reativacao.reativada });
   }
   return ok({ changed, reativada: reativacao.reativada }, { requestId });
 }
