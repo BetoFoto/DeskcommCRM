@@ -56,13 +56,14 @@ type Rota = { params: Promise<{ id: string }> };
 type Aberta = { admin: SupabaseClient; ator: string; tenantId: string; requestId: string };
 
 /**
- * O portão das três: acompanhamento, escrita de platform admin, chave, id.
- * Mora NESTE arquivo para a cerca `admin-escrita-exige-scope-full` ver a chamada.
+ * O portão das três depois do acompanhamento: escrita de platform admin, chave,
+ * id. Mora NESTE arquivo para a cerca `admin-escrita-exige-scope-full` ver a
+ * chamada. O `requireSupportWrite` fica no corpo de cada handler, antes deste
+ * portão: a cerca `suporte-cobertura-de-efeitos` lê o corpo do handler, não o
+ * de quem ele chama.
  */
 async function abrir({ params }: Rota): Promise<Aberta | { resposta: NextResponse<ApiError> }> {
   const { id: tenantId } = await params;
-  const supportDenied = await requireSupportWrite(tenantId);
-  if (supportDenied) return { resposta: supportDenied };
   const requestId = randomUUID();
   let adminCtx: PlatformAdminContext;
   try {
@@ -92,6 +93,8 @@ function auditar(a: Aberta, action: "cobranca.plano_trocado" | "cobranca.isencao
 }
 
 export async function POST(req: NextRequest, rota: Rota) {
+  const supportDenied = await requireSupportWrite((await rota.params).id);
+  if (supportDenied) return supportDenied;
   const a = await abrir(rota);
   if ("resposta" in a) return a.resposta;
   const { admin, tenantId, requestId } = a;
@@ -129,6 +132,8 @@ export async function POST(req: NextRequest, rota: Rota) {
 }
 
 export async function PATCH(req: NextRequest, rota: Rota) {
+  const supportDenied = await requireSupportWrite((await rota.params).id);
+  if (supportDenied) return supportDenied;
   const a = await abrir(rota);
   if ("resposta" in a) return a.resposta;
   const { admin, tenantId, requestId } = a;
@@ -202,6 +207,8 @@ export async function PATCH(req: NextRequest, rota: Rota) {
 }
 
 export async function DELETE(_req: NextRequest, rota: Rota) {
+  const supportDenied = await requireSupportWrite((await rota.params).id);
+  if (supportDenied) return supportDenied;
   const a = await abrir(rota);
   if ("resposta" in a) return a.resposta;
   const { admin, ator, tenantId, requestId } = a;
