@@ -74,6 +74,12 @@ describe("rodadaDaCobranca", () => {
     expect(await rodar()).toEqual({ relidas: 1, falhas: 0, avisos: 1, suspensas: 1, reativadas: 1, canceladas: 1, avisosDeIa: 0 });
   });
 
+  it("⭐ empresa sem provedor na fila: a ação da régua que sincronizar já executou entra no resumo", async () => {
+    m.reconciliaveis = [{ organization_id: "A", relida_em: null, precisa_reler: true }];
+    h.sincronizar.mockResolvedValue({ tipo: "sem_provedor", acao: "suspender" });
+    expect(await rodar()).toMatchObject({ relidas: 0, falhas: 0, suspensas: 1 });
+  });
+
   it("a falha de uma empresa não derruba a rodada", async () => {
     m.todas = ["A", "B"];
     h.aplicarRegua.mockImplementation(async (_db: unknown, org: string) => {

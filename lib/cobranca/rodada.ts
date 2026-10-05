@@ -69,6 +69,8 @@ export async function rodadaDaCobranca(admin: SupabaseClient, deps: Dependencias
     try {
       const r = await sincronizar(admin, org, deps);
       if (r.tipo === "falhou") resumo.falhas += 1;
+      // sem provedor a régua já rodou dentro de sincronizar: a ação aconteceu e tem de entrar no resumo
+      if (r.tipo === "sem_provedor") contar(r.acao);
       if (r.tipo === "aplicada") {
         resumo.relidas += 1;
         contar(r.acao);
