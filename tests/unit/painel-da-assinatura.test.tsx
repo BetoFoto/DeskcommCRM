@@ -22,6 +22,7 @@ const EM_TESTE: DadosDoPainel = {
   uso: { assentos: 1, canais: 2 },
   gastoIaUsdCents: 120,
   planosParaTroca: [],
+  fuso: null,
 };
 
 describe("PainelDaAssinatura", () => {
@@ -48,5 +49,15 @@ describe("PainelDaAssinatura", () => {
   it("fala espanhol", () => {
     render(<PainelDaAssinatura dados={{ ...EM_TESTE, assinatura: null, plano: null }} idioma="es" />);
     expect(screen.getByText("Tu empresa no tiene plan de cobro: no paga y no tiene límites.")).toBeTruthy();
+  });
+
+  it("a virada de dia é a da empresa: 23h em São Paulo (02h UTC) continua no mesmo dia", () => {
+    const dados = { ...EM_TESTE, assinatura: { ...ASSINATURA_EM_TESTE, trial_ate: "2026-10-11T02:00:00Z" } };
+    const { unmount } = render(<PainelDaAssinatura dados={dados} idioma="pt-BR" />);
+    expect(screen.getByText(/^Teste grátis até 10\/10\/2026/)).toBeTruthy();
+    unmount();
+    // fuso gravado ilegível cai no padrão em vez de derrubar a tela
+    render(<PainelDaAssinatura dados={{ ...dados, fuso: "Marte/Olimpo" }} idioma="pt-BR" />);
+    expect(screen.getByText(/^Teste grátis até 10\/10\/2026/)).toBeTruthy();
   });
 });

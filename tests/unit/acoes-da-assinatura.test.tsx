@@ -24,7 +24,7 @@ const BASE: NonNullable<DadosDoPainel["assinatura"]> = {
   cancela_no_fim: false, modo: "teste", provedor: "stripe", link_de_pagamento: null, assinaturas_vivas: 1, plano_agendado: null,
 };
 const painel = (a: Partial<typeof BASE>): DadosDoPainel => ({
-  assinatura: { ...BASE, ...a }, plano: PLANO, uso: { assentos: 1, canais: 1 }, gastoIaUsdCents: 0, planosParaTroca: [PRO],
+  assinatura: { ...BASE, ...a }, plano: PLANO, uso: { assentos: 1, canais: 1 }, gastoIaUsdCents: 0, planosParaTroca: [PRO], fuso: null,
 });
 const acoes = (p: Partial<PropsDasAcoes> = {}): PropsDasAcoes => ({
   estado: "ativa", temProvedor: true, assinaturasVivas: 1, linkDePagamento: null, cancelaNoFim: false,

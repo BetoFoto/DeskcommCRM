@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
+import { formatadorDeData } from "@/lib/cobranca/fuso";
 import { abrirNoNavegador } from "@/lib/cobranca/navegar";
 import type { PlanoParaTroca } from "@/lib/cobranca/painel";
 import type { EstadoDaAssinatura } from "@/lib/cobranca/vocabulario";
@@ -26,6 +27,8 @@ export interface PropsDasAcoes {
   voltouDoCheckout: boolean;
   /** No hub de conta suspensa: pagar e voltar ao sistema é o único assunto. */
   noHub: boolean;
+  /** IANA da empresa; o mesmo dia do painel. Ausente, o padrão. */
+  fuso?: string | null;
 }
 
 const BASE = "/api/v1/cobranca/assinatura";
@@ -46,7 +49,7 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
   const [novo, setNovo] = useState(p.planosParaTroca[0]?.id ?? "");
   const [cancelando, setCancelando] = useState(false);
   const releu = useRef(false);
-  const dia = (v: string | null) => (v ? new Intl.DateTimeFormat(idioma, { day: "2-digit", month: "2-digit" }).format(new Date(v)) : "");
+  const dia = (v: string | null) => (v ? formatadorDeData(idioma, p.fuso ?? null, { day: "2-digit", month: "2-digit" }).format(new Date(v)) : "");
 
   const emDivida = p.estado === "em_atraso" || p.estado === "cancelada";
   const podeAssinar = p.assinaturasVivas === 0 && p.estado !== "ativa";

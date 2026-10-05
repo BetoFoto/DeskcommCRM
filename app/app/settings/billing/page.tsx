@@ -57,6 +57,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               planosParaTroca={painel.planosParaTroca}
               voltouDoCheckout={(await searchParams).voltou === "1"}
               noHub={false}
+              fuso={painel.fuso}
             />
           )}
         </>

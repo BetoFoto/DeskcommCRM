@@ -40,6 +40,8 @@ export interface DadosDoPainel {
   gastoIaUsdCents: number;
   /** Planos ativos e oferecidos às empresas, do MESMO intervalo, fora o atual (a troca não muda o intervalo). */
   planosParaTroca: PlanoParaTroca[];
+  /** IANA da empresa (`organizations.timezone`): as datas do painel e do recado saem nele. */
+  fuso: string | null;
 }
 
 interface PlanoLido extends PlanoParaTroca {
@@ -67,14 +69,15 @@ export async function lerPainelDaAssinatura(db: SupabaseClient, orgId: string): 
     .maybeSingle();
   if (error) throw new Error(`painel da assinatura: leitura falhou (${error.code})`);
 
-  const [planos, uso, gasto] = await Promise.all([
+  const [planos, uso, gasto, org] = await Promise.all([
     db
       .from("cobranca_planos")
       .select("id, nome, preco_cents, intervalo, max_assentos, max_canais, teto_ia_usd_cents, arquivado_em, oferecido_ao_cliente"),
     lerUsoDaOrganizacao(db, orgId),
     db.rpc("fn_gasto_de_ia_do_mes", { p_org: orgId }),
+    db.from("organizations").select("timezone").eq("id", orgId).maybeSingle(),
   ]);
-  if (planos.error || !uso || gasto.error) throw new Error("painel da assinatura: leitura falhou");
+  if (planos.error || !uso || gasto.error || org.error) throw new Error("painel da assinatura: leitura falhou");
 
   const todos = (planos.data ?? []) as PlanoLido[];
   const plano = a ? (todos.find((p) => p.id === a.plano_id) ?? null) : null;
@@ -103,6 +106,7 @@ export async function lerPainelDaAssinatura(db: SupabaseClient, orgId: string): 
       : null,
     uso,
     gastoIaUsdCents: Number(gasto.data ?? 0),
+    fuso: (org.data as { timezone: string | null } | null)?.timezone ?? null,
     planosParaTroca: plano
       ? todos
           .filter((p) => p.arquivado_em === null && p.oferecido_ao_cliente && p.intervalo === plano.intervalo && p.id !== plano.id)
