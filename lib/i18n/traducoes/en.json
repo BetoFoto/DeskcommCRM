@@ -8849,5 +8849,12 @@
   "dias, o Jev e o jeito de hoje deram o mesmo destino a": "days, Jev and the current behavior gave the same outcome to",
   "campos do negócio.": "deal fields.",
   "O Jev foi perguntado se o cliente disse, nas mensagens ainda sem resposta deste turno, o valor do campo personalizado do negócio que a IA ia gravar.": "Jev was asked whether the client said, in this turn's still-unanswered messages, the value of the deal custom field the AI was about to save.",
-  "O Jev não respondeu: o campo foi gravado como antes, sem a conferência.": "Jev didn't reply: the field was saved as before, without the check."
+  "O Jev não respondeu: o campo foi gravado como antes, sem a conferência.": "Jev didn't reply: the field was saved as before, without the check.",
+  "Remover do atendimento": "Remove from support",
+  "Desconectar conta": "Disconnect account",
+  "Desconectar esta conta?": "Disconnect this account?",
+  "Remover do atendimento?": "Remove from support?",
+  "As mensagens param de chegar e a conta sai do provedor. Para usar de novo, será preciso autorizar a conta outra vez. As conversas já recebidas continuam no CRM.": "Messages stop arriving and the account is removed from the provider. To use it again, you will need to authorize the account again. Conversations already received stay in the CRM.",
+  "As mensagens desta conta param de chegar no atendimento. A conta continua vinculada e pode voltar a receber depois. As conversas já recebidas continuam no CRM.": "Messages from this account stop arriving in support. The account stays linked and can receive again later. Conversations already received stay in the CRM.",
+  "Conta removida do atendimento.": "Account removed from support."
 }

@@ -69,6 +69,14 @@ interface SendArgs {
   /** O país da organização decide a lei e o idioma do texto. */
   perfil: PerfilDoPais;
   /**
+   * A ligação para o `data.json` — a cópia do art. 15.º, n.º 3 (issue #2340), que sobe no mesmo diretório do
+   * `report.pdf` (`workers/lgpd-export-worker.ts`). Chave obrigatória com
+   * valor possivelmente `undefined`, a mesma disciplina do `fuso`: o chamador
+   * não a esquece calado. Imprime só no ramo FORA do Brasil — o e-mail
+   * brasileiro é travado byte a byte pelo doc 88.
+   */
+  signedUrlDados: string | undefined;
+  /**
    * Fuso IANA da organização; só é lido fora do Brasil. A chave é obrigatória
    * (o valor pode ser `undefined`) para quem chama não a esquecer calado.
    */
@@ -170,7 +178,11 @@ function mensagemForaDoBrasil(args: SendArgs, shortId: string): Mensagem {
   <p>O relatório está disponível na ligação abaixo. Por razões de segurança, a ligação expira em <strong>${expiresFmt}</strong>.</p>
   <p style="margin:24px 0;">
     <a href="${args.signedUrl}" style="background:${args.marca.accent};color:${args.marca.accentFg};padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block;">Descarregar relatório</a>
-  </p>
+  </p>${
+    args.signedUrlDados
+      ? `\n  <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">A cópia dos seus dados pessoais (data.json) está em <a href="${args.signedUrlDados}" style="color:inherit;">${args.signedUrlDados}</a>.</p>`
+      : ""
+  }
   <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">Se não fez este pedido, ignore este e-mail.</p>${
     direito ? `\n  <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">${escapeHtml(direito)}</p>` : ""
   }
@@ -180,7 +192,14 @@ function mensagemForaDoBrasil(args: SendArgs, shortId: string): Mensagem {
   const text = `Pedido de acesso aos seus dados pessoais #${shortId}, tratado por ${args.marca.nome}.
 
 O relatório está disponível em:
-${args.signedUrl}
+${args.signedUrl}${
+    args.signedUrlDados
+      ? `
+
+A cópia dos seus dados pessoais (data.json) está em:
+${args.signedUrlDados}`
+      : ""
+  }
 
 A ligação expira em ${expiresFmt}.
 

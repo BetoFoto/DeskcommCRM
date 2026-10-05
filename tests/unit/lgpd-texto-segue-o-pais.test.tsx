@@ -99,6 +99,7 @@ async function emailPara(perfil: PerfilDoPais, fuso?: string) {
     to: "titular@x.test",
     requestId: "3f2a9c10-0000-4000-8000-000000000001",
     signedUrl: "https://storage.test/report.pdf?token=abc",
+    signedUrlDados: "https://storage.test/data.json?token=abc",
     expiresAt: new Date("2026-10-08T12:00:00.000Z"),
     marca: MARCA,
     perfil,
