@@ -10772,6 +10772,9 @@ export const DICIONARIO: Traducoes = {
       es: "Confirma con la persona que reconoce el cambio. Si no lo reconoce, habla con quien administra el servidor.",
     },
   "Abrir a equipe": { es: "Abrir el equipo" },
+  "Suspensa por falta de pagamento: não pode ser excluída enquanto houver cobrança pendente.": {
+    es: "Suspendida por falta de pago: no se puede eliminar mientras haya un cobro pendiente.",
+  },
   // Diálogo de exclusão de canal (`frasesDoImpacto`): singular e plural.
   "chamada de voz": { es: "llamada de voz" },
   "chamadas de voz": { es: "llamadas de voz" },

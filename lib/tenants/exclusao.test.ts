@@ -2,11 +2,14 @@
  * O ORQUESTRADOR da exclusão de tenant — a ordem é o desenho.
  *
  * A transação do banco está provada contra Postgres em
- * `tests/invariants/gestao-de-tenants.test.ts`. Aqui se mede o que o banco não
- * vê: que as recusas acontecem ANTES de tocar em qualquer coisa, que o que fala
- * com o mundo sai ANTES da transação (as credenciais moram nas linhas que ela
- * apaga), que Storage e logins vêm DEPOIS, e que um login que o GoTrue recusa
- * apagar fica registrado como mantido em vez de derrubar a exclusão.
+ * `tests/invariants/gestao-de-tenants.test.ts` e
+ * `tests/invariants/exclusao-recusa-cobranca.test.ts`. Aqui se mede o que o
+ * banco não vê: que as recusas acontecem ANTES de tocar em qualquer coisa
+ * (inclusive a suspensão por cobrança), que as credenciais são LIDAS antes da
+ * transação mas o mundo externo (WhatsApp, voz, loja) só é desligado DEPOIS do
+ * commit — se o banco recusar, nada lá fora caiu —, que Storage e logins vêm
+ * depois, e que um login que o GoTrue recusa apagar fica registrado como
+ * mantido em vez de derrubar a exclusão.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,14 +21,32 @@ vi.mock("@/lib/audit", () => ({
   }),
 }));
 vi.mock("@/lib/channels/desligar-da-organizacao", () => ({
-  desligarCanaisDaOrganizacao: vi.fn(async () => {
+  inventariarCanaisDaOrganizacao: vi.fn(async () => {
+    passos.push("canais.inventario");
+    return {
+      canais: [{ id: "canal-1", provider: "qr", wahaSessionName: "s1", meta: null }],
+      sessaoDeVoz: "voz-1",
+    };
+  }),
+  desligarCanaisInventariados: vi.fn(async () => {
     passos.push("canais.desligar");
     return [{ id: "canal-1", provedor: "qr", desfecho: "ok" }];
   }),
 }));
-vi.mock("@/lib/wacalls/client", () => ({ getWacallsClient: () => null }));
-vi.mock("@/lib/voice/desparear", () => ({ despareaVoz: vi.fn() }));
-vi.mock("@/lib/webhooks/secrets", () => ({ decryptWebhookSecret: vi.fn() }));
+vi.mock("@/lib/wacalls/client", () => ({ getWacallsClient: () => ({}) }));
+vi.mock("@/lib/voice/desparear", () => ({
+  desligarSessaoDeVozNoTransporte: vi.fn(async (_w: unknown, id: string) => {
+    passos.push(`voz.desligar:${id}`);
+  }),
+}));
+vi.mock("@/lib/nuvemshop/api-client", () => ({
+  NuvemshopApiClient: class {
+    async deleteWebhook(id: number) {
+      passos.push(`nuvemshop.desligar:${id}`);
+    }
+  },
+}));
+vi.mock("@/lib/webhooks/secrets", () => ({ decryptWebhookSecret: vi.fn(async () => "tok") }));
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
 import { audit } from "@/lib/audit";
@@ -37,6 +58,7 @@ const ATOR = "7e0a1111-0000-4000-8000-0000000000ff";
 
 interface Cenario {
   status?: string;
+  suspendedKind?: string | null;
   rpcErro?: { code: string; message: string } | null;
   arquivos?: Array<{ bucket_id: string; name: string }>;
   removiveis?: string[];
@@ -56,10 +78,24 @@ function adminFalso(c: Cenario) {
     from: (tabela: string) => {
       if (tabela === "organizations") {
         return leituraSimples(
-          c.status === undefined ? null : { id: ORG, slug: "acme", status: c.status },
+          c.status === undefined
+            ? null
+            : {
+                id: ORG,
+                slug: "acme",
+                status: c.status,
+                suspended_kind: c.suspendedKind === undefined ? "administrativa" : c.suspendedKind,
+              },
         );
       }
-      if (tabela === "tenant_integrations") return leituraSimples(null);
+      if (tabela === "tenant_integrations") {
+        passos.push("nuvemshop.inventario");
+        return leituraSimples({
+          oauth_access_token_encrypted: "enc",
+          store_metadata: { store_id: 9 },
+          webhook_subscriptions: { "order/created": { id: 77 } },
+        });
+      }
       throw new Error(`tabela inesperada: ${tabela}`);
     },
     rpc: vi.fn(async (fn: string) => {
@@ -112,6 +148,9 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+const TRANSPORTE = ["canais.desligar", "voz.desligar", "nuvemshop.desligar"];
+const tocouTransporte = () => passos.some((p) => TRANSPORTE.some((t) => p.startsWith(t)));
+
 describe("recusas — nada é tocado", () => {
   it("organização ATIVA: recusa com state_conflict, sem desligar canal nem chamar o banco", async () => {
     const admin = adminFalso({ status: "active" });
@@ -119,6 +158,15 @@ describe("recusas — nada é tocado", () => {
       codigo: "state_conflict",
     });
     expect(passos).toEqual([]);
+  });
+
+  it("suspensa por COBRANÇA: exclusao_com_cobranca_pendente, sem inventário, banco, transporte nem audit", async () => {
+    const admin = adminFalso({ status: "suspended", suspendedKind: "cobranca" });
+    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toMatchObject({
+      codigo: "exclusao_com_cobranca_pendente",
+    });
+    expect(passos).toEqual([]);
+    expect(admin.rpc).not.toHaveBeenCalled();
   });
 
   it("confirmação que não é o slug: recusa", async () => {
@@ -145,7 +193,7 @@ describe("recusas — nada é tocado", () => {
 });
 
 describe("a ordem", () => {
-  it("canal externo ANTES do banco; Storage e logins DEPOIS; registro final por último", async () => {
+  it("credenciais lidas ANTES do banco; WhatsApp, voz e loja desligados DEPOIS do commit; Storage, logins e registro por último", async () => {
     const admin = adminFalso({
       status: "suspended",
       arquivos: [
@@ -156,15 +204,32 @@ describe("a ordem", () => {
     });
     const r = await excluirOrganizacao(admin as never, entrada);
 
-    const i = (p: string) => passos.findIndex((x) => x.startsWith(p));
-    expect(i("canais.desligar")).toBeLessThan(i("rpc:fn_excluir_organizacao"));
-    expect(i("rpc:fn_excluir_organizacao")).toBeLessThan(i("storage:"));
-    expect(i("rpc:fn_excluir_organizacao")).toBeLessThan(i("auth.delete:u1"));
+    const i = (p: string) => {
+      const n = passos.findIndex((x) => x.startsWith(p));
+      expect(n, `passo ${p} em ${passos.join(", ")}`).toBeGreaterThanOrEqual(0);
+      return n;
+    };
+    const banco = i("rpc:fn_excluir_organizacao");
+    expect(i("canais.inventario")).toBeLessThan(banco);
+    expect(i("nuvemshop.inventario")).toBeLessThan(banco);
+    for (const t of TRANSPORTE) expect(i(t)).toBeGreaterThan(banco);
+    expect(i("storage:")).toBeGreaterThan(i("canais.desligar"));
+    expect(i("auth.delete:u1")).toBeGreaterThan(banco);
     expect(passos.at(-1)).toBe("audit");
 
+    expect(passos).toContain("voz.desligar:voz-1");
+    expect(passos).toContain("nuvemshop.desligar:77");
+    expect(r.voz).toBe("ok");
+    expect(r.nuvemshop).toBe("ok");
     expect(r.arquivos).toEqual({ encontrados: 2, removidos: 2, falhas: 0 });
     expect(r.usuarios.removidos).toEqual(["u1"]);
     expect(r.canais[0]).toMatchObject({ id: "canal-1", desfecho: "ok" });
+  });
+
+  it("suspensão sem tipo (nula) vale como administrativa: a exclusão segue", async () => {
+    const admin = adminFalso({ status: "suspended", suspendedKind: null });
+    const r = await excluirOrganizacao(admin as never, entrada);
+    expect(r.slug).toBe("acme");
   });
 
   it("login que o GoTrue recusa apagar fica como MANTIDO — a exclusão não cai", async () => {
@@ -177,8 +242,10 @@ describe("a ordem", () => {
     expect(r.usuarios.removidos).toEqual(["u1"]);
     expect(r.usuarios.mantidos.map((m) => m.id)).toEqual(["u2"]);
   });
+});
 
-  it("recusa do banco (PT409, corrida com reativação) vira state_conflict, e Storage/logins não rodam", async () => {
+describe("o banco recusou — nada lá fora caiu", () => {
+  it("PT409 (corrida com reativação) vira state_conflict; zero transporte, Storage, logins e audit", async () => {
     const admin = adminFalso({
       status: "suspended",
       rpcErro: { code: "PT409", message: "organizacao_nao_suspensa" },
@@ -187,7 +254,28 @@ describe("a ordem", () => {
     await expect(excluirOrganizacao(admin as never, entrada)).rejects.toMatchObject({
       codigo: "state_conflict",
     });
+    expect(tocouTransporte()).toBe(false);
     expect(passos.some((p) => p.startsWith("storage:") || p.startsWith("auth.delete"))).toBe(false);
     expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("PT409 organizacao_com_cobranca_pendente (o tipo virou cobrança no meio) vira exclusao_com_cobranca_pendente", async () => {
+    const admin = adminFalso({
+      status: "suspended",
+      rpcErro: { code: "PT409", message: "organizacao_com_cobranca_pendente" },
+    });
+    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toMatchObject({
+      codigo: "exclusao_com_cobranca_pendente",
+    });
+    expect(tocouTransporte()).toBe(false);
+  });
+
+  it("erro qualquer da transação: lança, e o WhatsApp, a voz e a loja seguem ligados", async () => {
+    const admin = adminFalso({
+      status: "suspended",
+      rpcErro: { code: "P0001", message: "organizacao_exclusao_incompleta" },
+    });
+    await expect(excluirOrganizacao(admin as never, entrada)).rejects.toThrow(/exclusao_banco/);
+    expect(tocouTransporte()).toBe(false);
   });
 });

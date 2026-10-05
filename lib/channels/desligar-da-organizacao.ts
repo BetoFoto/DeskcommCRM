@@ -10,9 +10,17 @@
  * (`app/api/v1/channel-sessions/[id]/route.ts`), aplicado a todos:
  *
  *  - sessão por QR: sai do aparelho (logout) e o servidor apaga a sessão;
- *  - número oficial: o webhook do número volta para a URL do app — precisa da
- *    credencial da linha, então roda ANTES de a cascata apagá-la. A inscrição
- *    na WABA não entra: ela é compartilhada com outros números.
+ *  - número oficial: o webhook do número volta para a URL do app.
+ *    A inscrição na WABA não entra: ela é compartilhada com outros números.
+ *
+ * Em DUAS metades, e a separação é o desenho (decisão do dono, recorte do
+ * #1967): `inventariarCanaisDaOrganizacao` LÊ do banco — inclusive a credencial
+ * do número oficial, já decifrada, e a sessão de voz — ANTES da transação que
+ * apaga as linhas; `desligarCanaisInventariados` só fala com o transporte, sem
+ * banco, e roda DEPOIS do commit. Se a transação falhar, nada lá fora caiu: o
+ * WhatsApp da empresa segue funcionando e o tenant fica suspenso e intacto. O
+ * preço declarado: um desligamento que falha depois do commit deixa a sessão
+ * órfã no provedor, com o desfecho `falhou` no registro final.
  *
  * Best-effort, canal por canal: um transporte fora do ar não segura a exclusão
  * que o admin pediu, e o desfecho de cada canal volta para o registro final.
@@ -39,48 +47,93 @@ interface LinhaDoCanal {
   waha_session_name: string | null;
   meta_phone_number_id: string | null;
   meta_token_encrypted: string | null;
+  wacalls_session_id: string | null;
+  archived_at: string | null;
+}
+
+/** O que o desligamento precisa saber de um canal, lido antes da transação. */
+export interface CanalInventariado {
+  id: string;
+  provider: string;
+  wahaSessionName: string | null;
+  /** Número oficial: o token já decifrado (em memória), ou o motivo de não ter. */
+  meta: { phoneNumberId: string; token: string | null; motivo?: string } | null;
+}
+
+export interface InventarioDeCanais {
+  canais: CanalInventariado[];
+  /** A sessão de voz (WaCalls) da linha `provider='wacalls'` não arquivada. */
+  sessaoDeVoz: string | null;
 }
 
 function mensagemDe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export async function desligarCanaisDaOrganizacao(
+/** Metade 1 — só leitura, sem efeito externo. Roda ANTES da transação. */
+export async function inventariarCanaisDaOrganizacao(
   admin: SupabaseClient,
   orgId: string,
-): Promise<CanalDesligado[]> {
+): Promise<InventarioDeCanais> {
   const { data, error } = await admin
     .from("channel_sessions")
-    .select("id, provider, waha_session_name, meta_phone_number_id, meta_token_encrypted")
+    .select(
+      "id, provider, waha_session_name, meta_phone_number_id, meta_token_encrypted, wacalls_session_id, archived_at",
+    )
     .eq("organization_id", orgId);
-  if (error) throw new Error(`desligar_canais: ${error.message}`);
+  if (error) throw new Error(`inventariar_canais: ${error.message}`);
 
+  const canais: CanalInventariado[] = [];
+  let sessaoDeVoz: string | null = null;
+  for (const linha of (data ?? []) as LinhaDoCanal[]) {
+    if (linha.provider === "wacalls" && !linha.archived_at && linha.wacalls_session_id) {
+      sessaoDeVoz = linha.wacalls_session_id;
+    }
+    let meta: CanalInventariado["meta"] = null;
+    if (linha.provider !== CHANNEL_PROVIDER_WAHA && linha.meta_token_encrypted && linha.meta_phone_number_id) {
+      try {
+        const token = await decryptWebhookSecret(admin, linha.meta_token_encrypted);
+        meta = token
+          ? { phoneNumberId: linha.meta_phone_number_id, token }
+          : { phoneNumberId: linha.meta_phone_number_id, token: null, motivo: "credencial_ilegivel" };
+      } catch (err) {
+        meta = { phoneNumberId: linha.meta_phone_number_id, token: null, motivo: mensagemDe(err) };
+      }
+    }
+    canais.push({ id: linha.id, provider: linha.provider, wahaSessionName: linha.waha_session_name, meta });
+  }
+  return { canais, sessaoDeVoz };
+}
+
+/** Metade 2 — só transporte, sem banco. Roda DEPOIS do commit. */
+export async function desligarCanaisInventariados(
+  inventario: InventarioDeCanais,
+): Promise<CanalDesligado[]> {
   const waha = getWahaClient();
   const saida: CanalDesligado[] = [];
-  for (const canal of (data ?? []) as LinhaDoCanal[]) {
+  for (const canal of inventario.canais) {
     try {
       if (canal.provider === CHANNEL_PROVIDER_WAHA) {
-        if (!waha || !canal.waha_session_name) {
+        if (!waha || !canal.wahaSessionName) {
           saida.push({ id: canal.id, provedor: canal.provider, desfecho: "nao_se_aplica" });
           continue;
         }
-        await waha.logoutSession(canal.waha_session_name);
-        await waha.deleteSession(canal.waha_session_name);
+        await waha.logoutSession(canal.wahaSessionName);
+        await waha.deleteSession(canal.wahaSessionName);
         saida.push({ id: canal.id, provedor: canal.provider, desfecho: "ok" });
-      } else if (canal.meta_token_encrypted && canal.meta_phone_number_id) {
-        const token = await decryptWebhookSecret(admin, canal.meta_token_encrypted);
-        if (!token) {
+      } else if (canal.meta) {
+        if (!canal.meta.token) {
           saida.push({
             id: canal.id,
             provedor: canal.provider,
             desfecho: "falhou",
-            motivo: "credencial_ilegivel",
+            motivo: canal.meta.motivo ?? "credencial_ilegivel",
           });
           continue;
         }
         const desfecho = await desfazerWebhookDoNumero({
-          phoneNumberId: canal.meta_phone_number_id,
-          token,
+          phoneNumberId: canal.meta.phoneNumberId,
+          token: canal.meta.token,
         });
         saida.push({
           id: canal.id,

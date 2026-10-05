@@ -48,6 +48,7 @@ export async function GET(
       status,
       onboarded_at,
       suspended_at,
+      suspended_kind,
       created_at,
       settings,
       country,

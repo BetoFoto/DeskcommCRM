@@ -7,33 +7,43 @@
  * O que mora FORA do Postgres não entra numa transação, e por isso a ordem é o
  * desenho:
  *
- *   1. ANTES do banco, desligar o que fala com o mundo — os canais de mensagem
- *      (`lib/channels/desligar-da-organizacao.ts`), a voz e os webhooks da
- *      loja integrada. Precisa ser
- *      antes: é a credencial guardada nas linhas da organização que autoriza a
- *      chamada, e depois da cascata ela não existe mais. Best-effort: um serviço
- *      externo fora do ar não segura a exclusão que o admin pediu — o resultado
- *      de cada passo vai para o registro final.
- *   2. O banco, numa transação. Se falhar, nada foi apagado: o tenant fica
- *      intacto (e suspenso) e o admin pode tentar de novo.
- *   3. DEPOIS do commit, os arquivos no Storage (prefixo `<org>/` em todos os
- *      buckets) pela API — apagar `storage.objects` direto deixaria o arquivo
- *      no disco. Repetível: o prefixo é determinístico.
- *   4. Os logins que pertenciam só a esta organização, pelo GoTrue (limpa
+ *   1. ANTES do banco, só LER o que o desligamento vai precisar — as linhas dos
+ *      canais (`inventariarCanaisDaOrganizacao`, em
+ *      `lib/channels/desligar-da-organizacao.ts`), a sessão de voz e a conexão
+ *      da loja, com as credenciais já decifradas, em memória. Precisa ser
+ *      antes: depois da cascata as linhas não existem mais. Nada externo é
+ *      tocado neste passo.
+ *   2. O banco, numa transação. Se falhar, nada foi apagado e NADA lá fora
+ *      caiu: o WhatsApp, a voz e a loja da empresa seguem funcionando, e o
+ *      tenant fica suspenso e intacto para o admin tentar de novo.
+ *   3. DEPOIS do commit, desligar o que fala com o mundo, só com o inventário:
+ *      os canais de mensagem, a voz e os webhooks da loja. Best-effort: um
+ *      serviço fora do ar não desfaz a exclusão — o desfecho de cada passo vai
+ *      para o registro final, e um `falhou` aqui é sessão órfã no provedor.
+ *      Desligar antes e o banco recusar era pior: a empresa ficava sem
+ *      WhatsApp e continuava existindo.
+ *   4. Os arquivos no Storage (prefixo `<org>/` em todos os buckets) pela API
+ *      — apagar `storage.objects` direto deixaria o arquivo no disco.
+ *      Repetível: o prefixo é determinístico.
+ *   5. Os logins que pertenciam só a esta organização, pelo GoTrue (limpa
  *      sessões, fatores e identidades). Quem o banco ainda referencia fica, e
  *      isso é registrado — não é erro.
- *   5. O registro final (`organization.deletion_completed`).
+ *   6. O registro final (`organization.deletion_completed`).
  *
  * Pré-condição dura, conferida aqui e de novo no banco: a organização está
- * SUSPENSA e a confirmação é o slug dela.
+ * SUSPENSA, a suspensão é ADMINISTRATIVA (a por cobrança é recusada — excluir
+ * deixaria a assinatura cobrando no provedor) e a confirmação é o slug dela.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
-import { desligarCanaisDaOrganizacao } from "@/lib/channels/desligar-da-organizacao";
+import {
+  desligarCanaisInventariados,
+  inventariarCanaisDaOrganizacao,
+} from "@/lib/channels/desligar-da-organizacao";
 import { logger } from "@/lib/logger";
 import { NuvemshopApiClient } from "@/lib/nuvemshop/api-client";
-import { despareaVoz } from "@/lib/voice/desparear";
+import { desligarSessaoDeVozNoTransporte } from "@/lib/voice/desparear";
 import { getWacallsClient } from "@/lib/wacalls/client";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
@@ -53,7 +63,11 @@ export interface ResultadoDaExclusao {
 export class ExclusaoRecusada extends Error {
   constructor(
     public readonly codigo:
-      "not_found" | "state_conflict" | "confirmacao_divergente" | "motivo_curto",
+      | "not_found"
+      | "state_conflict"
+      | "exclusao_com_cobranca_pendente"
+      | "confirmacao_divergente"
+      | "motivo_curto",
     message: string,
   ) {
     super(message);
@@ -75,15 +89,18 @@ function mensagemDe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** Passo 1b — a voz é por organização, não por canal. */
-async function desligarVoz(admin: SupabaseClient, orgId: string): Promise<DesfechoExterno> {
+const MENSAGEM_DE_COBRANCA =
+  "Esta empresa está suspensa por falta de pagamento. Excluí-la deixaria a assinatura cobrando no provedor: resolva a cobrança antes.";
+
+/** Passo 3 — a voz é por organização, não por canal; o id veio do inventário. */
+async function desligarVoz(orgId: string, sessaoDeVoz: string | null): Promise<DesfechoExterno> {
   const wacalls = getWacallsClient();
-  if (!wacalls) return "nao_se_aplica";
+  if (!wacalls || !sessaoDeVoz) return "nao_se_aplica";
   try {
-    const r = await despareaVoz(admin, wacalls, orgId);
-    return r.desapareado ? "ok" : "nao_se_aplica";
+    await desligarSessaoDeVozNoTransporte(wacalls, sessaoDeVoz);
+    return "ok";
   } catch (err) {
-    logger.warn("[exclusao] falha ao desparear a voz", {
+    logger.warn("[exclusao] falha ao desligar a voz", {
       organization_id: orgId,
       erro: mensagemDe(err),
     });
@@ -91,8 +108,18 @@ async function desligarVoz(admin: SupabaseClient, orgId: string): Promise<Desfec
   }
 }
 
-/** Passo 1c — os webhooks que a conexão registrou na loja apontam para cá. */
-async function desligarNuvemshop(admin: SupabaseClient, orgId: string): Promise<DesfechoExterno> {
+interface LojaInventariada {
+  storeId: string;
+  /** Decifrado antes da transação; `null` quando a credencial não abriu. */
+  accessToken: string | null;
+  webhookIds: number[];
+}
+
+/** Passo 1 — a conexão da loja, lida antes da transação (só leitura). */
+async function inventariarNuvemshop(
+  admin: SupabaseClient,
+  orgId: string,
+): Promise<LojaInventariada | null> {
   const { data } = await admin
     .from("tenant_integrations")
     .select("oauth_access_token_encrypted, store_metadata, webhook_subscriptions")
@@ -104,35 +131,46 @@ async function desligarNuvemshop(admin: SupabaseClient, orgId: string): Promise<
     store_metadata: { store_id?: string | number } | null;
     webhook_subscriptions: Record<string, { id: number | null }> | null;
   } | null;
-  if (!linha?.oauth_access_token_encrypted || !linha.store_metadata?.store_id)
-    return "nao_se_aplica";
+  if (!linha?.oauth_access_token_encrypted || !linha.store_metadata?.store_id) return null;
+  let accessToken: string | null = null;
   try {
-    const accessToken = await decryptWebhookSecret(admin, linha.oauth_access_token_encrypted);
-    if (!accessToken) return "falhou";
-    const client = new NuvemshopApiClient({
-      storeId: String(linha.store_metadata.store_id),
-      accessToken,
-    });
-    let falhou = false;
-    for (const assinatura of Object.values(linha.webhook_subscriptions ?? {})) {
-      if (!assinatura?.id) continue;
-      try {
-        await client.deleteWebhook(assinatura.id);
-      } catch {
-        falhou = true;
-      }
-    }
-    return falhou ? "falhou" : "ok";
+    accessToken = await decryptWebhookSecret(admin, linha.oauth_access_token_encrypted);
   } catch (err) {
-    logger.warn("[exclusao] falha ao remover os webhooks da Nuvemshop", {
+    logger.warn("[exclusao] credencial da Nuvemshop ilegível", {
       organization_id: orgId,
       erro: mensagemDe(err),
     });
-    return "falhou";
   }
+  const webhookIds = Object.values(linha.webhook_subscriptions ?? {})
+    .map((a) => a?.id)
+    .filter((id): id is number => typeof id === "number");
+  return { storeId: String(linha.store_metadata.store_id), accessToken, webhookIds };
 }
 
-/** Passo 3 — arquivos pelo prefixo `<org>/`, em lotes, pela API do Storage. */
+/** Passo 3 — os webhooks que a conexão registrou na loja apontam para cá. */
+async function desligarNuvemshop(
+  orgId: string,
+  loja: LojaInventariada | null,
+): Promise<DesfechoExterno> {
+  if (!loja) return "nao_se_aplica";
+  if (!loja.accessToken) return "falhou";
+  const client = new NuvemshopApiClient({ storeId: loja.storeId, accessToken: loja.accessToken });
+  let falhou = false;
+  for (const id of loja.webhookIds) {
+    try {
+      await client.deleteWebhook(id);
+    } catch (err) {
+      falhou = true;
+      logger.warn("[exclusao] falha ao remover um webhook da Nuvemshop", {
+        organization_id: orgId,
+        erro: mensagemDe(err),
+      });
+    }
+  }
+  return falhou ? "falhou" : "ok";
+}
+
+/** Passo 4 — arquivos pelo prefixo `<org>/`, em lotes, pela API do Storage. */
 async function limparArquivos(
   admin: SupabaseClient,
   orgId: string,
@@ -162,7 +200,7 @@ async function limparArquivos(
   return { encontrados: (data ?? []).length, removidos, falhas };
 }
 
-/** Passo 4 — só quem o banco apontou como sem nenhum outro vínculo. */
+/** Passo 5 — só quem o banco apontou como sem nenhum outro vínculo. */
 async function removerLogins(
   admin: SupabaseClient,
   candidatos: string[],
@@ -194,7 +232,7 @@ export async function excluirOrganizacao(
 
   const { data: org, error: orgErr } = await admin
     .from("organizations")
-    .select("id, slug, status")
+    .select("id, slug, status, suspended_kind")
     .eq("id", entrada.orgId)
     .maybeSingle();
   if (orgErr) throw new Error(`exclusao_leitura: ${orgErr.message}`);
@@ -205,6 +243,10 @@ export async function excluirOrganizacao(
       "Só uma organização suspensa pode ser excluída. Suspenda-a antes.",
     );
   }
+  // Tipo nulo vale como administrativa — a régua de `lib/organizacao/operante.ts`.
+  if (org.suspended_kind === "cobranca") {
+    throw new ExclusaoRecusada("exclusao_com_cobranca_pendente", MENSAGEM_DE_COBRANCA);
+  }
   if (entrada.confirmacao !== org.slug) {
     throw new ExclusaoRecusada(
       "confirmacao_divergente",
@@ -212,10 +254,10 @@ export async function excluirOrganizacao(
     );
   }
 
-  // 1. O que fala com o mundo, com as credenciais ainda no banco.
-  const canais = await desligarCanaisDaOrganizacao(admin, entrada.orgId);
-  const voz = await desligarVoz(admin, entrada.orgId);
-  const nuvemshop = await desligarNuvemshop(admin, entrada.orgId);
+  // 1. Só leitura: o que o desligamento vai precisar, antes que a cascata
+  // apague as linhas. Nada externo é tocado aqui.
+  const inventario = await inventariarCanaisDaOrganizacao(admin, entrada.orgId);
+  const loja = await inventariarNuvemshop(admin, entrada.orgId);
 
   // 2. O banco, numa transação.
   const { data: resultado, error: rpcErr } = await admin.rpc("fn_excluir_organizacao", {
@@ -226,8 +268,11 @@ export async function excluirOrganizacao(
     p_request_id: entrada.requestId,
   });
   if (rpcErr) {
-    // Recusas do próprio banco (corrida com uma reativação, por exemplo) viram
-    // a mesma recusa que a checagem de cima daria.
+    // Recusas do próprio banco (corrida com uma reativação, ou com uma
+    // suspensão que virou cobrança) viram a mesma recusa que a checagem de
+    // cima daria. Nada lá fora foi tocado.
+    if (rpcErr.code === "PT409" && rpcErr.message === "organizacao_com_cobranca_pendente")
+      throw new ExclusaoRecusada("exclusao_com_cobranca_pendente", MENSAGEM_DE_COBRANCA);
     if (rpcErr.code === "PT409")
       throw new ExclusaoRecusada("state_conflict", "A organização não está mais suspensa.");
     if (rpcErr.code === "PT404")
@@ -240,7 +285,12 @@ export async function excluirOrganizacao(
     usuarios_removiveis: string[];
   };
 
-  // 3 e 4. Depois do commit — repetíveis e registrados.
+  // 3. Depois do commit, o que fala com o mundo — só com o inventário.
+  const canais = await desligarCanaisInventariados(inventario);
+  const voz = await desligarVoz(entrada.orgId, inventario.sessaoDeVoz);
+  const nuvemshop = await desligarNuvemshop(entrada.orgId, loja);
+
+  // 4 e 5. Repetíveis e registrados.
   const arquivos = await limparArquivos(admin, entrada.orgId);
   const usuarios = await removerLogins(admin, banco.usuarios_removiveis ?? []);
 
@@ -255,7 +305,7 @@ export async function excluirOrganizacao(
     usuarios,
   };
 
-  // 5. O registro final. `organizationId` nulo: a organização não existe mais,
+  // 6. O registro final. `organizationId` nulo: a organização não existe mais,
   // e a trilha dela é achada por `resource_id` (como a lápide).
   await audit({
     action: "organization.deletion_completed",
