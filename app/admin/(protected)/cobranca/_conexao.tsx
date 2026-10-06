@@ -122,7 +122,7 @@ export function ConexaoDaCobranca({
       {aPublicar !== null && (
         <div role="alert" className="space-y-2 rounded-md border p-3 text-sm">
           <p>
-            {t("{n} empresa(s) assinaram em modo de teste. Ao publicar, elas voltam para o teste grátis e precisam assinar de novo com um cartão de verdade.").replace(
+            {(aPublicar === 1 ? t("{n} empresa assinou em modo de teste. Ao publicar, ela volta para o teste grátis e precisa assinar de novo com um cartão de verdade.") : t("{n} empresas assinaram em modo de teste. Ao publicar, elas voltam para o teste grátis e precisam assinar de novo com um cartão de verdade.")).replace(
               "{n}",
               String(aPublicar),
             )}

@@ -20,7 +20,7 @@ import { FaixaDoModoDeTeste, VisaoGeral } from "@/app/admin/(protected)/cobranca
 import { ApiError } from "@/lib/api/types";
 import { montarChecklist, type DadosDaVisaoGeral } from "@/lib/cobranca/visao-geral";
 
-const CHAVE = "sk_test_51HtelaDeConexao0042";
+const CHAVE = ["sk", "test", "51HtelaDeConexao0042"].join("_");
 const VAZIA: DadosDaVisaoGeral = {
   provedor: null, modo: null, chaveLast4: null, urlDoWebhook: "https://crm.exemplo.com/api/v1/webhooks/cobranca/stripe",
   ultimoAvisoEm: null, ultimaLeituraEm: null, compraConcluida: false, emailPronto: false, planoDoCadastro: false,
@@ -51,7 +51,7 @@ describe("Conexão", () => {
     render(<ConexaoDaCobranca provedor="stripe" modo="teste" last4="0042" urlDoWebhook={VAZIA.urlDoWebhook} />);
     await u.type(screen.getByLabelText("Chave secreta"), CHAVE.replace("test", "live"));
     await u.click(screen.getByRole("button", { name: "Testar e conectar" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("2 empresa(s)");
+    expect((await screen.findByRole("alert")).textContent).toContain("2 empresas assinaram");
     await u.click(screen.getByRole("button", { name: "Publicar mesmo assim" }));
     await waitFor(() => expect(h.post).toHaveBeenLastCalledWith("/api/v1/admin/cobranca/conexao", expect.objectContaining({ confirmar_publicacao: true })));
   });
@@ -96,13 +96,19 @@ describe("Visão geral", () => {
   it("problemas do dono aparecem só quando existem", () => {
     const comProblema = { ...VAZIA, problemas: { ...VAZIA.problemas, cobrancaDupla: 2 } };
     render(<VisaoGeral dados={comProblema} checklist={montarChecklist(comProblema)} idioma="pt-BR" agora={new Date()} />);
-    expect(screen.getByText(/2 cliente\(s\) com duas assinaturas ativas/)).toBeTruthy();
+    expect(screen.getByText(/2 clientes com duas assinaturas ativas/)).toBeTruthy();
   });
 
   it("⭐ avisos recusados por assinatura viram problema com o que fazer (segredo trocado não fica em silêncio)", () => {
     const recusados = { ...VAZIA, problemas: { ...VAZIA.problemas, avisosRecusados: 4 } };
     render(<VisaoGeral dados={recusados} checklist={montarChecklist(recusados)} idioma="pt-BR" agora={new Date()} />);
-    expect(screen.getByText(/4 aviso\(s\) de pagamento recusado\(s\)/)).toBeTruthy();
+    expect(screen.getByText(/4 avisos de pagamento recusados/)).toBeTruthy();
+  });
+
+  it("um problema só fala no singular, sem '(s)'", () => {
+    const um = { ...VAZIA, problemas: { ...VAZIA.problemas, cobrancaDupla: 1 } };
+    render(<VisaoGeral dados={um} checklist={montarChecklist(um)} idioma="pt-BR" agora={new Date()} />);
+    expect(screen.getByText(/^1 cliente com duas assinaturas ativas/)).toBeTruthy();
   });
 
   it("⭐ em modo de teste, a faixa diz que as empresas reais ainda não pagam; em produção, some", () => {

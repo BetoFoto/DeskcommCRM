@@ -44,13 +44,13 @@ export function VisaoGeral({
   const proximo = checklist.find((p) => !p.feito);
   const atrasada = leituraAtrasada(dados.ultimaLeituraEm, agora, 7);
   const problemas = [
-    [dados.problemas.credencialInvalida, t("{n} cliente(s) com leitura falhando: a chave não funciona mais. Conecte de novo na aba Conexão.")],
-    [dados.problemas.cobrancaDupla, t("{n} cliente(s) com duas assinaturas ativas. Cancele uma no painel do provedor.")],
-    [dados.problemas.pagouCancelada, t("{n} pagamento(s) de assinatura já cancelada. Dê prazo à empresa ou estorne no provedor.")],
-    [dados.problemas.avisosComErro, t("{n} aviso(s) do provedor sem empresa correspondente nos últimos 90 dias.")],
+    [dados.problemas.credencialInvalida, (dados.problemas.credencialInvalida === 1 ? t("{n} cliente com leitura falhando: a chave não funciona mais. Conecte de novo na aba Conexão.") : t("{n} clientes com leitura falhando: a chave não funciona mais. Conecte de novo na aba Conexão."))],
+    [dados.problemas.cobrancaDupla, (dados.problemas.cobrancaDupla === 1 ? t("{n} cliente com duas assinaturas ativas. Cancele uma no painel do provedor.") : t("{n} clientes com duas assinaturas ativas. Cancele uma de cada no painel do provedor."))],
+    [dados.problemas.pagouCancelada, (dados.problemas.pagouCancelada === 1 ? t("{n} pagamento de assinatura já cancelada. Dê prazo à empresa ou estorne no provedor.") : t("{n} pagamentos de assinatura já cancelada. Dê prazo às empresas ou estorne no provedor."))],
+    [dados.problemas.avisosComErro, (dados.problemas.avisosComErro === 1 ? t("{n} aviso do provedor sem empresa correspondente nos últimos 90 dias.") : t("{n} avisos do provedor sem empresa correspondente nos últimos 90 dias."))],
     [
       dados.problemas.avisosRecusados,
-      t("{n} aviso(s) de pagamento recusado(s) nas últimas 24 h: a assinatura não confere. Conecte a chave de novo na aba Conexão."),
+      (dados.problemas.avisosRecusados === 1 ? t("{n} aviso de pagamento recusado nas últimas 24 h: a assinatura não confere. Conecte a chave de novo na aba Conexão.") : t("{n} avisos de pagamento recusados nas últimas 24 h: a assinatura não confere. Conecte a chave de novo na aba Conexão.")),
     ],
   ] as const;
 
