@@ -1654,6 +1654,13 @@ export const DICIONARIO: Traducoes = {
   },
   // ─── Shell persistente (sidebar, topbar, ⌘K, menu do usuário) ───
   "Navegação principal": { es: "Navegación principal" },
+  // A barra de abas do celular: o rótulo acessível dela e o da aba que abre a
+  // gaveta com o resto dos destinos.
+  "Navegação rápida": { es: "Navegación rápida" },
+  Mais: { es: "Más" },
+  // O estado de carregando da tela de Desempenho, que passou a usar o mesmo
+  // molde de vazio/erro das outras telas.
+  "Carregando o desempenho": { es: "Cargando el rendimiento" },
   "Expandir sidebar": { es: "Expandir barra lateral" },
   "Recolher sidebar": { es: "Contraer barra lateral" },
   Versão: { es: "Versión" },
