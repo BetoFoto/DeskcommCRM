@@ -37,6 +37,28 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Conectar a assinatura do ChatGPT": { es: "Conectar la suscripción de ChatGPT" },
+  "Cada empresa conecta a própria conta do ChatGPT. Abra o link e entre com a conta que tem a assinatura. No fim, o navegador vai para http://127.0.0.1:1455/auth/callback, que pode não abrir — é esperado. Copie esse endereço inteiro, da barra do navegador, e cole aqui.": {
+    es: "Cada empresa conecta su propia cuenta de ChatGPT. Abre el enlace e inicia sesión con la cuenta que tiene la suscripción. Al final, el navegador irá a http://127.0.0.1:1455/auth/callback, que quizá no se abra — es normal. Copia la dirección completa de la barra del navegador y pégala aquí.",
+  },
+  "A autorização usa Sign in with ChatGPT para apps auto-hospedados. O acesso depende dos termos e limites de uso da assinatura e pode mudar conforme as regras da OpenAI.": {
+    es: "La autorización usa Sign in with ChatGPT para aplicaciones autoalojadas. El acceso depende de los términos y límites de uso de la suscripción y puede cambiar según las reglas de OpenAI.",
+  },
+  "A assinatura é pessoal e tem limites por janela de uso. Não compartilhe esta conta entre organizações nem tente contornar os limites.": {
+    es: "La suscripción es personal y tiene límites por ventana de uso. No compartas esta cuenta entre organizaciones ni intentes eludir los límites.",
+  },
+  "Para atendimento de clientes em volume, prefira uma chave de API da própria organização. Se configurada, ela pode servir como reserva quando a assinatura atingir limites ou falhar.": {
+    es: "Para atender a clientes a gran escala, es mejor usar una clave de API de la propia organización. Si está configurada, puede servir como alternativa cuando la suscripción alcance sus límites o falle.",
+  },
+  "Há um login anterior salvo, mas ele ainda não autorizou o uso do plano ChatGPT. Conecte novamente por este link para listar modelos e usar a assinatura.": {
+    es: "Hay un inicio de sesión anterior guardado, pero aún no autorizó el uso del plan ChatGPT. Vuelve a conectar desde este enlace para listar modelos y usar la suscripción.",
+  },
+  "Login guardado com cifra nesta empresa. O agente pode usar a assinatura dentro dos limites dela; se houver falha elegível e uma reserva configurada, usa a chave de API desta organização.": {
+    es: "Inicio de sesión guardado cifrado para esta empresa. El agente puede usar la suscripción dentro de sus límites; si ocurre un fallo compatible y hay una alternativa configurada, usará la clave de API de esta organización.",
+  },
+  "Conecte sua conta pessoal do ChatGPT dentro dos limites da assinatura; para operação em volume, prefira uma chave de API da organização. Uma chave da própria organização pode servir de reserva.": {
+    es: "Conecta tu cuenta personal de ChatGPT dentro de los límites de la suscripción; para operar a gran escala, es mejor usar una clave de API de la organización. Una clave de la propia organización puede servir como alternativa.",
+  },
   // A conferência de fato (#2231): a terceira camada do before_send.
   "Conferir afirmações de fato na resposta": { es: "Verificar las afirmaciones de hecho de la respuesta" },
   "Lê a resposta que o assistente vai enviar e confere, nas evidências consultadas neste turno, se o que ele afirma sobre o negócio está escrito ali — ou se o material diz o contrário.":

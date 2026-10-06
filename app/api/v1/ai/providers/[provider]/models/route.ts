@@ -11,7 +11,8 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { loadAuthUser } from "@/lib/auth/server";
 import { orgAtivaDaApi } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
+import { ehProvedorSuportado, PROVEDOR_POR_ASSINATURA } from "@/lib/ai/pontos/provedores";
+import { listarModelosDaAssinatura } from "@/lib/ai/catalogo/modelos-da-assinatura";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,17 @@ export async function GET(
   const activeOrg = ativa.org;
   if (!activeOrg) {
     return fail("forbidden_tenant", "Sem organização ativa.", 403, { requestId });
+  }
+
+  // O catálogo da assinatura é por CONTA, não global como `ai_models`.
+  // Consultá-lo sob o token da organização evita gravar nomes/modelos de uma
+  // conta em uma tabela compartilhada entre tenants.
+  if (provider === PROVEDOR_POR_ASSINATURA) {
+    const models = await listarModelosDaAssinatura(activeOrg.orgId);
+    if (!models) {
+      return fail("credential_invalid", "Conecte a assinatura do ChatGPT para listar os modelos.", 409, { requestId });
+    }
+    return ok({ models }, { requestId });
   }
 
   const supabase = await createClient();

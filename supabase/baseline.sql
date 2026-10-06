@@ -22500,7 +22500,7 @@ begin
 end;
 $$;
 
-revoke all on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) from public,anon,authenticated;
+revoke execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) from public,anon,authenticated;
 grant execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) to service_role;
 create or replace function public.fn_publish_ai_agent_version(p_org_id uuid,p_agent_id uuid,p_version_id uuid,p_platform_credential_verified boolean)
 returns table(agent_id uuid,version_id uuid,previous_version_id uuid,published_at timestamptz)
@@ -38897,10 +38897,10 @@ comment on column public.crm_leads.won_reason is
   'Motivo do ganho (issue #1536, migration 0420): por que este negócio foi fechado como ganho. null quando ninguém informou. Texto livre por padrão; settings.won_reasons do funil transforma em lista e settings.won_reason_required liga a obrigatoriedade — as duas decididas no servidor (lib/leads/campos-exigidos.ts), nunca por CHECK: o ganho não tinha exigência nenhuma antes e não pode ganhar uma para o install inteiro.';
 
 -- ---- publicar agente com o provedor personalizado (migration 0418, #1642) ----
--- Para `custom`, o modelo é conferido na lista que o PRÓPRIO endpoint devolveu
--- (`models_available` da credencial da versão), não no catálogo global
--- `ai_models`, onde nada escreve linha `custom`. Racional inteiro no cabeçalho
--- da migration; a definição abaixo é a MESMA, byte a byte.
+-- Para `custom` e `openai-assinatura`, o modelo é conferido na lista que o
+-- endpoint autenticado devolveu (`models_available` da credencial da versão),
+-- não no catálogo global `ai_models`. Racional inteiro no cabeçalho da
+-- migration; a definição abaixo é a MESMA, byte a byte.
 create or replace function public.fn_publish_ai_agent_version(
   p_org_id uuid,
   p_agent_id uuid,
@@ -39003,10 +39003,11 @@ begin
     raise exception 'channel_session_offline' using errcode = 'P0001';
   end if;
 
-  -- Provedor personalizado (0418): o endpoint é da empresa, e quem diz que o
-  -- modelo existe é a lista que ELE devolveu, gravada na credencial já
-  -- conferida acima. Sem credencial própria não há lista — recusado.
-  if v_version.provider = 'custom' then
+  -- `custom` e o login por assinatura consultam um catálogo autenticado ou
+  -- específico da empresa; quem confirma que o modelo existe é a lista
+  -- gravada na credencial já conferida acima. Não usar `ai_models`, que é
+  -- global entre organizações.
+  if v_version.provider in ('custom', 'openai-assinatura') then
     if v_version.credential_id is null then
       raise exception 'model_not_found' using errcode = 'P0001';
     end if;

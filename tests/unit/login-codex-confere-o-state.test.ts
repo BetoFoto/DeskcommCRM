@@ -34,17 +34,27 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("next/headers", () => ({ headers: async () => new Map<string, string>() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("jose", () => ({
+  createRemoteJWKSet: vi.fn(() => vi.fn()),
+  jwtVerify: vi.fn(async () => ({ payload: { nonce: "nonce-test", sub: "siwc-subject" } })),
+}));
+vi.mock("@/lib/ai/credenciais/host-siwc", () => ({
+  lerOuCriarHostIdSiwc: vi.fn(async () => "urn:uuid:host-test"),
+}));
 
 const guardar = vi.hoisted(() => vi.fn(async (_p: unknown) => ({ ok: true as const, id: "cred-1" })));
 vi.mock("@/lib/ai/credenciais/login-codex", () => ({
   guardarLoginCodex: guardar,
   desconectarLoginCodex: vi.fn(async () => true),
+  lerLoginCodex: vi.fn(async () => null),
 }));
 
 const trocar = vi.hoisted(() =>
-  vi.fn(async (_e: { code: string; codeVerifier: string }) => ({
+  vi.fn(async (_e: { code: string; codeVerifier: string; clientId: string }) => ({
     access_token: "at",
     refresh_token: "rt",
+    id_token: "signed-id-token",
+    scopes: ["chatgpt.tokens.use.direct", "resource.invoke"],
     expires_at: null,
   })),
 );
@@ -55,16 +65,16 @@ vi.mock("@/lib/ai/pontos/pkce-da-assinatura", async (importOriginal) => ({
 
 import { conectarLoginCodex } from "@/app/actions/settings/conectarLoginCodex";
 import { emitirEstado } from "@/lib/agenda/google/estado";
-import { lerRetornoColado } from "@/lib/ai/pontos/pkce-da-assinatura";
+import { CLIENTE_DINAMICO_SIWC, lerRetornoColado } from "@/lib/ai/pontos/pkce-da-assinatura";
 
 const VERIFIER = "v".repeat(60);
 
 function estadoPara(organizationId: string, userId: string, segredo = SEGREDO): string {
-  return emitirEstado({ organizationId, userId }, { segredo, agora: new Date() });
+  return emitirEstado({ organizationId, userId, authSessionId: CLIENTE_DINAMICO_SIWC }, { segredo, agora: new Date(), nonce: "nonce-test" });
 }
 
 function retorno(code: string, state: string): string {
-  return `http://localhost:1455/auth/callback?code=${encodeURIComponent(code)}&scope=openid&state=${encodeURIComponent(state)}`;
+  return `http://127.0.0.1:1455/auth/callback?code=${encodeURIComponent(code)}&client_id=dynamic-client-test&scope=openid&state=${encodeURIComponent(state)}`;
 }
 
 beforeEach(() => {
@@ -74,13 +84,13 @@ beforeEach(() => {
 
 describe("lerRetornoColado", () => {
   it("tira code e state do endereço inteiro, e da parte depois do ?", () => {
-    expect(lerRetornoColado(" " + retorno("c-1", "s-1") + " ")).toEqual({ code: "c-1", state: "s-1" });
+    expect(lerRetornoColado(" " + retorno("c-1", "s-1") + " ")).toEqual({ code: "c-1", state: "s-1", clientId: "dynamic-client-test" });
     expect(lerRetornoColado("code=c-2&state=s-2")).toEqual({ code: "c-2", state: "s-2" });
   });
 
   it("código solto, ou endereço sem state, não é retorno", () => {
     expect(lerRetornoColado("ac_soltinho")).toBeNull();
-    expect(lerRetornoColado("http://localhost:1455/auth/callback?code=c-3")).toBeNull();
+    expect(lerRetornoColado("http://127.0.0.1:1455/auth/callback?code=c-3")).toBeNull();
   });
 });
 
@@ -89,7 +99,7 @@ describe("conectarLoginCodex confere o state antes de trocar o código", () => {
     const r = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
     expect(r).toEqual({ ok: true });
     expect(trocar).toHaveBeenCalledTimes(1);
-    expect(trocar.mock.calls[0]![0]).toMatchObject({ code: "code-bom", codeVerifier: VERIFIER });
+    expect(trocar.mock.calls[0]![0]).toMatchObject({ code: "code-bom", codeVerifier: VERIFIER, clientId: "dynamic-client-test" });
     expect(guardar).toHaveBeenCalledTimes(1);
   });
 
