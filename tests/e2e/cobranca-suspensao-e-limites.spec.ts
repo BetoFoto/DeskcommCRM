@@ -217,9 +217,13 @@ test("o dono cria o plano, os limites valem pela tela, e prazo e desligar a chav
     await expect(page.getByText(`serão liberadas ao desligar: ${suspensas.count}`)).toBeVisible();
     await page.screenshot({ path: `${EVIDENCIA}/sistema-desligar-libera.png`, fullPage: true });
     await interruptor.click();
-    await expect.poll(async () => (await estadoDaOrg(orgB)).status).toBe("active");
-    const chaveDepois = await db.from("platform_config").select("valor").eq("chave", CHAVE).single();
-    expect(chaveDepois.data?.valor).toBe("desligado");
+    // A ação LIBERA antes de GRAVAR a chave (de propósito: se liberar falhar, a chave
+    // fica ligada). Esperar o "active" e ler a chave no mesmo instante disputava com
+    // a gravação — o último efeito é a chave, então é por ela que se espera.
+    await expect
+      .poll(async () => (await db.from("platform_config").select("valor").eq("chave", CHAVE).single()).data?.valor)
+      .toBe("desligado");
+    expect((await estadoDaOrg(orgB)).status).toBe("active");
     await page.goto("/admin/dashboard");
     await expect(page.getByRole("link", { name: "Cobrança" })).toHaveCount(0);
     expect((await page.goto("/admin/cobranca"))?.status()).toBe(404);
