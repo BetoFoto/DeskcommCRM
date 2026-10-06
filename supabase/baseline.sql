@@ -47448,7 +47448,7 @@ alter table public.campaign_recipients
 
 notify pgrst, 'reload schema';
 
--- ---- Gemini 3.5 Flash-Lite no catálogo Google (migration 0575) ----
+-- ---- Gemini 3.5 Flash-Lite no catálogo Google (migration 0576) ----
 -- manifest: Gemini 3.5 Flash-Lite no catálogo Google, com preço Standard em ambas as tabelas.
 -- Fonte (06/10/2026): https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite
 -- Preço: https://ai.google.dev/gemini-api/docs/pricing
@@ -47476,7 +47476,7 @@ insert into public.ai_pricing
   (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
 values
   ('gemini-3.5-flash-lite', 30, 250,
-   'catálogo 0575 — Google Gemini API Standard, 06/10/2026; cache e armazenamento cobrados à parte')
+   'catálogo 0576 — Google Gemini API Standard, 06/10/2026; cache e armazenamento cobrados à parte')
 on conflict (model) do update set
   prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
   completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,

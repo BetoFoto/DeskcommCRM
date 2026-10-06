@@ -25,7 +25,7 @@ insert into public.ai_pricing
   (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
 values
   ('gemini-3.5-flash-lite', 30, 250,
-   'catálogo 0575 — Google Gemini API Standard, 06/10/2026; cache e armazenamento cobrados à parte')
+   'catálogo 0576 — Google Gemini API Standard, 06/10/2026; cache e armazenamento cobrados à parte')
 on conflict (model) do update set
   prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
   completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,
