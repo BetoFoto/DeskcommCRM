@@ -28,11 +28,11 @@ const mock = vi.hoisted(() => ({ admin: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mock.admin }));
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 
-import { copiaDoTitular } from "@/lib/lgpd/copia-do-titular";
+import { copiaDoTitular, O_QUE_FICA, SECOES_DA_EQUIPE } from "@/lib/lgpd/copia-do-titular";
 import { collectExportData, type ExportPayload } from "@/lib/lgpd/export-collector";
 
 /** Seções inteiras que não podem sair. */
-const SECOES_PROIBIDAS = ["conversation_notes", "case_chat_messages"];
+const SECOES_PROIBIDAS = ["conversation_notes", "case_chat_messages", "appointment_notices"];
 
 /** [seção, campo] que não pode sair de nenhuma linha. */
 const CAMPOS_PROIBIDOS: Array<[string, string]> = [
@@ -45,6 +45,10 @@ const CAMPOS_PROIBIDOS: Array<[string, string]> = [
   ["case_events", "metadata"],
   ["passagens", "motor"],
   ["passagens", "origem"],
+  ["passagens", "content"],
+  ["honorarios_contratos", "repasse_advogado_pct"],
+  ["meeting_deliveries", "run_after"],
+  ["contact_field_proposals", "motivo_recusa"],
   ["avisos_de_caso", "destino_mascarado"],
   ["avisos_de_caso", "erro_codigo"],
   ["avisos_de_caso", "tentativas"],
@@ -98,10 +102,23 @@ function payloadCheio(): ExportPayload {
       {
         id: "SEGREDO-ce",
         case_id: "SEGREDO-cec",
+        actor_kind: "agent",
         body: "FICA-evento",
         metadata: { destino_mascarado: "SEGREDO-plantao", entrega_id: "SEGREDO-ent" },
       },
+      // `human_replied`: a nota de quem resolveu (human-cases.ts) é texto da equipe.
+      { id: "SEGREDO-ch", actor_kind: "human", human_action: "FICA-resolved", body: "SEGREDO-nota-de-quem-resolveu" },
     ],
+    honorarios_contratos: [
+      { id: "SEGREDO-hc", lead_id: "SEGREDO-hcl", modelo: "FICA-modelo", repasse_advogado_pct: "SEGREDO-repasse" },
+    ],
+    meeting_deliveries: [
+      { id: "SEGREDO-md", status: "FICA-enviado", run_after: "SEGREDO-fila", appointment_id: "SEGREDO-mda" },
+    ],
+    contact_field_proposals: [
+      { id: "SEGREDO-cfp", campo: "FICA-campo", trecho: "FICA-trecho", motivo_recusa: "SEGREDO-recusa" },
+    ],
+    appointment_notices: [{ id: "SEGREDO-an", title: "SEGREDO-aviso-da-central" }],
     passagens: [
       {
         id: "SEGREDO-pa",
@@ -111,6 +128,7 @@ function payloadCheio(): ExportPayload {
         origem: "SEGREDO-origem",
         motivo_codigo: "FICA-motivo",
         notes: "FICA-ultimas-palavras-do-cliente",
+        content: "SEGREDO-razao-de-quem-passou",
         tentativas: ["FICA-tentativa"],
       },
     ],
@@ -129,7 +147,30 @@ function payloadCheio(): ExportPayload {
     ],
     conversation_notes: [{ id: "x", body: "SEGREDO-nota-interna", created_by_name: "SEGREDO-funcionario" }],
     case_chat_messages: [{ id: "y", body: "SEGREDO-chat-interno" }],
-    ai_agent_runs: [{ id: "SEGREDO-run", tool_calls: [{ tool_name: "add_note", args: { text: "FICA-args" } }] }],
+    // A forma de `toolCallsParaOTitular`: passo → chamadas → args. O funcionário da
+    // agenda (`owner_user_id`, agendamento.ts) e o do repasse (`target_user_id`,
+    // handoff.ts) moram nos argumentos.
+    ai_agent_runs: [
+      {
+        id: "SEGREDO-run",
+        tool_calls: [
+          {
+            step: 1,
+            tool_calls: [
+              {
+                tool_name: "crm_book_appointment",
+                args: {
+                  owner_user_id: "SEGREDO-funcionario-uuid",
+                  lead_id: "SEGREDO-args-lead",
+                  texto: "FICA-args",
+                  repasse: { target_user_id: "SEGREDO-alvo-do-repasse" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
     b2b: {
       pessoa: { id: "SEGREDO-pe", full_name: "FICA-pessoa", notes: "SEGREDO-nota-b2b" },
       vinculos: [{ company_id: "SEGREDO-co", job_title: "FICA-cargo", notes: "SEGREDO-nota-vinculo" }],
@@ -308,5 +349,22 @@ describe("isolamento do arquivo do titular", () => {
     const arquivo = JSON.stringify(copiaDoTitular(data));
     for (const meu of ["MEU-nome", "MEU-mensagem", "MEU-lead", "MEU-memoria"]) expect(arquivo, meu).toContain(meu);
     expect(arquivo.match(/(VIZINHO|OUTRA-ORG)-[a-z-]+/g) ?? []).toEqual([]);
+  });
+
+  it("toda seção que o coletor devolve foi decidida: vai ao titular ou sai, com o motivo", async () => {
+    const data = await collectExportData({
+      organizationId: ORG,
+      requestId: "pedido-1",
+      contactId: CONTATO,
+      externalCustomerId: null,
+      pais: "PT",
+    });
+    const decididas = new Set([...Object.keys(O_QUE_FICA), ...Object.keys(SECOES_DA_EQUIPE)]);
+    const cheio = JSON.parse(
+      readFileSync(join(__dirname, "..", "fixtures", "lgpd-brasil-antes-do-doc88", "data-cheio.json"), "utf8"),
+    ) as Obj;
+    const secoes = new Set([...Object.keys(data), ...Object.keys(cheio), ...Object.keys(payloadCheio())]);
+    expect(secoes.size).toBeGreaterThan(40);
+    expect([...secoes].filter((s) => !decididas.has(s))).toEqual([]);
   });
 });
