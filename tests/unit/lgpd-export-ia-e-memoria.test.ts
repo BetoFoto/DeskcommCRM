@@ -272,8 +272,8 @@ describe("LGPD: export do titular traz a memória da IA e o estado da lead", () 
   it("os textos plantados aparecem no arquivo gerado (JSON que o worker sobe)", async () => {
     const payload = await collectExportData(request);
     const json = JSON.stringify(payload);
-    // data.json é `JSON.stringify(data)`: se o texto não aparece no payload,
-    // não aparece no arquivo que o titular recebe.
+    // O data.json é `copiaDoTitular(data)`, que não tira estas seções (só as
+    // chaves de banco): se o texto não aparece no payload, não aparece no arquivo.
     expect(json).toContain(TEXTOS_DO_TITULAR[0]!);
     expect(json).toContain(TEXTOS_DO_TITULAR[1]!);
     expect(json).toContain('"next_action":"ligar segunda"');

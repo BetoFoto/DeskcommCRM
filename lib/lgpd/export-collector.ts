@@ -395,6 +395,9 @@ export interface CaseEventRow {
  *
  * O vínculo é a FK DIRETA `contact_id`, e não a conversa: ela existe nesta
  * tabela exatamente para isso.
+ *
+ * Coletada, mas FORA do `data.json` que o titular recebe: é conversa interna da
+ * equipe (doc 103, A — `lib/lgpd/copia-do-titular.ts`).
  */
 export interface CaseChatMessageRow {
   id: string;
@@ -739,6 +742,9 @@ export interface ExportPayload {
    * a pedido dele é o que se entrega a pedido dele (Art. 18 II). A mídia vem
    * como METADADO (caminho, MIME, bytes): o export é `data.json` + `report.pdf`,
    * e nenhum binário trafega por ele.
+   *
+   * Coletada, mas FORA do `data.json` que o titular recebe: é nota da equipe
+   * (doc 103, A — `lib/lgpd/copia-do-titular.ts`).
    */
   conversation_notes?: Array<{
     id: string;
