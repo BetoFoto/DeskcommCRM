@@ -100,7 +100,7 @@ describe("checkout da assinatura", () => {
     expect(h.ad.garantirCliente).toHaveBeenCalledWith({ id: ORG, nome: "Loja Legal Ltda", email: "admin@loja.com", documento: null });
     const pedido = h.ad.iniciarAssinatura.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(pedido).toMatchObject({ clienteRef: "cus_novo", orgId: ORG, chaveIdempotencia: CHAVE, trialAte: new Date("2026-10-20T00:00:00.000Z") });
-    expect(String(pedido.urlDeVolta)).toMatch(/\/app\/settings\/billing$/);
+    expect(String(pedido.urlDeVolta)).toMatch(/\/cobranca\/volta\?para=painel$/);
     expect(gravacao).toMatchObject({ provedor: "stripe", modo: "teste", provedor_cliente_id: "cus_novo", checkout_url: "https://checkout.stripe.com/c/pay/cs_1", checkout_expira_em: "2026-10-11T12:00:00.000Z" });
     expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "cobranca.checkout_iniciado", organizationId: ORG, metadata: { provedor: "stripe", modo: "teste", plano_id: "plano-a" } }));
   });
@@ -126,7 +126,7 @@ describe("checkout da assinatura", () => {
   it("⭐ vindo do hub da conta suspensa: o provedor devolve para /account-suspended (o /app redirecionaria e perderia o ?voltou=1)", async () => {
     await assinar({ volta: "hub" });
     const pedido = h.ad.iniciarAssinatura.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(String(pedido.urlDeVolta)).toMatch(/\/account-suspended$/);
+    expect(String(pedido.urlDeVolta)).toMatch(/\/cobranca\/volta\?para=hub$/);
     expect((await assinar({ volta: "https://golpe.example.com" })).status).toBe(400);
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { urlDoWebhookDaCobranca } from "./url";
+import { destinoDaVolta, urlDoHub, urlDoPainelDaEmpresa, urlDoWebhookDaCobranca } from "./url";
 
 describe("urlDoWebhookDaCobranca — o provedor só entrega aviso em https público", () => {
   it.each([
@@ -13,5 +13,28 @@ describe("urlDoWebhookDaCobranca — o provedor só entrega aviso em https públ
     ["vazio", "", true, null],
   ] as const)("%s", (_caso, base, aceitaLoopback, esperado) => {
     expect(urlDoWebhookDaCobranca(base, "stripe", aceitaLoopback)).toBe(esperado);
+  });
+});
+
+describe("a volta do provedor passa pela ponte (cookie de sessão Strict)", () => {
+  it("checkout e portal voltam por /cobranca/volta, nunca direto na tela protegida", () => {
+    expect(urlDoPainelDaEmpresa()).toMatch(/\/cobranca\/volta\?para=painel$/);
+    expect(urlDoHub()).toMatch(/\/cobranca\/volta\?para=hub$/);
+  });
+
+  it.each([
+    ["para=painel", "/app/settings/billing"],
+    ["para=painel&voltou=1", "/app/settings/billing?voltou=1"],
+    ["para=hub", "/account-suspended"],
+    ["para=hub&voltou=1", "/account-suspended?voltou=1"],
+    ["", "/app/settings/billing"],
+  ])("%s → %s", (query, destino) => {
+    expect(destinoDaVolta(new URLSearchParams(query))).toBe(destino);
+  });
+
+  it("nada da query é refletido: destino fora da lista cai no painel", () => {
+    for (const q of ["para=https://evil.example.com", "para=//evil.example.com", "para=/admin", "voltou=javascript:alert(1)&para=HUB"]) {
+      expect(["/app/settings/billing", "/app/settings/billing?voltou=1"]).toContain(destinoDaVolta(new URLSearchParams(q)));
+    }
   });
 });
