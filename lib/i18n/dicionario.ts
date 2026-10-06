@@ -3277,6 +3277,24 @@ export const DICIONARIO: Traducoes = {
   "Ligado, toda entrega de webhook precisa vir assinada com o segredo da sessão. Desligado por padrão porque nem todo servidor de canal assina: ligar sem que ele assine corta a entrada de mensagens.": {
     es: "Si está activado, cada entrega de webhook debe llegar firmada con el secreto de la sesión. Viene desactivado por defecto porque no todos los servidores de canal firman: activarlo sin que firmen corta la entrada de mensajes.",
   },
+  "Nenhuma entrega do WhatsApp na última semana para conferir a assinatura.": {
+    es: "Ninguna entrega de WhatsApp en la última semana para comprobar la firma.",
+  },
+  "As últimas entregas do WhatsApp chegaram assinadas: sim (última em {momento}).": {
+    es: "Las últimas entregas de WhatsApp llegaron firmadas: sí (la última el {momento}).",
+  },
+  "As últimas entregas do WhatsApp chegaram assinadas: não.": {
+    es: "Las últimas entregas de WhatsApp llegaron firmadas: no.",
+  },
+  "Última assinada: {momento}.": {
+    es: "Última firmada: {momento}.",
+  },
+  "Última sem assinatura: {momento}.": {
+    es: "Última sin firma: {momento}.",
+  },
+  "Pode ligar: o WhatsApp já assina.": {
+    es: "Puede activarlo: WhatsApp ya firma.",
+  },
   "Divulgação de pagamento no atendimento": {
     es: "Divulgación de pago en la atención",
   },
@@ -12191,6 +12209,17 @@ export const DICIONARIO: Traducoes = {
   "Manter IA pausada": { es: "Mantener IA pausada" },
   "Não foi possível carregar as redes sociais.": { es: "No se pudieron cargar las redes sociales." },
   "Reconfigurar integração": { es: "Reconfigurar integración" },
+  "Canais sem conta no perfil": { es: "Canales sin cuenta en el perfil" },
+  "Estas conexões apontam para contas que saíram do perfil no provedor (por exemplo, conta removida e recriada por lá). Exclua a linha órfã para fechar o aviso.": { es: "Estas conexiones apuntan a cuentas que salieron del perfil en el proveedor (por ejemplo, una cuenta eliminada y recreada allí). Elimina la línea huérfana para cerrar el aviso." },
+  "Canal excluído. A lista atualiza sem a linha órfã.": { es: "Canal eliminado. La lista se actualiza sin la línea huérfana." },
+  "Excluir o canal órfão?": { es: "¿Eliminar el canal huérfano?" },
+  "A linha sai da lista e os avisos dela são fechados. As conversas já recebidas continuam no CRM.": { es: "La línea sale de la lista y se cierran sus avisos. Las conversaciones ya recibidas siguen en el CRM." },
+  "Excluir canal": { es: "Eliminar canal" },
+  "Desvincular perfil": { es: "Desvincular perfil" },
+  "Desvincular o perfil?": { es: "¿Desvincular el perfil?" },
+  "O perfil sai do CRM. Só funciona sem canais sociais ativos: arquive ou exclua os canais antes. Dá para vincular outro perfil depois.": { es: "El perfil sale del CRM. Solo funciona sin canales sociales activos: archiva o elimina los canales antes. Después puedes vincular otro perfil." },
+  "Perfil desvinculado. Dá para vincular outro perfil.": { es: "Perfil desvinculado. Puedes vincular otro perfil." },
+  "Salvar atualiza a chave em todos os canais deste perfil, inclusive os arquivados.": { es: "Guardar actualiza la clave en todos los canales de este perfil, incluidos los archivados." },
 
   // Extensões declarativas — interface e mensagens literais da API.
   "Extensões": { es: "Extensiones" },
@@ -13681,6 +13710,7 @@ export const DICIONARIO: Traducoes = {
     es: "personas? El envío sigue el ritmo del número y puede llevar horas.",
   },
   "podem receber": { es: "pueden recibir" },
+  "O recorte bateu o teto de 20.000 negócios desta prévia — a lista pode estar incompleta. Refine o filtro para ver o todo.": { es: "El recorte alcanzó el techo de 20.000 negocios de esta vista previa — la lista puede estar incompleta. Ajusta el filtro para ver el total." },
   "Preparar lista": { es: "Preparar lista" },
   "Progresso do envio": { es: "Progreso del envío" },
   "Público": { es: "Público" },
@@ -14722,6 +14752,33 @@ export const DICIONARIO: Traducoes = {
   "Outra renovação desta conta está em curso (ou o recurso está desligado). Aguarde alguns segundos e tente de novo.": { es: "Otra renovación de esta cuenta está en curso (o el recurso está desactivado). Espere unos segundos e intente de nuevo." },
   "A OpenAI recusou a renovação do login. Gere o link de novo e conecte a conta outra vez.": { es: "OpenAI rechazó la renovación del inicio de sesión. Genere el enlace de nuevo y conecte la cuenta otra vez." },
   "Esta credencial guarda o login por assinatura da empresa, não uma chave de API. Use Conectar ou Desconectar na tela de Credenciais.": { es: "Esta credencial guarda el inicio de sesión por suscripción de la empresa, no una clave de API. Use Conectar o Desconectar en la pantalla de Credenciales." },
+
+  // ─── #2387, ação em lote de pausa/retomada — Central de Conexões ─────────
+  // Os rótulos dos dois botões e as frases de `frasesDoLoteDePausa`
+  // (components/connections/ConnectionsClient.tsx). As contagens passam por
+  // `contar()`/`enumerar()`, cuja chave o guarda de tela NÃO resolve (é o cego
+  // C: `t(singular)` com o argumento vindo do call site) — por isto cada palavra
+  // avulsa vive aqui com a entrada dela: sem ela, quem escolheu espanhol vê
+  // "3 canais pausados agora" em português no meio de uma frase traduzida.
+  "Pausar todas": { es: "Pausar todas" },
+  "Retomar todas": { es: "Reanudar todas" },
+  "Não foi possível mudar o estado dos canais.": { es: "No se pudo cambiar el estado de los canales." },
+  "Não foi possível pausar": { es: "No se pudo pausar" },
+  "Não foi possível retomar": { es: "No se pudo reanudar" },
+  "Feito:": { es: "Hecho:" },
+  "Nada mudou:": { es: "Nada cambió:" },
+  canal: { es: "canal" },
+  canais: { es: "canales" },
+  "canal pausado agora": { es: "canal pausado ahora" },
+  "canais pausados agora": { es: "canales pausados ahora" },
+  "canal reativado agora": { es: "canal reactivado ahora" },
+  "canais reativados agora": { es: "canales reactivados ahora" },
+  "canal já estava pausado": { es: "canal ya estaba pausado" },
+  "canais já estavam pausados": { es: "canales ya estaban pausados" },
+  "canal já estava reativado": { es: "canal ya estaba reactivado" },
+  "canais já estavam reativados": { es: "canales ya estaban reactivados" },
+  "canal arquivado fica de fora": { es: "canal archivado queda fuera" },
+  "canais arquivados ficam de fora": { es: "canales archivados quedan fuera" },
 };
 
 /**
