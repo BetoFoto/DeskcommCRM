@@ -1049,6 +1049,12 @@ export const AUDIT_ACTIONS = [
   "cobranca.org_reativada",
   "cobranca.rodada",
   "cobranca.regua_salva",
+  // #1639, fatia do login: o código colado em /admin/sistema virou tokens e foi
+  // guardado cifrado. Sem esta linha, "quem conectou a assinatura, e quando"
+  // ficaria sem rastro — e é a conta que passa a pagar as chamadas.
+  "ai.login_codex_conectado",
+  // A conta da empresa foi desconectada pela própria tela de Credenciais.
+  "ai.login_codex_desconectado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -40,7 +40,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 
 /**
- * `banco_externo`, `fluxos_atendimento`, `propostas`, `crm_b2b` e `cobranca` ligam/desligam por uma linha em `platform_config`
+ * `banco_externo`, `fluxos_atendimento`, `propostas`, `crm_b2b`, `cobranca` e `login_codex` ligam/desligam por uma linha em `platform_config`
  * (ver o resto deste arquivo). `honorarios` é um MÓDULO DE TABELA (ADR-0002): a fonte da
  * verdade é `modulos_instalados`, escrita só por `fn_modulo_instalar` (`lib/modulos/service.ts`),
  * nunca por esta tela. Os dois mecanismos convivem na mesma lista porque é isso que
@@ -54,6 +54,7 @@ export const MODULOS_OPCIONAIS = [
   "crm_b2b",
   "honorarios",
   "cobranca",
+  "login_codex",
 ] as const;
 export type ModuloOpcional = (typeof MODULOS_OPCIONAIS)[number];
 
@@ -74,6 +75,7 @@ export const MODULOS_OPCIONAIS_POR_FLAG = [
   "propostas",
   "crm_b2b",
   "cobranca",
+  "login_codex",
 ] as const satisfies readonly ModuloOpcional[];
 
 /** A linha de cada módulo por FLAG em `platform_config`. O formato é o da CHECK da 0341.
@@ -97,6 +99,10 @@ export const CHAVE_DO_MODULO: Record<(typeof MODULOS_OPCIONAIS_POR_FLAG)[number]
   // da instalação. As tabelas `cobranca_*` existem em todo banco, vazias; a
   // chave decide se valem. Desligada: rotas 404, limites "sem limite", cron pula.
   cobranca: "MODULO_COBRANCA",
+  // #1639: o login do Codex por assinatura. Desligado por padrão é a condição
+  // que o mantenedor pôs (02/10): só quem administra a instalação liga, e
+  // ligar libera o painel de conexão em /admin/sistema.
+  login_codex: "MODULO_LOGIN_CODEX",
 };
 
 const LIGADO = "ligado";
