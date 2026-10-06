@@ -1,4 +1,4 @@
--- 0559 — COBRANÇA DO REVENDEDOR, PR 2: planos e limites
+-- 0567 — COBRANÇA DO REVENDEDOR, PR 2: planos e limites
 --        (spec docs/superpowers/specs/2026-09-29-cobranca-do-revendedor-design.md §1.2, §2.1-§2.7, §3.1, §5)
 --
 -- ── A causa ───────────────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ create table if not exists public.cobranca_planos (
 );
 
 comment on table public.cobranca_planos is
-  'Planos que o dono da instalação vende às empresas dela (migration 0559). Da INSTALAÇÃO, sem organization_id: RLS ligada sem policy, só o service_role. Limite nulo = sem limite. preco_cents >= 500 (mínimo de boleto); moeda só BRL; teto_ia_usd_cents na moeda de fn_gasto_de_ia_do_mes.';
+  'Planos que o dono da instalação vende às empresas dela (migration 0567). Da INSTALAÇÃO, sem organization_id: RLS ligada sem policy, só o service_role. Limite nulo = sem limite. preco_cents >= 500 (mínimo de boleto); moeda só BRL; teto_ia_usd_cents na moeda de fn_gasto_de_ia_do_mes.';
 
 create unique index if not exists cobranca_planos_um_padrao
   on public.cobranca_planos ((true)) where padrao_no_cadastro and arquivado_em is null;
@@ -90,7 +90,7 @@ create table if not exists public.cobranca_assinaturas (
 );
 
 comment on table public.cobranca_assinaturas is
-  'Assinatura de cada empresa da instalação (migration 0559): uma linha por org; SEM linha = isenta de cobrança, limite e régua. estado vem da releitura do provedor, nunca do corpo do webhook; suspensa NÃO é estado daqui (fonte: organizations.status/suspended_kind). CPF/CNPJ nunca é guardado. Leitura: admin da própria org; escrita: só service_role.';
+  'Assinatura de cada empresa da instalação (migration 0567): uma linha por org; SEM linha = isenta de cobrança, limite e régua. estado vem da releitura do provedor, nunca do corpo do webhook; suspensa NÃO é estado daqui (fonte: organizations.status/suspended_kind). CPF/CNPJ nunca é guardado. Leitura: admin da própria org; escrita: só service_role.';
 comment on column public.cobranca_assinaturas.vencida_desde is
   'Início da dívida corrente. MONOTÔNICO: só recua (least) ou zera quando o estado volta a ativa/trial; cancelar e reassinar não reinicia o relógio.';
 comment on column public.cobranca_assinaturas.proximo_vencimento is
@@ -393,7 +393,7 @@ create trigger trg_trial_na_criacao_da_org
   for each row execute function public.fn_trial_na_criacao_da_org();
 
 -- O tenant criado pelo dono recebe o plano do formulário (plano_id). Corpo da
--- 0237 + as linhas da 0559. settings.plan segue gravado como antes.
+-- 0237 + as linhas da 0567. settings.plan segue gravado como antes.
 create or replace function public.fn_create_tenant_with_owner(
   p_actor uuid, p_key uuid, p_request jsonb, p_hash text
 ) returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
@@ -424,7 +424,7 @@ begin
     return prior.response_body || jsonb_build_object('created', false);
   end if;
 
-  -- 0559: plano da cobrança do revendedor. Com a chave desligada o formulário não
+  -- 0567: plano da cobrança do revendedor. Com a chave desligada o formulário não
   -- oferece plano; um plano_id que chegue assim é recusado, em vez de criar uma
   -- assinatura que nenhuma régua lê. Validado DEPOIS da autorização.
   v_plano_id := nullif(p_request->>'plano_id', '')::uuid;
@@ -448,7 +448,7 @@ begin
   insert into public.organizations(display_name, slug, legal_name, cnpj, status, settings, created_by)
     values (p_request->>'display_name', p_request->>'slug', coalesce(nullif(p_request->>'legal_name', ''), p_request->>'display_name'),
       p_request->>'cnpj', 'active',
-      -- 0559: com a cobrança ligada a rota não manda `plan`; sem esta guarda a org
+      -- 0567: com a cobrança ligada a rota não manda `plan`; sem esta guarda a org
       -- nasceria com {"plan": null} e o rótulo antigo apareceria como "—".
       case when p_request ? 'plan' then jsonb_build_object('plan', p_request->>'plan') else '{}'::jsonb end,
       p_actor)
@@ -459,7 +459,7 @@ begin
         then '{"preset":"completa"}'::jsonb
         else coalesce(p_request->'owner_interface_settings', '{"preset":"completa"}'::jsonb) end,
       dono_e_outra_pessoa);
-  -- 0559: a assinatura nasce na MESMA transação da organização.
+  -- 0567: a assinatura nasce na MESMA transação da organização.
   if v_plano_id is not null then
     insert into public.cobranca_assinaturas (organization_id, plano_id, estado, trial_ate)
       values (org.id, v_plano_id, 'trial', now() + make_interval(days => v_trial_dias));
@@ -477,7 +477,7 @@ grant execute on function public.fn_create_tenant_with_owner(uuid, uuid, jsonb, 
 
 -- ── F. suspensão por cobrança: isenta não é suspensa; reativar zera o aviso ─
 -- create or replace das duas funções da 0501 (corpo VIGENTE da 0501 + linhas
--- 0559). Na PR 1 elas não citavam cobranca_assinaturas, que ainda não existia
+-- 0567). Na PR 1 elas não citavam cobranca_assinaturas, que ainda não existia
 -- (plpgsql resolve a relação ao executar: 42P01 em toda chamada). A reativação
 -- também passa a contar, no aviso e no evento, o que a suspensão parou sem
 -- avisar (acabamento 22 da PR 1). fn_org_parada_descarta_fila e a C0a
@@ -520,7 +520,7 @@ begin
            suspended_by = p_ator
      where id = p_org;
   elsif v_status = 'active' then
-    -- 0559: org sem assinatura é isenta; a régua nunca a suspende por cobrança.
+    -- 0567: org sem assinatura é isenta; a régua nunca a suspende por cobrança.
     if p_kind = 'cobranca'
        and not exists (select 1 from public.cobranca_assinaturas a where a.organization_id = p_org) then
       return jsonb_build_object('changed', false, 'motivo', 'org_isenta');
@@ -567,7 +567,7 @@ declare
   v_kind      text;
   v_desde     timestamptz;
   v_conversas integer := 0;
-  -- 0559 (acabamento 22 da PR 1): o que a suspensão parou sem avisar ninguém.
+  -- 0567 (acabamento 22 da PR 1): o que a suspensão parou sem avisar ninguém.
   v_ultima_volta timestamptz;
   v_agendamentos integer := 0;
   v_passos       integer := 0;
@@ -610,7 +610,7 @@ begin
        and not c.is_group
        and c.last_inbound_at >= v_desde;
 
-    -- 0559: disparo único que venceu com a org parada e que o scheduler
+    -- 0567: disparo único que venceu com a org parada e que o scheduler
     -- DESLIGOU (lib/agent-engine/cron/scheduler.ts: `enabled = false,
     -- last_error = 'org_nao_operante'`). O recorrente só é adiado e segue vivo.
     -- Só `followup_turn`: é o mesmo recorte da fila de IA › Follow-ups
@@ -626,7 +626,7 @@ begin
        and cj.updated_at >= v_desde;
   end if;
 
-  -- 0559: turno de follow-up falhado pela parada SEM `turn_discarded`. O de
+  -- 0567: turno de follow-up falhado pela parada SEM `turn_discarded`. O de
   -- envio com o evento o motor refaz sozinho (C0a); classificar resposta e
   -- planejar horário não têm evento, e o efeito depende do nó. `job_queue` não
   -- tem `updated_at`: a janela é "criado depois da volta anterior", porque o que
@@ -651,14 +651,14 @@ begin
   if v_conversas + v_agendamentos + v_passos > 0 then
     insert into public.agent_inbox_items (organization_id, kind, severity, title, body)
     values (p_org, 'org_reativada', 'warn',
-            -- 0559: sem conversa, o título não promete conversa.
+            -- 0567: sem conversa, o título não promete conversa.
             case when v_conversas > 0
               then 'A conta foi reativada — há conversas para revisar'
               else 'A conta foi reativada — há agendamentos e follow-ups para revisar'
             end,
             -- Só o fato: o que fazer é a orientação do aviso na tela
             -- (lib/ai/inbox-destino.ts, org_reativada), que sabe das abas.
-            -- 0559: concat_ws pula o nulo; só conversas = o texto da 0501, byte a byte.
+            -- 0567: concat_ws pula o nulo; só conversas = o texto da 0501, byte a byte.
             concat_ws(' ',
               case when v_conversas = 1
                 then '1 conversa recebeu mensagem enquanto a conta estava suspensa.'
@@ -681,10 +681,10 @@ begin
   values (p_org, 'tenant.reactivated', 'organization', p_org,
           jsonb_build_object('tenant_id', p_org, 'kind', v_kind,
                              'reactivated_by', p_ator, 'conversas_com_mensagem', v_conversas,
-                             -- 0559
+                             -- 0567
                              'agendamentos_desligados', v_agendamentos, 'passos_descartados', v_passos));
 
-  -- 0559, passo 7: a régua recomeça; um aviso da dívida anterior não vale para a próxima.
+  -- 0567, passo 7: a régua recomeça; um aviso da dívida anterior não vale para a próxima.
   update public.cobranca_assinaturas
      set ultimo_aviso = null, ultimo_aviso_em = null
    where organization_id = p_org;
