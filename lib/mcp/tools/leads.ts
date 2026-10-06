@@ -439,6 +439,12 @@ const moveInputShape = {
    * cliente ou passa para o humano — nunca move calado.
    */
   won_reason: z.string().max(500).optional(),
+  /**
+   * O motivo da perda, quando o destino é etapa de perda (issue #917). O banco
+   * confere contra o vocabulário do funil (canônico + `settings.lost_reasons`) e
+   * recusa a perda sem ele. O `moveLeadHandler` já aceitava; a tool descartava.
+   */
+  lost_reason: z.string().min(1).max(500).optional(),
 };
 
 export const crmMoveLeadStage: McpToolDefinition<typeof moveInputShape> = {
@@ -470,6 +476,7 @@ export const crmMoveLeadStage: McpToolDefinition<typeof moveInputShape> = {
         position_in_stage: input.position_in_stage,
         reason: input.reason,
         won_reason: input.won_reason,
+        lost_reason: input.lost_reason,
       },
     );
     return { lead };
