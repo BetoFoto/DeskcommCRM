@@ -1415,18 +1415,18 @@ real, não pela tela).
 **Não coberto pela tela:** a publicação (troca da chave de teste pela de produção, D-7); "Tornar isenta" com assinatura viva no provedor; o aviso de 80% do teto de IA; o e-mail dos avisos (o fresco não tem envio configurado, e o checklist mostra isso); o cancelamento de org redigida. Onde são provados: nos testes unitários das rotas e da régua (`lib/cobranca/regua.test.ts`, `lib/cobranca/estado.test.ts`) e nos invariantes da PR 3a. A suspensão usa datas recuadas no banco, não relógio falso: cron e régua rodam com o `now()` real.
 
 **Evidência** (PNG em `evidence/cobranca-revendedor/`):
-- `billing-cobranca-agendada`
-- `billing-em-dia`
-- `billing-troca-agendada`
-- `central-aviso-final`
-- `central-aviso-venceu`
-- `checkout-do-duble`
-- `conexao-modo-de-teste`
-- `faixa-em-atraso`
-- `hub-pagar-agora`
-- `reativada-sem-rajada`
-- `sistema-cobranca-ligada`
-- `visao-geral-checklist`
+- `evidence/cobranca-revendedor/billing-cobranca-agendada.png`
+- `evidence/cobranca-revendedor/billing-em-dia.png`
+- `evidence/cobranca-revendedor/billing-troca-agendada.png`
+- `evidence/cobranca-revendedor/central-aviso-final.png`
+- `evidence/cobranca-revendedor/central-aviso-venceu.png`
+- `evidence/cobranca-revendedor/checkout-do-duble.png`
+- `evidence/cobranca-revendedor/conexao-modo-de-teste.png`
+- `evidence/cobranca-revendedor/faixa-em-atraso.png`
+- `evidence/cobranca-revendedor/hub-pagar-agora.png`
+- `evidence/cobranca-revendedor/reativada-sem-rajada.png`
+- `evidence/cobranca-revendedor/sistema-cobranca-ligada.png`
+- `evidence/cobranca-revendedor/visao-geral-checklist.png`
 
 ## Jornadas exercitadas (instalação final, virgem)
 

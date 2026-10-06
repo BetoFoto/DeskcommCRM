@@ -205,7 +205,7 @@ test("[P0] primeira cobrança: conectar, assinar, atrasar, suspender e voltar so
     await expect(page.locator('[data-passo="publicar"]')).toHaveAttribute("data-feito", "false");
     await expect(page.getByRole("alert").filter({ hasText: "não conseguem pagar" })).toBeVisible();
     // O aviso forjado do passo 4 deixou rastro que o dono vê.
-    await expect(page.getByText(/\d+ aviso\(s\) de pagamento recusado\(s\)/)).toBeVisible();
+    await expect(page.getByText(/\d+ avisos? de pagamento recusados? nas últimas 24 h/)).toBeVisible();
     expect(await page.evaluate(() => document.body.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
     await page.screenshot({ path: `${EVIDENCIA}/visao-geral-checklist.png`, fullPage: true });
 
