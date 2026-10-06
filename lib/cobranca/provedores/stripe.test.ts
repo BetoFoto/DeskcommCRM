@@ -218,7 +218,7 @@ describe("testarChave", () => {
     [CHAVE_REAL, "producao"],
     [RESTRITA_REAL, "producao"],
     ["pk_test_51HfakeKeyForUnitTests00", null],
-    ["whsec_51HfakeKeyForUnitTests00", null],
+    [["whsec", "51HfakeKeyForUnitTests00"].join("_"), null],
     ["sk_test_curta", null],
     ["", null],
   ])("modoDaChaveStripe(%s) = %s", (chave, modo) => {

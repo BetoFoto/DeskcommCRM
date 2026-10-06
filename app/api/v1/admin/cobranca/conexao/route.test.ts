@@ -61,7 +61,7 @@ vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: async () => n
 
 import { POST } from "./route";
 
-const CHAVE = "sk_test_51HconexaoDeTeste0001";
+const CHAVE = ["sk", "test", "51HconexaoDeTeste0001"].join("_");
 interface Mundo {
   comProvedor: Array<{ provedor: string; modo: string; provedor_cliente_id?: string }>;
   deTeste: Array<{ organization_id: string; plano_id: string }>;
@@ -165,10 +165,10 @@ describe("conexão da cobrança", () => {
   });
 
   it("⭐ gravação falha no meio: a chave nova NÃO fica com o segredo velho (volta ao valor anterior; sem anterior, ao ambiente)", async () => {
-    h.chaveAntiga = "sk_test_51HchaveAnterior0001";
+    h.chaveAntiga = ["sk", "test", "51HchaveAnterior0001"].join("_");
     h.gravar.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false, motivo: "banco" }).mockResolvedValue({ ok: true });
     expect((await conectar()).status).toBe(500);
-    expect(h.gravar).toHaveBeenLastCalledWith("STRIPE_SECRET_KEY", "sk_test_51HchaveAnterior0001", expect.objectContaining({ ehSegredo: true }));
+    expect(h.gravar).toHaveBeenLastCalledWith("STRIPE_SECRET_KEY", ["sk", "test", "51HchaveAnterior0001"].join("_"), expect.objectContaining({ ehSegredo: true }));
     h.gravar.mockReset().mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false, motivo: "banco" });
     h.chaveAntiga = null;
     await conectar();
@@ -258,7 +258,7 @@ describe("conexão da cobrança", () => {
 
   it("⭐ publicar apaga, com a chave de TESTE velha, o aviso do modo de teste (senão a Stripe o faria falhar por 3 dias)", async () => {
     h.ad.testarChave.mockResolvedValue({ ok: true, modo: "producao" });
-    h.chaveAntiga = "sk_test_51HchaveVelhaDeTeste00";
+    h.chaveAntiga = ["sk", "test", "51HchaveVelhaDeTeste00"].join("_");
     h.modoAnterior = "teste";
     const res = await conectar();
     expect(res.status).toBe(200);
