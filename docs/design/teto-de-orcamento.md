@@ -1092,15 +1092,21 @@ Regra: resposta que não **nomeia o artefato concreto** não conta.
    num produto self-host, e um número que deriva sozinho. É decisão do dono do produto; o
    mínimo honesto (o rótulo dizer a unidade real) entra neste commit porque armar um teto
    contra um número lido 5x errado é estrangulamento por outra porta.
-2. **Gasto multimodal: a visão SOMA no teto, mas não é barrada por ele; a transcrição nem
-   soma.** (Atualizado depois deste design: o texto original dizia que o worker de mídia não
-   gravava `llm_calls`.) O worker grava uma linha por chamada que saiu, nos pontos
-   `visao_de_imagem` e `transcricao_de_audio`. A visão (foto e quadros de vídeo) leva custo
-   pela tabela de preços e entra em `fn_gasto_de_ia_do_mes` — logo, aproxima o teto do turno.
-   Mas o worker chama `generateText` direto, sem `runModelCall`, e não consulta o gate: depois
-   do teto, a mídia segue sendo lida e paga. A transcrição grava `cost_cents` nulo (cobrança
-   por minuto, sem preço conhecido) e não aproxima o teto. Para conferir na fonte:
-   `grep -n "PONTO_VISAO_DE_IMAGEM\|PONTO_TRANSCRICAO_DE_AUDIO\|cost_cents" workers/media-derive-worker.ts`.
+2. **Gasto multimodal: a visão SOMA no teto e é barrada por ele; a transcrição fica fora dos
+   dois.** (Atualizado depois deste design: o texto original dizia que o worker de mídia não
+   gravava `llm_calls`, e uma versão seguinte, que a visão somava mas não era barrada.) O
+   worker grava uma linha por chamada que saiu, nos pontos `visao_de_imagem` e
+   `transcricao_de_audio`. A visão (foto e cada quadro de vídeo) leva custo pela tabela de
+   preços e entra em `fn_gasto_de_ia_do_mes`. Ela chama o provedor fora do `runModelCall`, mas
+   antes do `generateText` passa pelo MESMO `aplicarOrcamento` do seam — não uma cópia: com o
+   teto armado e estourado, a foto não sai, a recusa vira linha `orcamento_esgotado` em
+   `llm_calls`, o item `budget_exceeded` abre na Central e a mensagem recebe o marcador de mídia
+   não lida. A transcrição não passa pelo gate nem soma, por três razões escritas no worker: o
+   custo dela é `null` (cobrança por minuto, sem preço conhecido), então nunca entraria na soma
+   que o teto compara; o degrau 1 pode ser o serviço da própria instalação, que não é gasto da
+   organização; e é com a conversa já na fila humana — o efeito do bloqueio — que o áudio
+   transcrito mais serve a quem atende. Para conferir na fonte:
+   `grep -n "aplicarOrcamento" workers/media-derive-worker.ts`.
    A soma nova chega como **degrau de aviso** antes de bloquear, porque a condição 7 protege.
 3. **Modelo sem preço não consome teto.** `pricing.ts:14-19,34-37` casa por prefixo contra
    três chaves Claude e devolve `null` fora delas (o docstring diz isso com todas as letras).

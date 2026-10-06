@@ -688,8 +688,11 @@ function buildDeriveDeps(
     // limite" barrava o atendimento e deixava a foto seguir saindo, paga. O
     // gate é o do seam, não uma cópia: mesmo veredito, mesmo item
     // `budget_exceeded` na Central, mesma linha `orcamento_esgotado` em
-    // Execuções. Fica depois das recusas de configuração pela mesma razão de
-    // lá: consultar gasto para uma chamada que não vai sair é custo à toa.
+    // Execuções. Fica depois de `validarParProvedorModelo` pela razão do seam:
+    // a recusa grava o modelo em `llm_calls` (`model text not null`), e antes
+    // dessa validação o nome não é confiável — gravar um valor inventado numa
+    // tabela de auditoria é pior que a linha faltando. De quebra, não se
+    // consulta o gasto de uma chamada que a configuração já impediu.
     //
     // A transcrição NÃO passa por aqui, de propósito: o custo dela é null (o
     // preço por minuto não é conhecido), então ela nunca entra na soma que o
