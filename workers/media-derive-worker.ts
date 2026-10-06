@@ -11,8 +11,18 @@ import { extractPdfText } from "@/lib/ai/rag/extractors/pdf";
 import { visaoEmVigor } from "@/lib/ai/pontos/capacidade-em-vigor";
 import { PONTO_TRANSCRICAO_DE_AUDIO, PONTO_VISAO_DE_IMAGEM } from "@/lib/ai/pontos/registro";
 import { costCents } from "@/lib/agent-engine/edge/llm/pricing";
-import { normalizarErro } from "@/lib/agent-engine/edge/llm/run-model-call";
-import { resolveOrgLlmConfig, type LlmEdgeConfig } from "@/lib/agent-engine/edge/llm/credentials";
+import {
+  aplicarOrcamento,
+  LlmBudgetExceededError,
+  normalizarErro,
+} from "@/lib/agent-engine/edge/llm/run-model-call";
+import { normalizarChaveDeOrcamento } from "@/lib/agent-engine/edge/llm/orcamento";
+import { chaveDeOrcamentoDaInstalacao } from "@/lib/instalacao/comportamento";
+import {
+  resolveOrgLlmConfig,
+  type LlmEdgeConfig,
+  type OrgLlmConfig,
+} from "@/lib/agent-engine/edge/llm/credentials";
 import { createDefaultRegistry } from "@/lib/agent-engine/edge/llm/providers";
 import { createPool } from "@/lib/agent-engine/db/pool";
 import { env } from "@/lib/env";
@@ -544,7 +554,7 @@ async function lerBindingDoPonto(
 }
 
 function buildDeriveDeps(
-  llm: { provider: string; apiKey: string; defaultModel: string | null },
+  llm: Pick<OrgLlmConfig, "provider" | "apiKey" | "defaultModel" | "orcamento" | "orcamentoIndisponivelPorque">,
   decisao: DecisaoDeTranscricao,
   orgId: string,
   admin: ReturnType<typeof createAdminClient>,
@@ -671,6 +681,48 @@ function buildDeriveDeps(
       return MARCADOR_NAO_LIDA;
     }
     const modelo = llm.defaultModel ?? "";
+    // ─── O TETO DE GASTO, ANTES DE SAIR BYTE ───────────────────────────────
+    //
+    // A visão grava custo em `llm_calls` e soma no gasto do mês, mas chama o
+    // provedor fora do `runModelCall` — então o "Parar a IA ao chegar no
+    // limite" barrava o atendimento e deixava a foto seguir saindo, paga. O
+    // gate é o do seam, não uma cópia: mesmo veredito, mesmo item
+    // `budget_exceeded` na Central, mesma linha `orcamento_esgotado` em
+    // Execuções. Fica depois das recusas de configuração pela mesma razão de
+    // lá: consultar gasto para uma chamada que não vai sair é custo à toa.
+    //
+    // A transcrição NÃO passa por aqui, de propósito: o custo dela é null (o
+    // preço por minuto não é conhecido), então ela nunca entra na soma que o
+    // teto compara; o degrau 1 pode ser o serviço da própria instalação, que
+    // não é gasto da organização; e é com a conversa já na fila humana — que
+    // é o que o bloqueio faz — que o áudio transcrito mais serve a quem atende.
+    try {
+      await aplicarOrcamento({
+        db: derivePool(),
+        organizationId: orgId,
+        orcamentoDaConfig: llm.orcamento,
+        orcamentoIndisponivelPorque: llm.orcamentoIndisponivelPorque,
+        // A mesma chave efetiva do seam: a tela de admin vence, o `.env` é o piso.
+        chave: chaveDeOrcamentoDaInstalacao(normalizarChaveDeOrcamento(env.AI_BUDGET_ENFORCEMENT)),
+        purpose: PONTO_VISAO_DE_IMAGEM,
+        provider: llm.provider,
+        model: modelo,
+        origem: origemDoModelo,
+        input: { tenantId: orgId },
+        log: logger,
+      });
+    } catch (err) {
+      if (!(err instanceof LlmBudgetExceededError)) throw err;
+      await avisarMidiaNaoLida(
+        orgId,
+        "imagem",
+        "o limite de gasto com IA deste mês foi atingido e a IA está configurada para parar nele, então a foto não foi enviada ao provedor",
+        "Enquanto o limite valer, a IA também não responde: as conversas vão para a fila de atendimento humano.",
+        undefined,
+        "Para resolver, suba o limite ou desligue a parada em Uso de IA › Orçamento.",
+      );
+      return MARCADOR_NAO_LIDA;
+    }
     const inicio = Date.now();
     let res: Awaited<ReturnType<typeof generateText>>;
     try {
@@ -946,12 +998,15 @@ export function textoDoAvisoDeMidiaNaoLida(aviso: {
   motivo: string;
   consequencia: string;
   detalheTecnico?: string;
+  /** Quando a saída não é modelo nem chave (ex.: o teto de gasto), o padrão mandaria o operador ao lugar errado. */
+  paraResolver?: string;
 }): { title: string; body: string } {
   return {
     title: `O agente não conseguiu ler ${aviso.tipo} que o cliente enviou`,
     body:
       `Motivo: ${aviso.motivo}. ${aviso.consequencia} ` +
-      `Para resolver, ajuste o modelo desse ponto em Agente de IA → Provedores, ou cadastre a chave necessária em Credenciais.` +
+      (aviso.paraResolver ??
+        `Para resolver, ajuste o modelo desse ponto em Agente de IA → Provedores, ou cadastre a chave necessária em Credenciais.`) +
       (aviso.detalheTecnico ? ` ${DETALHE_TECNICO} ${aviso.detalheTecnico}` : ""),
   };
 }
@@ -967,6 +1022,7 @@ async function avisarMidiaNaoLida(
   consequencia = "Enquanto isso, o agente responde avisando que não conseguiu abrir o arquivo.",
   /** A frase crua do provedor ou do armazenamento, quando houver — vai no fim, rotulada. */
   detalheTecnico?: string,
+  paraResolver?: string,
 ): Promise<void> {
   try {
     const admin = createAdminClient();
@@ -988,7 +1044,7 @@ async function avisarMidiaNaoLida(
       organization_id: organizationId,
       kind: "midia_nao_lida",
       severity: "warn",
-      ...textoDoAvisoDeMidiaNaoLida({ tipo, motivo, consequencia, detalheTecnico }),
+      ...textoDoAvisoDeMidiaNaoLida({ tipo, motivo, consequencia, detalheTecnico, paraResolver }),
     });
     // E o retorno é CONFERIDO. O supabase-js devolve `{ error }` em vez de
     // lançar, então o `catch` abaixo era inalcançável para erro de banco: a
