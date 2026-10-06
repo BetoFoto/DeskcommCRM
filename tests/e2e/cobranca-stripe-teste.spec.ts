@@ -106,7 +106,8 @@ test.describe("cobrança — contra a Stripe de verdade, em modo teste", () => {
       expect(((await conexao.json()) as { data: unknown }).data).toEqual({ modo: "teste", webhook: "automatico", publicadas: 0 });
       await page.goto("/admin/cobranca");
       await expect(page.getByText("MODO DE TESTE").first()).toBeVisible();
-      expect(await page.content()).not.toContain(CHAVE);
+      // includes + toBe(false): `not.toContain(CHAVE)` imprimiria a chave inteira no log justamente quando falhasse.
+      expect((await page.content()).includes(CHAVE), "a chave apareceu na página").toBe(false);
       const endpoints = await stripe<{ data: Array<{ id: string; url: string; enabled_events: string[] }> }>("GET", "/webhook_endpoints?limit=100");
       const nosso = endpoints.data.find((e) => e.url === `${APP}/api/v1/webhooks/cobranca/stripe`);
       if (!nosso) throw new Error("o webhook não foi registrado na conta de teste");
@@ -180,11 +181,25 @@ test.describe("cobrança — contra a Stripe de verdade, em modo teste", () => {
       falha = erro;
       throw erro;
     } finally {
+      // Primeiro o que vaza para fora desta spec — as chaves da instalação local —, isolado:
+      // uma falha de rede na Stripe logo abaixo não pode deixá-las apontando para a conta de teste.
+      try {
+        await restaurarChaves(foto);
+      } catch (e) {
+        test.info().annotations.push({ type: "cleanup", description: `chaves não restauradas: ${e instanceof Error ? e.message : String(e)}` });
+      }
+      for (const [o, f] of [
+        ["cliente", () => (cliente ? stripe("DELETE", `/customers/${cliente}`) : null)],
+        ["endpoint", () => (endpointId ? stripe("DELETE", `/webhook_endpoints/${endpointId}`) : null)],
+      ] as const) {
+        try {
+          await f();
+        } catch (e) {
+          test.info().annotations.push({ type: "cleanup", description: `${o} na Stripe não apagado: ${e instanceof Error ? e.message : String(e)}` });
+        }
+      }
       try {
         await Promise.allSettled(contextos.map((c) => c.close()));
-        // Apagar o cliente cancela as assinaturas dele na conta de teste.
-        if (cliente) await stripe("DELETE", `/customers/${cliente}`);
-        if (endpointId) await stripe("DELETE", `/webhook_endpoints/${endpointId}`);
         // A trava da Task 33A lê a última releitura gravada, não a Stripe: apague a linha antes da empresa.
         const assinaturas = await db.from("cobranca_assinaturas").delete().in("organization_id", orgs);
         if (assinaturas.error) throw assinaturas.error;
@@ -196,7 +211,6 @@ test.describe("cobrança — contra a Stripe de verdade, em modo teste", () => {
           const r = await db.from("cobranca_planos").delete().eq("id", planoId);
           if (r.error) throw r.error;
         }
-        await restaurarChaves(foto);
         const pa = await db.from("platform_admins").delete().in("user_id", pessoas);
         if (pa.error) throw pa.error;
         for (const id of pessoas) {
