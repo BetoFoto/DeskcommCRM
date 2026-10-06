@@ -87,6 +87,12 @@ const USD_PER_MTOK: Record<string, Preco> = {
   'gpt-5.4-nano': { input: 0.2, output: 1.25, cacheRead: 0.02, cacheWrite5m: 0.2, cacheWrite1h: 0.2 },
   'gpt-5.4-pro': { input: 30, output: 180, cacheRead: 30, cacheWrite5m: 30, cacheWrite1h: 30 },
 
+  // Google Gemini 3.5 Flash-Lite, tarifa Standard (06/10/2026):
+  // https://ai.google.dev/gemini-api/docs/pricing
+  // Cache write paga a entrada normal; armazenamento de cache ($1/MTok/h)
+  // não é contabilizado por chamada nesta tabela.
+  'gemini-3.5-flash-lite': { input: 0.3, output: 2.5, cacheRead: 0.03, cacheWrite5m: 0.3, cacheWrite1h: 0.3 },
+
   // Jev (TypeSafe AI), a versão FIXADA em lib/ai/decisao/cliente.ts. Fonte:
   // docs.typesafe.ai/models.md, conferida em 23/09/2026 — "Charged per input
   // token. Output tokens are free." A API devolve output_tokens > 0 mesmo assim:
