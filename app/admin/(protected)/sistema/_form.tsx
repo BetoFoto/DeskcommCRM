@@ -224,6 +224,13 @@ const MODULOS_NA_TELA: ReadonlyArray<{ modulo: ModuloPorFlag; id: string; rotulo
     descricao:
       "Ligado, você cria planos e cobra as empresas hospedadas aqui, com teste grátis e suspensão automática de quem não paga. Empresas que já existem ficam isentas; você escolhe quem passa a pagar. Desligado, os limites dos planos deixam de valer e as empresas suspensas por falta de pagamento são liberadas; nada é cancelado no provedor de pagamento.",
   },
+  {
+    modulo: "login_codex",
+    id: "modulo-login-codex",
+    rotulo: "Login do Codex por assinatura",
+    descricao:
+      "Ligado, cada empresa vê em Credenciais o painel para conectar a própria conta do Codex. Desligado por padrão: sem este interruptor nada aparece para as empresas, e a reserva de chamada continua sendo a chave de API da organização.",
+  },
 ];
 
 export function FormularioDeModulos({
