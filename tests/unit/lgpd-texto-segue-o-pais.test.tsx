@@ -16,6 +16,11 @@
  * Exceção deliberada: `pdf-textos-cpf-da-conversa-e-aviso.txt` foi REGRAVADO
  * no PR #2355 (issue #2341), que troca no Brasil também o ponteiro "valor no
  * arquivo de dados" pelo CPF mascarado. Essa linha não é mais a de antes.
+ *
+ * Segunda exceção deliberada: `email.json` foi REGRAVADO pelo doc 103 (resposta
+ * A), que passa a entregar ao titular brasileiro o link do arquivo de dados. A
+ * diferença é só essa: um parágrafo com o link no HTML e, no texto, o link e
+ * "Os dois links expiram" no lugar de "O link expira". O resto segue byte a byte.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -158,7 +163,11 @@ async function dataJson(country: string | null, timezone: string, pais?: string 
   return { vazio, cheio };
 }
 
-/** O JSON como o worker o grava (`JSON.stringify(data, null, 2)`), sem o relógio. */
+/**
+ * O PAYLOAD serializado, sem o relógio. Desde o doc 103 o arquivo que o worker
+ * sobe é `copiaDoTitular(data)` (`lgpd-copia-do-titular.test.ts`); estes
+ * fixtures travam o payload de onde saem o PDF e essa cópia.
+ */
 const comoGravado = (p: ExportPayload) => JSON.stringify({ ...p, generated_at: "X" }, null, 2);
 
 function textos(no: ReactNode): string[] {
@@ -202,7 +211,7 @@ function pdfDe(
 }
 
 describe("e-mail ao titular", () => {
-  it("Brasil: igual, byte a byte, ao que saía antes do doc 88", async () => {
+  it("Brasil: o de antes do doc 88, byte a byte, mais o link do arquivo de dados (doc 103, A)", async () => {
     expect(JSON.stringify(await emailPara(perfilDoPais("BR")), null, 2)).toBe(fixture("email.json"));
   });
 
