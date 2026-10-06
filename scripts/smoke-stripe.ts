@@ -23,9 +23,10 @@ if (modoDaChaveStripe(chave) !== "teste") {
   process.exit(3);
 }
 
+// Lança em vez de sair: `process.exit` não roda o `finally`, e a conta de teste
+// ficava com cliente, assinatura e endpoint a cada checagem vermelha.
 function falha(msg: string): never {
-  console.error(`✗ SMOKE STRIPE FAIL: ${msg}`);
-  process.exit(1);
+  throw new Error(`SMOKE STRIPE FAIL: ${msg}`);
 }
 function ok(msg: string): void {
   console.info(`✓ ${msg}`);
@@ -116,15 +117,23 @@ async function main(): Promise<void> {
     endpoint = nossos[0]?.id ?? null;
     ok("prepararWebhook + confirmar: um endpoint, segredo whsec_ devolvido (não impresso)");
   } finally {
-    if (endpoint) await stripe("DELETE", `/webhook_endpoints/${endpoint}`);
-    if (assinatura) await stripe("DELETE", `/subscriptions/${assinatura}`);
-    if (cliente) await stripe("DELETE", `/customers/${cliente}`);
-    for (const p of [plano, novo]) await stripe("POST", `/products/dc_plano_${p.id}`, { active: false }).catch(() => null);
+    // Cada passo isolado: uma limpeza que falha não pode deixar as outras para trás.
+    const limpar = async (o: string, f: () => Promise<unknown>) => {
+      try {
+        await f();
+      } catch (e) {
+        console.error(`✗ limpeza (${o}) falhou: ${e instanceof Error ? e.message : "desconhecido"}`);
+      }
+    };
+    if (endpoint) await limpar("endpoint", () => stripe("DELETE", `/webhook_endpoints/${endpoint}`));
+    if (assinatura) await limpar("assinatura", () => stripe("DELETE", `/subscriptions/${assinatura}`));
+    if (cliente) await limpar("cliente", () => stripe("DELETE", `/customers/${cliente}`));
+    for (const p of [plano, novo]) await limpar(`produto ${p.id}`, () => stripe("POST", `/products/dc_plano_${p.id}`, { active: false }));
   }
   console.info(`✓ SMOKE STRIPE OK (versão ${STRIPE_VERSION})`);
 }
 
 main().catch((e: unknown) => {
-  console.error(`✗ SMOKE STRIPE ERRO: ${e instanceof Error ? e.message : "desconhecido"}`);
-  process.exit(1);
+  console.error(`✗ ${e instanceof Error ? e.message : "SMOKE STRIPE ERRO desconhecido"}`);
+  process.exitCode = 1;
 });
