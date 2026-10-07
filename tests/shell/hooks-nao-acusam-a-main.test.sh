@@ -757,6 +757,9 @@ else falha "T-TROCA-TIPO: o git classifica a troca de tipo como T" "$(git -C "$t
 r=$(commitar_pelo_dispatcher "$tt" "o invariante da main vira symlink")
 assert_exit "$(exit_de "$r")" 1 "T-TROCA-TIPO: trocar o invariante da main por symlink é ACUSADO (o T entra como M — #2465)"
 assert_contains "$(saida_de "$r")" "$INV" "T-TROCA-TIPO: e a mensagem nomeia o invariante trocado (não passou/reprovou por outro motivo)"
+# o caminho sozinho não distingue: a saída de um `git commit` que PASSOU também o lista.
+# A frase do guard só aparece quando ele bloqueia.
+assert_contains "$(saida_de "$r")" "tests/invariants/** é congelado" "T-TROCA-TIPO: e quem bloqueou foi o freeze (a frase do guard está na saída)"
 # o controle que fecha: quem bloqueou é ESTE guard, e a válvula declarada segue valendo
 # para o MESMO estado — sem isto, o exit 1 acima provaria só que algum hook reclamou.
 saida=$( cd "$tt" && DESKCOMM_GOV_INVARIANTS_EDIT=1 git commit --no-edit -m "troca de tipo com a valvula declarada" 2>&1 ); rc=$?

@@ -70,10 +70,15 @@ set -euo pipefail
 #       symlink para um arquivo mais fraco e o guard nem via a linha. T entra
 #       tratado como M — acusado, e só escapa pelas MESMAS exceções do M.
 #   C = cópia: o `--name-status` só a emite com detecção de cópia ligada
-#       (`diff.copies=true` no config de quem roda, ou `-C`). Sem a letra aqui a
-#       cópia entraria em silêncio; com ela, falha FECHADA — igual ao R, porque a
-#       linha `C` tem DOIS caminhos (`C100<TAB>origem<TAB>destino`) e nenhum dos
-#       dois sozinho passa pelas exceções do M.
+#       (`diff.renames=copies` no config de quem roda, ou `-C`; `diff.copies`
+#       não é chave do git).
+#       Sem `--find-copies-harder` o C só aparece quando a ORIGEM também mudou,
+#       e essa mudança já aparece na própria linha M, sujeita às mesmas regras
+#       de antes — o C não esconde edição de invariante.
+#       Ele entra FECHADO por conservadorismo, igual ao R: a linha tem DOIS
+#       caminhos (`C100<TAB>origem<TAB>destino`) e nenhum passa pelas exceções do M.
+#       O custo: nessa config, um invariante NOVO copiado de um arquivo
+#       modificado passa a pedir a válvula.
 #
 # ⚠️ `-c core.quotepath=false` e o `"?` do regex NÃO são enfeite: eram um FURO
 # ABERTO, medido em 18/09/2026 nesta versão e nas duas anteriores. Com
