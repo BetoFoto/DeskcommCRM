@@ -6919,6 +6919,8 @@
   "O arquivo não está mais guardado. Envie de novo.": "The file is no longer stored. Send it again.",
   "Esta chave de idempotência já foi usada com outro conteúdo.": "This idempotency key has already been used with different content.",
   "Um canal está em modo de teste — a IA não responde ninguém nele": "A channel is in test mode — the AI doesn't respond to anyone on it",
+  "Um canal foi pausado — não recebe nem envia mensagens": "A channel was paused — it neither receives nor sends messages",
+  "Se este canal precisar voltar a operar, retome a pausa em Conexões — este aviso se resolve sozinho quando a pausa for desfeita.": "If this channel needs to go back in service, resume the pause in Connections — this notice resolves itself once the pause is lifted.",
   "A mesma requisição ainda está em curso. Tente de novo em instantes.": "The same request is still in progress. Try again in a moment.",
   "Filtros inválidos.": "Invalid filters.",
   "Header Idempotency-Key é obrigatório.": "The Idempotency-Key header is required.",
