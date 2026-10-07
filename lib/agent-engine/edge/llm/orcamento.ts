@@ -490,8 +490,9 @@ const RECURSO_TETO_DE_IA: RecursoDoPlano = 'ia_usd_cents';
  * subiu) OU teto nenhum (a empresa ficou isenta, ou o plano perdeu o teto). A
  * mesma régua de `SQL_ORCAMENTO`: sem o caso do teto nulo, o aviso "as conversas
  * foram para a equipe" ficaria aceso para sempre, porque não há outro resolvedor.
- * A cobrança DESLIGADA não chega aqui (o gate nem roda o statement); quem fecha
- * esse caso é `fn_cobranca_liberar_suspensoes`, no ato de desligar.
+ * A cobrança DESLIGADA não chega aqui, salvo a janela do memo (o gate nem roda o
+ * statement); quem fecha esse caso é `fn_cobranca_liberar_suspensoes`, no ato de
+ * desligar.
  */
 export const SQL_TETO_DO_PLANO = `
 with plano as (

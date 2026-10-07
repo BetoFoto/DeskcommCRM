@@ -1,12 +1,12 @@
 ---
-impacto: nada_mudou
+impacto: capacidade_nova
 secao: alterado
 titulo: A cobrança dos seus clientes começa a chegar ao sistema, ainda sem poder ser ligada
 ---
 
 Esta versão traz a primeira parte da capacidade de o dono de uma instalação cobrar as empresas que atende: planos com limite de pessoas, de números conectados e de uso de IA, e o teste grátis de quem se cadastra. Ela chega desligada e travada: o interruptor só aparece em Admin › Recursos opcionais quando a conexão com o provedor de pagamento chegar, e nada precisa ser ligado nesta versão. Por isso quase nada muda para quem já usa o sistema: o campo Plano do novo cliente, o selo do plano no painel de cada empresa, a tela de Billing e os menus seguem iguais, e nenhuma empresa ganha limite.
 
-Uma coisa muda para todos, com ou sem cobrança: quando uma empresa suspensa é reativada, o aviso da Central passa a citar também os agendamentos de disparo único que venceram sem ser disparados e os passos de follow-up descartados durante a suspensão, e aparece mesmo quando nenhuma conversa chegou nesse período. A orientação do aviso aponta para IA › Follow-ups, além do Inbox. Na fila de IA › Follow-ups, o retorno que a suspensão impediu de sair passa a aparecer como "não disparada", e não mais como "concluída". Para quem integra pelo MCP, a ferramenta `crm_list_followups` ganha um quarto valor em `situacao`, `nao_disparado`, além de `agendado`, `disparado` e `cancelado`: uma integração que só conhecia os três precisa tratar o novo valor.
+Uma coisa muda para todos, com ou sem cobrança: quando uma empresa suspensa é reativada, o aviso da Central passa a citar também os agendamentos de disparo único que venceram sem ser disparados e os passos de follow-up descartados durante a suspensão, e aparece mesmo quando nenhuma conversa chegou nesse período. A orientação do aviso aponta para IA › Follow-ups, além do Inbox. Na fila de IA › Follow-ups, o retorno que a suspensão impediu de sair passa a aparecer como "não disparada", e não mais como "concluída". Para quem integra pelo MCP, a ferramenta `crm_list_followups` ganha um quarto valor em `situacao`, `nao_disparado`, além de `agendado`, `disparado` e `cancelado`. Ele aparece em qualquer instalação, com ou sem cobrança, sempre que um retorno não saiu porque a empresa estava parada; uma integração que só conhecia os três valores passa a recebê-lo também.
 
 O aviso de orçamento de IA também foi ajustado: o aviso do teto do plano e o aviso do orçamento da empresa passam a coexistir, em vez de um calar o outro, e o modo de orçamento que apenas avisa não afrouxa o teto do plano. Como a cobrança está travada, nenhuma empresa tem teto de plano hoje e o aviso de orçamento segue igual.
 

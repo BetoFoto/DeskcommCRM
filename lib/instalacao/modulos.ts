@@ -208,8 +208,8 @@ export async function moduloLigadoComMemo(
  * A chave da COBRANÇA com o mesmo memo, para quem só tem o pool `pg`: o gate do
  * LLM (lib/agent-engine/edge/llm/run-model-call.ts), que roda em TODA chamada
  * com a chave da instalação. Lê pela função que o próprio `fn_limite_do_plano`
- * consulta. Erro = desligada, como `modulosLigados`: o teto do plano não roda e
- * a chamada segue — o mesmo lado de `lerTetoDoPlano` indisponível.
+ * consulta. Erro = desligada: o teto do plano não roda e a chamada segue — o
+ * mesmo lado de `lerTetoDoPlano` indisponível.
  */
 export async function cobrancaLigadaComMemo(
   db: Pick<pg.Pool, "query">,
