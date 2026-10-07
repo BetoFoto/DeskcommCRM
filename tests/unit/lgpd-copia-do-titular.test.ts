@@ -16,6 +16,14 @@
  * 3. Isolamento: pelo caminho de produção (coletor + cópia), o que é de outro
  *    contato ou de outra organização não entra.
  *
+ * E as três respostas do doc 110 ("1A, 2A, 3A"), cada uma com o seu caso:
+ *
+ * - 1A: das ações da IA fica o nome e a data; nada do que ela digitou (o termo
+ *   de busca de contato, a razão de chamar um atendente) — Brasil e Portugal;
+ * - 2A: o Brasil recebe TODAS as mensagens e a lista das seções no limite;
+ * - 3A: em Portugal as seis notas da equipe sobre ele voltam (marca `NOTA`),
+ *   com o texto e a data e sem o nome de quem escreveu; no Brasil, não.
+ *
  * O PDF não muda: ele é desenhado do payload inteiro, antes da cópia. Quem o
  * trava byte a byte são os fixtures de `lgpd-texto-segue-o-pais.test.tsx`;
  * aqui o teste garante que a cópia não altera o payload de onde o PDF sai.
@@ -34,27 +42,34 @@ import { collectExportData, type ExportPayload } from "@/lib/lgpd/export-collect
 /** Seções inteiras que não podem sair. */
 const SECOES_PROIBIDAS = ["conversation_notes", "case_chat_messages", "appointment_notices"];
 
-/** [seção, campo] que não pode sair de nenhuma linha. */
+/**
+ * As seis notas da equipe SOBRE o titular (doc 110, 3A), escritas à mão: fora
+ * no Brasil, dentro em Portugal. `conversation_notes` é seção inteira no Brasil.
+ */
+const NOTAS: Array<[string, string]> = [
+  ["sales", "notes"],
+  ["passagens", "content"],
+  ["contact_field_proposals", "motivo_recusa"],
+  ["b2b.pessoa", "notes"],
+  ["b2b.vinculos", "notes"],
+];
+
+/** [seção, campo] que não pode sair de nenhuma linha, em país nenhum. */
 const CAMPOS_PROIBIDOS: Array<[string, string]> = [
   ["activities", "source_module"],
   ["appointments", "google_base_projection"],
   ["appointments", "google_conflict"],
   ["appointments", "google_pending_write"],
   ["appointments", "meeting_state"],
-  ["sales", "notes"],
   ["case_events", "metadata"],
   ["passagens", "motor"],
   ["passagens", "origem"],
-  ["passagens", "content"],
   ["honorarios_contratos", "repasse_advogado_pct"],
   ["meeting_deliveries", "run_after"],
-  ["contact_field_proposals", "motivo_recusa"],
   ["avisos_de_caso", "destino_mascarado"],
   ["avisos_de_caso", "erro_codigo"],
   ["avisos_de_caso", "tentativas"],
   ["prospecting_candidates", "error"],
-  ["b2b.pessoa", "notes"],
-  ["b2b.vinculos", "notes"],
   ["b2b.linhas_importadas", "error"],
 ];
 
@@ -97,7 +112,7 @@ function payloadCheio(): ExportPayload {
         meeting_state: "SEGREDO-estado",
       },
     ],
-    sales: [{ id: "SEGREDO-v", number: 7, notes: "SEGREDO-nota-comanda", cancel_reason: "FICA-cancelou" }],
+    sales: [{ id: "SEGREDO-v", number: 7, notes: "NOTA-comanda", cancel_reason: "FICA-cancelou" }],
     case_events: [
       {
         id: "SEGREDO-ce",
@@ -107,7 +122,7 @@ function payloadCheio(): ExportPayload {
         metadata: { destino_mascarado: "SEGREDO-plantao", entrega_id: "SEGREDO-ent" },
       },
       // `human_replied`: a nota de quem resolveu (human-cases.ts) é texto da equipe.
-      { id: "SEGREDO-ch", actor_kind: "human", human_action: "FICA-resolved", body: "SEGREDO-nota-de-quem-resolveu" },
+      { id: "SEGREDO-ch", actor_kind: "human", human_action: "FICA-resolved", body: "NOTA-de-quem-resolveu" },
     ],
     honorarios_contratos: [
       { id: "SEGREDO-hc", lead_id: "SEGREDO-hcl", modelo: "FICA-modelo", repasse_advogado_pct: "SEGREDO-repasse" },
@@ -116,7 +131,7 @@ function payloadCheio(): ExportPayload {
       { id: "SEGREDO-md", status: "FICA-enviado", run_after: "SEGREDO-fila", appointment_id: "SEGREDO-mda" },
     ],
     contact_field_proposals: [
-      { id: "SEGREDO-cfp", campo: "FICA-campo", trecho: "FICA-trecho", motivo_recusa: "SEGREDO-recusa" },
+      { id: "SEGREDO-cfp", campo: "FICA-campo", trecho: "FICA-trecho", motivo_recusa: "NOTA-recusa" },
     ],
     appointment_notices: [{ id: "SEGREDO-an", title: "SEGREDO-aviso-da-central" }],
     passagens: [
@@ -128,7 +143,7 @@ function payloadCheio(): ExportPayload {
         origem: "SEGREDO-origem",
         motivo_codigo: "FICA-motivo",
         notes: "FICA-ultimas-palavras-do-cliente",
-        content: "SEGREDO-razao-de-quem-passou",
+        content: "NOTA-razao-de-quem-passou",
         tentativas: ["FICA-tentativa"],
       },
     ],
@@ -145,26 +160,45 @@ function payloadCheio(): ExportPayload {
     prospecting_candidates: [
       { id: "SEGREDO-pc", campaign_id: "SEGREDO-pcc", place_id: "SEGREDO-place", error: "SEGREDO-e", phone: "FICA-fone" },
     ],
-    conversation_notes: [{ id: "x", body: "SEGREDO-nota-interna", created_by_name: "SEGREDO-funcionario" }],
+    conversation_notes: [
+      {
+        id: "SEGREDO-cn",
+        conversation_id: "SEGREDO-cnc",
+        body: "NOTA-nota-interna",
+        media_storage_path: "SEGREDO-caminho-do-anexo",
+        media_mime: "SEGREDO-mime",
+        media_size_bytes: 12345,
+        created_at: "NOTA-data-da-nota",
+        created_by_name: "SEGREDO-funcionario",
+      },
+    ],
     case_chat_messages: [{ id: "y", body: "SEGREDO-chat-interno" }],
     // A forma de `toolCallsParaOTitular`: passo → chamadas → args. O funcionário da
     // agenda (`owner_user_id`, agendamento.ts) e o do repasse (`target_user_id`,
-    // handoff.ts) moram nos argumentos.
+    // handoff.ts) moram nos argumentos; o termo da busca de contato pode ser o
+    // nome de OUTRO cliente, e a razão do repasse é texto para a equipe (doc 110, 1A).
     ai_agent_runs: [
       {
         id: "SEGREDO-run",
+        created_at: "FICA-quando-a-ia-rodou",
         tool_calls: [
           {
             step: 1,
             tool_calls: [
               {
-                tool_name: "crm_book_appointment",
+                tool_name: "FICA-crm_book_appointment",
                 args: {
                   owner_user_id: "SEGREDO-funcionario-uuid",
                   lead_id: "SEGREDO-args-lead",
-                  texto: "FICA-args",
+                  texto: "SEGREDO-args",
                   repasse: { target_user_id: "SEGREDO-alvo-do-repasse" },
                 },
+              },
+              { tool_name: "FICA-crm_search_contacts", args: { query: "SEGREDO-nome-de-outro-cliente" } },
+              {
+                tool_name: "FICA-handoff_to_human",
+                args: { reason: "SEGREDO-razao-para-a-equipe", attempted: "SEGREDO-o-que-a-ia-tentou" },
+                result: "SEGREDO-resultado",
               },
             ],
           },
@@ -172,8 +206,8 @@ function payloadCheio(): ExportPayload {
       },
     ],
     b2b: {
-      pessoa: { id: "SEGREDO-pe", full_name: "FICA-pessoa", notes: "SEGREDO-nota-b2b" },
-      vinculos: [{ company_id: "SEGREDO-co", job_title: "FICA-cargo", notes: "SEGREDO-nota-vinculo" }],
+      pessoa: { id: "SEGREDO-pe", full_name: "FICA-pessoa", notes: "NOTA-b2b" },
+      vinculos: [{ company_id: "SEGREDO-co", job_title: "FICA-cargo", notes: "NOTA-vinculo" }],
       linhas_importadas: [
         { id: "SEGREDO-li", batch_id: "SEGREDO-lote", raw_data: { nome: "FICA-planilha" }, error: "SEGREDO-imp" },
       ],
@@ -181,10 +215,13 @@ function payloadCheio(): ExportPayload {
   } as unknown as ExportPayload;
 }
 
+const PAISES = ["BR", "PT"] as const;
+
 describe("o arquivo do titular (data.json)", () => {
-  it("não leva nenhuma seção nem campo da lista proibida", () => {
-    const copia = copiaDoTitular(payloadCheio());
-    for (const secao of SECOES_PROIBIDAS) expect(copia, secao).not.toHaveProperty(secao);
+  it.each(PAISES)("%s: não leva nenhuma seção nem campo da lista proibida", (pais) => {
+    const copia = copiaDoTitular(payloadCheio(), pais);
+    for (const secao of SECOES_PROIBIDAS.filter((s) => pais === "BR" || s !== "conversation_notes"))
+      expect(copia, secao).not.toHaveProperty(secao);
     for (const [secao, campo] of CAMPOS_PROIBIDOS) {
       const ls = noCaminho(copia, secao);
       expect(ls.length, `${secao}: a seção sumiu do teste`).toBeGreaterThan(0);
@@ -192,8 +229,8 @@ describe("o arquivo do titular (data.json)", () => {
     }
   });
 
-  it("não leva chave de banco de linha nenhuma — e nada marcado SEGREDO, em lugar nenhum", () => {
-    const copia = copiaDoTitular(payloadCheio());
+  it.each(PAISES)("%s: não leva chave de banco de linha nenhuma — e nada marcado SEGREDO, em lugar nenhum", (pais) => {
+    const copia = copiaDoTitular(payloadCheio(), pais);
     const secoes = Object.entries(copia).flatMap(([k, v]) =>
       k === "b2b" ? Object.values(v as Obj).flatMap(linhas) : linhas(v),
     );
@@ -203,28 +240,76 @@ describe("o arquivo do titular (data.json)", () => {
     expect(JSON.stringify(copia).match(/SEGREDO[^"]*/g) ?? []).toEqual([]);
   });
 
-  it("leva o que é do titular, inclusive chave dentro de um jsonb dele", () => {
+  it.each(PAISES)("%s: leva o que é do titular, inclusive chave dentro de um jsonb dele", (pais) => {
     const tudo = JSON.stringify(payloadCheio());
-    const copia = JSON.stringify(copiaDoTitular(payloadCheio()));
-    const fica = tudo.match(/FICA-[a-z-]+/g)!;
+    const copia = JSON.stringify(copiaDoTitular(payloadCheio(), pais));
+    const fica = tudo.match(/FICA-[a-z_-]+/g)!;
     expect(fica.length).toBeGreaterThan(20);
     for (const marca of fica) expect(copia, marca).toContain(marca);
   });
 
-  it("não altera o payload de onde o PDF é desenhado", () => {
+  it.each(PAISES)("%s: não altera o payload de onde o PDF é desenhado", (pais) => {
     const data = payloadCheio();
     const antes = structuredClone(data);
-    copiaDoTitular(data);
+    copiaDoTitular(data, pais);
     expect(data).toEqual(antes);
   });
 
-  it("o worker sobe a cópia, desenha o PDF do payload e assina o link para todo país", () => {
+  it("o worker sobe a cópia do país da organização, desenha o PDF do payload e assina o link para todo país", () => {
     const fonte = readFileSync(join(__dirname, "..", "..", "workers", "lgpd-export-worker.ts"), "utf8");
-    expect(fonte).toContain("JSON.stringify(copiaDoTitular(data), null, 2)");
+    // `perfil.codigo`: o MESMO perfil lido uma vez e passado ao coletor e ao e-mail.
+    expect(fonte).toContain("JSON.stringify(copiaDoTitular(data, perfil.codigo), null, 2)");
     expect(fonte).toContain("renderLgpdPdf(data,");
     expect(fonte).toContain(".createSignedUrl(jsonPath, expiresInSec)");
     // O link do arquivo era pedido só fora do Brasil; o país não pode voltar a decidir isso.
     expect(fonte).not.toContain("PAIS_PADRAO");
+  });
+});
+
+describe("doc 110 — as três respostas do dono", () => {
+  it.each(PAISES)(
+    "1A (%s): das ações da IA ficam o nome e quando rodou; nada do que ela digitou",
+    (pais) => {
+      const copia = copiaDoTitular(payloadCheio(), pais);
+      const [run] = linhas(copia.ai_agent_runs);
+      expect(run).toEqual({
+        created_at: "FICA-quando-a-ia-rodou",
+        tool_calls: [
+          {
+            step: 1,
+            tool_calls: [
+              { tool_name: "FICA-crm_book_appointment" },
+              { tool_name: "FICA-crm_search_contacts" },
+              { tool_name: "FICA-handoff_to_human" },
+            ],
+          },
+        ],
+      });
+    },
+  );
+
+  it("3A: no Brasil nenhuma das seis notas da equipe sobre ele sai (doc 103)", () => {
+    const copia = copiaDoTitular(payloadCheio(), "BR");
+    expect(copia).not.toHaveProperty("conversation_notes");
+    for (const [secao, campo] of NOTAS)
+      for (const l of noCaminho(copia, secao)) expect(l, `${secao}.${campo}`).not.toHaveProperty(campo);
+    expect(JSON.stringify(copia).match(/NOTA-[a-z-]+/g) ?? []).toEqual([]);
+  });
+
+  it("3A: em Portugal as seis notas saem com o texto e a data, sem o nome de quem escreveu nem o anexo", () => {
+    const copia = copiaDoTitular(payloadCheio(), "PT");
+    const texto = JSON.stringify(copia);
+    for (const nota of JSON.stringify(payloadCheio()).match(/NOTA-[a-z-]+/g)!) expect(texto, nota).toContain(nota);
+    expect(copia.conversation_notes).toEqual([{ body: "NOTA-nota-interna", created_at: "NOTA-data-da-nota" }]);
+    for (const [secao, campo] of NOTAS)
+      for (const l of noCaminho(copia, secao)) expect(l, `${secao}.${campo}`).toHaveProperty(campo);
+    // O nome do funcionário e o caminho do anexo: o art. 15.º, n.º 4 protege OUTRAS pessoas.
+    expect(texto).not.toContain("SEGREDO-funcionario");
+    expect(texto).not.toContain("SEGREDO-caminho-do-anexo");
+  });
+
+  it("3A: um país sem decisão segue o Brasil, não Portugal", () => {
+    expect(copiaDoTitular(payloadCheio(), "XI")).toEqual(copiaDoTitular(payloadCheio(), "BR"));
   });
 });
 
@@ -282,6 +367,11 @@ function consulta(tabela: string): unknown {
         if (prop === "in")
           return (k: string, vs: unknown[]) => {
             ins.push([k, vs]);
+            return q;
+          };
+        if (prop === "limit")
+          return (n: number) => {
+            faixa = [faixa[0], faixa[0] + n - 1];
             return q;
           };
         if (prop === "range")
@@ -346,9 +436,32 @@ describe("isolamento do arquivo do titular", () => {
       externalCustomerId: null,
       pais: "BR",
     });
-    const arquivo = JSON.stringify(copiaDoTitular(data));
+    const arquivo = JSON.stringify(copiaDoTitular(data, "BR"));
     for (const meu of ["MEU-nome", "MEU-mensagem", "MEU-lead", "MEU-memoria"]) expect(arquivo, meu).toContain(meu);
     expect(arquivo.match(/(VIZINHO|OUTRA-ORG)-[a-z-]+/g) ?? []).toEqual([]);
+  });
+
+  it("2A: no Brasil o arquivo leva TODAS as mensagens dele e a lista das seções no limite", async () => {
+    // 1.234 mensagens: passa do recorte de 100 e de duas páginas de 500.
+    const minhas = Array.from({ length: 1234 }, (_, i) =>
+      linha({ org: ORG, contato: CONTATO }, { id: `mm${i}`, conversation_id: "conv-meu", body: `MEU-${i}` }),
+    );
+    banco.messages = [...banco.messages, ...minhas];
+    const data = await collectExportData({
+      organizationId: ORG,
+      requestId: "pedido-1",
+      contactId: CONTATO,
+      externalCustomerId: null,
+      pais: "BR",
+    });
+    const copia = copiaDoTitular(data, "BR");
+    expect(copia.messages_recent, "a amostra do PDF não muda").toHaveLength(100);
+    const corpos = linhas(copia.messages_completas).map((m) => m.body);
+    expect(corpos, "o recorte de 100 voltou").toHaveLength(1235);
+    expect(corpos).toContain("MEU-mensagem");
+    expect(corpos).toContain("MEU-1233");
+    expect(corpos.filter((b) => /VIZINHO|OUTRA-ORG/.test(String(b)))).toEqual([]);
+    expect(copia.secoes_no_limite, "o aviso das seções no limite").toEqual([]);
   });
 
   it("toda seção que o coletor devolve foi decidida: vai ao titular ou sai, com o motivo", async () => {

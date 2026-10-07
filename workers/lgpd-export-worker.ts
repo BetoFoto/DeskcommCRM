@@ -190,7 +190,7 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
 
     // O arquivo é o que o titular RECEBE (doc 103): o payload sem o que é da
     // equipe. O PDF acima foi desenhado do payload inteiro e não muda.
-    const jsonBytes = Buffer.from(JSON.stringify(copiaDoTitular(data), null, 2), "utf-8");
+    const jsonBytes = Buffer.from(JSON.stringify(copiaDoTitular(data, perfil.codigo), null, 2), "utf-8");
 
     const { error: jsonUploadErr } = await admin.storage
       .from(BUCKET)

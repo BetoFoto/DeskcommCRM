@@ -21,6 +21,13 @@
  * A), que passa a entregar ao titular brasileiro o link do arquivo de dados. A
  * diferença é só essa: um parágrafo com o link no HTML e, no texto, o link e
  * "Os dois links expiram" no lugar de "O link expira". O resto segue byte a byte.
+ *
+ * Terceira exceção, e esta NÃO regrava fixture: o doc 110 (resposta 2A) dá ao
+ * `data.json` brasileiro TODAS as mensagens (`messages_completas`) e a lista
+ * das seções no limite (`secoes_no_limite`), como Portugal. `data-*.json`
+ * segue o gravado em c85293f05: o payload brasileiro é comparado a ele SEM
+ * essas duas chaves (`semAsChavesDoDoc110`), o que prova que nenhuma outra
+ * mudou, e um caso à parte cobra que as duas estão lá.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -170,6 +177,10 @@ async function dataJson(country: string | null, timezone: string, pais?: string 
  */
 const comoGravado = (p: ExportPayload) => JSON.stringify({ ...p, generated_at: "X" }, null, 2);
 
+/** O payload brasileiro menos as duas chaves que o doc 110 (2A) acrescentou — ver o cabeçalho. */
+const semAsChavesDoDoc110 = ({ messages_completas: _m, secoes_no_limite: _s, ...resto }: ExportPayload) =>
+  resto as ExportPayload;
+
 function textos(no: ReactNode): string[] {
   if (no === null || no === undefined || typeof no === "boolean") return [];
   if (typeof no === "string") return [no];
@@ -290,10 +301,18 @@ describe("alarme ao encarregado", () => {
 });
 
 describe("data.json e PDF de acesso", () => {
-  it("Brasil: o data.json é o de antes, sem `lei_rotulo` nem `fuso`", async () => {
+  it("Brasil: o data.json é o de antes, sem `lei_rotulo` nem `fuso` — fora as duas chaves do doc 110", async () => {
     const { vazio, cheio } = await dataJson(null, "America/Sao_Paulo");
     expect(comoGravado(vazio)).toBe(fixture("data-vazio.json"));
-    expect(comoGravado(cheio)).toBe(fixture("data-cheio.json"));
+    expect(comoGravado(semAsChavesDoDoc110(cheio))).toBe(fixture("data-cheio.json"));
+    // Doc 110, 2A: as duas chaves que a trava do doc 88 segurava, e só elas.
+    expect(cheio.messages_completas).toEqual([]);
+    expect(cheio.secoes_no_limite).toEqual([]);
+    const gravadas = Object.keys(JSON.parse(fixture("data-cheio.json")));
+    expect(Object.keys(JSON.parse(comoGravado(cheio))).filter((k) => !gravadas.includes(k))).toEqual([
+      "messages_completas",
+      "secoes_no_limite",
+    ]);
     for (const p of [vazio, cheio]) {
       expect(Object.keys(p)).not.toContain("lei_rotulo");
       expect(Object.keys(p)).not.toContain("fuso");
@@ -345,7 +364,7 @@ describe("data.json e PDF de acesso", () => {
     expect(cheio.lei_citada).toBe("RGPD art. 15.º (Regulamento (UE) 2016/679)");
     expect(cheio.documento_rotulo).toBe("NIF");
     const { cheio: semPais } = await dataJson("BR", "America/Sao_Paulo");
-    expect(comoGravado(semPais)).toBe(fixture("data-cheio.json"));
+    expect(comoGravado(semAsChavesDoDoc110(semPais))).toBe(fixture("data-cheio.json"));
   });
 
   it("o worker lê o país uma vez e passa o mesmo perfil ao coletor e ao e-mail", () => {
