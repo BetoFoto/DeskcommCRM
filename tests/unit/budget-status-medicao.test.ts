@@ -75,7 +75,6 @@ function fazerAdmin(opts: {
       or: (...a: unknown[]) => registra("or", a),
       is: (...a: unknown[]) => registra("is", a),
       gte: (...a: unknown[]) => registra("gte", a),
-      or: (...a: unknown[]) => registra("or", a),
       maybeSingle: async () => ({ data: tabela === "ai_budgets" ? LINHA : null, error: null }),
       then: (res: (v: unknown) => unknown) =>
         Promise.resolve(
