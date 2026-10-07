@@ -1203,12 +1203,33 @@ export async function sendMessageHandler(
         : [];
       const limparEco = () =>
         removerEcoDoProprioEnvio(supabase, ctx.organization_id, c.id, message.id, externalId, candidatosDoEco);
+      // A FORMA GRAVADA É A CANÔNICA DO CANAL (`adapter.canonicalExternalId`),
+      // não o id cru que o adapter devolveu. O eco do webhook grava a cauda em
+      // qualquer engine (#1855), e o `unique (organization_id, external_id)` só
+      // recusa a segunda linha se os DOIS lados gravarem a MESMA string — é
+      // dele que vem a rede de segurança contra a corrida entre a limpeza e
+      // este UPDATE.
+      //
+      // No NOWEB nada muda: a resposta de envio já é a cauda (`3EB0…`) e a
+      // regra canônica a devolve intacta. No WEBJS ela vem como `_serialized`
+      // (`true_<chat>_3EB0…`); gravada aqui, nunca colidia com a cauda do eco,
+      // o `23505` não disparava e o eco que entrava nesse intervalo nascia como
+      // segunda linha com a mesma frase (#196).
+      //
+      // Os leitores continuam achando o id: `handleAck` e `echoExternalIds`
+      // procuram o par `[composto, cauda]`, e editar/apagar reconstrói o id
+      // completo a partir do DESTINATÁRIO (`app/api/v1/messages/[id]/route.ts`
+      // resolve o chat do contato, nunca o id gravado) — é o que o NOWEB já
+      // fazia, sem migration e sem backfill. Canais que não implementam o
+      // método (id simétrico) gravam exatamente o que o envio devolveu.
+      const idCanonico =
+        externalId !== null ? (adapter.canonicalExternalId?.(externalId) ?? externalId) : null;
       const marcarEnviada = (comId: boolean) =>
         supabase
           .from("messages")
           .update({
             status: "sent",
-            ...(comId ? { external_id: externalId } : {}),
+            ...(comId ? { external_id: idCanonico } : {}),
             ack: 0,
             // Colunas só do template — é o que responde custo e conformidade de
             // janela depois, sem varrer jsonb.
