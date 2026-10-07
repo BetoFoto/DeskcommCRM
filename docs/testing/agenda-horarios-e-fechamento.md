@@ -3,6 +3,7 @@
 Medição de contribuição externa em 07/10/2026, base oficial inicial `ce5b87a3c`.
 Depois da medição, a `main` oficial `857917055` foi incorporada sem conflito;
 nenhum dos seis arquivos de implementação desta correção mudou nesse intervalo.
+O último avanço conferido, `6f8228f54`, também foi incorporado sem conflito.
 Código candidato em worktree, sem implantação. Dados, contatos, canal e banco
 fictícios; nenhum envio por WhatsApp. O canal somente capturou mensagens.
 
@@ -129,3 +130,9 @@ a semântica do modelo real é medida pelos cinco cenários acima.
 - A suíte completa de 20.707 casos e os cinco ensaios com modelo real acima
   pertencem à base inicial; não foram repetidos integralmente após esse merge.
   A implementação da correção e seus cinco arquivos unitários são idênticos.
+
+Após incorporar `6f8228f54`: os **75 testes de agenda mais cinco de métricas
+passaram (80 no total)**; o invariante nativo de fechamento passou novamente;
+`pnpm build` terminou com **exit 0**. Esse avanço oficial alterou medição de
+custo/latência e exportou o gate de orçamento; não alterou os arquivos desta
+correção. Os ensaios com modelo real não foram repetidos por essa mudança.
