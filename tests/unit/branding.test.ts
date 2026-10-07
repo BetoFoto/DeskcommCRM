@@ -239,6 +239,12 @@ const MARCA_CONGELADA: Record<string, EntradaDeMarca> = {
       "nome do servidor MCP, que o cliente (Claude Desktop e afins) grava na própria configuração. Renomear derruba as conexões já configuradas de quem usa",
     marcas: ["deskcomm-crm"],
   },
+  "lib/mcp/servidor-externo/chamada.ts": {
+    categoria: "PROTOCOLO",
+    motivo:
+      "clientInfo do handshake `initialize` do MCP que este cliente manda ao servidor REMOTO: ele registra quem conectou e é comum haver regra de acesso por identificação do cliente lá do lado. Não é texto de interface — a tela nunca mostra — e renomear muda a identidade reportada no fio do protocolo",
+    marcas: ["deskcomm-crm"],
+  },
   "lib/supabase/admin.ts": {
     categoria: "PROTOCOLO",
     motivo:
@@ -970,6 +976,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "painel onde o usuário gera a PRÓPRIA chave da Requesty (`ondePegarAChave` em lib/ai/pontos/provedores.ts). Endereço do fornecedor, não nosso.",
   },
+  "myaccount.google.com": {
+    categoria: "CONSOLE",
+    motivo:
+      "página do Google onde a PESSOA revoga o acesso que deu ao app (`/permissions`). A política de privacidade (`app/legal/privacy/page.tsx`) tem de apontar para ela — o Google exige que o texto diga como revogar, e o endereço é dele, não nosso.",
+  },
   "aistudio.google.com": {
     categoria: "CONSOLE",
     motivo: "Google AI Studio — onde o usuário cria a chave do Gemini.",
@@ -1196,6 +1207,11 @@ describe("catraca de host de terceiro no código que embarca", () => {
       "meet.jit.si",
       "meusistema.com",
       "mi-gateway.ejemplo.com",
+      // Decisão escrita: a política de privacidade (`app/legal/privacy/page.tsx`) manda a
+      // pessoa revogar o acesso ao Google em `/permissions`, que é onde o Google exige
+      // que o texto aponte. O produto não fala com o host — quem abre o link é a pessoa
+      // — e o endereço é do Google, não nosso. Crescimento escrito, como a regra pede.
+      "myaccount.google.com",
       "partners.tiendanube.com",
       "platform.deepseek.com",
       "platform.openai.com",
