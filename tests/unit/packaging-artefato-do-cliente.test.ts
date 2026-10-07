@@ -125,6 +125,25 @@ describe("packaging — o artefato que o cliente instala", () => {
     ).toBe(true);
   });
 
+  it.each(NOSSOS)(
+    "o serviço '%s' declara build: ao lado do image: — o escape de plataforma (#1060)",
+    (nome) => {
+      const bloco = servicos.get(nome);
+      expect(bloco, `serviço '${nome}' sumiu do compose de produção`).toBeDefined();
+
+      const temBuild = /^ {4}build:/m.test(bloco!);
+      expect(
+        temBuild,
+        `'${nome}' perdeu o build: ao lado do image:. Numa VPS cuja arquitetura não é ` +
+          `a das imagens publicadas (Oracle Ampere/ARM) o pull responde ` +
+          `"no matching manifest" e o 'up -d' que o próprio kit documenta não tem o que ` +
+          `subir — a recuperação da #1060 fica só na guarda do update.sh, sem a segunda ` +
+          `rede. Imagem publicada + build ao lado é o padrão das quatro. ` +
+          `Ver docs/doctrine/packaging.md, invariante 1.`,
+      ).toBe(true);
+    },
+  );
+
   it("nenhum serviço de produção é build-only", () => {
     const buildOnly = [...servicos.entries()]
       .filter(([, bloco]) => /^\s{4}build:/m.test(bloco) && !/^\s{4}image:\s*\S/m.test(bloco))

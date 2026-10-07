@@ -709,8 +709,10 @@ cd "$PROJ" || exit 1
 
 echo "── 12. VPS de outra arquitetura: atualizar se recupera sozinho (issue 1060)"
 # O defeito: o registro responde "no matching manifest for linux/arm64/v8", o
-# `pull` não traz imagem nenhuma e o `up -d` morre junto — o `app` não tem
-# `build:` ao lado do `image:`, então o Compose não tem o que subir. Antes da
+# `pull` não traz imagem nenhuma e o `up -d` morre junto. O fallback automático
+# do Compose não é garantia — nos três relatos reais o `up -d` morreu com erro
+# também nos serviços que JÁ tinham `build:` —, então quem responde é a guarda.
+# Antes da
 # guarda o script terminava como se tivesse dado certo: o CRM ficava na versão
 # velha e o dono não era avisado. Pelo botão "Atualizar" nem isso, porque o
 # agente roda sozinho no cron. O desfecho certo é construir aqui a MESMA versão
@@ -756,6 +758,65 @@ check "caminho feliz: a saída não fala em arquitetura nem em construção loca
 # depois do `up -d` que pode falhar, não em outro lugar qualquer.
 check "install.sh chama a recuperação depois de um up -d que pode falhar" \
   bash -c "grep -A1 'if ! dc up -d; then' '$REPO_ROOT/hostgator-setup-kit/install.sh' | grep -q 'construir_aqui_e_subir'"
+
+echo "── 12b. As quatro imagens nossas têm \`build:\` ao lado do \`image:\` (#1060)"
+# A outra metade do conserto: o `up -d` documentado nas mensagens do próprio kit
+# (`docker compose ... up -d`, a dica que o dono roda à mão) tem de conseguir
+# CONSTRUIR quando o registro não serve a plataforma da VPS. Worker, scheduler e
+# voice-agent já tinham; o `app` não tinha, e é ele que derruba a página inteira.
+# Serviço `build:`-only continuaria proibido (invariante 1 da doutrina de
+# packaging) — por isso a prova exige as DUAS chaves no mesmo bloco.
+# Sabotagem: apagar o `build:` do `app` em docker-compose.prod.yml reprova isto.
+bloco_do_servico() { # <nome> → bloco (4 espaços) do serviço no compose de produção
+  awk -v alvo="  $1:" '
+    $0 == alvo { dentro = 1; next }
+    dentro && /^  [A-Za-z0-9_-]+:$/ { exit }
+    dentro { print }
+  ' "$REPO_ROOT/docker-compose.prod.yml"
+}
+# `grep -q` dentro de `set -o pipefail` é cilada (o grep fecha o pipe cedo e o
+# awk sai por SIGPIPE), então a leitura é feita linha a linha em bash: menos
+# processos e nenhum falso vermelho por causa do próprio instrumento. A régua
+# de valor não vazio é do teste de unit (packaging-artefato-do-cliente), que
+# parseia o YAML inteiro — aqui o que se prende é a PRESENÇA da chave.
+tem_chave() { # <bloco> <prefixo da linha> → 0 quando alguma linha começa com ele
+  local bloco="$1" pref="$2" linha
+  while IFS= read -r linha; do
+    case "$linha" in
+      "$pref"*) return 0 ;;
+    esac
+  done <<< "$bloco"
+  return 1
+}
+imagem_e_build_juntos() { # <serviço> → 0 quando image: e build: convivem no bloco
+  local bloco
+  bloco="$(bloco_do_servico "$1")"
+  [ -n "$bloco" ] || return 1
+  tem_chave "$bloco" "    image:" || return 1
+  tem_chave "$bloco" "    build:" || return 1
+  return 0
+}
+for svc in app worker scheduler voice-agent; do
+  check "o serviço '$svc' declara image: e build: no mesmo bloco" \
+    imagem_e_build_juntos "$svc"
+done
+
+# O outro lado da régua: `build:` é só das NOSSAS imagens. Ganhar build num
+# binário de terceiro seria construir na VPS do cliente algo que ninguém aqui
+# mantém — waha, redis, srh, caddy, asterisk e wacalls são upstream e continuam
+# só puxados do registro.
+nenhum_build_upstream() {
+  local svc
+  for svc in waha redis srh caddy asterisk wacalls; do
+    if tem_chave "$(bloco_do_servico "$svc")" "    build:"; then
+      echo "serviço upstream ganhou build: $svc"
+      return 1
+    fi
+  done
+  return 0
+}
+check "nenhum serviço upstream ganhou build: (só as nossas quatro constroem)" \
+  nenhum_build_upstream
 
 echo "── 13. \"Nada a atualizar\" derruba o aviso de manutenção preso (PR #1524)"
 # Medido numa VPS real: a atualização morreu depois de subir o aviso, com a tag

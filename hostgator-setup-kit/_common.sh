@@ -700,11 +700,13 @@ REGRAS_FALTANDO="${REGRAS_FALTANDO:-}"
 # antes do banco e a volta usa o endereço da imagem NOVA — gravado antes de
 # tentar baixá-la. Sem imagem, ele não volta. O susto virou queda.
 #
-# ⚠️ SÓ A IMAGEM DO APP. O worker e o scheduler têm `build:` ao lado do `image:`
-# no compose, então o `up -d` os constrói localmente quando falta imagem — mais
-# lento, mesmo resultado. O app não tem essa rede de segurança, e essa
-# assimetria já está escrita no update.sh, onde as duas mensagens são
-# diferentes de propósito.
+# ⚠️ SÓ A IMAGEM DO APP, de propósito. Worker, scheduler, voice-agent e o app
+# têm `build:` ao lado do `image:` (#1060): quando falta imagem, o `up -d` — e,
+# se ele falhar, a guarda do update.sh — a constrói aqui, mais lento, mesmo
+# resultado. O que não dá para construir é a decisão de OFERECER a atualização,
+# e é isso que este veredito pergunta. As duas mensagens do update.sh sobre pull
+# que falhou continuam diferentes de propósito: a saída (construir aqui) é a
+# mesma, mas o diagnóstico — versão ainda publicando × peça faltando — não é.
 #
 # Ecoa: publicada | ausente | indisponivel
 veredito_da_imagem_do_app() {  # veredito_da_imagem_do_app <versão alvo> <versão instalada>
@@ -848,11 +850,15 @@ restaurar_servicos() {
 # ── Imagem pronta que não serve para esta VPS: constrói a versão aqui ────────
 # Uma VPS cuja arquitetura não é a das imagens publicadas (Oracle Ampere, por
 # exemplo) recebe "no matching manifest for linux/arm64/v8" ao puxá-las. O
-# `up -d` seguinte morre junto: sem imagem no disco e sem `build:` ao lado do
-# `image:` do app, o Compose não tem o que subir. O desfecho visível era o pior
-# possível — a atualização não acontecia, o script terminava como se tivesse
-# dado certo e o dono só descobria pelo CRM velho. Pelo botão "Atualizar" do
-# site, nem isso: o agente roda sozinho no cron e não há ninguém lendo a tela.
+# `up -d` seguinte morre junto: sem imagem no disco, o Compose só tem o que
+# subir se o `build:` ao lado do `image:` entrar em cena — e o fallback
+# automático dele NÃO se confirmou nos relatos que originaram a issue (#1060):
+# o `up -d` morreu com erro também nos serviços que já tinham `build:`. É esta
+# função que responde, e é por isso que ela não pode ser removida "porque o
+# compose agora constrói sozinho". O desfecho visível antes era o pior possível
+# — a atualização não acontecia, o script terminava como se tivesse dado certo
+# e o dono só descobria pelo CRM velho. Pelo botão "Atualizar" do site, nem
+# isso: o agente roda sozinho no cron e não há ninguém lendo a tela.
 #
 # A saída já existe no repo e é o docker-compose.build.yml: `pull_policy: never`
 # nas três imagens e o build saindo do MESMO commit que o `git checkout` deixou

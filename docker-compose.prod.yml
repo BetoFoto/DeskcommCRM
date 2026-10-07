@@ -34,6 +34,21 @@ services:
     # topo da main pede `APP_IMAGE=…:latest` explicitamente.
     image: ${APP_IMAGE:-ghcr.io/melgarafael/deskcommcrm:stable}
     pull_policy: ${APP_PULL_POLICY:-always}
+    # `build:` AO LADO do `image:` — o mesmo escape que worker, scheduler e
+    # voice-agent já têm, e a razão é a #1060: numa VPS cuja arquitetura não é
+    # a das imagens publicadas (Oracle Ampere/ARM) o pull não traz nada ("no
+    # matching manifest for linux/arm64/v8") e, sem `build:`, o Compose não tem
+    # o que subir. Com os dois presentes ele usa a imagem publicada quando ela
+    # existe e CONSTRÓI quando não existe — é o que faz o `up -d` de quem opera
+    # à mão (a dica que o próprio kit imprime) se sair sozinho no ARM, em vez
+    # de morrer com "No such image".
+    #
+    # `image:` continua obrigatório (invariante 1 da doutrina de packaging):
+    # um serviço build-only é pulado pelo pull e NUNCA é atualizado. Aqui a
+    # imagem continua vindo do registro; o build é só a saída de emergência.
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     env_file: .env
     environment:
