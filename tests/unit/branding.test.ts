@@ -1199,6 +1199,11 @@ describe("catraca de host de terceiro no código que embarca", () => {
       "meet.jit.si",
       "meusistema.com",
       "mi-gateway.ejemplo.com",
+      // Decisão escrita: a política de privacidade (`app/legal/privacy/page.tsx`) manda a
+      // pessoa revogar o acesso ao Google em `/permissions`, que é onde o Google exige
+      // que o texto aponte. O produto não fala com o host — quem abre o link é a pessoa
+      // — e o endereço é do Google, não nosso. Crescimento escrito, como a regra pede.
+      "myaccount.google.com",
       "partners.tiendanube.com",
       "platform.deepseek.com",
       "platform.openai.com",
