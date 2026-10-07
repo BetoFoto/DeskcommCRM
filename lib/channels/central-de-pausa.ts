@@ -3,13 +3,17 @@
  *
  * A regra pura mora em `lib/channels/canal-pausado.ts`; este módulo é a parte
  * com I/O — leitura do item aberto, leitura do canal, e a escrita que a decisão
- * mandou. Existe separado porque TRÊS handlers precisam dele com a mesma conta:
+ * mandou. Existe separado porque CINCO caminhos precisam dele com a mesma conta:
  *
  *   * `PATCH …/channel-sessions/[id]/disabled` — pausar/retomar um canal;
  *   * `PATCH …/channel-sessions/disabled` — ação em lote (um item POR canal);
- *   * `DELETE|PATCH …/channel-sessions/[id]` — arquivar/excluir.
+ *   * `DELETE|PATCH …/channel-sessions/[id]` — arquivar/excluir;
+ *   * `disconnectSocialAccount` (Redes Sociais) e `despareaVoz` (voz) — os dois
+ *     outros lugares que gravam `archived_at` em `channel_sessions`, via
+ *     `fecharAvisoDePausaDoCanalArquivado`. Quem arquiva canal e não passa por
+ *     aqui é reprovado por `tests/unit/arquivar-canal-fecha-aviso-de-pausa.test.ts`.
  *
- * No último caso o canal já sumiu ou já está marcado, e o item resolve com
+ * Nos três últimos o canal já sumiu ou já está marcado, e o item resolve com
  * `canal_arquivado` — é a mesma régua do `canal-mudo-watcher` para canal que
  * não apareceu na varredura, e a razão de existir é a lição do #1023: aviso
  * cujo emissor some fica aberto para sempre.
@@ -206,3 +210,16 @@ async function fechar(
 
 /** Título do item — exportado para os testes de rota não repetirem a string. */
 export const TITULO = TITULO_DO_AVISO_DE_PAUSA;
+
+/**
+ * Para quem ARQUIVA o canal fora das rotas de `channel-sessions` (Redes Sociais,
+ * voz). Chame DEPOIS de gravar `archived_at`: com a linha arquivada a regra só
+ * resolve (`canal_arquivado`), e o autor nunca entra no corpo — por isso não é
+ * pedido a quem chama.
+ */
+export function fecharAvisoDePausaDoCanalArquivado(
+  db: SupabaseClient,
+  canal: CanalAlvo,
+): Promise<DesfechoDaSincronizacaoDePausa> {
+  return sincronizarAvisoDePausa(db, canal, { autor: "o sistema" });
+}
