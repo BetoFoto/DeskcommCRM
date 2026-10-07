@@ -81,9 +81,17 @@ describe("escolherModeloEconomico com temPrecoNoMotor", () => {
     expect(escolherModeloEconomico(CATALOGO, "openai", "gpt-5.6-terra", SO_O_MINI, temPrecoNoMotor)).toBeNull();
   });
 
-  it("escolhe o mais barato ENTRE os que o motor cobra", () => {
+  it("escolhe o mais barato ENTRE os que o motor cobra, mesmo havendo um mais barato sem preço", () => {
+    // Um id fictício, mais barato que o nano no catálogo e fora da tabela do motor.
+    const comFantasma = [...CATALOGO, m("gpt-fantasma", 10, 40)];
     expect(
-      escolherModeloEconomico(CATALOGO, "openai", "gpt-5.6-terra", [...SO_O_MINI, "gpt-5.4-nano"], temPrecoNoMotor),
+      escolherModeloEconomico(
+        comFantasma,
+        "openai",
+        "gpt-5.6-terra",
+        [...SO_O_MINI, "gpt-5.4-nano", "gpt-fantasma"],
+        temPrecoNoMotor,
+      ),
     ).toBe("gpt-5.4-nano");
   });
 
