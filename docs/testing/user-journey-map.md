@@ -1708,8 +1708,10 @@ bash install.sh
 #       de acesso. Se a pergunta não aparecer na sua execução, é regressão — o
 #       caso da VPS limpa em `test-validators.sh` a vigia.
 
-# 2. Confira que o domínio responde 307 (redirect para o login), não 404
+# 2. Confira que `/` responde 200 (página inicial pública) e `/app` responde 307
+#    (redirect para o login), não 404
 curl -s -o /dev/null -w '%{http_code}\n' https://<DOMAIN>/
+curl -s -o /dev/null -w '%{http_code}\n' https://<DOMAIN>/app
 
 # 3. Logue como o admin criado pelo install, abra /admin/marca e grave a cor
 #    (`#f2c94c` serve). Depois SAIA da sessão.
