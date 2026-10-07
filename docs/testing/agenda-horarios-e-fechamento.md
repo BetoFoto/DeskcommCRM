@@ -137,3 +137,22 @@ passaram (80 no total)**; o invariante nativo de fechamento passou novamente;
 `pnpm build` terminou com **exit 0**. Esse avanço oficial alterou medição de
 custo/latência e exportou o gate de orçamento; não alterou os arquivos desta
 correção. Os ensaios com modelo real não foram repetidos por essa mudança.
+
+### Ajustes do mantenedor e evidência de segurança
+
+Após o envio, o mantenedor acrescentou `6c4250817` (causa truncada no aviso de
+falha) e `b62f68fa1` (fita completa como texto no fechamento, compatível com
+chamadas sem ferramentas da Anthropic). Na revisão `b62f68fa1`:
+
+- Os cinco arquivos unitários de agenda e o novo de fechamento passaram:
+  **6 arquivos, 78 testes**.
+- Fechamento, isolamento entre organizações e isolamento entre contatos foram
+  repetidos no PostgreSQL descartável: **3 arquivos, 8 testes passaram**.
+- `pnpm typecheck`: **exit 0** com limite de memória de 8 GiB no processo;
+  a primeira tentativa atingiu o limite padrão, sem erro de tipagem reportado.
+  Verificador dos cinco arquivos de código/testes alterados: zero erros e dois
+  avisos existentes. Nenhuma mudança de produto para acomodar o ambiente.
+- O scan de segurança do diff original foi concluído; relatório, SARIF gerado
+  e saídas de regressão estão em `evidence/security/agenda-no-turno/`.
+  O scan fixa `17a67d3da..1adb4ee92`; os dois novos commits foram lidos e testados
+  separadamente. Não é uma auditoria do repositório inteiro.
