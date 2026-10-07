@@ -14739,6 +14739,12 @@ export const DICIONARIO: Traducoes = {
   "Cada aplicação cria as tarefas do plano na ordem e não duplica — a marca da aplicação é a prova.": {
     es: "Cada aplicación crea las tareas del plan en orden y no duplica — la marca de la aplicación es la prueba.",
   },
+
+  // ─── Seletor de canal ao iniciar conversa nova (#2382) ───
+  "Escolha o canal para iniciar a conversa": { es: "Elija el canal para iniciar la conversación" },
+  "A conversa fica vinculada ao canal escolhido, e as próximas mensagens saem por ele.": { es: "La conversación queda vinculada al canal elegido, y los próximos mensajes salen por él." },
+  "Canais disponíveis": { es: "Canales disponibles" },
+  "Iniciar conversa": { es: "Iniciar conversación" },
 };
 
 /**
