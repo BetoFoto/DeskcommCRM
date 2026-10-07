@@ -1139,7 +1139,7 @@ ação `send_ai_message`, retomada manual (`lib/escalacao/retomada.ts`).
 | J20.12 | Follow-up em cliente atual (não autorizado, gate allowlist) | NÃO enrola | **CÓDIGO** — `silence-sweep.ts` `loadSilentContactIds` consulta a regra compartilhada e pula `!permitidoPeloGate`; **E2E** — `tests/e2e/j20-elegibilidade-followup.spec.ts` (fluxo de silêncio publicado pela API + cron real: silencioso autorizado → nasce `followup_enrollments`; silencioso NÃO autorizado, mesmo canal → nenhum enrollment) |
 | J20.13 | Reinício do worker com backlog de eventos pending | zero disparos: cada evento cujo inbound já foi superado vira `done` sem job | **UNIT** — `drain.test.ts` "evento superado por inbound mais recente" |
 | J20.14 | Submissão antiga (fora do TTL) | NÃO reativa a IA sozinha | **UNIT** — `gate.test.ts` "submissão antiga (fora da janela)", `drain.test.ts` "autorização EXPIRADA" |
-| J20.15 | Org SEM versão de agente publicada (caminho legado `ai-response-worker`), gate allowlist, contato não autorizado | IA NÃO responde por este caminho tampouco | **UNIT** — `ai-response-worker-elegibilidade.test.ts` (skip `nao_elegivel_para_ia` antes de ler mensagem/agente; fail-closed em erro de leitura) |
+| J20.15 | Org SEM versão de agente publicada (caminho legado `ai-response-worker`), gate allowlist, contato não autorizado | IA NÃO responde por este caminho tampouco | **UNIT** — `ai-response-worker-elegibilidade.test.ts` (skip `nao_elegivel_para_ia` antes de ler a mensagem; a leitura dos candidatos legados em `ai_agents` vem primeiro — sem candidato, sai com uma consulta; fail-closed em erro de leitura) |
 | J20.16 | Follow-up de TEXTO FIXO drenado inline (`enviarTextoFixoPendente`, sem worker), contato não autorizado | NÃO envia; job vira `done` | **UNIT** — `enviar-texto-fixo.test.ts` "conversa NÃO elegível" (+ fail-closed volta pra `pending`) |
 | J20.17 | Cliente antigo irritado (gate allowlist, não autorizado) → worker de sentimento dispara `low_sentiment` | `triggerHandoff` NÃO dispara: sem "um humano vai te atender", sem mexer no estado da conversa | **UNIT** — `handoff-orchestrator-elegibilidade.test.ts` (`bloqueioPorAllowlist` e `conversa_silenciada` barram; fail-closed em erro) |
 | J20.18 | Eu respondo o cliente à mão pelo meu WhatsApp numa conversa autorizada | IA para naquela conversa por um PRAZO renovado a cada nova fala humana — o da EMPRESA (`settings.routing.manual_reply_silence_minutes`, Configurações › Atendimento, 5 min a 24 h; padrão `PRAZO_DO_SILENCIO_MS`, 60 min; diagnóstico de @gaberaldo-svg no #2005: clínica que atende o dia inteiro pelo celular nunca via a IA voltar) —, SEM apagar `ai_authorized_at`; volta sozinha quando o prazo vence, ou antes por "devolver ao automático" | **UNIT** — `atendimento-manual.test.ts` (as duas pontas do prazo medidas pelo motor real `decidirElegibilidade`, renovação, e o que NUNCA encurta: `'infinity'` do handoff formal e janela mais longa) + `waha-ingest-atendimento-manual.test.ts` (via `dispatchWahaEvent` real; eco do próprio envio NÃO pausa) + guarda de fonte no Zernio + fiação em `handoff-fantasma-fiacao.test.ts` + o prazo da empresa em `atendimento-manual.test.ts` (15 min gravado; erro/exceção ao ler o ajuste ainda pausa com 60; `#off` nem consulta) e os valores inválidos em `prazo-silencio-knob.test.ts` + o campo em `app/app/settings/atendimento/_form.test.tsx`; **E2E** — `tests/e2e/j20-elegibilidade-atendimento-manual.spec.ts` (webhook `fromMe` genuíno → `bot_silenced_until` finito e futuro, nunca `'infinity'`, + rastro; `ai_authorized_at` intacto; 2ª mensagem RENOVA o prazo; tela mostra o selo; "devolver ao automático" solta a trava e a autorização continua) |
@@ -1708,8 +1708,10 @@ bash install.sh
 #       de acesso. Se a pergunta não aparecer na sua execução, é regressão — o
 #       caso da VPS limpa em `test-validators.sh` a vigia.
 
-# 2. Confira que o domínio responde 307 (redirect para o login), não 404
+# 2. Confira que `/` responde 200 (página inicial pública) e `/app` responde 307
+#    (redirect para o login), não 404
 curl -s -o /dev/null -w '%{http_code}\n' https://<DOMAIN>/
+curl -s -o /dev/null -w '%{http_code}\n' https://<DOMAIN>/app
 
 # 3. Logue como o admin criado pelo install, abra /admin/marca e grave a cor
 #    (`#f2c94c` serve). Depois SAIA da sessão.
@@ -3098,6 +3100,10 @@ sim. Consertado pela ordem: publicar primeiro, decidir a porta depois.
 ## Conversões de anúncios — reprocessamento
 
 [P1] `tests/e2e/conversoes-reprocessamento.spec.ts`: administrador abre Conversões sem credenciais opcionais, vê o que falta, identifica origem de uma venda pendente e agenda reprocessamento pela tela. A spec confere o evento exclusivo e captura screenshot; integra o CI. O teste não prova aceite/atribuição por contas reais de anúncios.
+
+### Regras de etapa da Meta sem conexão direta (06/10/2026)
+
+- [P1] `tests/e2e/conversoes-reprocessamento.spec.ts`: organização SEM conexão direta com a Meta. Com a chave "Enviar vendas pelo canal da conversa" desligada, a seção "O que cada etapa do funil informa à Meta" não aparece; ligada, aparece com as etapas do funil para editar. Evidência: `evidence/regras-meta-pelo-canal/01-regras-visiveis-sem-conexao-direta.png`. Não prova o envio ao provedor (coberto por `tests/unit/conversao-pelo-canal.test.ts`).
 
 ### Conversões Google: captura e qualificação
 
