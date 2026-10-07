@@ -446,7 +446,7 @@ describe("isolamento do arquivo do titular", () => {
     const minhas = Array.from({ length: 1234 }, (_, i) =>
       linha({ org: ORG, contato: CONTATO }, { id: `mm${i}`, conversation_id: "conv-meu", body: `MEU-${i}` }),
     );
-    banco.messages = [...banco.messages, ...minhas];
+    banco.messages = [...(banco.messages ?? []), ...minhas];
     const data = await collectExportData({
       organizationId: ORG,
       requestId: "pedido-1",
