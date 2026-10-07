@@ -11,6 +11,10 @@
  * `candidatosParaConversaNova` decide quem APARECE:
  *
  *   - canal de MENSAGEM (a linha de voz da spec 18 não manda texto);
+ *   - com TELEFONE gravado, porque esta porta inicia a conversa por telefone:
+ *     rede social não tem telefone e só responde a quem escreveu primeiro. É a
+ *     mesma régua de `lib/inbox/outros-numeros.ts`, e testa o telefone, não o
+ *     provider;
  *   - não arquivado (mesma régua de `lib/channels/selectable.ts` — o invariante
  *     `canais-selecionaveis` nasceu justamente de três seletores que liam
  *     `channel_sessions` à mão e ofereciam canal já excluído);
@@ -51,6 +55,7 @@ export interface CanalObservado {
   status?: string | null;
   waha_session_name?: string | null;
   metadata?: Record<string, unknown> | null;
+  phone_number?: string | null;
   /** Coluna só existe após a migration 0106; ausente = não arquivado. */
   archived_at?: string | null;
 }
@@ -63,6 +68,7 @@ export function candidatosParaConversaNova<T extends CanalObservado>(
   return canais.filter(
     (c) =>
       transportaMensagem(c.provider) &&
+      !!c.phone_number &&
       !c.archived_at &&
       !canalDesativado(c.metadata ?? null) &&
       !ehNomeDeSessaoE2E(c.waha_session_name ?? null),
@@ -93,7 +99,6 @@ const ROTULO_DO_TIPO: Record<string, string> = {
   waha: "WAHA (QR Code)",
   meta_cloud: "Meta Cloud API",
   zernio: "Zernio",
-  zernio_social: "Zernio Social",
   datafy: "Datafy",
 };
 

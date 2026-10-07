@@ -18,6 +18,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *    critérios "não podem ser escolhidos", um por porta.
  * 4. Zero elegíveis: sem canal utilizável o fluxo NÃO trava (a lista fica
  *    vazia, o POST sai sem escolha e o servidor decide, como antes).
+ * 5. Rede social: canal sem telefone (Instagram/Messenger) não inicia conversa
+ *    com um contato de telefone, então não conta como opção — com ele e um
+ *    número conectado, o fluxo segue direto pelo número.
  *
  * A lista vem de `GET /api/v1/channel-sessions` (a mesma fonte do seletor do
  * inbox), então o teste mocka `apiClient.get` em vez de trocar o hook: as
@@ -227,9 +230,39 @@ describe("Seletor de canal ao iniciar conversa nova (#2382)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("canal de rede social (sem telefone) não é opção: segue direto pelo número", async () => {
+    getMock.mockResolvedValue({
+      data: [
+        canal({ id: "canal-numero", display_name: "Peças", phone_number: "+5517999990001" }),
+        canal({ id: "canal-social", display_name: "Instagram", provider: "zernio_social" }),
+      ],
+    });
+    montar();
+
+    fireEvent.click(screen.getByRole("button", { name: "iniciar" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(corpoDoPost()).toEqual({
+      contact_id: "contato-1",
+      phone_number: "+5517999998888",
+      channel_session_id: "canal-numero",
+    });
+    await waitFor(() => expect(aoAbrirMock).toHaveBeenCalledWith("conv-9"));
+  });
+
   it("nenhum canal elegível: o fluxo não trava — segue sem escolha", async () => {
     getMock.mockResolvedValue({
-      data: [canal({ id: "canal-caido", display_name: "Vendas", status: "STOPPED" })],
+      // Com telefone: o que tira este canal da escolha é o ESTADO, não a
+      // peneira do telefone — senão o caso deixaria de vigiar a régua de status.
+      data: [
+        canal({
+          id: "canal-caido",
+          display_name: "Vendas",
+          phone_number: "+5517999990001",
+          status: "STOPPED",
+        }),
+      ],
     });
     montar();
 
