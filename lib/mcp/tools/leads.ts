@@ -443,8 +443,11 @@ const moveInputShape = {
    * O motivo da perda, quando o destino é etapa de perda (issue #917). O banco
    * confere contra o vocabulário do funil (canônico + `settings.lost_reasons`) e
    * recusa a perda sem ele. O `moveLeadHandler` já aceitava; a tool descartava.
+   * Sem `.min(1)`: motivo em branco é tratado em lib/leads/motivo-da-perda.ts como
+   * ausente — a mesma régua do moveLeadSchema e do won_reason; string vazia
+   * morrendo no zod daria uma mensagem diferente da recusa de negócio.
    */
-  lost_reason: z.string().min(1).max(500).optional(),
+  lost_reason: z.string().max(500).optional(),
 };
 
 export const crmMoveLeadStage: McpToolDefinition<typeof moveInputShape> = {

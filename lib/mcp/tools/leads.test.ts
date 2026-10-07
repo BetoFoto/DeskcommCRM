@@ -118,4 +118,13 @@ describe("crm_move_lead_stage — motivo da perda (#917)", () => {
     });
     expect(doShape).not.toHaveProperty("lost_reason");
   });
+
+  it("aceita lost_reason vazio — quem decide a recusa é motivo-da-perda.ts, não o zod", () => {
+    const r = z.object(crmMoveLeadStage.inputSchema).safeParse({
+      lead_id: LEAD_ID,
+      to_stage_id: LEAD_ID,
+      lost_reason: "",
+    });
+    expect(r.success).toBe(true);
+  });
 });
