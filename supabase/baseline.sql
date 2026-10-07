@@ -10166,6 +10166,13 @@ alter table public.agent_inbox_items
     -- lista pelas razões de sempre (#159; a janela do `midia-nao-lida.test.ts`).
     'jev_pedido_de_humano',
     'jev_parar_de_receber',
+    -- (migration 0589, issue #2389) A pausa de uma conexão era silenciosa para
+    -- todo mundo menos para quem clicou. O audit registrava `channel.disabled`
+    -- / `channel.enabled`, mas audit é histórico para quem procura, não
+    -- comunicação — a Central é onde a operação inteira olha. O item nasce na
+    -- pausa e se resolve sozinho na retomada ou no arquivamento, com o motivo
+    -- no corpo (laço do canal-mudo-watcher, só que instantâneo).
+    'canal_pausado',
     'other'
   ));
 
@@ -47913,3 +47920,30 @@ create index if not exists idx_lead_state_transitions_job_id
 create index if not exists event_log_processing_por_tipo_idx
   on public.event_log (event_type)
   where status = 'processing';
+
+-- ---- dedupe do aviso de canal pausado: índice único parcial (migration 0589) ----
+-- Um canal pausado = um aviso aberto, garantido pelo banco: duas pausas
+-- simultâneas leriam "nenhum aberto" e inseririam dois. O segundo INSERT
+-- recebe 23505 e `lib/channels/central-de-pausa.ts` o trata como "a outra
+-- rodada já abriu". O kind entrou no bloco ÚNICO de
+-- `agent_inbox_items_kind_check`; cabeçalho da 0589 para o racional inteiro.
+with repetidas as (
+  select id,
+         row_number() over (
+           partition by organization_id, kind, ref_id
+           order by created_at asc, id asc
+         ) as ordem
+    from public.agent_inbox_items
+   where status = 'open'
+     and kind = 'canal_pausado'
+)
+update public.agent_inbox_items i
+   set status = 'resolved',
+       resolved_at = now()
+  from repetidas r
+ where i.id = r.id
+   and r.ordem > 1;
+
+create unique index if not exists agent_inbox_canal_pausado_aberto_unico
+  on public.agent_inbox_items (organization_id, kind, ref_id)
+  where status = 'open' and kind = 'canal_pausado';
