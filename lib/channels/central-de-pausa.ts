@@ -148,6 +148,11 @@ export async function sincronizarAvisoDePausa(
       ref_kind: "channel_session",
       ref_id: canal.id,
     });
+    // 23505 = outra rodada simultânea (duplo clique, lote + unitária) abriu o
+    // aviso entre a nossa leitura e o nosso INSERT. O índice único parcial da
+    // migration 0589 é quem garante "um canal pausado = um aviso"; aqui só
+    // reconhecemos que o aviso já existe.
+    if (error?.code === "23505") return "sem_mudanca";
     if (error) {
       logger.warn("[canal-pausado] abertura do aviso falhou", {
         detail: error.message,

@@ -45,6 +45,7 @@ function banco(estado: {
   linha: Record<string, unknown> | null;
   itens: Item[];
   erroLeitura?: boolean;
+  erroInsert?: { code: string; message: string };
 }) {
   let proximo = 1;
   const cliente = {
@@ -60,13 +61,13 @@ function banco(estado: {
         };
         return c;
       }
-      return itens(estado.itens, () => String(proximo++));
+      return itens(estado.itens, () => String(proximo++), estado.erroInsert);
     },
   };
   return cliente as unknown as SupabaseClient;
 }
 
-function itens(alvo: Item[], id: () => string) {
+function itens(alvo: Item[], id: () => string, erroInsert?: { code: string; message: string }) {
   let acao: "select" | "insert" | "update" = "select";
   let payload: Record<string, unknown> = {};
   const filtros: Array<[string, unknown]> = [];
@@ -76,9 +77,10 @@ function itens(alvo: Item[], id: () => string) {
       filtros.every(([c, v]) => (linha as unknown as Record<string, unknown>)[c] === v),
     );
 
-  const executar = async (): Promise<{ data: unknown; error: { message: string } | null }> => {
+  const executar = async (): Promise<{ data: unknown; error: { code?: string; message: string } | null }> => {
     if (acao === "select") return { data: casando()[0] ?? null, error: null };
     if (acao === "insert") {
+      if (erroInsert) return { data: null, error: erroInsert };
       alvo.push({ id: `aviso-${id()}`, status: "open", body: null, ...payload } as Item);
       return { data: null, error: null };
     }
@@ -198,6 +200,14 @@ describe("sincronizarAvisoDePausa", () => {
 
   it("linha ausente e sem item não faz nada", async () => {
     const db = banco({ linha: null, itens: [] });
+    expect(await sincronizarAvisoDePausa(db, { id: CANAL, organization_id: ORG }, CONTEXTO)).toBe(
+      "sem_mudanca",
+    );
+  });
+
+  it("INSERT que perde a corrida (23505 do índice único) é `sem_mudanca`, não `falhou`", async () => {
+    // Duas pausas simultâneas leram "nenhum aberto"; a outra inseriu primeiro.
+    const db = banco({ linha: linhaDoCanal(), itens: [], erroInsert: { code: "23505", message: "duplicate key" } });
     expect(await sincronizarAvisoDePausa(db, { id: CANAL, organization_id: ORG }, CONTEXTO)).toBe(
       "sem_mudanca",
     );

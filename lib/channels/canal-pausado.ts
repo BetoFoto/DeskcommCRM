@@ -43,7 +43,7 @@ import { tagDeIdioma } from "@/lib/i18n/datas";
 import type { Idioma } from "@/lib/i18n/idiomas";
 import { FUSO_PADRAO } from "@/lib/tempo/fusos";
 
-/** O kind do aviso em `agent_inbox_items` (vocabulário fechado por CHECK, migration 0583). */
+/** O kind do aviso em `agent_inbox_items` (vocabulário fechado por CHECK, migration 0589). */
 export const KIND_CANAL_PAUSADO = "canal_pausado" as const;
 
 /**
