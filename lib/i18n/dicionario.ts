@@ -4231,8 +4231,8 @@ export const DICIONARIO: Traducoes = {
   "Modelo mais econômico do mesmo provedor — esta tarefa é uma classificação curta e não precisa do modelo do agente. Escolha outro no painel se preferir.": {
     es: "Modelo más económico del mismo proveedor: esta tarea es una clasificación corta y no necesita el modelo del agente. Elige otro en el panel si lo prefieres.",
   },
-  "O modelo econômico não respondeu; a chamada se repetiu no modelo de antes e nada se perdeu.": {
-    es: "El modelo económico no respondió; la llamada se repitió con el modelo anterior y no se perdió nada.",
+  "O modelo econômico não respondeu; a chamada foi repetida no modelo de antes, e o resultado dessa repetição aparece numa linha própria.": {
+    es: "El modelo económico no respondió; la llamada se repitió con el modelo anterior, y el resultado de esa repetición aparece en una línea propia.",
   },
   "Usando o padrão da organização.": {
     es: "Usando el valor predeterminado de la organización.",
@@ -9513,6 +9513,12 @@ export const DICIONARIO: Traducoes = {
   "Sua performance": { es: "Tu rendimiento" },
   "Sem atividade no período (ganhos/perdidos, conversas ou respostas).": { es: "Sin actividad en el período (ganados/perdidos, conversaciones o respuestas)." },
   "1ª resposta (média)": { es: "1ª respuesta (promedio)" },
+  "Por canal": { es: "Por canal" },
+  "Sem atividade no período.": { es: "Sin actividad en el período." },
+  "Erro ao carregar os canais.": { es: "Error al cargar los canales." },
+  "Janela de {dias} dias: o relatório por canal cobre no máximo {maximo} dias.": {
+    es: "Ventana de {dias} días: el informe por canal cubre como máximo {maximo} días.",
+  },
   "Atrito, funil e performance por atendente nos últimos 30 dias.": { es: "Fricción, embudo y rendimiento por asesor en los últimos 30 días." },
   "Nenhuma perda na janela.": { es: "Ninguna pérdida en la ventana." },
   "Negócios": { es: "Negocios" },
