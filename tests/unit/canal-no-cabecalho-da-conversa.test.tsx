@@ -142,9 +142,9 @@ describe("no CABEÇALHO da conversa aberta", () => {
 
 describe("o rótulo É o da página /channels", () => {
   it.each([
-    ["nome e número", { display_name: "Peças", phone_number: "+19392301037" }],
-    ["só o nome", { display_name: "Centro Automotivo", phone_number: null }],
-    ["só o número", { display_name: null, phone_number: "+19392301037" }],
+    ["nome e número", { display_name: "Peças", phone_number: "+19392301037", waha_session_name: null }],
+    ["só o nome", { display_name: "Centro Automotivo", phone_number: null, waha_session_name: null }],
+    ["só o número", { display_name: null, phone_number: "+19392301037", waha_session_name: null }],
   ])("%s → igual ao card do canal", (_caso, canal) => {
     expect(rotuloDoCanalDaConversa(canal)).toBe(channelLabel(canal));
   });

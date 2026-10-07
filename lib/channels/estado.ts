@@ -139,8 +139,7 @@ export function rotuloDoCanalDaConversa(
   t: (texto: string) => string = (texto) => texto,
 ): string | null {
   if (!canal) return null;
-  const temIdentidade = Boolean(
-    (canal.display_name ?? "").trim() || (canal.phone_number ?? "").trim(),
-  );
-  return temIdentidade ? nomeDoCanal(canal, t) : null;
+  const temApelido = Boolean(canal.display_name?.trim());
+  const temNumero = Boolean(canal.phone_number?.trim());
+  return temApelido || temNumero ? nomeDoCanal(canal, t) : null;
 }

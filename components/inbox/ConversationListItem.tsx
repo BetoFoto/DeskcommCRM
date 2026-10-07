@@ -213,11 +213,11 @@ export function ConversationListItem({
   // do cliente. Com dois canais é o que decide o tom da resposta e qual número
   // a pessoa vê respondendo.
   //
-  // #2383: o resolvedor é o MESMO da tela de canais (`/app/connections`), com o
-  // nome amigável na frente — antes o número vencia o nome
-  // (`phone_number ?? display_name`) e um canal chamado "Peças" saía na lista
-  // como o número cru. Sem canal associado (grupo, conversa sem sessão, não-WA)
-  // e sem nome E sem número o badge continua não existindo, como estava.
+  // #2383: quando o canal tem nome ou número, o texto é o MESMO do card da tela
+  // de canais (`/app/connections`), com o nome amigável na frente — antes o
+  // número vencia o nome, e um canal chamado "Peças" saía na lista como o
+  // número cru. Sem canal associado (grupo, conversa sem sessão, não-WA) e sem
+  // nome E sem número o badge continua não existindo, como estava.
   const canal = conversation.channel_sessions ?? null;
   const rotuloCanal = rotuloDoCanalDaConversa(canal, t);
 

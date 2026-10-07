@@ -112,7 +112,7 @@ export function ConversationHeader({
   const c = conversation.contacts ?? null;
   const displayName = rotuloDoContato(c, t);
   /**
-   * POR ONDE ESTA CONVERSA ENTOU — o mesmo rótulo da lista e da tela de
+   * POR ONDE ESTA CONVERSA ENTROU — o mesmo rótulo da lista e da tela de
    * canais (#2383). `null` quando não há canal, e aí o badge não existe.
    */
   const rotuloCanal = rotuloDoCanalDaConversa(conversation.channel_sessions, t);
