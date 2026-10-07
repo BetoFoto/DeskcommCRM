@@ -1,8 +1,7 @@
 /**
  * ai-sentiment-worker — classifies the sentiment of inbound messages.
  *
- * Consumes `message.received` events. O dreno roda os handlers EM SÉRIE
- * (`lib/event-log/dispatcher.ts`): a latência daqui atrasa os seguintes.
+ * Consumes `message.received` events (parallel to ai-response-worker).
  * Uses `anthropic/claude-haiku-4-5` via Vercel AI Gateway with generateObject
  * and a strict Zod schema so the result is always typed.
  *
