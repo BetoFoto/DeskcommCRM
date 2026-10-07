@@ -1204,8 +1204,9 @@ export async function sendMessageHandler(
       const limparEco = () =>
         removerEcoDoProprioEnvio(supabase, ctx.organization_id, c.id, message.id, externalId, candidatosDoEco);
       // A FORMA GRAVADA É A CANÔNICA DO CANAL (`adapter.canonicalExternalId`),
-      // não o id cru que o adapter devolveu. O eco do webhook grava a cauda em
-      // qualquer engine (#1855), e o `unique (organization_id, external_id)` só
+      // não o id cru que o adapter devolveu: é a string que o eco do webhook
+      // grava (a cauda na conversa individual, desde o #1855; o id intacto em
+      // grupo), e o `unique (organization_id, external_id)` só
       // recusa a segunda linha se os DOIS lados gravarem a MESMA string — é
       // dele que vem a rede de segurança contra a corrida entre a limpeza e
       // este UPDATE.
@@ -1217,11 +1218,13 @@ export async function sendMessageHandler(
       // segunda linha com a mesma frase (#196).
       //
       // Os leitores continuam achando o id: `handleAck` e `echoExternalIds`
-      // procuram o par `[composto, cauda]`, e editar/apagar reconstrói o id
-      // completo a partir do DESTINATÁRIO (`app/api/v1/messages/[id]/route.ts`
-      // resolve o chat do contato, nunca o id gravado) — é o que o NOWEB já
-      // fazia, sem migration e sem backfill. Canais que não implementam o
-      // método (id simétrico) gravam exatamente o que o envio devolveu.
+      // procuram o par `[composto, cauda]`, sem migration e sem backfill para
+      // as linhas antigas, que guardam o id completo. Editar/apagar uma linha
+      // NOVA gravada em cauda reconstrói o id completo a partir do DESTINATÁRIO
+      // do contato (`resolveRecipient`, que prefere o `@lid`), e não mais do chat
+      // do id gravado — se isso acha a mesma mensagem no WEBJS não foi medido.
+      // Canais que não implementam o método (id simétrico) gravam exatamente o
+      // que o envio devolveu.
       const idCanonico =
         externalId !== null ? (adapter.canonicalExternalId?.(externalId) ?? externalId) : null;
       const marcarEnviada = (comId: boolean) =>

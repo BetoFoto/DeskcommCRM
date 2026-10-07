@@ -231,3 +231,64 @@ describe("WEBJS: o envio carima a mesma forma que o eco grava", () => {
     expect(messages.filter((m) => m.body === "oi")).toHaveLength(1);
   });
 });
+
+/**
+ * GRUPO: o eco de grupo grava o id INTACTO (`ingerirMensagemDeGrupo` em
+ * `lib/waha/ingest.ts` passa `p.id` a `lib/grupos/ingest.ts`), não a cauda.
+ * Reduzir o id do envio aqui faria as duas strings divergirem de novo — a
+ * corrida que o caso individual fecha reabriria espelhada no grupo. E o id de
+ * grupo pode trazer o participante como 4º segmento: a "cauda" seria o JID do
+ * participante, a mesma string para todo envio da sessão no grupo.
+ */
+describe("WEBJS em GRUPO: o envio grava o id intacto, como o eco de grupo", () => {
+  const GRUPO = "120363000000000000@g.us";
+  const ID_GRUPO_3 = `true_${GRUPO}_${BARE}`;
+  const ID_GRUPO_4 = `true_${GRUPO}_${BARE}_5531999998888@c.us`;
+
+  function dubleDeGrupo() {
+    const { supabase, mensagens } = criarDubleDoHandler({
+      conversation: { ...conversationRow(), is_group: true, group_chat_id: GRUPO },
+      indiceUnicoMensagem: true,
+    });
+    return { supabase, messages: mensagens };
+  }
+
+  function wahaRespondendo(serializado: string) {
+    vi.stubEnv("WAHA_API_BASE_URL", "http://localhost:3030");
+    vi.stubEnv("WAHA_API_KEY", "hash123");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ id: { _serialized: serializado } }), { status: 200 })),
+    );
+  }
+
+  it.each([
+    ["3 segmentos", ID_GRUPO_3],
+    ["4 segmentos (com participante)", ID_GRUPO_4],
+  ])("%s: grava o id composto, a mesma string que o eco de grupo grava", async (_rotulo, serializado) => {
+    wahaRespondendo(serializado);
+    const { supabase, messages } = dubleDeGrupo();
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.external_id, "o envio reduziu o id de grupo: o eco de grupo nunca colide").toBe(serializado);
+    expect(messages[0]!.status).toBe("sent");
+  });
+
+  it.each([
+    ["3 segmentos", ID_GRUPO_3],
+    ["4 segmentos (com participante)", ID_GRUPO_4],
+  ])("%s: o eco de grupo entre a limpeza e o carimbo não deixa a frase duas vezes", async (_rotulo, serializado) => {
+    wahaRespondendo(serializado);
+    const { supabase, messages } = dubleDeGrupo();
+    ecoDepoisDaLimpeza(supabase, messages, ecoDoWebhook({ external_id: serializado }));
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    const daMensagem = messages.filter((m) => m.body === "oi");
+    expect(daMensagem, "a mesma frase ficou duas vezes no grupo — o unique não pegou").toHaveLength(1);
+    expect(daMensagem[0]!.sent_via).toBe("user");
+    expect(daMensagem[0]!.external_id).toBe(serializado);
+  });
+});

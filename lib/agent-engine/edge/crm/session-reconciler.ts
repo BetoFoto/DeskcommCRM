@@ -27,7 +27,7 @@
  */
 import type pg from 'pg';
 
-import { bareWaMessageId, parseWahaMessageId, wahaEchoExternalIds } from '@/lib/waha/message-id';
+import { canonicalWahaExternalId, parseWahaMessageId, wahaEchoExternalIds } from '@/lib/waha/message-id';
 import { lerNumerosDeTeste, numeroPodeTestar, preGoLiveAtivo } from '@/lib/ai/elegibilidade/pre-go-live';
 import { canalDesativado } from '@/lib/channels/desativado';
 
@@ -190,9 +190,10 @@ function chatIdOf(m: QueuedRow): string | null {
 /**
  * Marca `sent` a mensagem que o WAHA acabou de aceitar.
  *
- * O id é gravado na FORMA CANÔNICA (bare), a mesma que o eco grava em qualquer
- * engine (#1855): só assim o `unique (organization_id, external_id)` enxerga a
- * colisão e devolve `23505`. No NOWEB a resposta de envio já é a cauda e nada
+ * O id é gravado na FORMA CANÔNICA, a mesma que o eco grava
+ * (`canonicalWahaExternalId`: a cauda em conversa individual, desde o #1855; o
+ * id intacto em grupo): só assim o `unique (organization_id, external_id)`
+ * enxerga a colisão e devolve `23505`. No NOWEB a resposta de envio já é a cauda e nada
  * muda; no WEBJS ela vem como `_serialized` e, gravada aqui, nunca colidia com
  * o eco — a segunda linha nascia sem que este tratamento chegasse a rodar.
  *
@@ -210,7 +211,7 @@ async function markRedriveSent(
   m: QueuedRow,
   externalId: string | null,
 ): Promise<boolean> {
-  const canonico = externalId === null ? null : bareWaMessageId(externalId);
+  const canonico = externalId === null ? null : canonicalWahaExternalId(externalId);
   try {
     await pool.query(
       `update messages
@@ -279,8 +280,8 @@ async function removeRedriveEcho(
  * em `sent`: sem entregue, sem lida. `external_id is null` garante que isto nunca
  * sobrescreve um id que outro caminho já gravou.
  *
- * A FORMA É A CANÔNICA (bare) pela mesma razão do carimbo do envio: o eco grava
- * o bare em qualquer engine (#1855), e só gravando a MESMA string é que o
+ * A FORMA É A CANÔNICA (`canonicalWahaExternalId`) pela mesma razão do carimbo
+ * do envio: é a string que o eco grava, e só gravando a MESMA string é que o
  * `unique (organization_id, external_id)` recusa uma segunda linha quando outro
  * eco entra aqui. No NOWEB o id do envio já era a cauda — nada muda; no WEBJS o
  * `_serialized` gravado aqui nunca colidia com o eco.
@@ -299,7 +300,7 @@ async function stampExternalIdAfterEcho(
     await pool.query(
       `update messages set external_id = $2
        where id = $1 and organization_id = $3 and external_id is null`,
-      [m.id, bareWaMessageId(externalId), m.organization_id],
+      [m.id, canonicalWahaExternalId(externalId), m.organization_id],
     );
   } catch (err) {
     log.warn('watchdog: mensagem reenviada ficou sem id — o eco ainda o ocupa', {
