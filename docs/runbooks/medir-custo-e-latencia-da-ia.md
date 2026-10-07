@@ -59,14 +59,18 @@ Como ler:
   candidato a investigação.
 - **`chamadas_sem_preco`** maior que zero quer dizer que `custo_usd` está
   **abaixo** do real. Acontece com modelo que a tabela de preços não conhece, e
-  sempre com a transcrição de áudio (abaixo). A linha de erro fica de fora: ela
+  sempre com a transcrição de áudio feita pelo serviço de transcrição (abaixo). A linha de erro fica de fora: ela
   também tem custo vazio, mas o provedor recusou e não cobrou token.
 - **`visao_de_imagem`** e **`transcricao_de_audio`** são as chamadas do worker
   de mídia (descrição de foto, áudio e os quadros de vídeo). Elas só aparecem
   a partir da versão que trouxe este runbook — antes, esse gasto não deixava
-  linha nenhuma. A transcrição é cobrada por minuto e o serviço não devolve
-  tokens: ela aparece com a contagem de chamadas e a latência, e com o custo
-  vazio — e por isso **não conta para o teto de orçamento**. A visão conta.
+  linha nenhuma. A transcrição depende de quem ouviu o áudio, gravado em
+  `origem_da_escolha`: com `modelo_da_organizacao` foi o modelo de conversa,
+  cobrado por token — a linha tem tokens e custo e **conta para o teto**, como a
+  visão. Com `servico_da_instalacao` ou `padrao_openai_compativel` foi o serviço
+  de transcrição, que tem preço próprio, desconhecido do sistema, e não devolve
+  tokens: a linha tem a contagem e a latência, com o custo vazio — e por isso
+  **não conta para o teto de orçamento**.
   Chamada de mídia que falhou no provedor também grava linha, com
   `status = 'erro'`.
 

@@ -30,7 +30,7 @@ const BINDING = {
   credential_id: "cred-1",
   base_url: null as string | null,
 };
-let bindingDaVez: typeof BINDING = BINDING;
+let bindingDaVez: typeof BINDING | null = BINDING;
 
 let linhaDaMensagem = {
   id: "msg1",
@@ -71,22 +71,36 @@ vi.mock("@/lib/messaging/media/derive", () => ({
 
 const credencial = vi.hoisted(() => ({
   origemDaChave: "credencial_da_organizacao" as "credencial_da_organizacao" | "chave_da_instalacao",
+  /**
+   * `null` = a conversa é a Anthropic de sempre e há chave OpenAI (degrau 2).
+   * Preenchido = a conversa é este modelo Google, que declara `audio`, e não há
+   * chave OpenAI nenhuma — a escada desce ao degrau 3.
+   */
+  conversaGoogle: null as string | null,
 }));
 vi.mock("@/lib/agent-engine/edge/llm/credentials", () => ({
-  resolveOrgLlmConfig: vi.fn(async () => ({
-    provider: "anthropic",
-    apiKey: "chave-do-binding",
-    origemDaChave: credencial.origemDaChave,
-    defaultModel: "claude-haiku-4-5",
-    params: {},
-    enabledModels: [],
-    orcamento: { modo: "off", tetoCents: 0, efetivoEm: null, limiarPct: 80 },
-    orcamentoIndisponivelPorque: null,
-  })),
+  resolveOrgLlmConfig: vi.fn(async (_db: unknown, _cfg: unknown, _org: string, override?: { provider?: string }) => {
+    if (credencial.conversaGoogle && override?.provider === "openai") throw new Error("sem credencial openai");
+    return {
+      provider: credencial.conversaGoogle ? "google" : "anthropic",
+      apiKey: "chave-do-binding",
+      origemDaChave: credencial.origemDaChave,
+      defaultModel: credencial.conversaGoogle ?? "claude-haiku-4-5",
+      params: {},
+      enabledModels: [],
+      orcamento: { modo: "off", tetoCents: 0, efetivoEm: null, limiarPct: 80 },
+      orcamentoIndisponivelPorque: null,
+    };
+  }),
 }));
 
 vi.mock("@/lib/agent-engine/edge/llm/providers", () => ({
-  createDefaultRegistry: () => ({ anthropic: factoryMock, openai: factoryMock, openrouter: factoryMock }),
+  createDefaultRegistry: () => ({
+    anthropic: factoryMock,
+    openai: factoryMock,
+    openrouter: factoryMock,
+    google: factoryMock,
+  }),
 }));
 
 vi.mock("@/lib/ai/pontos/capacidade-em-vigor", () => ({
@@ -163,6 +177,7 @@ beforeEach(() => {
   esquecerDestinosInternos();
   dns.resposta = [{ address: "93.184.216.34", family: 4 }];
   credencial.origemDaChave = "credencial_da_organizacao";
+  credencial.conversaGoogle = null;
   bindingDaVez = BINDING;
   transcricaoDoEnv.apiKey = "";
   transcricaoDoEnv.baseUrl = "";
@@ -237,6 +252,57 @@ describe("worker de mídia: chamada paga grava em llm_calls", () => {
       output_tokens: 0,
       cost_cents: null,
       status: "ok",
+    });
+  });
+
+  it("transcrição pelo serviço grava o degrau da escada, que é o que a separa do furo de medição", async () => {
+    comAudio();
+
+    await deriveMessageMedia(eventRow());
+    await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+    expect(llmCallsInsertMock.mock.calls[0]![0]).toMatchObject({ origem_da_escolha: "padrao_openai_compativel" });
+  });
+
+  it("transcrição pelo modelo da organização (degrau 3) grava tokens e o custo da tabela de preços", async () => {
+    comAudio();
+    credencial.conversaGoogle = "gemini-2.5-flash";
+    bindingDaVez = null;
+
+    await deriveMessageMedia(eventRow());
+    const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+    // O áudio foi ao MODELO, não ao serviço de transcrição.
+    expect(transcribeDoSvcMock).not.toHaveBeenCalled();
+    expect(texto).toBe("descrição de mentira");
+    expect(llmCallsInsertMock).toHaveBeenCalledTimes(1);
+    const linha = llmCallsInsertMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(linha).toMatchObject({
+      organization_id: "org1",
+      purpose: PONTO_TRANSCRICAO_DE_AUDIO,
+      provider: "google",
+      model: "gemini-2.5-flash",
+      origem_da_escolha: "modelo_da_organizacao",
+      input_tokens: 1200,
+      output_tokens: 40,
+      status: "ok",
+    });
+    // gemini-2.5-flash: 0,30 USD/MTok de entrada, 2,50 de saída
+    expect(linha.cost_cents).toBeCloseTo(((1200 * 0.3 + 40 * 2.5) / 1_000_000) * 100, 10);
+  });
+
+  it("degrau 3 com modelo fora da tabela de preços grava os tokens e custo null — nunca 0", async () => {
+    comAudio();
+    credencial.conversaGoogle = "gemini-modelo-que-ninguem-precificou";
+    bindingDaVez = null;
+
+    await deriveMessageMedia(eventRow());
+    await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+    expect(llmCallsInsertMock.mock.calls[0]![0]).toMatchObject({
+      origem_da_escolha: "modelo_da_organizacao",
+      input_tokens: 1200,
+      cost_cents: null,
     });
   });
 

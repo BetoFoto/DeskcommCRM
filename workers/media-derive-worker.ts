@@ -10,7 +10,7 @@ import type pg from "pg";
 import { extractPdfText } from "@/lib/ai/rag/extractors/pdf";
 import { visaoEmVigor } from "@/lib/ai/pontos/capacidade-em-vigor";
 import { PONTO_TRANSCRICAO_DE_AUDIO, PONTO_VISAO_DE_IMAGEM } from "@/lib/ai/pontos/registro";
-import { costCents } from "@/lib/agent-engine/edge/llm/pricing";
+import { costCents, type TokenUsage } from "@/lib/agent-engine/edge/llm/pricing";
 import {
   aplicarOrcamento,
   LlmBudgetExceededError,
@@ -33,6 +33,7 @@ import { deriveVideoText } from "@/lib/messaging/media/video-derive";
 import {
   decidirTranscricao,
   type DecisaoDeTranscricao,
+  type OrigemDaTranscricao,
 } from "@/lib/messaging/media/escada-de-transcricao";
 import type { TranscriptionProvider } from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
@@ -588,6 +589,51 @@ function buildDeriveDeps(
       .maybeSingle();
     return data?.supports_vision ?? null;
   };
+  // O gate de orçamento do seam, não uma cópia: mesmo veredito, mesmo item
+  // `budget_exceeded` na Central, mesma linha `orcamento_esgotado` em
+  // Execuções. Vale para toda chamada de LLM cobrada por token que este
+  // worker faz — a visão e o degrau 3 da transcrição (o modelo de conversa da
+  // organização). Os degraus 1 e 2 da transcrição ficam fora: o custo deles é
+  // nulo (o serviço tem preço próprio, que o sistema não conhece), então
+  // nunca entram na soma que o teto compara, e o degrau 1 pode ser o serviço
+  // da própria instalação, que não é gasto da organização.
+  const barradoPeloTeto = async (d: {
+    tipo: "imagem" | "áudio";
+    oQueNaoSaiu: string;
+    purpose: string;
+    provider: string;
+    model: string;
+    origem: string;
+  }): Promise<boolean> => {
+    try {
+      await aplicarOrcamento({
+        db: derivePool(),
+        organizationId: orgId,
+        orcamentoDaConfig: llm.orcamento,
+        orcamentoIndisponivelPorque: llm.orcamentoIndisponivelPorque,
+        // A mesma chave efetiva do seam: a tela de admin vence, o `.env` é o piso.
+        chave: chaveDeOrcamentoDaInstalacao(normalizarChaveDeOrcamento(env.AI_BUDGET_ENFORCEMENT)),
+        purpose: d.purpose,
+        provider: d.provider,
+        model: d.model,
+        origem: d.origem,
+        input: { tenantId: orgId },
+        log: logger,
+      });
+      return false;
+    } catch (err) {
+      if (!(err instanceof LlmBudgetExceededError)) throw err;
+      await avisarMidiaNaoLida(
+        orgId,
+        d.tipo,
+        `o limite de gasto com IA deste mês foi atingido e a IA está configurada para parar nele, então ${d.oQueNaoSaiu} ao provedor`,
+        "Enquanto o limite valer, a IA também não responde: as conversas vão para a fila de atendimento humano.",
+        undefined,
+        "Para resolver, suba o limite ou desligue a parada em Uso de IA › Orçamento.",
+      );
+      return true;
+    }
+  };
   const describeImage: DeriveDeps["describeImage"] = async (buffer, mime) => {
     // ⚠️ A resposta é resolvida AQUI, não na montagem das deps, porque num
     // roteador ela depende do catálogo e a consulta é assíncrona. Antes disto
@@ -685,45 +731,22 @@ function buildDeriveDeps(
     //
     // A visão grava custo em `llm_calls` e soma no gasto do mês, mas chama o
     // provedor fora do `runModelCall` — então o "Parar a IA ao chegar no
-    // limite" barrava o atendimento e deixava a foto seguir saindo, paga. O
-    // gate é o do seam, não uma cópia: mesmo veredito, mesmo item
-    // `budget_exceeded` na Central, mesma linha `orcamento_esgotado` em
-    // Execuções. Fica depois de `validarParProvedorModelo` pela razão do seam:
-    // a recusa grava o modelo em `llm_calls` (`model text not null`), e antes
-    // dessa validação o nome não é confiável — gravar um valor inventado numa
-    // tabela de auditoria é pior que a linha faltando. De quebra, não se
-    // consulta o gasto de uma chamada que a configuração já impediu.
-    //
-    // A transcrição NÃO passa por aqui, de propósito: o custo dela é null (o
-    // preço por minuto não é conhecido), então ela nunca entra na soma que o
-    // teto compara; o degrau 1 pode ser o serviço da própria instalação, que
-    // não é gasto da organização; e é com a conversa já na fila humana — que
-    // é o que o bloqueio faz — que o áudio transcrito mais serve a quem atende.
-    try {
-      await aplicarOrcamento({
-        db: derivePool(),
-        organizationId: orgId,
-        orcamentoDaConfig: llm.orcamento,
-        orcamentoIndisponivelPorque: llm.orcamentoIndisponivelPorque,
-        // A mesma chave efetiva do seam: a tela de admin vence, o `.env` é o piso.
-        chave: chaveDeOrcamentoDaInstalacao(normalizarChaveDeOrcamento(env.AI_BUDGET_ENFORCEMENT)),
+    // limite" barrava o atendimento e deixava a foto seguir saindo, paga.
+    // Fica depois de `validarParProvedorModelo` pela razão do seam: a recusa
+    // grava o modelo em `llm_calls` (`model text not null`), e antes dessa
+    // validação o nome não é confiável — gravar um valor inventado numa tabela
+    // de auditoria é pior que a linha faltando. De quebra, não se consulta o
+    // gasto de uma chamada que a configuração já impediu.
+    if (
+      await barradoPeloTeto({
+        tipo: "imagem",
+        oQueNaoSaiu: "a foto não foi enviada",
         purpose: PONTO_VISAO_DE_IMAGEM,
         provider: llm.provider,
         model: modelo,
         origem: origemDoModelo,
-        input: { tenantId: orgId },
-        log: logger,
-      });
-    } catch (err) {
-      if (!(err instanceof LlmBudgetExceededError)) throw err;
-      await avisarMidiaNaoLida(
-        orgId,
-        "imagem",
-        "o limite de gasto com IA deste mês foi atingido e a IA está configurada para parar nele, então a foto não foi enviada ao provedor",
-        "Enquanto o limite valer, a IA também não responde: as conversas vão para a fila de atendimento humano.",
-        undefined,
-        "Para resolver, suba o limite ou desligue a parada em Uso de IA › Orçamento.",
-      );
+      })
+    ) {
       return MARCADOR_NAO_LIDA;
     }
     const inicio = Date.now();
@@ -834,12 +857,34 @@ function buildDeriveDeps(
           ? "desconhecido"
           : decisao.anuncio.provider,
       model: decisao.anuncio.modelId ?? "desconhecido",
+      origem: decisao.origem,
     });
+  // O degrau 3 é o modelo de conversa da organização: chamada de LLM cobrada
+  // por token, então passa pelo teto antes de o áudio sair, como a visão.
+  const transcriberDoModelo = (servico: TranscriptionProvider): TranscriptionProvider => ({
+    transcribe: async (audio, mime) => {
+      if (
+        await barradoPeloTeto({
+          tipo: "áudio",
+          oQueNaoSaiu: "o áudio não foi enviado",
+          purpose: PONTO_TRANSCRICAO_DE_AUDIO,
+          provider: decisao.anuncio.provider,
+          model: decisao.anuncio.modelId ?? "",
+          origem: decisao.origem,
+        })
+      ) {
+        return MARCADOR_NAO_LIDA;
+      }
+      return servico.transcribe(audio, mime);
+    },
+  });
   const transcriber: DeriveDeps["transcriber"] = !decisao.transcriber
     ? semTranscricao
     : decisao.origem === "servico_da_instalacao"
       ? transcriberDeServico(comCusto(decisao.transcriber))
-      : comCusto(decisao.transcriber);
+      : decisao.origem === "modelo_da_organizacao"
+        ? transcriberDoModelo(comCusto(decisao.transcriber))
+        : comCusto(decisao.transcriber);
   return {
     transcriber,
     describeImage,
@@ -861,6 +906,12 @@ interface ChamadaDeMidia {
   /** null = preço desconhecido; 0 diria "grátis" à tela de uso e ao teto. */
   cost_cents: number | null;
   latency_ms: number;
+  /**
+   * Na transcrição, o degrau da escada que ouviu o áudio. É o que separa a
+   * linha de custo nulo por construção (degraus 1 e 2, serviço sem tokens) da
+   * linha de LLM sem preço conhecido (degrau 3), que acende o aviso.
+   */
+  origem_da_escolha?: OrigemDaTranscricao;
   /** Ausente = `ok`. */
   status?: "erro";
   error_code?: string;
@@ -876,12 +927,19 @@ interface ChamadaDeMidia {
  */
 function linhaDeFalha(
   err: unknown,
-  d: { purpose: ChamadaDeMidia["purpose"]; provider: string; model: string; inicio: number },
+  d: {
+    purpose: ChamadaDeMidia["purpose"];
+    provider: string;
+    model: string;
+    inicio: number;
+    origem?: OrigemDaTranscricao;
+  },
 ): ChamadaDeMidia {
   return {
     purpose: d.purpose,
     provider: d.provider,
     model: d.model,
+    ...(d.origem ? { origem_da_escolha: d.origem } : {}),
     input_tokens: 0,
     output_tokens: 0,
     cache_read_tokens: 0,
@@ -941,23 +999,46 @@ function registrarChamadaDeMidia(
 
 /**
  * Embrulha o provedor que de fato chama o serviço pago. As recusas (sem chave,
- * destino não aceito) ficam FORA deste embrulho, então não gravam linha.
- * Transcrição é cobrada por minuto e o serviço não devolve tokens: o custo fica
- * null, nunca 0, até existir preço por minuto.
+ * destino não aceito, teto de gasto) ficam FORA deste embrulho, então não
+ * gravam linha de custo.
+ *
+ * Dois tipos de cobrança passam aqui. O modelo de conversa (degrau 3) é LLM
+ * cobrado por token e devolve o uso (`transcribeMedindo`): a linha leva tokens
+ * e o custo da tabela de preços, nulo só quando o modelo não está nela. O
+ * serviço `/v1/audio/transcriptions` (degraus 1 e 2) tem preço próprio, que o
+ * sistema não conhece, e não devolve tokens que se leiam aqui: custo nulo,
+ * nunca 0.
  */
 function comCustoRegistrado(
   servico: TranscriptionProvider,
-  ctx: { admin: ReturnType<typeof createAdminClient>; orgId: string; provider: string; model: string },
+  ctx: {
+    admin: ReturnType<typeof createAdminClient>;
+    orgId: string;
+    provider: string;
+    model: string;
+    origem: OrigemDaTranscricao;
+  },
 ): TranscriptionProvider {
   return {
     transcribe: async (audio, mime) => {
       const inicio = Date.now();
       let texto: string;
+      let uso: TokenUsage | null = null;
       try {
-        texto = await servico.transcribe(audio, mime);
+        if (servico.transcribeMedindo) {
+          ({ texto, uso } = await servico.transcribeMedindo(audio, mime));
+        } else {
+          texto = await servico.transcribe(audio, mime);
+        }
       } catch (err) {
         registrarChamadaDeMidia(ctx.admin, ctx.orgId, () =>
-          linhaDeFalha(err, { purpose: PONTO_TRANSCRICAO_DE_AUDIO, provider: ctx.provider, model: ctx.model, inicio }),
+          linhaDeFalha(err, {
+            purpose: PONTO_TRANSCRICAO_DE_AUDIO,
+            provider: ctx.provider,
+            model: ctx.model,
+            inicio,
+            origem: ctx.origem,
+          }),
         );
         throw err;
       }
@@ -965,11 +1046,12 @@ function comCustoRegistrado(
         purpose: PONTO_TRANSCRICAO_DE_AUDIO,
         provider: ctx.provider,
         model: ctx.model,
-        input_tokens: 0,
-        output_tokens: 0,
-        cache_read_tokens: 0,
-        cache_write_tokens: 0,
-        cost_cents: null,
+        origem_da_escolha: ctx.origem,
+        input_tokens: uso?.inputTokens ?? 0,
+        output_tokens: uso?.outputTokens ?? 0,
+        cache_read_tokens: uso?.cacheReadTokens ?? 0,
+        cache_write_tokens: uso?.cacheWriteTokens ?? 0,
+        cost_cents: uso ? costCents(ctx.model, uso) : null,
         latency_ms: Date.now() - inicio,
       }));
       return texto;

@@ -9,8 +9,9 @@ import type * as ModuloDeTranscricao from "@/lib/messaging/media/transcription";
  * estes casos fixam: com o teto armado e estourado, a visão não chama o
  * provedor, devolve o marcador de mídia não lida, abre o aviso na Central e
  * deixa a MESMA linha de recusa que o seam deixa (`orcamento_esgotado`). Sem
- * teto, segue igual. E a transcrição, que tem custo null, fica fora do gate
- * por decisão declarada no worker.
+ * teto, segue igual. A transcrição pelo modelo da organização (degrau 3 da
+ * escada) é LLM cobrado por token e passa pelo MESMO gate; a pelo serviço
+ * (degraus 1 e 2), de custo nulo, fica fora por decisão declarada no worker.
  *
  * Mesmo dublê de `midia-grava-custo-em-llm-calls.test.ts`, mais o pool que o
  * gate consulta.
@@ -33,7 +34,7 @@ const BINDING = {
   credential_id: "cred-1",
   base_url: null as string | null,
 };
-let bindingDaVez: typeof BINDING = BINDING;
+let bindingDaVez: typeof BINDING | null = BINDING;
 
 let linhaDaMensagem = {
   id: "msg1",
@@ -95,22 +96,32 @@ vi.mock("@/lib/agent-engine/db/pool", () => ({
 
 const credencial = vi.hoisted(() => ({
   origemDaChave: "credencial_da_organizacao" as "credencial_da_organizacao" | "chave_da_instalacao",
+  /** Preenchido = conversa Google com `audio` e sem chave OpenAI: degrau 3 da escada. */
+  conversaGoogle: null as string | null,
 }));
 vi.mock("@/lib/agent-engine/edge/llm/credentials", () => ({
-  resolveOrgLlmConfig: vi.fn(async () => ({
-    provider: "anthropic",
-    apiKey: "chave-do-binding",
-    origemDaChave: credencial.origemDaChave,
-    defaultModel: "claude-haiku-4-5",
-    params: {},
-    enabledModels: [],
-    orcamento: orcamento.daConfig,
-    orcamentoIndisponivelPorque: null,
-  })),
+  resolveOrgLlmConfig: vi.fn(async (_db: unknown, _cfg: unknown, _org: string, override?: { provider?: string }) => {
+    if (credencial.conversaGoogle && override?.provider === "openai") throw new Error("sem credencial openai");
+    return {
+      provider: credencial.conversaGoogle ? "google" : "anthropic",
+      apiKey: "chave-do-binding",
+      origemDaChave: credencial.origemDaChave,
+      defaultModel: credencial.conversaGoogle ?? "claude-haiku-4-5",
+      params: {},
+      enabledModels: [],
+      orcamento: orcamento.daConfig,
+      orcamentoIndisponivelPorque: null,
+    };
+  }),
 }));
 
 vi.mock("@/lib/agent-engine/edge/llm/providers", () => ({
-  createDefaultRegistry: () => ({ anthropic: factoryMock, openai: factoryMock, openrouter: factoryMock }),
+  createDefaultRegistry: () => ({
+    anthropic: factoryMock,
+    openai: factoryMock,
+    openrouter: factoryMock,
+    google: factoryMock,
+  }),
 }));
 
 vi.mock("@/lib/ai/pontos/capacidade-em-vigor", () => ({
@@ -155,7 +166,7 @@ vi.mock("@/lib/env", async (importOriginal) => {
 
 import { deriveMessageMedia, MARCADOR_NAO_LIDA } from "@/workers/media-derive-worker";
 import { esquecerDestinosInternos } from "@/lib/automation/destinos-internos-autorizados";
-import { PONTO_VISAO_DE_IMAGEM } from "@/lib/ai/pontos/registro";
+import { PONTO_TRANSCRICAO_DE_AUDIO, PONTO_VISAO_DE_IMAGEM } from "@/lib/ai/pontos/registro";
 import { deriveMediaText, type DeriveDeps } from "@/lib/messaging/media/derive";
 import { generateText } from "ai";
 import type { Env } from "@/lib/env";
@@ -203,6 +214,7 @@ beforeEach(() => {
   esquecerDestinosInternos();
   dns.resposta = [{ address: "93.184.216.34", family: 4 }];
   credencial.origemDaChave = "credencial_da_organizacao";
+  credencial.conversaGoogle = null;
   orcamento.daConfig = { modo: "off", tetoCents: 0, efetivoEm: null, limiarPct: 80 };
   bindingDaVez = BINDING;
   transcricaoDoEnv.apiKey = "";
@@ -264,7 +276,46 @@ describe("a visão de imagem respeita o teto de gasto", () => {
     expect(avisoInsertMock).not.toHaveBeenCalled();
   });
 
-  it("a transcrição fica fora do gate: com o teto estourado o áudio ainda vira texto", async () => {
+  it("o degrau 3 da transcrição (modelo da organização) é LLM pago: com o teto estourado o áudio não sai", async () => {
+    armarTeto();
+    credencial.conversaGoogle = "gemini-2.5-flash";
+    bindingDaVez = null;
+    linhaDaMensagem = { ...linhaDaMensagem, type: "audio", media_mime: "audio/ogg", media_storage_path: "org1/conv1/msg1.ogg" };
+
+    await deriveMessageMedia(eventRow());
+    const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+    expect(texto).toBe(MARCADOR_NAO_LIDA);
+    expect(generateText).not.toHaveBeenCalled();
+    expect(factoryMock).not.toHaveBeenCalled();
+    expect(transcribeDoSvcMock).not.toHaveBeenCalled();
+    expect(llmCallsInsertMock).not.toHaveBeenCalled();
+    const [recusa] = statementsDoGate("insert into llm_calls");
+    expect(recusa!.params).toEqual(
+      expect.arrayContaining(["org1", PONTO_TRANSCRICAO_DE_AUDIO, "google", "gemini-2.5-flash", "orcamento_esgotado"]),
+    );
+    expect(avisoInsertMock).toHaveBeenCalledTimes(1);
+    const aviso = avisoInsertMock.mock.calls[0]![0] as Record<string, string>;
+    expect(aviso.kind).toBe("midia_nao_lida");
+    expect(aviso.title).toContain("áudio");
+    expect(aviso.body).toContain("o áudio não foi enviado ao provedor");
+    expect(aviso.body).toContain("Uso de IA › Orçamento");
+  });
+
+  it("o degrau 3 sem teto segue igual: o áudio vai ao modelo", async () => {
+    credencial.conversaGoogle = "gemini-2.5-flash";
+    bindingDaVez = null;
+    linhaDaMensagem = { ...linhaDaMensagem, type: "audio", media_mime: "audio/ogg", media_storage_path: "org1/conv1/msg1.ogg" };
+
+    await deriveMessageMedia(eventRow());
+    const texto = await depsDaChamada().transcriber.transcribe(Buffer.from("ogg"), "audio/ogg");
+
+    expect(texto).toBe("descrição de mentira");
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(avisoInsertMock).not.toHaveBeenCalled();
+  });
+
+  it("os degraus 1 e 2 da transcrição ficam fora do gate: com o teto estourado o áudio ainda vira texto", async () => {
     armarTeto();
     linhaDaMensagem = { ...linhaDaMensagem, type: "audio", media_mime: "audio/ogg", media_storage_path: "org1/conv1/msg1.ogg" };
 
