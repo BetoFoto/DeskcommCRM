@@ -1,9 +1,22 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { gerarAbordagemDeFormulario } from "@/lib/agent-engine/agent/abordagem-de-formulario";
 import { formatarParaWhatsApp } from "@/lib/agent-engine/agent/formato-whatsapp";
+
+vi.mock("@/lib/agent-engine/agent/agent-config", () => ({
+  loadPublishedAgentConfigById: async () => ({
+    systemPrompt: "Você atende a clínica.",
+    model: "m",
+    provider: "anthropic",
+    credentialId: null,
+  }),
+}));
+vi.mock("@/lib/agent-engine/edge/llm/run-model-call", () => ({
+  runModelCall: async () => ({ result: { text: "## **Hola**\\n\\nTenemos **2x1** hoy." } }),
+}));
 
 describe("formatarParaWhatsApp", () => {
   it("troca o \\n literal por salto de linha de verdade (caso medido)", () => {
@@ -83,3 +96,18 @@ describe("o send_message formata ANTES da cadeia de envio", () => {
   });
 });
 
+describe("a mensagem escrita pela IA na automação sai no mesmo formato", () => {
+  // `send_ai_message` e a prospecção mandam este texto ao cliente sem passar
+  // pelo `send_message`: sem a formatação aqui, `**x**` chegava na tela.
+  it("gerarAbordagemDeFormulario devolve o texto já formatado", async () => {
+    const r = await gerarAbordagemDeFormulario({} as never, {} as never, {
+      tenantId: "t",
+      agentId: "a",
+      leadId: "l",
+      instrucao: "Cumprimente.",
+      dados: {},
+      origemDaAbordagem: "automacao",
+    });
+    expect(r).toEqual({ ok: true, texto: "*Hola*\n\nTenemos *2x1* hoy." });
+  });
+});
