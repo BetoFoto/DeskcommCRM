@@ -57,6 +57,7 @@ import {
 } from './orcamento';
 import { costCents } from './pricing';
 import { chaveDeOrcamentoDaInstalacao } from '../../../instalacao/comportamento';
+import { cobrancaLigadaComMemo } from '../../../instalacao/modulos';
 import { createDefaultRegistry, type ProviderRegistry } from './providers';
 import { buildStablePrefix } from './stable-prefix';
 import {
@@ -364,7 +365,9 @@ async function aplicarOrcamento(d: EntradaDoGate): Promise<void> {
   // `SQL_CONFIG_COM_ORCAMENTO`: o catch de lá troca para a query legada em
   // qualquer erro e desliga o orçamento de toda org — a função nova falhando
   // levaria junto o orçamento que já existe.
-  if (d.origemDaChave === 'chave_da_instalacao') {
+  // Com a cobrança desligada — a instalação de empresa única, quase todas —
+  // o statement nem sai: a chave vem do memo de módulos (MEMO_DO_MODULO_MS).
+  if (d.origemDaChave === 'chave_da_instalacao' && (await cobrancaLigadaComMemo(d.db))) {
     const plano = await lerTetoDoPlano(d.db, d.organizationId);
     if ('indisponivel' in plano) {
       d.log?.warn('llm: teto do plano não pôde ser lido — a chamada SEGUE sem ele', {
