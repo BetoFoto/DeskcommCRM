@@ -163,16 +163,24 @@ describe("dry-run prepara a mídia do produto como o envio real (#2490)", () => 
 
   it("a cópia sai para a pasta TEMPORÁRIA do teste — nunca para a pasta de uma conversa", async () => {
     const { db } = catalogo({ IP15: { fotos: [CAPA] } });
-    const copiar = vi.fn(async () => true);
-    const { chamar } = cenario(db, { copiar });
+    const copias: Array<[origem: string, destino: string]> = [];
+    const { chamar } = cenario(db, {
+      copiar: async (origem, destino) => {
+        copias.push([origem, destino]);
+        return true;
+      },
+    });
 
     await chamar({ body: "Segue a foto", produto_codigo: "IP15" });
 
-    expect(copiar.mock.calls).toEqual([
+    expect(copias).toEqual([
       [CAPA, `${ORG}/${PASTA_DE_TESTE_DE_MIDIA}/catalogo-11111111-2222-4333-8444-555555555555.jpg`],
     ]);
-    for (const [, destino] of copiar.mock.calls)
-      expect(String(destino).startsWith(`${ORG}/${PASTA_DE_TESTE_DE_MIDIA}/`)).toBe(true);
+    // O sandbox não tem conversa: anexo em pasta de conversa seria efeito
+    // permanente num lugar que a issue manda deixar intocado.
+    expect(copias.every(([, destino]) => destino.startsWith(`${ORG}/${PASTA_DE_TESTE_DE_MIDIA}/`))).toBe(
+      true,
+    );
   });
 
   it("produto sem fotos: segue com o texto e AVISA que nenhuma imagem sairia", async () => {
