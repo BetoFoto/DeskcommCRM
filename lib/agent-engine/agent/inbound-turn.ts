@@ -127,7 +127,7 @@ import {
   trimTranscriptToBudget,
   type CompactionKnobs,
 } from './compaction';
-import { pruneToolResults, type PruneToolResultsKnobs } from './prune-tool-results';
+import { pruneToolResults, toolPartsAsText, type PruneToolResultsKnobs } from './prune-tool-results';
 import {
   classifyStage,
   recordStageDivergenceCandidate,
@@ -4627,10 +4627,14 @@ async function executarTurnoDoAgente(
     // sufixo por-lead, nunca no prefixo estável (regra de cache 15).
     // No SDK atual, response.messages contém só a ÚLTIMA etapa. O fechamento
     // precisa da fita inteira, incluindo as ações concluídas em etapas anteriores.
-    const responseMessages =
+    // O fechamento vai SEM `tools`: as partes de ferramenta viram texto (a Anthropic recusa
+    // tool_use/tool_result sem tools), com teto por resultado no knob do pruning.
+    const responseMessages = toolPartsAsText(
       deps.knobs.prune !== undefined
         ? pruneToolResults(turn.result.responseMessages, deps.knobs.prune)
-        : turn.result.responseMessages;
+        : turn.result.responseMessages,
+      deps.knobs.prune?.minResultTokens,
+    );
 
     // Fechamento imposto pelo runtime: 2ª chamada, mesma conversa, só o checkpoint.
     //

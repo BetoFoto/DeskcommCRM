@@ -176,8 +176,12 @@ describe("o fechamento do motor recebe a reserva atual e a persiste", () => {
     expect(prompts.at(-1)).toContain("Agenda verificada depois das ações deste turno");
     // A etapa final do modelo não tinha ferramentas. No SDK atual somente
     // responseMessages conserva o envio executado na etapa anterior.
-    expect(prompts.at(-1)).toContain('"toolName":"send_message"');
-    expect(prompts.at(-1)).toContain('"role":"tool"');
+    expect(prompts.at(-1)).toContain("[ferramenta send_message chamada com");
+    // O fechamento vai sem `tools`: nenhuma parte de ferramenta pode chegar ao
+    // provedor (a Anthropic recusa tool_use/tool_result sem tools definidas).
+    const fechamento = JSON.parse(prompts.at(-1)!) as Array<{ role: string; content: unknown }>;
+    expect(fechamento.filter((m) => m.role === "tool")).toEqual([]);
+    expect(prompts.at(-1)).not.toMatch(/"type":"tool-(call|result)"/);
     const checkpoint = await latestCheckpoint(pool, org, contact);
     expect(checkpoint?.commitments).toEqual(["Consulta reservada às 17h."]);
     expect(checkpoint?.rolling_summary).toBe("Remarcação concluída para 17h.");

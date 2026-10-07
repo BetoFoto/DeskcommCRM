@@ -31,7 +31,11 @@ flowchart LR
   modelo. Não faz essa leitura para propostas de prévia ainda não executadas.
 - O fechamento usa `result.responseMessages`, a fita completa de todas as
   etapas. `result.response.messages` contém apenas a última etapa no SDK atual
-  e pode omitir justamente a marcação feita antes do envio.
+  e pode omitir justamente a marcação feita antes do envio. As partes de
+  ferramenta dessa fita chegam ao fechamento como TEXTO (`toolPartsAsText`, em
+  `prune-tool-results.ts`): a chamada de fechamento vai sem `tools`, e a API da
+  Anthropic recusa tool_use/tool_result sem tools definidas. Cada resultado tem
+  teto em `PRUNE_TOOL_RESULTS_MIN_RESULT_TOKENS`.
 - O fechamento recebe a nova leitura e a orientação de substituir fatos
   superados, preservando pedidos e preferências. Uma lista vazia significa
   ausência de compromissos ativos e futuros nesse recorte, não agenda livre.
