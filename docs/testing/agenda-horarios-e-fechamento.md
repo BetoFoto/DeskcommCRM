@@ -3,7 +3,8 @@
 Medição de contribuição externa em 07/10/2026, base oficial inicial `ce5b87a3c`.
 Depois da medição, a `main` oficial `857917055` foi incorporada sem conflito;
 nenhum dos seis arquivos de implementação desta correção mudou nesse intervalo.
-O último avanço conferido, `6f8228f54`, também foi incorporado sem conflito.
+Os avanços `6f8228f54` e `17a67d3da` também foram incorporados sem conflito.
+O último acrescentou somente um teste de credenciais; nenhum arquivo do produto mudou.
 Código candidato em worktree, sem implantação. Dados, contatos, canal e banco
 fictícios; nenhum envio por WhatsApp. O canal somente capturou mensagens.
 
