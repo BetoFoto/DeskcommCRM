@@ -19,6 +19,10 @@ import pg from 'pg';
 
 import { createLogger } from '../obs/logger';
 
+const CONNECTION_TIMEOUT_MS = 10_000;
+export const QUERY_TIMEOUT_MS = 60_000;
+const KEEPALIVE_INITIAL_DELAY_MS = 10_000;
+
 export function createPool(
   databaseUrl: string,
   onError?: (err: Error) => void,
@@ -30,7 +34,19 @@ export function createPool(
   const raw = process.env.DB_POOL_MAX;
   const parsed = raw === undefined ? Number.NaN : Number.parseInt(raw, 10);
   const max = Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
-  const pool = new pg.Pool({ connectionString: databaseUrl, max });
+  // Socket MUDO (restart do Postgres/pooler sem FIN chegar) não emite 'error':
+  // a query fica pendurada para sempre e quem a espera para junto — o laço do
+  // drain da IA ficou dias parado assim com o healthz dizendo ok. O teto de
+  // leitura faz a query falhar (o pool descarta o cliente) e o keepAlive faz o
+  // SO perceber a conexão ociosa morta antes de ela ser reusada.
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max,
+    connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
+    query_timeout: QUERY_TIMEOUT_MS,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: KEEPALIVE_INITIAL_DELAY_MS,
+  });
   const handler =
     onError ??
     ((err: Error): void => {
