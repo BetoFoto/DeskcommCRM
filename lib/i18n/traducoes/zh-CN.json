@@ -3354,6 +3354,7 @@
   "Fluxo concluído": "流程已完成",
   "O fluxo parou de tentar": "流程已停止尝试",
   "Falhou neste passo": "此步骤失败",
+  "Não conseguiu mover o card para a etapa escolhida": "无法将卡片移动到所选阶段",
   "O cliente respondeu — o fluxo acordou na hora": "客户回复了——流程立即被唤醒",
   "Encerrado porque o cliente respondeu": "因客户回复而结束",
   "Encerrado porque o cliente pediu para parar": "因客户要求停止而结束",

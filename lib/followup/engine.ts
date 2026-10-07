@@ -53,6 +53,7 @@ import { interpolarDestino, persistirRespostaFollowupSupabase } from "./persisti
 import { criarTarefaInterna as criarTarefaNoCrm } from "@/lib/tarefas/criar-tarefa";
 import { moveLeadHandler } from "@/app/api/v1/leads/_handler";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
+import { ApiError } from "@/lib/api/types";
 import { getAction } from "@/lib/automation/actions";
 // Efeito de import: registra a ação `add_tag` no MESMO mapa que o motor de
 // automação usa. A tag do follow-up é a tag da automação — não uma segunda.
@@ -490,6 +491,30 @@ async function applyResult(
         node_id: node.id,
         error: err instanceof Error ? err.message : String(err),
       });
+      // A recusa vira linha na trilha da inscrição — quem montou o fluxo vê o
+      // card parado onde o fluxo diz que andou. Chave própria (`:falha`) para o
+      // replay não duplicar; o registro tem o próprio try/catch para nunca
+      // derrubar o tick nem reverter o avanço.
+      try {
+        await db.insertEnrollmentEvent({
+          organization_id: enrollment.organization_id,
+          enrollment_id: enrollment.id,
+          node_id: node.id,
+          event_type: "move_lead_failed",
+          payload: {
+            error: err instanceof Error ? err.message : String(err),
+            codigo: err instanceof ApiError ? err.code : null,
+          },
+          idempotency_key: `${idemKey}:falha`,
+        });
+      } catch (registroErr) {
+        logger.warn("followup_move_lead_failed_event_failed", {
+          organization_id: enrollment.organization_id,
+          enrollment_id: enrollment.id,
+          node_id: node.id,
+          error: registroErr instanceof Error ? registroErr.message : String(registroErr),
+        });
+      }
     }
   }
   if (result.kind === "advance" && !isReplay && node.type === "edit_lead_tag") {

@@ -4834,6 +4834,7 @@
   "Fluxo concluído": "Flow completed",
   "O fluxo parou de tentar": "The flow stopped trying",
   "Falhou neste passo": "Failed at this step",
+  "Não conseguiu mover o card para a etapa escolhida": "Couldn't move the card to the chosen stage",
   "O cliente respondeu — o fluxo acordou na hora": "The client responded — the flow woke up right away",
   "Encerrado porque o cliente respondeu": "Ended because the client responded",
   "Encerrado porque o cliente pediu para parar": "Ended because the client asked to stop",
