@@ -99,7 +99,11 @@ describe("no CABEÇALHO da conversa aberta", () => {
     // mouse lê o texto inteiro.
     expect(screen.getByTitle("Entrou por Peças")).toBeInTheDocument();
     // PII: com nome amigável o número não é exibido — nem aqui nem na lista.
-    expect(badge.textContent).not.toContain("+19392301037");
+    expect(badge.textContent).not.toContain("+193****1037");
+    // #2383 (critério 5): a fonte é a SESSÃO da conversa, não o contato. O
+    // contato aqui é "5517999"; se o rótulo saísse dele o badge diria outra
+    // coisa — e o atendente leria o número da pessoa como se fosse o canal.
+    expect(badge).not.toHaveTextContent("5517999");
     // Aceite: "layout continua utilizável… com nomes de canal maiores".
     expect(badge.className).toContain("max-w-");
     expect(badge.className).toContain("truncate");
@@ -143,6 +147,22 @@ describe("o rótulo É o da página /channels", () => {
     ["só o número", { display_name: null, phone_number: "+19392301037" }],
   ])("%s → igual ao card do canal", (_caso, canal) => {
     expect(rotuloDoCanalDaConversa(canal)).toBe(channelLabel(canal));
+  });
+
+  it("dois números do MESMO provider continuam distinguíveis pelo nome/número", () => {
+    // #2383 (critério 4): mesmas "Peças"/"Vendas" no mesmo provider. Sem nome
+    // amigável o NÚMERO é o que separa uma da outra — e o nome, quando existe,
+    // é o que o operador lê primeiro.
+    const pecas = { display_name: "Peças", phone_number: "+55179991111" };
+    const vendas = { display_name: "Vendas", phone_number: "+55179992222" };
+    const semApelido = { display_name: null, phone_number: "+55179993333" };
+
+    expect(rotuloDoCanalDaConversa(pecas)).toBe("Peças");
+    expect(rotuloDoCanalDaConversa(pecas)).not.toBe(rotuloDoCanalDaConversa(vendas));
+    expect(rotuloDoCanalDaConversa(semApelido)).toBe("+55179993333");
+    expect(rotuloDoCanalDaConversa(semApelido)).not.toBe(
+      rotuloDoCanalDaConversa({ display_name: null, phone_number: "+55179992222" }),
+    );
   });
 
   it("canal sem nome E sem número não vira badge — nem a frase repetida em toda linha", () => {

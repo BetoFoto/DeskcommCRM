@@ -69,6 +69,32 @@ describe("mostra POR ONDE a conversa entrou — o canal da empresa, nunca o clie
     expect(screen.getByText("Canal novo")).toBeInTheDocument();
   });
 
+  it("dois números do MESMO provider continuam distinguíveis — nome/número", () => {
+    // #2383 (critério 4): "Peças" e a linha sem apelido são as MESMAS
+    // wa_conversations/waha no mesmo provider; o que as separa na lista é o
+    // nome amigável, e o número entra onde não há nome. Duas linhas iguais na
+    // lista seriam o atendente respondendo no canal errado.
+    const mesmoProvider = (canal: { phone_number: string | null; display_name: string | null }) =>
+      ({ ...comCanal(canal), channel: "whatsapp", provider: "waha" }) as ConversationWithContact;
+
+    pintar(mesmoProvider({ phone_number: "+55179991111", display_name: "Peças" }), true);
+    pintar(mesmoProvider({ phone_number: "+55179992222", display_name: null }), true);
+
+    expect(screen.getByText("Peças")).toBeInTheDocument();
+    expect(screen.getByText("+55179992222")).toBeInTheDocument();
+    expect(screen.queryByText("+55179991111")).not.toBeInTheDocument();
+  });
+
+  it("nome de canal comprido encolhe — `min-w-0` + `max-w` + `truncate` na faixa", () => {
+    // #2383 (critério 5): a linha de selos é `flex-wrap`; sem limite o nome
+    // "Centro Automotivo Norte" levaria a faixa inteira para fora da coluna.
+    pintar(comCanal({ phone_number: null, display_name: "Centro Automotivo Norte" }), true);
+    const badge = screen.getByTitle("Entrou por Centro Automotivo Norte");
+    expect(badge.className).toContain("max-w-");
+    expect(badge.className).toContain("truncate");
+    expect(badge.querySelector("span.truncate")).not.toBeNull();
+  });
+
   it("explica o rótulo no title — o número solto não diz o que é", () => {
     pintar(comCanal({ phone_number: "+19392301037", display_name: null }), true);
     expect(screen.getByTitle("Entrou por +19392301037")).toBeInTheDocument();
