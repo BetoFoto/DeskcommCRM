@@ -112,6 +112,11 @@ grant execute on all functions in schema public to agent_worker;
 alter default privileges for role "postgres" in schema public grant execute on functions to agent_worker;
 alter default privileges for role "postgres" in schema public grant usage, select on sequences to agent_worker;
 alter default privileges for role "postgres" in schema public grant select, insert, update, delete on tables to agent_worker;
+
+-- A auditoria é só-inclusão para todo papel: o worker grava e lê
+-- `api_audit_log`, nunca altera nem apaga. O `baseline.sql` reafirma isto a
+-- cada `update.sh` (migration 0525), com o nome que o papel tiver.
+revoke update, delete, truncate on table public.api_audit_log from agent_worker;
 ```
 Se o papel do **dono** na sua instalação não for `postgres` (ex.: você usa um
 superusuário com outro nome), troque `for role "postgres"` pelo nome dele nas
@@ -212,6 +217,12 @@ sem quebrar nada.
    link correto. Esta seção ensinava a forma com `?` até 2026-08-14, e o
    projeto Supabase de produção estava com ela gravada: quem seguiu a receita
    reproduziu o defeito.
+
+   O link abre a tela **Confirmar acesso**, com o botão **Continuar**, e é de
+   propósito: o token é de uso único, e verificadores de link (Safe Links do
+   Hotmail/Outlook, gateways de e-mail corporativos) abrem cada link na entrega.
+   Quando abrir o link já gastava o token, essas pessoas recebiam "link inválido
+   ou expirado" no próprio clique. Quem gasta o token agora é o botão.
 
 4. **SMTP próprio** (Authentication → SMTP): o sender embutido do Supabase tem
    limite baixo (~2 e-mails/h) — configure Resend/SES/etc. para produção.
