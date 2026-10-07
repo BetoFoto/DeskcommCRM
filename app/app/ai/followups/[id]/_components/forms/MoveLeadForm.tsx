@@ -32,8 +32,9 @@ import type { ConfigOf } from "./shared";
  * o publish recusa (`motivo_da_perda_ausente`), porque o motor seria recusado
  * com 422 e o fluxo seguiria como se o card tivesse andado. As opções são as
  * MESMAS da janela "Marcar como perdido" do quadro (canônicos + motivos do
- * funil) — nada de segunda lista. Trocar para etapa comum limpa o motivo, para
- * não ficar motivo solto no grafo.
+ * funil) — nada de segunda lista. Trocar de etapa descarta o motivo que não
+ * está nas opções do funil de destino, para não guardar um motivo que o
+ * publish recusaria (`motivo_da_perda_invalido`).
  */
 export function MoveLeadForm({
   config,
@@ -51,6 +52,7 @@ export function MoveLeadForm({
   const ehPerda = etapaEscolhida?.isPerda === true;
   const motivoAtual = (config.lost_reason ?? "").trim();
   const opcoes = opcoesDeMotivoDePerda(motivosDoFunil(etapaEscolhida?.settingsDoFunil ?? null));
+  const motivoNaLista = motivoAtual !== "" && opcoes.some((o) => o.valor === motivoAtual);
 
   return (
     <div className="space-y-2">
@@ -60,8 +62,12 @@ export function MoveLeadForm({
         onValueChange={(stageId) => {
           const destino = etapas.find((e) => e.stageId === stageId);
           const motivoMantido = (config.lost_reason ?? "").trim();
+          // Só mantém o motivo se ele existe nas opções do funil DE DESTINO:
+          // motivo de outro funil passaria no seletor vazio e cairia no
+          // `motivo_da_perda_invalido` do publish, longe de quem pode corrigir.
+          const opcoesDoDestino = opcoesDeMotivoDePerda(motivosDoFunil(destino?.settingsDoFunil ?? null));
           const parsed =
-            destino?.isPerda === true && motivoMantido
+            destino?.isPerda === true && motivoMantido && opcoesDoDestino.some((o) => o.valor === motivoMantido)
               ? moveLeadConfigSchema.safeParse({ stage_id: stageId, lost_reason: motivoMantido })
               : moveLeadConfigSchema.safeParse({ stage_id: stageId });
           if (parsed.success) onChange(parsed.data);
@@ -88,7 +94,7 @@ export function MoveLeadForm({
         <div className="space-y-2">
           <Label htmlFor="move-lead-motivo">{t("Motivo da perda")}</Label>
           <Select
-            value={motivoAtual !== "" && opcoes.some((o) => o.valor === motivoAtual) ? motivoAtual : ""}
+            value={motivoNaLista ? motivoAtual : ""}
             onValueChange={(motivo) => {
               const parsed = moveLeadConfigSchema.safeParse(
                 motivo ? { stage_id: valor, lost_reason: motivo } : { stage_id: valor },
@@ -108,7 +114,7 @@ export function MoveLeadForm({
               ))}
             </SelectContent>
           </Select>
-          {motivoAtual === "" && (
+          {ehPerda && !motivoNaLista && (
             <p role="alert" className="text-xs text-destructive">
               {t("Escolha o motivo da perda.")}
             </p>

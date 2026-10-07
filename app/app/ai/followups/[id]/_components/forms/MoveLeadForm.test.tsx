@@ -30,6 +30,8 @@ const usuario = () => userEvent.setup({ delay: null });
 
 const COMUM = "bbbbbbbb-2222-4222-8222-222222222222";
 const PERDA = "aaaaaaaa-1111-4111-8111-111111111111";
+const PERDA_MESMO_FUNIL = "cccccccc-3333-4333-8333-333333333333";
+const PERDA_OUTRO_FUNIL = "dddddddd-4444-4444-8444-444444444444";
 
 function comEtapas() {
   etapasDoFluxo = {
@@ -42,6 +44,22 @@ function comEtapas() {
         pipelineName: "Vendas",
         isPerda: true,
         settingsDoFunil: { lost_reasons: ["Sem orçamento"] },
+      },
+      {
+        stageId: PERDA_MESMO_FUNIL,
+        stageName: "Perdido 2",
+        pipelineId: "p1",
+        pipelineName: "Vendas",
+        isPerda: true,
+        settingsDoFunil: { lost_reasons: ["Sem orçamento"] },
+      },
+      {
+        stageId: PERDA_OUTRO_FUNIL,
+        stageName: "Perdido",
+        pipelineId: "p2",
+        pipelineName: "Suporte",
+        isPerda: true,
+        settingsDoFunil: { lost_reasons: ["Sem verba"] },
       },
     ],
     carregando: false,
@@ -104,5 +122,35 @@ describe("MoveLeadForm — motivo da perda", () => {
     await user.click(await screen.findByRole("option", { name: "Proposta · Vendas" }));
 
     expect(gravados.at(-1)).toEqual({ stage_id: COMUM });
+  });
+
+  it("perda para perda do mesmo funil mantém o motivo", async () => {
+    comEtapas();
+    const user = usuario();
+    const gravados = renderizar({ stage_id: PERDA, lost_reason: "Sem orçamento" });
+
+    await user.click(screen.getByRole("combobox", { name: "Etapa de destino" }));
+    await user.click(await screen.findByRole("option", { name: "Perdido 2 · Vendas" }));
+
+    expect(gravados.at(-1)).toEqual({ stage_id: PERDA_MESMO_FUNIL, lost_reason: "Sem orçamento" });
+  });
+
+  it("perda para perda de outro funil descarta o motivo que não está lá", async () => {
+    comEtapas();
+    const user = usuario();
+    const gravados = renderizar({ stage_id: PERDA, lost_reason: "Sem orçamento" });
+
+    await user.click(screen.getByRole("combobox", { name: "Etapa de destino" }));
+    await user.click(await screen.findByRole("option", { name: "Perdido · Suporte" }));
+
+    expect(gravados.at(-1)).toEqual({ stage_id: PERDA_OUTRO_FUNIL });
+  });
+
+  it("motivo gravado fora das opções mostra o seletor vazio e o erro", () => {
+    comEtapas();
+    renderizar({ stage_id: PERDA_OUTRO_FUNIL, lost_reason: "Sem orçamento" });
+
+    expect(screen.getByRole("combobox", { name: "Motivo da perda" })).toHaveTextContent("Escolha o motivo");
+    expect(screen.getByText("Escolha o motivo da perda.")).toBeInTheDocument();
   });
 });
