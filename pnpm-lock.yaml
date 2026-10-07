@@ -147,8 +147,8 @@ importers:
         specifier: ^2.5.0
         version: 2.5.0
       jose:
-        specifier: 6.2.7
-        version: 6.2.7
+        specifier: ^6.2.12
+        version: 6.2.12
       jsonc-parser:
         specifier: ^3.3.1
         version: 3.3.1
