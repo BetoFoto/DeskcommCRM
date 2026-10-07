@@ -52,7 +52,7 @@ describe('createPool', () => {
   it('falha a query num socket mudo em vez de esperar para sempre', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const srv = await servidorMudo();
-    const pool = createPool(`postgres://u:p@127.0.0.1:${srv.porta}/db`, () => undefined);
+    const pool = createPool(`postgres://teste@127.0.0.1:${srv.porta}/db`, () => undefined);
     try {
       const resultado = pool.query('select 1').then(
         () => 'respondeu',
