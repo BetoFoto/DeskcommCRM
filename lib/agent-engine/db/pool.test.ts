@@ -47,6 +47,7 @@ function servidorMudo(): Promise<{ porta: number; queryChegou: Promise<void>; fe
 describe('createPool', () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it('falha a query num socket mudo em vez de esperar para sempre', async () => {
@@ -61,6 +62,42 @@ describe('createPool', () => {
       await srv.queryChegou;
       await vi.advanceTimersByTimeAsync(QUERY_TIMEOUT_MS + 1);
       expect(await resultado).toBe('Query read timeout');
+    } finally {
+      srv.fechar();
+      await pool.end().catch(() => undefined);
+    }
+  });
+
+  // Pool cheio é ESPERA, não erro: o before-send segura conexão durante lock,
+  // throttle e envio, e as leituras do turno contam com a fila (inbound-turn,
+  // get-lead-context). `connectionTimeoutMillis` transformaria essa espera em
+  // 'timeout exceeded when trying to connect' — por isso o pool não o usa.
+  it('com o pool cheio, quem chega espera a vaga em vez de errar', async () => {
+    vi.stubEnv('DB_POOL_MAX', '1');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const srv = await servidorMudo();
+    const pool = createPool(`postgres://teste@127.0.0.1:${srv.porta}/db`, () => undefined);
+    try {
+      const primeiro = await pool.connect();
+      let desfecho = 'esperando';
+      const segundo = pool.connect().then(
+        (client) => {
+          desfecho = 'conectou';
+          return client;
+        },
+        (err: Error) => {
+          desfecho = err.message;
+          return undefined;
+        },
+      );
+      await vi.advanceTimersByTimeAsync(2 * QUERY_TIMEOUT_MS);
+      const antesDaVaga = desfecho;
+      // libera ANTES de afirmar: com cliente em checkout, o pool.end() do finally
+      // esperaria para sempre e o vermelho viraria timeout do vitest.
+      primeiro.release();
+      (await segundo)?.release();
+      expect(antesDaVaga).toBe('esperando');
+      expect(desfecho).toBe('conectou');
     } finally {
       srv.fechar();
       await pool.end().catch(() => undefined);
