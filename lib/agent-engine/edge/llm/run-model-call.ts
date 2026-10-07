@@ -291,6 +291,9 @@ export interface RunModelCallDeps {
  * importar este arquivo (ele arrastaria `pg` e o SDK para o bundle do Next).
  */
 
+/** Só o que a linha de recusa em `llm_calls` grava — quem chama de fora do seam não tem mensagens. */
+type RastroDaChamada = Pick<RunModelCallInput, 'tenantId' | 'leadId' | 'jobId' | 'variantId' | 'agentId'>;
+
 /** O que o statement do gate devolve — uma ida ao banco, um snapshot. */
 interface LinhaDoOrcamento {
   teto: number | string | null;
@@ -331,7 +334,7 @@ interface LinhaDoOrcamento {
  * Ordem (spec da cobrança §5): chave de emergência → teto do PLANO → orçamento da org.
  */
 /** O que o gate recebe do seam. */
-interface EntradaDoGate {
+export interface EntradaDoGate {
   db: pg.Pool;
   organizationId: string;
   /** Só para o atalho de custo. A decisão usa o snapshot de `SQL_ORCAMENTO`. */
@@ -344,11 +347,17 @@ interface EntradaDoGate {
   provider: string;
   model: string;
   origem: string;
-  input: RunModelCallInput;
+  input: RastroDaChamada;
   log?: Logger;
 }
 
-async function aplicarOrcamento(d: EntradaDoGate): Promise<void> {
+/**
+ * Exportado para o worker de mídia: a visão de imagem chama o provedor fora
+ * deste seam (`workers/media-derive-worker.ts`) e precisa da MESMA recusa —
+ * mesmo veredito, mesmo item na Central, mesma linha `orcamento_esgotado` em
+ * `llm_calls`. Uma segunda cópia do gate seria uma segunda régua.
+ */
+export async function aplicarOrcamento(d: EntradaDoGate): Promise<void> {
   const comum = { organization_id: d.organizationId, purpose: d.purpose };
   const inicio = Date.now();
 
@@ -1216,7 +1225,7 @@ export function redigirMensagemDoProvedor(bruto: string): string {
 async function registrarFalha(
   db: pg.Pool,
   d: {
-    input: RunModelCallInput;
+    input: RastroDaChamada;
     purpose: string;
     provider: string;
     model: string;
