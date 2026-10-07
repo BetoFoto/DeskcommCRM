@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { KIND_CANAL_PAUSADO } from "./canal-pausado";
-import { sincronizarAvisoDePausa } from "./central-de-pausa";
+import { fecharAvisoDePausaDoCanalArquivado, sincronizarAvisoDePausa } from "./central-de-pausa";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const CANAL = "22222222-2222-4222-8222-222222222222";
@@ -194,6 +194,18 @@ describe("sincronizarAvisoDePausa", () => {
     const desfecho = await sincronizarAvisoDePausa(db, { id: CANAL, organization_id: ORG }, CONTEXTO);
 
     expect(desfecho).toBe("resolvido");
+    expect(itens[0]!.status).toBe("resolved");
+    expect(itens[0]!.body).toContain("Resolvido pelo sistema: o canal foi arquivado.");
+  });
+
+  it("canal pausado e depois ARQUIVADO fora de Conexões resolve com `canal_arquivado`", async () => {
+    // Redes Sociais e voz arquivam a linha e chamam o fechador sem autor.
+    const itens = [itemAberto()];
+    const db = banco({ linha: linhaDoCanal({ archived_at: AGORA.toISOString() }), itens });
+
+    expect(await fecharAvisoDePausaDoCanalArquivado(db, { id: CANAL, organization_id: ORG })).toBe(
+      "resolvido",
+    );
     expect(itens[0]!.status).toBe("resolved");
     expect(itens[0]!.body).toContain("Resolvido pelo sistema: o canal foi arquivado.");
   });
