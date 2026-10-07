@@ -1,6 +1,8 @@
 # Evidência: horários locais e fechamento depois das ações
 
-Medição de contribuição externa em 07/10/2026, base oficial `ce5b87a3c`.
+Medição de contribuição externa em 07/10/2026, base oficial inicial `ce5b87a3c`.
+Depois da medição, a `main` oficial `857917055` foi incorporada sem conflito;
+nenhum dos seis arquivos de implementação desta correção mudou nesse intervalo.
 Código candidato em worktree, sem implantação. Dados, contatos, canal e banco
 fictícios; nenhum envio por WhatsApp. O canal somente capturou mensagens.
 
@@ -59,4 +61,71 @@ no produto.
 
 ## Gates e sabotagem
 
-Resultados e comandos serão preenchidos após as verificações finais.
+Ambiente: macOS, Node 24.19.0, pnpm 9.15.9. O projeto declara Node 22;
+esta medição local não substitui esse ambiente do CI. Nenhuma variável de
+produção foi carregada na compilação.
+
+| Verificação                                              | Resultado medido                                                                       |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `pnpm typecheck`                                         | exit 0                                                                                 |
+| `pnpm lint`                                              | exit 0; zero erros, 507 avisos existentes                                              |
+| `pnpm lint:channels`                                     | exit 0; 62 arquivos de dívida conhecida, nenhum novo                                   |
+| `pnpm lint:role-rank`                                    | exit 0                                                                                 |
+| `pnpm release:conferir`                                  | exit 0; somente conferência, sem cortar release                                        |
+| `pnpm build`                                             | exit 0                                                                                 |
+| Cinco arquivos unitários de agenda                       | 75 testes passaram; repetidos depois de restaurar a sabotagem                          |
+| Três arquivos nativos de banco: fechamento e isolamento  | 8 testes passaram; baseline aplicado e reaplicado, 164 regras de isolamento conferidas |
+| Invariante de fechamento depois de restaurar a sabotagem | 1 teste passou                                                                         |
+
+A suíte inteira foi executada, sem filtro por caminho:
+
+```text
+pnpm test:unit --maxWorkers=3
+Test Files  5 failed | 1973 passed (1978)
+Tests       16 failed | 20690 passed | 1 expected fail (20707)
+```
+
+Arquivos vermelhos e comparação na base oficial `ce5b87a3c`, sem a correção:
+
+- `atualizacao-confere-regras-de-isolamento.test.ts`: dois limites de tempo,
+  também reproduzidos na base.
+- `instalador-idioma-da-cli.test.ts`: onze falhas, também reproduzidas na base.
+- `dialog-base-roda-e-tem-teto.test.ts`: uma falha, também reproduzida na base;
+  o comando de shell trata a pasta com espaços como argumentos separados.
+- `baseline-nao-constroi-o-que-derruba.test.ts`: um limite de tempo na suíte
+  completa; passou isolado na base.
+- `agent-form-callback-default.test.tsx`: um limite de tempo na suíte completa;
+  passou isolado na base.
+
+Comparação dos três primeiros arquivos, mais o teste de baseline:
+`3 failed | 1 passed`, `14 failed | 59 passed`.
+Repetição isolada dos dois arquivos com limite de tempo:
+`2 passed`, `23 passed`. Não se declara a suíte completa verde; as falhas
+persistentes do ambiente e os limites de tempo ficam explícitos para o mantenedor.
+
+### Sabotagem depois do commit `0b59226ad`
+
+| Alteração deliberada                                           | Previsão                                                                          | Resultado                                                               |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Renderizar tudo em UTC                                         | Sete casos vermelhos: quatro fusos não UTC, remarcação e dois caminhos de criação | Exatamente 7 falharam e 7 passaram no arquivo de 14 testes              |
+| Voltar a usar somente `result.response.messages` no fechamento | Um invariante vermelho: a ação de envio anterior desaparece da fita               | Exatamente 1 falhou; ausência de `toolName: send_message` no fechamento |
+| Reutilizar o bloco da abertura em vez de reler a reserva       | Um invariante vermelho: persistência de 17h30 após mudar para 17h                 | Exatamente 1 falhou; compromisso persistido continuava 17h30            |
+
+As duas últimas sabotagens rodaram numa segunda cópia, separada da branch
+candidata. Todas foram restauradas; os testes de agenda voltaram ao verde.
+Os testes nativos de banco usam modelo determinístico para medir a integração;
+a semântica do modelo real é medida pelos cinco cenários acima.
+
+### Reconferência após incorporar `857917055`
+
+- `pnpm lint`: **exit 0**, zero erros e 508 avisos na branch mesclada.
+- `pnpm build`: **exit 0** na branch mesclada, incluindo TypeScript e geração
+  das páginas. Os avisos de leitura de marca/módulos sem banco configurado
+  pertencem à compilação sem variáveis opcionais.
+- Agenda, mais os dois arquivos que tinham excedido o tempo: **7 arquivos,
+  98 testes passaram**, incluindo os 75 testes de agenda.
+- Fechamento e isolamento no novo baseline oficial: **3 arquivos, 8 testes
+  passaram**; banco instalado e reaplicado novamente, sem usar produção.
+- A suíte completa de 20.707 casos e os cinco ensaios com modelo real acima
+  pertencem à base inicial; não foram repetidos integralmente após esse merge.
+  A implementação da correção e seus cinco arquivos unitários são idênticos.
