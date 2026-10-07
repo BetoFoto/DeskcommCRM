@@ -1113,8 +1113,9 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
      * as automações (`create_or_move_lead`) e a tool MCP `crm_move_lead_stage`.
      * Ele é quem valida etapa existente, organização certa, troca de funil
      * (`pipeline_immutable_use_clone`) e reabertura de negócio encerrado; aqui
-     * só resolvemos QUAL negócio e deixamos a recusa subir (o `applyResult`
-     * registra em `followup_move_lead_failed` sem reverter o avanço).
+     * só resolvemos QUAL negócio e repassamos o motivo da perda que o bloco
+     * guarda (`lost_reason`, sem padrão escondido) — e deixamos a recusa subir
+     * (o `applyResult` registra em `followup_move_lead_failed` sem reverter o avanço).
      *
      * O negócio é o mais recente do contato NO FUNIL DA ETAPA DE DESTINO. O
      * mais recente de qualquer funil, quando o contato tem negócio em dois,
@@ -1159,7 +1160,16 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
         actor: { type: "webhook_source", id: `followup:${item.enrollment_id}` },
         requestId: `followup:${item.enrollment_id}`,
       };
-      await moveLeadHandler(admin, handlerCtx, lead.id, { to_stage_id: item.config.stage_id });
+      // O motivo da perda viaja junto quando quem montou o fluxo escolheu um —
+      // sem ele a etapa de perda recusa com 422 e o publish já barrou antes.
+      // Sem motivo configurado a chave nem viaja: nada de padrão escondido.
+      const motivo = item.config.lost_reason?.trim();
+      await moveLeadHandler(
+        admin,
+        handlerCtx,
+        lead.id,
+        motivo ? { to_stage_id: item.config.stage_id, lost_reason: motivo } : { to_stage_id: item.config.stage_id },
+      );
     },
     /**
      * #2065 — nó `edit_lead_tag`: a MESMA ação `add_tag` do motor de automação,
