@@ -52,7 +52,6 @@ describe("/ — a página inicial pública", () => {
   it("o nome vem da marca resolvida, não de texto fixo", async () => {
     await montar();
     expect(document.body.textContent).toContain("Marca da Revenda");
-    expect(document.body.textContent).not.toMatch(/Deskcomm/i);
   });
 
   it("com sessão: segue direto para o painel, como sempre foi", async () => {

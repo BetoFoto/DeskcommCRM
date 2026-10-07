@@ -37,6 +37,7 @@ function escoposPedidosPeloCodigo(): Map<string, string[]> {
     const texto = readFileSync(arquivo, "utf8");
     for (const m of texto.matchAll(/googleapis\.com\/auth\/([a-z][a-z0-9._-]*)/g)) {
       const escopo = m[1];
+      if (!escopo) continue;
       achados.set(escopo, [...(achados.get(escopo) ?? []), caminhoRelativo(arquivo)]);
     }
   }

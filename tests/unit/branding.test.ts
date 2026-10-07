@@ -970,6 +970,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "painel onde o usuário gera a PRÓPRIA chave da Requesty (`ondePegarAChave` em lib/ai/pontos/provedores.ts). Endereço do fornecedor, não nosso.",
   },
+  "myaccount.google.com": {
+    categoria: "CONSOLE",
+    motivo:
+      "página do Google onde a PESSOA revoga o acesso que deu ao app (`/permissions`). A política de privacidade (`app/legal/privacy/page.tsx`) tem de apontar para ela — o Google exige que o texto diga como revogar, e o endereço é dele, não nosso.",
+  },
   "aistudio.google.com": {
     categoria: "CONSOLE",
     motivo: "Google AI Studio — onde o usuário cria a chave do Gemini.",
