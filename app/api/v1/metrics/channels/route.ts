@@ -51,7 +51,10 @@ const MS_POR_DIA = 24 * 60 * 60 * 1000;
  * organização e as mensagens de cada uma, qualquer que seja a janela. Medido na
  * triagem do #2504 (Postgres do baseline, 3.000 conversas, sob RLS de gerente):
  * ~14s com janela de 1 dia e ~14s com 90 — o mesmo da `fn_attendant_metrics`.
- * Sem RLS, 17ms: o custo é a checagem de visibilidade por linha.
+ * Sem RLS, 17ms: o custo é a checagem de visibilidade por linha. A medição foi
+ * sem limite de tempo por consulta; numa instalação com o limite de 8 s do
+ * banco (statement_timeout do papel authenticated), a org desse porte pode
+ * receber ERRO em vez de lentidão — e a irmã por atendente também.
  */
 const DIAS_MAXIMOS = 90;
 
