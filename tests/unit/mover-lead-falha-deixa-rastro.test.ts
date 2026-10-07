@@ -162,6 +162,6 @@ describe("move_lead recusado deixa rastro na trilha", () => {
     expect(resumo.failed).toBe(0);
     expect(resumo.advanced).toBe(1);
     expect(c.patches[0]).toMatchObject({ current_node_id: "fim" });
-    expect(c.eventos.map((e) => e.event_type)).toEqual(["node_advanced"]));
+    expect(c.eventos.map((e) => e.event_type)).toEqual(["node_advanced"]);
   });
 });
