@@ -451,6 +451,7 @@ export const crmMoveLeadStage: McpToolDefinition<typeof moveInputShape> = {
   name: "crm_move_lead_stage",
   description:
     "Move um lead para outro stage dentro do MESMO pipeline. Audit registra from/to stage e reason. " +
+    "Mover para uma etapa de perda exige lost_reason, com um motivo do vocabulário do funil. " +
     // "use clone" apontava para uma porta que o agente NÃO tem: não existe tool
     // de clone em lib/mcp/tools/, e ele não faz HTTP autenticado por cookie de
     // sessão. Instrução que não pode ser cumprida faz o modelo prometer ao
