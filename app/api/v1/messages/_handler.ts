@@ -1,5 +1,5 @@
 import { assertProspectingDelivery } from "@/lib/prospecting/guard";
-import { assertAgentOperationSupabase } from "@/lib/ai/agents/operation";
+import { assertAgentOperationSupabase, mesmaOperacao } from "@/lib/ai/agents/operation";
 import {
   assertApprovedReplySupabase,
   recordApprovedReplyReceiptSupabase,
@@ -9,9 +9,14 @@ import {
 import { assertMeetingDeliverySupabase } from "@/lib/agenda/meet-delivery";
 import { AgendaDeferredError } from "@/lib/agenda/protecao-followup";
 import { assertAgendaEffectSupabase, guardAgendaEffect } from "@/lib/agenda/efeito";
-import { StaleServiceBoundaryError } from "@/lib/atendimento/fronteira";
+import { mesmaFronteira, StaleServiceBoundaryError } from "@/lib/atendimento/fronteira";
 import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
-import { currentExecutionBoundary, guardServiceEffect } from "@/lib/atendimento/fronteira-server";
+import {
+  currentExecutionAgentOperation,
+  currentExecutionBoundary,
+  guardServiceEffect,
+} from "@/lib/atendimento/fronteira-server";
+import { logger } from "@/lib/logger";
 /**
  * Core handlers para messages (list + send).
  *
@@ -1001,17 +1006,26 @@ export async function sendMessageHandler(
     if (updated) message = updated as unknown as Message;
   } else {
     try {
-      // O que separa mídia de texto é a presença de `media` no envelope — o
+      // O `guardServiceEffect` de cada corte relê, pelo pg, a fronteira e a operação do
+      // escopo de execução. Quando o ctx carrega EXATAMENTE essas mesmas, reler
+      // pela REST é a mesma pergunta duas vezes por corte (quatro por bolha). Sem
+      // escopo, ou com escopo diferente (UI, MCP, automação), a REST continua
+      // sendo a única conferência e segue aqui.
+      const fronteiraJaConferida = mesmaFronteira(currentExecutionBoundary(), ctx.serviceBoundary ?? null);
+      const operacaoJaConferida = mesmaOperacao(currentExecutionAgentOperation(), ctx.agentOperation);
       const checkBoundary = async () => {
         await guardServiceEffect();
         await guardAgendaEffect();
         if (ctx.prospectingDelivery) await assertProspectingDelivery(supabase, ctx.prospectingDelivery);
         if (ctx.meetingDelivery) await assertMeetingDeliverySupabase(supabase, ctx.meetingDelivery);
         if (ctx.proactiveContext) await assertAgendaEffectSupabase(supabase, ctx.proactiveContext);
-        if (ctx.serviceBoundary) await assertServiceBoundarySupabase(supabase, ctx.serviceBoundary);
+        if (ctx.serviceBoundary && !fronteiraJaConferida)
+          await assertServiceBoundarySupabase(supabase, ctx.serviceBoundary);
         if (ctx.approvedReply) await prepareApprovedReplySupabase(supabase, ctx.approvedReply);
-        if (ctx.agentOperation) await assertAgentOperationSupabase(supabase, ctx.agentOperation);
+        if (ctx.agentOperation && !operacaoJaConferida)
+          await assertAgentOperationSupabase(supabase, ctx.agentOperation);
       };
+      // O que separa mídia de texto é a presença de `media` no envelope — o
       // adapter preserva o mesmo branch (e a mesma mensagem de erro de cada
       // método) do outro lado do seam.
       let externalId: string | null;
@@ -1331,11 +1345,23 @@ export async function sendMessageHandler(
   // única coisa entre esta escrita e outro tenant seria a confiança em
   // `c.contact_id` — e o anti-pattern nº 10 do CLAUDE.md existe justamente
   // porque essa confiança já falhou antes.
-  await supabase
+  //
+  // Sem `await`: é carimbo de listagem, ninguém lê antes da resposta, e esperá-lo
+  // somava uma ida ao banco a cada bolha do agente.
+  void supabase
     .from("contacts")
     .update({ last_activity_at: now })
     .eq("id", c.contact_id)
-    .eq("organization_id", c.organization_id);
+    .eq("organization_id", c.organization_id)
+    .then(({ error }) => {
+      if (error)
+        logger.warn("messages.send.last_activity_failed", {
+          code: error.code,
+          message: error.message,
+          organization_id: c.organization_id,
+          message_id: message.id,
+        });
+    });
 
   }
   const a = actorAuditPayload(ctx.actor);
@@ -1346,7 +1372,9 @@ export async function sendMessageHandler(
   // identidade provada: pô-la na coluna de autor faria o log dizer que ela
   // agiu, quando ninguém a autenticou nesta chamada.
   const emNomeDe = ctx.onBehalfOf ? { on_behalf_of_user_id: ctx.onBehalfOf.userId } : {};
-  await audit({
+  // Fire-and-forget pela doutrina de audit: `audit()` nunca lança e reporta a
+  // própria falha ao Sentry.
+  void audit({
     action: "message.sent",
     actorUserId: a.actorUserId,
     actorApiTokenId: ctx.onBehalfOf ? apiTokenIdDoActor(ctx.actor) : undefined,
@@ -1357,7 +1385,9 @@ export async function sendMessageHandler(
     metadata: { ...a.metadataActor, ...emNomeDe, status: message.status, type: message.type },
   });
 
-  await supabase
+  // Sem `await`: quem consome `message.sent` é o dispatcher do event_log, que lê
+  // depois e por conta própria; nada nesta resposta depende de a linha já existir.
+  void supabase
     .rpc("emit_event", {
       p_event_type: "message.sent",
       p_entity_kind: "message",
@@ -1367,7 +1397,13 @@ export async function sendMessageHandler(
       p_organization_id: c.organization_id,
     })
     .then(({ error }) => {
-      if (error) console.error("[messages.send] emit_event failed", error.message);
+      if (error)
+        logger.error("messages.send.emit_event_failed", {
+          code: error.code,
+          message: error.message,
+          organization_id: c.organization_id,
+          message_id: message.id,
+        });
     });
 
   return message;
