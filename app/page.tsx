@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { branding } from "@/lib/branding";
+import { marcaDaSaida } from "@/lib/branding/saida";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
@@ -16,8 +16,8 @@ import { createClient } from "@/lib/supabase/server";
  * precisa ver o nome do produto, o que ele faz e o link da política.
  *
  * `/` já é caminho público no `proxy` (`lib/auth/public-paths.ts`), então nada
- * lá muda. O nome vem da marca resolvida (`branding()`), nunca de texto fixo:
- * uma imagem serve todas as marcas.
+ * lá muda. O nome vem da marca resolvida (`marcaDaSaida`: banco acima do
+ * `.env`), nunca de texto fixo: uma imagem serve todas as marcas.
  *
  * `getUser()` e nunca `getSession()`: o redirecionamento só vale para sessão que
  * o servidor de autenticação confirmou.
@@ -31,7 +31,7 @@ export default async function HomePage() {
   } = await supabase.auth.getUser();
   if (user) redirect("/app");
 
-  const marca = branding();
+  const marca = await marcaDaSaida(null);
   const idioma = await idiomaDoVisitante(null);
   const t = (texto: string) => traduzir(texto, idioma);
 
@@ -39,7 +39,7 @@ export default async function HomePage() {
     <div className="min-h-screen bg-muted/40">
       <header className="border-b bg-background">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-6 py-4">
-          <p className="text-sm font-semibold tracking-tight">{marca.name}</p>
+          <p className="text-sm font-semibold tracking-tight">{marca.nome}</p>
           <Link
             href="/login"
             className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted"
@@ -51,21 +51,21 @@ export default async function HomePage() {
 
       <main className="mx-auto w-full max-w-3xl space-y-6 px-6 py-12">
         <div className="space-y-3">
-          <h1 className="text-3xl font-semibold tracking-tight">{marca.name}</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">{marca.nome}</h1>
           <p className="text-lg text-muted-foreground">
             {t("Atendimento e vendas pelo WhatsApp, com agentes de inteligência artificial.")}
           </p>
         </div>
 
         <p className="leading-relaxed">
-          {t("O")} {marca.name}{" "}
+          {t("O")} {marca.nome}{" "}
           {t(
             "reúne em um só lugar as conversas com os clientes, o funil de vendas, a agenda de atendimentos e agentes de inteligência artificial que respondem, qualificam o interesse e passam a conversa para uma pessoa quando é preciso.",
           )}
         </p>
 
         <p className="leading-relaxed">
-          {t("Quando a empresa conecta o Google Agenda, o")} {marca.name}{" "}
+          {t("Quando a empresa conecta o Google Agenda, o")} {marca.nome}{" "}
           {t(
             "mostra a ocupação da agenda e cria, altera e cancela os agendamentos pedidos pela própria pessoa. Quando conecta o Google Ads, devolve ao anúncio as vendas que ele trouxe. O uso dos dados do Google está descrito na",
           )}{" "}
