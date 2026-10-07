@@ -4225,6 +4225,12 @@ export const DICIONARIO: Traducoes = {
   "Herdado de quem disparou a chamada — o agente publicado, ou o roteador de intenção.": {
     es: "Heredado de quien inició la llamada: el agente publicado o el enrutador de intención.",
   },
+  "Modelo mais econômico do mesmo provedor — esta tarefa é uma classificação curta e não precisa do modelo do agente. Escolha outro no painel se preferir.": {
+    es: "Modelo más económico del mismo proveedor: esta tarea es una clasificación corta y no necesita el modelo del agente. Elige otro en el panel si lo prefieres.",
+  },
+  "O modelo econômico não respondeu; a chamada se repetiu no modelo de antes e nada se perdeu.": {
+    es: "El modelo económico no respondió; la llamada se repitió con el modelo anterior y no se perdió nada.",
+  },
   "Usando o padrão da organização.": {
     es: "Usando el valor predeterminado de la organización.",
   },
@@ -14818,6 +14824,12 @@ export const DICIONARIO: Traducoes = {
   "Cada aplicação cria as tarefas do plano na ordem e não duplica — a marca da aplicação é a prova.": {
     es: "Cada aplicación crea las tareas del plan en orden y no duplica — la marca de la aplicación es la prueba.",
   },
+
+  // ─── Seletor de canal ao iniciar conversa nova (#2382) ───
+  "Escolha o canal para iniciar a conversa": { es: "Elija el canal para iniciar la conversación" },
+  "A conversa fica vinculada ao canal escolhido, e as próximas mensagens saem por ele.": { es: "La conversación queda vinculada al canal elegido, y los próximos mensajes salen por él." },
+  "Canais disponíveis": { es: "Canales disponibles" },
+  "Iniciar conversa": { es: "Iniciar conversación" },
 };
 
 /**

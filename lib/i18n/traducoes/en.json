@@ -8921,5 +8921,9 @@
   "Plano de tarefa": "Task plan",
   "Escolha um plano cadastrado": "Choose a registered plan",
   "Nenhum plano cadastrado ainda. Cadastre em Tarefas › Planos.": "No plans registered yet. Create one in Tasks › Plans.",
-  "Cada aplicação cria as tarefas do plano na ordem e não duplica — a marca da aplicação é a prova.": "Each application creates the plan tasks in order and never duplicates — the application mark is the proof."
+  "Cada aplicação cria as tarefas do plano na ordem e não duplica — a marca da aplicação é a prova.": "Each application creates the plan tasks in order and never duplicates — the application mark is the proof.",
+  "Escolha o canal para iniciar a conversa": "Choose the channel to start the conversation",
+  "A conversa fica vinculada ao canal escolhido, e as próximas mensagens saem por ele.": "The conversation is bound to the chosen channel, and the next messages go out through it.",
+  "Canais disponíveis": "Available channels",
+  "Iniciar conversa": "Start conversation"
 }
