@@ -86,7 +86,14 @@ describe("POST de teste do agente: isolamento e efeitos explícitos", () => {
       ok: true, user: { id: "ffffffff-ffff-4fff-8fff-ffffffffffff", idioma: "pt-BR" },
       org: { orgId: ORG, role: "admin" },
     });
-    mocks.preview.mockResolvedValue({ candidates: [{ body: "Olá!" }], proposals: [], trace: [] });
+    // #2490: o resultado do motor traz `midia` (a preparação das fotos do
+    // produto que a resposta usaria) — o dublê espelha a forma real.
+    mocks.preview.mockResolvedValue({
+      candidates: [{ body: "Olá!" }],
+      proposals: [],
+      trace: [],
+      midia: [],
+    });
   });
 
   it("recusa versão de outra organização antes de criar run ou chamar modelo", async () => {

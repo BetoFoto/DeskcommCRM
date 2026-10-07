@@ -9,11 +9,15 @@
  * a pasta temporária `dry-run`, porque anexo em conversa seria efeito permanente.
  *
  * E a proibição de efeito externo continua intacta: nenhum cenário aqui chama
- * canal, WAHA ou `send` nenhum — o executor original do `send_message` não roda.
+ * canal de entrega nem roda o executor original do `send_message` — a mensagem
+ * não sai.
  *
- * Sabotagem prevista (remover o bloco de mídia de `preview.ts`): 6 vermelhos de 8 —
- * sucesso, sem-fotos, código inexistente, cópia falhada, sem preparador e a pasta
- * temporária; verdes ficam "sem produto_codigo" e a fiação por fonte.
+ * Sabotagem medida (remover o bloco de mídia de `preview.ts`):
+ * **7 vermelhos de 8** — sucesso, pasta temporária, sem-fotos, código inexistente,
+ * cópia falhada, sem produto_codigo (a asserção do registro `midia`) e sem preparador;
+ * verde só a fiação por fonte, que lê `inbound-turn.ts`. Previsão escrita antes da
+ * rodada: 6 — o caso "sem produto_codigo" entrou porque também afirma que o registro
+ * `midia` existe. Restaurado por `git checkout HEAD --` com árvore limpa.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

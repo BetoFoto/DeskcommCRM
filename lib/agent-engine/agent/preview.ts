@@ -294,8 +294,9 @@ export function applyPreviewPolicy(
               // `produto_codigo` que `crm_search_products` devolveu resolve o
               // produto no catálogo e prepara as fotos ANTES da cadeia (é o que
               // `inbound-turn.ts` faz no caminho de produção). Aqui o preparo é
-              // o único efeito — nada sai para o WhatsApp/WAHA e nada é gravado
-              // em conversa nenhuma, como `preview_no_client_effects` manda.
+              // o único efeito — nenhuma mensagem sai pelo canal de entrega e
+              // nada é gravado em conversa nenhuma, como `preview_no_client_effects`
+              // manda.
               const produtoCodigo =
                 args && typeof args === 'object' && 'produto_codigo' in args
                   ? typeof args.produto_codigo === 'string'
