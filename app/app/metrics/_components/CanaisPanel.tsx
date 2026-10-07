@@ -7,7 +7,7 @@
  * É o corte que faltava em `/app/metrics`: as telas existentes cortam por
  * atendente e por atividade, e a operação se organiza por NÚMERO (rodízio
  * #1330, paixa por conexão #2318). A conta mora na RPC `fn_channel_metrics`
- * (migration 0584) com a régua da irmã; esta tela só apresenta — somar de novo
+ * (migration 0590) com a régua da irmã; esta tela só apresenta — somar de novo
  * aqui faria a tela e o teste dizerem coisas diferentes.
  *
  * Mesma forma da tabela "Performance por atendente" ao lado: mesmo `Card`,

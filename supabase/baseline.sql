@@ -45765,7 +45765,7 @@ grant  execute on function public.emit_event(text, text, uuid, jsonb, jsonb, uui
 
 notify pgrst, 'reload schema';
 
--- ---- relatório por canal: volume, 1ª resposta humana e vazamento (migration 0584) ----
+-- ---- relatório por canal: volume, 1ª resposta humana e vazamento (migration 0590) ----
 -- (issue #2390) Mesmo texto da migration, aplicado pelo kit self-host — o apêndice
 -- entra ANTES da VARREDURA anon de propósito: ele cria função.
 create or replace function public.fn_channel_metrics(

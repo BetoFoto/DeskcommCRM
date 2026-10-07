@@ -3,7 +3,7 @@
  *
  * ## O que mora aqui e o que fica no SQL
  *
- * A conta inteira é da RPC `fn_channel_metrics` (migration 0584), que copia a
+ * A conta inteira é da RPC `fn_channel_metrics` (migration 0590), que copia a
  * régua da irmã `fn_attendant_metrics` (0037) e só troca o `group by` por
  * `channel_session_id`. Reimplementar a média em TypeScript seria uma SEGUNDA
  * versão da verdade — exatamente o que o critério 4 da issue proíbe. Este

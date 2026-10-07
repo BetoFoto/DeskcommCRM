@@ -5,7 +5,7 @@
  *
  *  - a montagem da linha (`montarLinhas`/`totalDeConversas`/`rotuloCanal`), que
  *    é o que a rota entrega e a tela pinta;
- *  - a régua da migration 0584, lida DO ARQUIVO: é ela que garante que a conta
+ *  - a régua da migration 0590, lida DO ARQUIVO: é ela que garante que a conta
  *    por canal é a MESMA da irmã `fn_attendant_metrics` (0037) — bot fora,
  *    `t1 <= t0` descartado e vazamento fora da média — e que o `group by` é por
  *    `channel_session_id`.
@@ -34,13 +34,13 @@ function linha(parcial: Partial<LinhaCanalBruta>): LinhaCanalBruta {
   };
 }
 
-/** A migration da issue, achada pelo NÚMERO (0584), não pelo nome do slug. */
+/** A migration da issue, achada pelo NÚMERO (0590), não pelo nome do slug. */
 function sqlDaMigration(): string {
   const dir = join(process.cwd(), "supabase", "migrations");
-  const arquivos = readdirSync(dir).filter((a) => /^.*_0584_.*\.sql$/.test(a));
-  expect(arquivos, "migration 0584 não encontrada em supabase/migrations").toHaveLength(1);
+  const arquivos = readdirSync(dir).filter((a) => /^.*_0590_.*\.sql$/.test(a));
+  expect(arquivos, "migration 0590 não encontrada em supabase/migrations").toHaveLength(1);
   const nome = arquivos[0];
-  if (!nome) throw new Error("migration 0584 não encontrada em supabase/migrations");
+  if (!nome) throw new Error("migration 0590 não encontrada em supabase/migrations");
   return readFileSync(join(dir, nome), "utf8");
 }
 
@@ -105,7 +105,7 @@ describe("a linha por canal", () => {
   });
 });
 
-describe("a RPC da migration 0584 — a régua da irmã (0037)", () => {
+describe("a RPC da migration 0590 — a régua da irmã (0037)", () => {
   const sql = sqlDaMigration();
 
   it("agrupa por channel_session_id e NUNCA por atendente (prova de sabotagem)", () => {

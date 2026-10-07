@@ -95,4 +95,4 @@ grant execute on function public.fn_channel_metrics(uuid, timestamptz, timestamp
 
 notify pgrst, 'reload schema';
 
--- 0584
+-- 0590

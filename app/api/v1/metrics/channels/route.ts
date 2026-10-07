@@ -4,7 +4,7 @@
  * Uma pergunta que as duas telas de relatório não respondem: **quantos
  * atendimentos veio por cada número/conexão**. O dado já existe
  * (`conversations.channel_session_id` + `channel`, migration 0027); a conta é a
- * RPC `fn_channel_metrics` (migration 0584), que copia a régua da irmã
+ * RPC `fn_channel_metrics` (migration 0590), que copia a régua da irmã
  * `fn_attendant_metrics` (0037) e só troca o `group by` por
  * `channel_session_id`.
  *
@@ -46,9 +46,12 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
 
 /**
- * Quantos dias a janela pode cobrir. A RPC varre `messages` por conversa da
- * organização (a mesma conta da irmã 0037) — numa VPS de 2 GB um "desde
- * sempre" é o pedido que derruba o banco, e ele chega pela query string.
+ * Quantos dias a janela pode cobrir. O teto limita o que o relatório AFIRMA,
+ * não o custo: como a irmã 0037, a RPC lê TODAS as conversas atribuídas da
+ * organização e as mensagens de cada uma, qualquer que seja a janela. Medido na
+ * triagem do #2504 (Postgres do baseline, 3.000 conversas, sob RLS de gerente):
+ * ~14s com janela de 1 dia e ~14s com 90 — o mesmo da `fn_attendant_metrics`.
+ * Sem RLS, 17ms: o custo é a checagem de visibilidade por linha.
  */
 const DIAS_MAXIMOS = 90;
 
