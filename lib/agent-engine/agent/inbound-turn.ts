@@ -76,6 +76,7 @@ import {
   copiarFotoNoStorage,
   enviarComFotos,
   prepararFotosDoProduto,
+  PASTA_DE_TESTE_DE_MIDIA,
   type FotoParaEnvio,
 } from './fotos-do-produto';
 import { enqueueJob, rescheduleJob, type JobRow, type Queryable } from '../queue/queue';
@@ -4247,6 +4248,18 @@ async function executarTurnoDoAgente(
                 toolCalledThisTurn: agendaToolCalledThisTurn,
               },
             }),
+            // #2490 — a MESMA `prepararFotosDoProduto` do caminho de produção,
+            // com a MESMA cópia por service role e a MESMA query no catálogo:
+            // o teste só troca o destino, a pasta temporária `dry-run` em vez da
+            // conversa. Aqui não há conversa (cenario sem contato) e anexo em
+            // pasta de conversa seria efeito permanente — proibido no preview.
+            // Nada é enviado: o `send_message` da prévia nem chega perto do canal.
+            (codigo: string) =>
+              prepararFotosDoProduto(pool, copiarFotoNoStorage(runLog), {
+                tenantId,
+                conversationId: PASTA_DE_TESTE_DE_MIDIA,
+                codigo,
+              }),
           )
         : rawTools;
     const tools = wrapToolsWithBreaker(previewTools, {
