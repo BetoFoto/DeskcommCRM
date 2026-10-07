@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { formatarParaWhatsApp } from "@/lib/agent-engine/agent/formato-whatsapp";
@@ -29,3 +32,54 @@ describe("formatarParaWhatsApp", () => {
     expect(formatarParaWhatsApp("  Hola 😊 \n\n\n\n¿En qué te ayudo?  ")).toBe("Hola 😊\n\n¿En qué te ayudo?");
   });
 });
+
+describe("formatarParaWhatsApp — o que não é ênfase não muda", () => {
+  it("link com __ na query string sai intacto", () => {
+    const link = "Pague aqui: https://loja.com/p?__hstc=123&__hssc=456";
+    expect(formatarParaWhatsApp(link)).toBe(link);
+  });
+
+  it("** e __ colados em palavra (senha, código) saem intactos", () => {
+    expect(formatarParaWhatsApp("Código: ab**cd**ef")).toBe("Código: ab**cd**ef");
+    expect(formatarParaWhatsApp("ref a__b__c")).toBe("ref a__b__c");
+  });
+
+  it("caminho de link com __ sai intacto", () => {
+    expect(formatarParaWhatsApp("Veja https://x.com/__init__")).toBe("Veja https://x.com/__init__");
+    expect(formatarParaWhatsApp("https://x.com/__init__/docs")).toBe("https://x.com/__init__/docs");
+    expect(formatarParaWhatsApp("o arquivo __init__.py")).toBe("o arquivo __init__.py");
+  });
+
+  it("ênfase colada em pontuação ainda converte, e __x__ é negrito", () => {
+    expect(formatarParaWhatsApp("(**Oferta**), __hoje__!")).toBe("(*Oferta*), *hoje*!");
+  });
+});
+
+describe("formatarParaWhatsApp — título com negrito dentro", () => {
+  // O título rodava DEPOIS do negrito e reembrulhava: `## **X**` → `**X**`.
+  it("não devolve os asteriscos duplos", () => {
+    expect(formatarParaWhatsApp("## **Nuestros servicios**\nEndolifting")).toBe(
+      "*Nuestros servicios*\nEndolifting",
+    );
+  });
+
+  it("negrito no meio do título não vira negrito aninhado", () => {
+    expect(formatarParaWhatsApp("### Planos com **Básico**")).toBe("*Planos com Básico*");
+    expect(formatarParaWhatsApp("## *Já no formato*")).toBe("*Já no formato*");
+  });
+});
+
+describe("o send_message formata ANTES da cadeia de envio", () => {
+  // O teste puro acima fica verde se a chamada sumir do turno; este vigia a ligação.
+  // A posição importa: os gates (corpo vazio, guardrails, bolhas) têm de medir o que sai.
+  const fonte = readFileSync(join(__dirname, "inbound-turn.ts"), "utf8");
+  const execute = fonte.slice(fonte.indexOf("send_message: tool({"));
+
+  it("formata o corpo do modelo antes do corpo vazio e do runBeforeSend", () => {
+    const formata = execute.indexOf("formatarParaWhatsApp(");
+    expect(formata).toBeGreaterThan(-1);
+    expect(formata).toBeLessThan(execute.indexOf("body.trim() === ''"));
+    expect(formata).toBeLessThan(execute.indexOf("runBeforeSend("));
+  });
+});
+
