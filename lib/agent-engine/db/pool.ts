@@ -19,7 +19,6 @@ import pg from 'pg';
 
 import { createLogger } from '../obs/logger';
 
-const CONNECTION_TIMEOUT_MS = 10_000;
 export const QUERY_TIMEOUT_MS = 60_000;
 const KEEPALIVE_INITIAL_DELAY_MS = 10_000;
 
@@ -39,10 +38,14 @@ export function createPool(
   // drain da IA ficou dias parado assim com o healthz dizendo ok. O teto de
   // leitura faz a query falhar (o pool descarta o cliente) e o keepAlive faz o
   // SO perceber a conexão ociosa morta antes de ela ser reusada.
+  // Sem `connectionTimeoutMillis` de propósito: no pg-pool ele também limita a
+  // ESPERA NA FILA do pool cheio ('timeout exceeded when trying to connect'), e
+  // aqui a fila é esperada no pico (before-send segura conexão durante lock,
+  // throttle e envio; inbound-turn e get-lead-context contam com "espera, não
+  // erro"). O socket mudo já é fechado pelas duas peças acima.
   const pool = new pg.Pool({
     connectionString: databaseUrl,
     max,
-    connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
     query_timeout: QUERY_TIMEOUT_MS,
     keepAlive: true,
     keepAliveInitialDelayMillis: KEEPALIVE_INITIAL_DELAY_MS,
