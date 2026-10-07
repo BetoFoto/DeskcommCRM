@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { rotuloDoCanalDaConversa } from "@/lib/channels/estado";
 
 interface Props {
   conversation: ConversationWithContact;
@@ -208,11 +209,17 @@ export function ConversationListItem({
       : (ROTULO_DO_COMANDO[comando.quem] ?? ROTULO_DO_COMANDO.ninguem),
   );
 
-  // O número DA EMPRESA por onde esta conversa chegou — não o do cliente. Com
-  // dois canais é o que decide o tom da resposta e qual número a pessoa vê
-  // respondendo. Cai no nome do canal quando não há número (canal recém-criado).
+  // QUEM MANDA ESTA CONVERSA — o número DA EMPRESA por onde ela chegou, não o
+  // do cliente. Com dois canais é o que decide o tom da resposta e qual número
+  // a pessoa vê respondendo.
+  //
+  // #2383: o resolvedor é o MESMO da tela de canais (`/app/connections`), com o
+  // nome amigável na frente — antes o número vencia o nome
+  // (`phone_number ?? display_name`) e um canal chamado "Peças" saía na lista
+  // como o número cru. Sem canal associado (grupo, conversa sem sessão, não-WA)
+  // e sem nome E sem número o badge continua não existindo, como estava.
   const canal = conversation.channel_sessions ?? null;
-  const rotuloCanal = canal?.phone_number ?? canal?.display_name ?? null;
+  const rotuloCanal = rotuloDoCanalDaConversa(canal, t);
 
   const temSelos =
     visibleTags.length > 0 ||

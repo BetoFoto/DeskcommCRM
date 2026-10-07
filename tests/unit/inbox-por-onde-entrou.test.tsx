@@ -45,9 +45,20 @@ const pintar = (conv: ConversationWithContact, mostrarCanal: boolean) =>
     />,
   );
 
-describe("mostra o número da empresa quando há mais de um canal", () => {
-  it("pinta o número por onde a conversa entrou", () => {
+describe("mostra POR ONDE a conversa entrou — o canal da empresa, nunca o cliente", () => {
+  // #2383: o rótulo passou a ser o MESMO da tela de canais (`nomeDoCanal`),
+  // com o nome amigável na frente. Antes era `phone_number ?? display_name` e
+  // um canal que a dona chamou de "MP wp" saía aqui como o número cru — o
+  // número que ela não reconhece, no lugar do nome que ela escolheu. Medido:
+  // o MESMO canal renderiza "+19392301037" na lista e "MP wp" em /connections.
+  it("pinta o NOME do canal — o número cru só entra quando não há nome", () => {
     pintar(comCanal({ phone_number: "+19392301037", display_name: "MP wp" }), true);
+    expect(screen.getByText("MP wp")).toBeInTheDocument();
+    expect(screen.queryByText("+19392301037")).not.toBeInTheDocument();
+  });
+
+  it("sem nome amigável, o número é o que sobra — e ele aparece", () => {
+    pintar(comCanal({ phone_number: "+19392301037", display_name: null }), true);
     expect(screen.getByText("+19392301037")).toBeInTheDocument();
   });
 
