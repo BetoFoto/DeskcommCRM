@@ -1,5 +1,5 @@
 -- ============================================================================
--- 2026-10-06 — 0578: PUBLICAR AGENTE COM LOGIN POR ASSINATURA (#1639)
+-- 2026-10-07 — 0592: PUBLICAR AGENTE COM LOGIN POR ASSINATURA (#1639)
 --
 -- A 0413 trouxe o "Provedor personalizado (compatível com OpenAI)": cadastro,
 -- teste, validação e turno do agente. Faltou a PUBLICAÇÃO. A

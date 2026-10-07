@@ -1,6 +1,18 @@
 ---
-impacto: capacidade_nova
-secao: adicionado
-titulo: Use a assinatura do ChatGPT nos agentes sem chave de API
+impacto: exige_acao
+secao: alterado
+titulo: A assinatura do ChatGPT passa a funcionar nos agentes, com login próprio e lista de modelos por empresa
 ---
-Conecte uma conta ChatGPT como credencial OpenAI e use os modelos disponíveis nos agentes, provedores e roteadores sem cadastrar uma chave de API. Crédito: @mayklourenco.
+A conexão **OpenAI pela assinatura (ChatGPT)** passa a usar o "Sign in with ChatGPT" para apps
+instalados no próprio servidor, em vez do login emprestado do Codex. A tela de credenciais mostra
+os modelos que a assinatura de cada empresa libera, e o **Publicar** do agente confere o modelo
+contra essa lista da empresa — antes ele conferia contra a lista geral e recusava a publicação.
+Contribuição de @omayklourenco.
+
+## Requer atenção
+
+Empresas que conectaram a assinatura do ChatGPT na 1.74 ou na 1.75 precisam conectar de novo:
+abra **IA › Credenciais**, use o link de conexão da assinatura e entre com a mesma conta. Até
+isso ser feito, a tela avisa que o login anterior ainda não autorizou o uso do plano e o agente
+não usa a assinatura (se houver chave de API da empresa configurada como reserva, ela segue
+atendendo). Nenhum arquivo precisa ser editado.
