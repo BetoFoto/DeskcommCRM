@@ -4670,10 +4670,12 @@ async function executarTurnoDoAgente(
           blocoDaAbertura: compromissosBlock,
           mensagens: turn.result.responseMessages,
         });
-      } catch {
+      } catch (err) {
         // A resposta já saiu: falhar o job por esta leitura repetiria o turno.
         // Falha de leitura não equivale a agenda vazia nem a ação desfeita.
-        runLog.warn('agenda não pôde ser relida no fechamento');
+        runLog.warn('agenda não pôde ser relida no fechamento', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+        });
         agendaAtual = 'A agenda não pôde ser relida depois das ações deste turno. Isso não prova ausência de reserva nem desfaz uma ação concluída. Registre somente o que os resultados das ferramentas comprovaram.';
       }
     }
