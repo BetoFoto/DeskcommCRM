@@ -1533,6 +1533,10 @@ export const DICIONARIO: Traducoes = {
   },
   "Nome de exibição": { es: "Nombre para mostrar" },
   "Razão social": { es: "Razón social" },
+  // Os rótulos da EMPRESA vêm do perfil do país (#1946, item 4): estes dois são
+  // os de Portugal, e quem escolhe espanhol precisa deles traduzidos.
+  "Denominação social": { es: "Denominación social" },
+  "NIPC": { es: "NIPC" },
   "DPO email": { es: "Email del DPO" },
   "Retenção de mídia (dias)": { es: "Retención de archivos multimedia (días)" },
   "Limpeza automática de mídia antiga": { es: "Limpieza automática de multimedia antigua" },
