@@ -232,6 +232,12 @@ async function recusaPessoalNaEscrita(
  * SQLSTATE `PT404`/`PT422` o contato ou responsável de fora da organização. As
  * guardas acima respondem antes; isto cobre a janela entre conferir e gravar
  * (um vínculo revogado nesse meio) com a MESMA resposta, e não um 500.
+ *
+ * `42501` é a policy de `crm_leads` (`fn_can_view_lead`) recusando a linha:
+ * quem grava não enxergaria o negócio depois de gravado — no modo "own" um
+ * Atendente nasce sem dono, e no "own_and_unassigned" um dono colega. É falta
+ * de permissão, não falha do sistema: 403, e não 500 "tente de novo", que
+ * tentar de novo nunca resolve.
  */
 function recusaDaGuardaDoBanco(
   ctx: HandlerCtx,
@@ -253,6 +259,18 @@ function recusaDaGuardaDoBanco(
       undefined,
       ctx.requestId,
       traduzir("Responsável não é um atendente ativo desta organização.", ctx.idioma ?? "pt-BR"),
+    );
+  }
+  if (erro?.code === "42501") {
+    return new ApiError(
+      403,
+      "forbidden",
+      undefined,
+      ctx.requestId,
+      traduzir(
+        "Sem permissão para salvar este negócio: pela visibilidade definida na organização, ele ficaria fora do que você pode ver.",
+        ctx.idioma ?? "pt-BR",
+      ),
     );
   }
   return null;
