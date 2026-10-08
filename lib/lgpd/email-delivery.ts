@@ -26,7 +26,8 @@
  *
  * ── O texto depende do PAÍS da organização (doc 88) ─────────────────────────
  *
- * O Brasil recebe o texto de sempre, byte a byte. Fora do Brasil o e-mail sai
+ * O Brasil recebe o texto de sempre, byte a byte, mais o link do arquivo de
+ * dados (doc 103, A — a única mudança desde o doc 88). Fora do Brasil o e-mail sai
  * em pt-PT, sem LGPD, citando a lei do país só quando o perfil tem citação
  * revisada (`citacaoDaLei`), e com o prazo do link no fuso da organização e o
  * nome do fuso escrito. Antes, com Portugal no seletor, o PDF citaria o RGPD e
@@ -69,6 +70,13 @@ interface SendArgs {
   /** O país da organização decide a lei e o idioma do texto. */
   perfil: PerfilDoPais;
   /**
+   * O link do `data.json` — a cópia dos dados que sobe no mesmo diretório do
+   * `report.pdf` (`workers/lgpd-export-worker.ts`), já sem o que é da equipe
+   * (`lib/lgpd/copia-do-titular.ts`). Portugal o recebe pelo art. 15.º, n.º 3
+   * (#2340); o Brasil, pela declaração completa da LGPD (doc 103, A).
+   */
+  signedUrlDados: string;
+  /**
    * Fuso IANA da organização; só é lido fora do Brasil. A chave é obrigatória
    * (o valor pode ser `undefined`) para quem chama não a esquecer calado.
    */
@@ -110,7 +118,7 @@ export async function sendExportEmail(args: SendArgs): Promise<{ messageId: stri
   return { messageId: result.id ?? "unknown" };
 }
 
-/** O texto de sempre, byte a byte — o Brasil não muda (doc 88). */
+/** O texto de sempre (doc 88), mais o link do arquivo de dados (doc 103, A). */
 function mensagemDoBrasil(args: SendArgs, shortId: string): Mensagem {
   const orgName = escapeHtml(args.marca.nome);
   const expiresFmt = args.expiresAt.toLocaleString("pt-BR", {
@@ -129,6 +137,7 @@ function mensagemDoBrasil(args: SendArgs, shortId: string): Mensagem {
   <p style="margin:24px 0;">
     <a href="${args.signedUrl}" style="background:${args.marca.accent};color:${args.marca.accentFg};padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block;">Baixar relatório LGPD</a>
   </p>
+  <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">A cópia dos seus dados pessoais em arquivo (data.json), com o mesmo prazo, está em <a href="${args.signedUrlDados}" style="color:inherit;">${args.signedUrlDados}</a>.</p>
   <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">Se você não solicitou este relatório, ignore este email — nenhum dado adicional é compartilhado.</p>
   <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">Base legal: LGPD Lei nº 13.709/2018, Art. 18, II.</p>
 </body>
@@ -141,7 +150,10 @@ function mensagemDoBrasil(args: SendArgs, shortId: string): Mensagem {
 O relatório completo está disponível em:
 ${args.signedUrl}
 
-O link expira em ${expiresFmt}.
+A cópia dos seus dados pessoais em arquivo (data.json) está em:
+${args.signedUrlDados}
+
+Os dois links expiram em ${expiresFmt}.
 
 Se você não solicitou este relatório, ignore este email.
 Base legal: LGPD Lei nº 13.709/2018, Art. 18, II.`;
@@ -170,7 +182,11 @@ function mensagemForaDoBrasil(args: SendArgs, shortId: string): Mensagem {
   <p>O relatório está disponível na ligação abaixo. Por razões de segurança, a ligação expira em <strong>${expiresFmt}</strong>.</p>
   <p style="margin:24px 0;">
     <a href="${args.signedUrl}" style="background:${args.marca.accent};color:${args.marca.accentFg};padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block;">Descarregar relatório</a>
-  </p>
+  </p>${
+    args.signedUrlDados
+      ? `\n  <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">A cópia dos seus dados pessoais (data.json) está em <a href="${args.signedUrlDados}" style="color:inherit;">${args.signedUrlDados}</a>.</p>`
+      : ""
+  }
   <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">Se não fez este pedido, ignore este e-mail.</p>${
     direito ? `\n  <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">${escapeHtml(direito)}</p>` : ""
   }
@@ -180,7 +196,14 @@ function mensagemForaDoBrasil(args: SendArgs, shortId: string): Mensagem {
   const text = `Pedido de acesso aos seus dados pessoais #${shortId}, tratado por ${args.marca.nome}.
 
 O relatório está disponível em:
-${args.signedUrl}
+${args.signedUrl}${
+    args.signedUrlDados
+      ? `
+
+A cópia dos seus dados pessoais (data.json) está em:
+${args.signedUrlDados}`
+      : ""
+  }
 
 A ligação expira em ${expiresFmt}.
 

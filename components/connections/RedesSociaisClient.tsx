@@ -9,6 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { apiClient } from "@/lib/api/client";
 import { canalDesativado } from "@/lib/channels/desativado";
 import { useT } from "@/hooks/i18n/useT";
@@ -22,11 +32,18 @@ type Account = {
   inbox_supported: boolean;
   channel: { id: string; status: string; metadata?: Record<string, unknown> | null } | null;
 };
+type Orphaned = {
+  channel_id: string;
+  account_id: string;
+  display_name: string | null;
+  status: string;
+};
 type State = {
   label: string;
   configured: boolean;
   networks: { id: string; label: string; inbox: boolean }[];
   accounts: Account[];
+  orphaned_channels: Orphaned[];
 };
 export function RedesSociaisClient() {
   const t = useT();
@@ -44,6 +61,11 @@ export function RedesSociaisClient() {
   const [platform, setPlatform] = useState("instagram");
   const [editing, setEditing] = useState(false);
   const [health, setHealth] = useState<Record<string, string>>({});
+  const [removing, setRemoving] = useState<{ account: Account; removeAccount: boolean } | null>(
+    null,
+  );
+  const [excluding, setExcluding] = useState<Orphaned | null>(null);
+  const [confirmandoDesvincular, setConfirmandoDesvincular] = useState(false);
   const load = () => query.refetch();
   async function togglePausado(account: Account) {
     if (!account.channel) return;
@@ -58,6 +80,41 @@ export function RedesSociaisClient() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível mudar o estado do canal.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function excluirOrfao(orfao: Orphaned) {
+    setBusy(orfao.channel_id);
+    setError(null);
+    try {
+      // A ação disconnect, não o DELETE de channel-sessions: só ela apaga a
+      // assinatura de webhook no provedor (pelo id ou pela URL, #2412). A
+      // assinatura é por chave, então sobreviveria à linha e entregaria num 404.
+      await apiClient.post("/api/v1/channels/social", {
+        action: "disconnect",
+        account_id: orfao.account_id,
+        remove_account: false,
+      });
+      toast.success(t("Canal excluído. A lista atualiza sem a linha órfã."));
+      setExcluding(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível excluir o canal.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function desvincularPerfil() {
+    setBusy("unlink");
+    setError(null);
+    try {
+      await apiClient.post("/api/v1/channels/social", { action: "unlink" });
+      toast.success(t("Perfil desvinculado. Dá para vincular outro perfil."));
+      setConfirmandoDesvincular(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível desvincular o perfil.");
     } finally {
       setBusy(null);
     }
@@ -84,6 +141,11 @@ export function RedesSociaisClient() {
               ? "Conexão verificada"
               : "A conexão precisa de atenção",
         }));
+      } else if (body.action === "disconnect") {
+        toast.success(
+          t(body.remove_account ? "Conta desconectada." : "Conta removida do atendimento."),
+        );
+        await load();
       } else {
         setKey("");
         setEditing(false);
@@ -154,6 +216,11 @@ export function RedesSociaisClient() {
             />
             <p className="text-xs text-muted-foreground">
               {t("A chave fica cifrada no servidor e não é exibida novamente.")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "Salvar atualiza a chave em todos os canais deste perfil, inclusive os arquivados.",
+              )}
             </p>
           </div>
           <Button
@@ -278,6 +345,22 @@ export function RedesSociaisClient() {
                       <Link href="/app/inbox">{t("Abrir atendimento")}</Link>
                     </Button>
                   )}
+                  {account.channel && (
+                    <Button
+                      variant="outline"
+                      disabled={!!busy}
+                      onClick={() => setRemoving({ account, removeAccount: false })}
+                    >
+                      {t("Remover do atendimento")}
+                    </Button>
+                  )}
+                  <Button
+                    variant="destructive"
+                    disabled={!!busy}
+                    onClick={() => setRemoving({ account, removeAccount: true })}
+                  >
+                    {t("Desconectar conta")}
+                  </Button>
                 </div>
                 {health[account.id] && (
                   <p role="status" className="text-sm">
@@ -312,9 +395,117 @@ export function RedesSociaisClient() {
           {state.accounts.length === 0 && (
             <p>{t("Nenhuma conta conectada neste perfil. Autorize uma rede para começar.")}</p>
           )}
-          <Button variant="ghost" className="self-start" onClick={() => setEditing(!editing)}>
-            {t("Alterar credencial")}
-          </Button>
+          {(state.orphaned_channels ?? []).length > 0 && (
+            <Card className="space-y-3 border-destructive p-4">
+              <h3 className="font-semibold">{t("Canais sem conta no perfil")}</h3>
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  "Estas conexões apontam para contas que saíram do perfil no provedor (por exemplo, conta removida e recriada por lá). Exclua a linha órfã para fechar o aviso.",
+                )}
+              </p>
+              {(state.orphaned_channels ?? []).map((orfao) => (
+                <div
+                  key={orfao.channel_id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
+                >
+                  <div>
+                    <p className="font-medium">{orfao.display_name ?? orfao.account_id}</p>
+                    <p className="text-xs text-muted-foreground">{orfao.status}</p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    disabled={!!busy}
+                    onClick={() => setExcluding(orfao)}
+                  >
+                    {t("Excluir")}
+                  </Button>
+                </div>
+              ))}
+            </Card>
+          )}
+          <AlertDialog open={!!excluding} onOpenChange={(open) => !open && setExcluding(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t("Excluir o canal órfão?")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t(
+                    "A linha sai da lista e os avisos dela são fechados. As conversas já recebidas continuam no CRM.",
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+                <AlertDialogAction onClick={() => excluding && void excluirOrfao(excluding)}>
+                  {t("Excluir canal")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <div className="flex flex-wrap gap-2 self-start">
+            <Button variant="ghost" onClick={() => setEditing(!editing)}>
+              {t("Alterar credencial")}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!!busy}
+              onClick={() => setConfirmandoDesvincular(true)}
+            >
+              {t("Desvincular perfil")}
+            </Button>
+          </div>
+          <AlertDialog open={confirmandoDesvincular} onOpenChange={(open) => !open && setConfirmandoDesvincular(false)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t("Desvincular o perfil?")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t(
+                    "O perfil sai do CRM. Só funciona sem canais sociais ativos: arquive ou exclua os canais antes. Dá para vincular outro perfil depois.",
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void desvincularPerfil()}>
+                  {t("Desvincular")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {removing?.removeAccount
+                    ? t("Desconectar esta conta?")
+                    : t("Remover do atendimento?")}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {removing?.removeAccount
+                    ? t(
+                        "As mensagens param de chegar e a conta sai do provedor. Para usar de novo, será preciso autorizar a conta outra vez. As conversas já recebidas continuam no CRM.",
+                      )
+                    : t(
+                        "As mensagens desta conta param de chegar no atendimento. A conta continua vinculada e pode voltar a receber depois. As conversas já recebidas continuam no CRM.",
+                      )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() =>
+                    removing &&
+                    void perform(removing.account.id, {
+                      action: "disconnect",
+                      account_id: removing.account.id,
+                      remove_account: removing.removeAccount,
+                    })
+                  }
+                >
+                  {removing?.removeAccount ? t("Desconectar") : t("Remover")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </>
       )}
     </div>

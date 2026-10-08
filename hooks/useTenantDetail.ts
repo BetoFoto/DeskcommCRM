@@ -20,7 +20,8 @@ export interface TenantOrganization {
   suspended_at: string | null;
   // Só significa algo com status='suspended'; nulo vale como administrativa.
   // A exclusão recusa a suspensão por cobrança (`lib/tenants/exclusao.ts`).
-  suspended_kind: TipoDeSuspensao | null;
+  // Opcional: fixtures antigas não o têm.
+  suspended_kind?: TipoDeSuspensao | null;
   created_at: string;
   settings: Record<string, unknown> | null;
   // Dados cadastrais editáveis (os mesmos de Configurações › Empresa).
