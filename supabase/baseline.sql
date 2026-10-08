@@ -46095,7 +46095,7 @@ grant  execute on function public.fn_expurgar_checkpoints_superados(int,int) to 
 
 notify pgrst, 'reload schema';
 
--- ---- o recorte da janela ANTES do lateral nas métricas (migration 0591, #2514) ----
+-- ---- o recorte da janela ANTES do lateral nas métricas (migration 0596, #2514) ----
 -- (issue #2514) Mesmo texto da migration, aplicado pelo kit self-host — o apêndice
 -- entra ANTES da VARREDURA anon de propósito: ele cria função.
 -- `fn_attendant_metrics` (0037/0266) e `fn_channel_metrics` (0590) ganham o conjunto de

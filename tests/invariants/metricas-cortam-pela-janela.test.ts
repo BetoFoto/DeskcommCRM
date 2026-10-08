@@ -69,7 +69,7 @@ const VOLUME_DE_CURTO = "2026-07-20T00:00:00+00";
 const VOLUME_ATE_CURTO = "2026-07-21T00:00:00+00"; // 1 dia
 
 /**
- * A RÉGUA ANTIGA — o corpo de cada função ANTES da migration 0591, escrito aqui
+ * A RÉGUA ANTIGA — o corpo de cada função ANTES da migration 0596, escrito aqui
  * como função de referência (`ref_fn_*`). É a comparação que a issue pede
  * ("paridade provada contra a régua atual"): a função nova e esta têm de
  * devolver o MESMO jsonb para o MESMO recorte, sob a MESMA RLS.
