@@ -74,14 +74,14 @@ describe("push de mensagem recebida: só a quem pode ver a conversa", () => {
   });
 
   // Na MESMA transação, como o PostgREST chama: fora dela o set_config local
-  // já se desfaria sozinho e o caso passaria sem medir nada.
+  // já se desfaria sozinho e o caso passaria sem medir nada. Sem `commit` de
+  // propósito: o psql imprimiria "COMMIT" como última linha.
   it("devolve as claims de quem chamou intactas", () => {
     const out = sql(`
       begin;
       select set_config('request.jwt.claims', '{"sub":"${GOV_AGENT_A}"}', true);
       select count(*) from public.fn_push_inscricoes_que_veem_a_conversa('${GOV_ORG}', '${GOV_CONV_AGENT_B}');
       select current_setting('request.jwt.claims') || '|' || auth.uid()::text;
-      commit;
     `);
     expect(lastLine(out)).toBe(`{"sub":"${GOV_AGENT_A}"}|${GOV_AGENT_A}`);
   });
