@@ -3276,6 +3276,18 @@ export const DICIONARIO: Traducoes = {
   "Ligado, toda entrega de webhook precisa vir assinada com o segredo da sessão. Desligado por padrão porque nem todo servidor de canal assina: ligar sem que ele assine corta a entrada de mensagens.": {
     es: "Si está activado, cada entrega de webhook debe llegar firmada con el secreto de la sesión. Viene desactivado por defecto porque no todos los servidores de canal firman: activarlo sin que firmen corta la entrada de mensajes.",
   },
+  "Nenhuma entrega do WhatsApp nos últimos {dias} dias para conferir se o servidor de canal assina.": {
+    es: "Ninguna entrega de WhatsApp en los últimos {dias} días para comprobar si el servidor del canal firma.",
+  },
+  "Nos últimos {dias} dias, as {total} entregas do WhatsApp chegaram assinadas: dá para ligar sem cortar mensagens.": {
+    es: "En los últimos {dias} días, las {total} entregas de WhatsApp llegaron firmadas: se puede activar sin cortar mensajes.",
+  },
+  "Nos últimos {dias} dias, nenhuma das {total} entregas do WhatsApp veio assinada. Ligar agora cortaria a entrada de mensagens.": {
+    es: "En los últimos {dias} días, ninguna de las {total} entregas de WhatsApp llegó firmada. Activarlo ahora cortaría la entrada de mensajes.",
+  },
+  "Nos últimos {dias} dias, {a} de {total} entregas do WhatsApp vieram assinadas. Descubra de onde vêm as outras antes de ligar.": {
+    es: "En los últimos {dias} días, {a} de {total} entregas de WhatsApp llegaron firmadas. Averigüe de dónde vienen las demás antes de activarlo.",
+  },
   "Divulgação de pagamento no atendimento": {
     es: "Divulgación de pago en la atención",
   },

@@ -13,6 +13,7 @@ import {
   type EstadoDoRecurso,
 } from "@/lib/recursos-opcionais/catalogo";
 import { detectarServidor } from "@/lib/recursos-opcionais/estado";
+import { carregarEvidenciaDeAssinatura } from "@/lib/waha/evidencia-de-assinatura";
 
 import { FormularioDeComportamento, FormularioDeModulos } from "./_form";
 
@@ -69,10 +70,15 @@ export default async function Page() {
 
   // O valor EFETIVO (linha acima, `.env` como piso): a tela mostra o que está
   // valendo de verdade, e não o que a linha diria se ela existisse.
-  const [comportamento, ligados, servidor] = await Promise.all([
+  // A evidência de assinatura acompanha o interruptor "Exigir assinatura": quem
+  // decide ligá-lo precisa saber se o WAHA já assina — ver o porquê em
+  // lib/waha/evidencia-de-assinatura.ts. Nunca lança; falha vira linha ausente.
+  const admin = createAdminClient();
+  const [comportamento, ligados, servidor, evidencia] = await Promise.all([
     carregarComportamentoDaInstalacao(),
-    modulosLigados(createAdminClient()),
+    modulosLigados(admin),
     detectarServidor(),
+    carregarEvidenciaDeAssinatura(admin),
   ]);
   const fontes = { modulos: ligados, settings: null, servidor };
 
@@ -129,7 +135,7 @@ export default async function Page() {
         <h2 id="bloco-comportamento" className="text-lg font-semibold">
           {traduzir("Comportamento", idioma)}
         </h2>
-        <FormularioDeComportamento inicial={comportamento} />
+        <FormularioDeComportamento inicial={comportamento} evidencia={evidencia} />
         <ul className="space-y-3">
           {outrasChaves.map((r) => (
             <LinhaDoRecurso

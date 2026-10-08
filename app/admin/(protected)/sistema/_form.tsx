@@ -21,6 +21,7 @@ import type {
   ComportamentoDaInstalacao,
 } from "@/lib/instalacao/comportamento";
 import type { ModuloOpcional, MODULOS_OPCIONAIS_POR_FLAG } from "@/lib/instalacao/modulos";
+import type { EvidenciaDeAssinatura, VereditoDaAssinatura } from "@/lib/waha/evidencia-de-assinatura";
 
 /** Só os módulos que esta tela liga/desliga — nunca "honorarios" (módulo de
  * tabela, ADR-0002): `updateModuloDaInstalacao` não aceita esse valor, e o tipo
@@ -37,7 +38,30 @@ type ModuloPorFlag = (typeof MODULOS_OPCIONAIS_POR_FLAG)[number];
  * um `upsert` de uma linha só, e mandar o estado todo evita que duas telas
  * abertas se sobrescrevam em campos que ninguém tocou.
  */
-export function FormularioDeComportamento({ inicial }: { inicial: ComportamentoDaInstalacao }) {
+/**
+ * A frase que acompanha "Exigir assinatura" — o que as entregas reais dos
+ * últimos dias dizem sobre ligá-lo. As chaves são frases inteiras (regra do
+ * dicionário); os números entram por `{a}`, `{total}` e `{dias}`.
+ */
+const FRASE_DA_EVIDENCIA: Record<VereditoDaAssinatura, string> = {
+  sem_trafego: "Nenhuma entrega do WhatsApp nos últimos {dias} dias para conferir se o servidor de canal assina.",
+  todas_assinadas: "Nos últimos {dias} dias, as {total} entregas do WhatsApp chegaram assinadas: dá para ligar sem cortar mensagens.",
+  nenhuma_assinada: "Nos últimos {dias} dias, nenhuma das {total} entregas do WhatsApp veio assinada. Ligar agora cortaria a entrada de mensagens.",
+  misto: "Nos últimos {dias} dias, {a} de {total} entregas do WhatsApp vieram assinadas. Descubra de onde vêm as outras antes de ligar.",
+};
+
+/** Ligado com o servidor sem assinar é o estado que derruba a entrada — fica vermelho. */
+function evidenciaContraria(e: EvidenciaDeAssinatura): boolean {
+  return e.veredito === "nenhuma_assinada" || e.veredito === "misto";
+}
+
+export function FormularioDeComportamento({
+  inicial,
+  evidencia = null,
+}: {
+  inicial: ComportamentoDaInstalacao;
+  evidencia?: EvidenciaDeAssinatura | null;
+}) {
   const t = useT();
   const [valores, setValores] = useState<ComportamentoDaInstalacao>(inicial);
   const [erro, setErro] = useState<string | null>(null);
@@ -110,6 +134,23 @@ export function FormularioDeComportamento({ inicial }: { inicial: ComportamentoD
                 "Ligado, toda entrega de webhook precisa vir assinada com o segredo da sessão. Desligado por padrão porque nem todo servidor de canal assina: ligar sem que ele assine corta a entrada de mensagens.",
               )}
             </p>
+            {evidencia && (
+              <p
+                data-testid="evidencia-de-assinatura"
+                className={
+                  evidenciaContraria(evidencia)
+                    ? valores.exigir_assinatura_no_webhook
+                      ? "text-sm font-medium text-destructive"
+                      : "text-sm text-muted-foreground"
+                    : "text-sm text-muted-foreground"
+                }
+              >
+                {t(FRASE_DA_EVIDENCIA[evidencia.veredito])
+                  .replace("{dias}", String(evidencia.dias))
+                  .replace("{total}", String(evidencia.assinadas + evidencia.semAssinatura))
+                  .replace("{a}", String(evidencia.assinadas))}
+              </p>
+            )}
           </div>
           <Switch
             id="assinatura-do-webhook"
