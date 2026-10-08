@@ -22,10 +22,14 @@
  * - 1A: das ações da IA (`ai_agent_runs`) fica a LISTA do que ela fez — o nome
  *   de cada ação e quando rodou — e sai o que ela digitou em cada uma. O que
  *   ela digitou ao chamar um atendente sai também da passagem que essa chamada
- *   grava (`ORIGENS_DIGITADAS_PELA_IA`). O termo
+ *   grava (`ORIGENS_DIGITADAS_PELA_IA`), e o que ela digitou no caso — ao
+ *   abri-lo (`TEXTO_DA_IA_NO_CASO`) e nas notas e no encerramento
+ *   (`ATORES_DO_CASO_QUE_ESCREVEM_PARA_A_EQUIPE`). O termo
  *   de uma busca de contato pode ser o nome ou o telefone de OUTRO cliente
  *   (`lib/mcp/tools/contacts.ts`), e a razão de chamar um atendente
- *   (`lib/mcp/tools/handoff.ts`) é texto escrito PARA a equipe. Por lista de
+ *   (`lib/mcp/tools/handoff.ts`) é texto escrito PARA a equipe. A régua: texto
+ *   escrito para a equipe por quem pode ser a IA ou uma integração (autoria
+ *   desconhecida) sai; a opinião de uma PESSOA da equipe segue a 3A. Por lista de
  *   permissão, não de proibição: ação nova da IA nasce sem argumento no
  *   arquivo. Revê o #1965 só nesse ponto. Vale para todo país.
  * - 3A: em Portugal, as seis notas que a equipe escreve SOBRE o titular voltam
@@ -100,10 +104,10 @@ export const O_QUE_FICA = {
   prospecting_candidates:
     "o dado público do negócio dele que originou a abordagem (origem dos dados, art. 19, II)",
   cases:
-    "o que a IA entendeu do problema dele quando travou (título, resumo, bloqueio): descrição dele por máquina, LGPD art. 20",
+    "que o atendimento dele parou e foi para a equipe: quando, por qual caminho e como terminou (o texto que a IA digitou ao abrir sai: `CAMPOS_DA_EQUIPE`)",
   case_events:
-    "a linha do tempo do caso dele: o que a IA registrou e o que ele respondeu (sem o texto de quem é da equipe)",
-  demandas: "o pedido dele: assunto, estado, se quem cuida é a IA ou uma pessoa, próximo passo e desfecho",
+    "a linha do tempo do caso dele: cada passo, quando, e o que ele informou (sem o texto escrito para a equipe)",
+  demandas: "o pedido dele: estado, se quem cuida é a IA ou uma pessoa, próximo passo e desfecho",
   passagens:
     "a passagem do atendimento dele a uma pessoa: o motivo, quando, se ele foi avisado, as últimas palavras dele e — quando não foi a IA quem digitou — o pedido em uma linha",
   avisos_de_caso: "que a equipe foi avisada do caso dele, e quando",
@@ -125,6 +129,17 @@ export const O_QUE_FICA = {
 const _todaSecaoDecidida = { ...O_QUE_FICA, ...SECOES_DA_EQUIPE } satisfies Record<keyof ExportPayload, string>;
 void _todaSecaoDecidida;
 
+/**
+ * O título, o resumo e o bloqueio do caso são digitados por quem ABRE o caso, e
+ * só a IA abre (`openCase`, `lib/agent-engine/agent/human-cases.ts`): pela
+ * ferramenta dela, ou pelo sistema no fail-safe, em que o resumo é a mensagem
+ * que ela tentou mandar e foi barrada. É texto da IA para a fila da equipe —
+ * a mesma régua de `ORIGENS_DIGITADAS_PELA_IA` (doc 110, 1A). Vale para todo
+ * país: a 3A devolve a opinião de uma PESSOA da equipe, não o texto da IA.
+ */
+const TEXTO_DA_IA_NO_CASO =
+  "o que a IA (ou o sistema, no fail-safe) digitou ao abrir o caso, para a fila da equipe (doc 110, 1A)";
+
 /** Campos que saem de cada linha da seção (ou do objeto, quando a seção é um só). */
 export const CAMPOS_DA_EQUIPE: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   honorarios_contratos: {
@@ -140,6 +155,15 @@ export const CAMPOS_DA_EQUIPE: Readonly<Record<string, Readonly<Record<string, s
   },
   case_events: {
     metadata: "metadado do motor do caso: guarda o telefone (mascarado) do plantão avisado e chaves internas",
+  },
+  cases: {
+    title: TEXTO_DA_IA_NO_CASO,
+    summary: TEXTO_DA_IA_NO_CASO,
+    blocker: TEXTO_DA_IA_NO_CASO,
+  },
+  demandas: {
+    assunto:
+      "só é preenchido nas demandas criadas da fila de casos antiga (migration 0280, R1), e é cópia do `title` do caso: sairia por uma porta e voltaria por esta",
   },
   passagens: {
     motor: "qual dos dois motores do sistema passou a conversa",
@@ -160,7 +184,8 @@ export const CAMPOS_DA_EQUIPE: Readonly<Record<string, Readonly<Record<string, s
  * As notas que a equipe escreve SOBRE o titular (doc 110, 3A). Saem no Brasil
  * (doc 103, A); em Portugal ficam — ver o cabeçalho. Além destes campos, são
  * notas sobre ele a seção `conversation_notes` (em Portugal só `body` e
- * `created_at`) e o `body` de `case_events` com ator humano.
+ * `created_at`) e o `body` de `case_events` com ator humano. O `body` com ator
+ * `agent` não é nota de pessoa: sai em todo país (`ATORES_DO_CASO_QUE_ESCREVEM_PARA_A_EQUIPE`).
  */
 export const NOTAS_SOBRE_O_TITULAR: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   sales: { notes: "anotação que o atendente escreveu na comanda" },
@@ -209,6 +234,21 @@ const ORIGENS_DIGITADAS_PELA_IA: ReadonlySet<string> = new Set<OrigemDaPassagem>
   "ferramenta_do_modelo",
   "mcp_externo",
 ]);
+
+/**
+ * O `body` de evento de caso com estes atores é texto escrito PARA a equipe por
+ * quem não se sabe se é IA ou pessoa, e sai em todo país (doc 110, 1A) — a
+ * mesma régua de `ORIGENS_DIGITADAS_PELA_IA`. Hoje só `agent_noted` tem `body`
+ * com ator `agent`: a nota de `crm_add_case_note` e a de encerramento de
+ * `crm_close_human_case` (`lib/mcp/tools/escalacao.ts`), chamadas com token —
+ * IA, integração ou pessoa, a linha não diz qual. As duas ferramentas pedem o
+ * texto "para o próximo atendente".
+ *
+ * Ficam: `human` segue a 3A (nota de pessoa sobre ele: Portugal sim, Brasil
+ * não); `lead` é o que ele informou (`provideCaseUpdate`); `system` não grava
+ * `body`.
+ */
+const ATORES_DO_CASO_QUE_ESCREVEM_PARA_A_EQUIPE = new Set(["agent"]);
 
 /** As chaves de banco que ficam, e por quê — ver o item 1 do cabeçalho. */
 const CHAVES_QUE_FICAM = new Set(["external_id"]);
@@ -260,7 +300,8 @@ function semCampos(copia: Objeto, mapa: Readonly<Record<string, Readonly<Record<
  * No caso, o `body` de evento com ator humano (`human_replied`) é a nota de
  * quem resolveu, o motivo de quem escalou ou o pedido de quem precisou de mais
  * informação (`lib/agent-engine/agent/human-cases.ts`): nota da equipe sobre
- * ele, que segue `NOTAS_SOBRE_O_TITULAR`. O `body` que a IA ou ele escreveu fica.
+ * ele, que segue `NOTAS_SOBRE_O_TITULAR`. O `body` de ator `agent` sai em todo
+ * país (`ATORES_DO_CASO_QUE_ESCREVEM_PARA_A_EQUIPE`); o que ele informou fica.
  */
 export function copiaDoTitular(data: ExportPayload, pais: string): Objeto {
   const copia = JSON.parse(JSON.stringify(data)) as Objeto;
@@ -280,6 +321,8 @@ export function copiaDoTitular(data: ExportPayload, pais: string): Objeto {
     copia.conversation_notes = data.conversation_notes.map(({ body, created_at }) => ({ body, created_at }));
 
   semCampos(copia, CAMPOS_DA_EQUIPE);
+  for (const evento of linhasDe(copia.case_events))
+    if (ATORES_DO_CASO_QUE_ESCREVEM_PARA_A_EQUIPE.has(String(evento.actor_kind))) delete evento.body;
   if (!recebeAsNotas) {
     semCampos(copia, NOTAS_SOBRE_O_TITULAR);
     for (const evento of linhasDe(copia.case_events)) if (evento.actor_kind === "human") delete evento.body;

@@ -745,8 +745,9 @@ export interface ExportPayload {
    * como METADADO (caminho, MIME, bytes): o export é `data.json` + `report.pdf`,
    * e nenhum binário trafega por ele.
    *
-   * Coletada, mas FORA do `data.json` que o titular recebe: é nota da equipe
-   * (doc 103, A — `lib/lgpd/copia-do-titular.ts`).
+   * No `data.json` que o titular recebe (`lib/lgpd/copia-do-titular.ts`):
+   * fora no Brasil, por ser nota da equipe (doc 103, A); em Portugal vão só
+   * `body` e `created_at` — sem o nome de quem escreveu nem o anexo (doc 110, 3A).
    */
   conversation_notes?: Array<{
     id: string;

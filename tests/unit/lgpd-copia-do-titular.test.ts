@@ -20,8 +20,9 @@
  *
  * - 1A: das ações da IA fica o nome e a data; nada do que ela digitou (o termo
  *   de busca de contato, a razão de chamar um atendente) — Brasil e Portugal;
- *   e o que ela digitou ao chamar o atendente (marca `IA-DIGITOU`) também não
- *   volta pela passagem que a chamada grava;
+ *   e o que ela digitou (marca `IA-DIGITOU`) também não volta pela passagem
+ *   que a chamada de atendente grava, nem pelo caso — ao abri-lo, nas notas e
+ *   no encerramento por token, nem pelo assunto da demanda copiado do caso;
  * - 2A: o Brasil recebe TODAS as mensagens e a lista das seções no limite;
  * - 3A: em Portugal as seis notas da equipe sobre ele voltam (marca `NOTA`),
  *   com o texto e a data e sem o nome de quem escreveu; no Brasil, não.
@@ -64,6 +65,10 @@ const CAMPOS_PROIBIDOS: Array<[string, string]> = [
   ["appointments", "google_pending_write"],
   ["appointments", "meeting_state"],
   ["case_events", "metadata"],
+  ["cases", "title"],
+  ["cases", "summary"],
+  ["cases", "blocker"],
+  ["demandas", "assunto"],
   ["passagens", "motor"],
   ["passagens", "origem"],
   ["passagens", "body"],
@@ -116,14 +121,36 @@ function payloadCheio(): ExportPayload {
       },
     ],
     sales: [{ id: "SEGREDO-v", number: 7, notes: "NOTA-comanda", cancel_reason: "FICA-cancelou" }],
+    // O que a IA digitou ao abrir o caso (`openCase`), para a fila da equipe.
+    cases: [
+      {
+        id: "SEGREDO-caso",
+        conversation_id: "SEGREDO-caso-conv",
+        status: "FICA-resolved",
+        title: "IA-DIGITOU-titulo-do-caso",
+        summary: "IA-DIGITOU-resumo-do-caso",
+        blocker: "IA-DIGITOU-bloqueio-do-caso",
+        source: "FICA-agent",
+        opened_at: "FICA-abriu",
+      },
+    ],
+    // `assunto` só existe nas demandas da fila antiga, copiado do `title` do caso.
+    demandas: [
+      { id: "SEGREDO-dm", agent_case_id: "SEGREDO-dmc", assunto: "IA-DIGITOU-titulo-do-caso", estado: "FICA-resolvida" },
+    ],
     case_events: [
       {
         id: "SEGREDO-ce",
         case_id: "SEGREDO-cec",
+        kind: "FICA-opened",
         actor_kind: "agent",
-        body: "FICA-evento",
         metadata: { destino_mascarado: "SEGREDO-plantao", entrega_id: "SEGREDO-ent" },
       },
+      // `crm_add_case_note` / `crm_close_human_case` (escalacao.ts): ator `agent`,
+      // chamado com token — IA, integração ou pessoa —, texto para o próximo atendente.
+      { kind: "agent_noted", actor_kind: "agent", body: "IA-DIGITOU-nota-do-caso", created_at: "FICA-quando-anotou" },
+      // `provideCaseUpdate`: o que ELE informou.
+      { kind: "lead_provided", actor_kind: "lead", body: "FICA-o-que-ele-informou" },
       // `human_replied`: a nota de quem resolveu (human-cases.ts) é texto da equipe.
       { id: "SEGREDO-ch", actor_kind: "human", human_action: "FICA-resolved", body: "NOTA-de-quem-resolveu" },
     ],
@@ -358,6 +385,19 @@ describe("doc 110 — as três respostas do dono", () => {
     (pais) => {
       const [escalado] = linhas(copiaDoTitular(payloadCheio(), pais).passagens);
       expect(escalado).toMatchObject({ title: "FICA-o-que-ele-quer", tentativas: ["FICA-tentativa"] });
+    },
+  );
+
+  it.each(PAISES)(
+    "1A (%s): o que a IA digitou no caso — ao abrir, na nota, no encerramento — não volta; o que ele informou fica",
+    (pais) => {
+      const copia = copiaDoTitular(payloadCheio(), pais);
+      expect(linhas(copia.cases)).toEqual([{ status: "FICA-resolved", source: "FICA-agent", opened_at: "FICA-abriu" }]);
+      expect(linhas(copia.demandas)).toEqual([{ estado: "FICA-resolvida" }]);
+      const eventos = linhas(copia.case_events);
+      expect(eventos[1]).toEqual({ kind: "agent_noted", actor_kind: "agent", created_at: "FICA-quando-anotou" });
+      expect(eventos[2]).toEqual({ kind: "lead_provided", actor_kind: "lead", body: "FICA-o-que-ele-informou" });
+      expect(JSON.stringify(copia).match(/IA-DIGITOU[^"]*/g) ?? []).toEqual([]);
     },
   );
 
