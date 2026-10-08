@@ -316,7 +316,7 @@ async function finalizeAudioSocketCall(uuid: string) {
   //
   // Sem isto a voz — o gasto mais caro por minuto do produto — não aparecia
   // em Uso de IA. Tokens medidos pela própria OpenAI (`response.done`), duração
-  // da ligação em `latency_ms`, custo 0 por limitação declarada (tarifa de
+  // da ligação em `latency_ms`, custo nulo por limitação declarada (tarifa de
   // áudio fora do catálogo — ver `./uso-da-sessao.ts`). Nunca lança.
   const sessao = call.bridge.usoDaSessao();
   await registrarChamadaDeIa(
@@ -345,7 +345,7 @@ async function finalizeAudioSocketCall(uuid: string) {
   });
 }
 
-async function handleAudioSocketConnection(socket: net.Socket, uuid: string, leftover: Buffer) {
+export async function handleAudioSocketConnection(socket: net.Socket, uuid: string, leftover: Buffer) {
   const { data: callRow, error } = await supabaseAdmin
     .from("voice_calls")
     .select("*")

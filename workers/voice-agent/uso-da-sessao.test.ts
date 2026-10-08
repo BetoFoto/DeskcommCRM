@@ -38,7 +38,7 @@ describe("uso da sessão de voz", () => {
     expect(uso.respostas).toBe(1);
   });
 
-  it("a linha da ligação leva tokens medidos, duração e custo 0 declarado", () => {
+  it("a linha da ligação leva tokens medidos, duração e custo NULO (preço desconhecido, não zero)", () => {
     const uso = somarUsoDaResposta(usoVazio(), USO_DE_UMA_RESPOSTA);
     expect(
       linhaDaLigacao({
@@ -59,7 +59,7 @@ describe("uso da sessão de voz", () => {
       model: "gpt-realtime",
       input_tokens: 250,
       output_tokens: 80,
-      cost_cents: 0,
+      cost_cents: null,
       latency_ms: 42_000,
       erro: null,
     });

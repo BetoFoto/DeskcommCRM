@@ -17,7 +17,7 @@
  *
  * ═══ ⚠️ O QUE NÃO É: O PREÇO ═══
  *
- * `cost_cents` sai 0, e é LIMITAÇÃO DECLARADA, não preço. Token de ÁUDIO é
+ * `cost_cents` sai NULO, e é LIMITAÇÃO DECLARADA, não preço. Token de ÁUDIO é
  * cobrado a uma tarifa própria, muito acima da de texto, e nem `ai_pricing` nem
  * `pricing.ts` têm tarifa de modelo realtime — `computeCost` precificaria o
  * áudio como texto (ou devolveria 0). Inventar a tarifa aqui seria número
@@ -25,6 +25,12 @@
  * tokens (o detalhe áudio/texto vai no log do fim da chamada) e quanto tempo.
  * O gasto em dinheiro da voz segue FORA da régua do teto até existir tarifa
  * de realtime no catálogo.
+ *
+ * Nulo, e não 0, porque é o nulo que DIZ isso na tela: `getBudgetStatus` conta
+ * linha `ok` com `cost_cents` nulo como `gasto_incompleto`, e o card de
+ * Orçamento avisa que o gasto medido é menor que o real e que a parada pode não
+ * disparar. Um 0 seria o número com cara de medido que este cabeçalho recusa —
+ * o card afirmaria medição completa com a ligação inteira fora da conta.
  */
 import type { ChamadaDeIa } from "@/lib/ai/usage/registrar-chamada";
 
@@ -115,8 +121,8 @@ export function linhaDaLigacao(entrada: {
     model: entrada.modelo,
     input_tokens: entrada.uso.entrada,
     output_tokens: entrada.uso.saida,
-    // Ver o cabeçalho: tokens medidos, tarifa de áudio desconhecida.
-    cost_cents: 0,
+    // Ver o cabeçalho: tokens medidos, tarifa de áudio desconhecida → nulo.
+    cost_cents: null,
     latency_ms: entrada.duracaoMs,
     erro: entrada.erro,
   };
