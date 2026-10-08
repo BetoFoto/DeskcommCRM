@@ -796,10 +796,21 @@ unico_traefik() {  # unico_traefik  < linhas "nome|projeto|imagem|portas"  → e
 #     mesmo criaria — "network <projeto>_internal declared as external, but could
 #     not be found" numa instalação nova; (2) a `internal` tem o redis SEM SENHA,
 #     e a rede do proxy é a única que um dia pode receber contêiner de fora.
+#
+#   Traefik em MAIS DE UMA rede  → a `coolify` se ela estiver entre elas; senão
+#     vazio, e quem chama recusa pedindo TRAEFIK_NETWORK. O docker lista as redes
+#     em ordem alfabética, então "a primeira" é a que vence o alfabeto, não a que
+#     o painel usa para os sites — medido numa VPS com Coolify: com uma rede
+#     `aaa-simulado` pendurada no coolify-proxy, esta função devolveu
+#     `aaa-simulado`. O que aconteceria com o domínio NÃO foi medido; o risco de
+#     escolher às cegas é ligar o CRM à rede de outro projeto, ou a uma rede
+#     `internal`/não-attachable que derruba o `up -d`.
 rede_do_traefik() {  # rede_do_traefik <NetworkMode do contêiner> <redes do contêiner> <bridge do projeto>
   local netmode="${1:-}" redes="${2:-}" nossa="${3:-}"
   [ "$netmode" = host ] && { printf '%s' "$nossa"; return 0; }
-  printf '%s' "$redes" | awk '{print $1}'
+  set -- $redes
+  [ $# -le 1 ] && { printf '%s' "${1:-}"; return 0; }
+  case " $* " in *" coolify "*) printf 'coolify' ;; esac
 }
 
 # Como o Traefik da hospedagem CHAMA as portas 80 e 443. Os nomes `web` e
@@ -1515,6 +1526,9 @@ if [ "$REVERSE_PROXY" = "traefik" ] && [ -z "${TRAEFIK_NETWORK:-}" ] && [ -n "$t
     c_dim "$(t "  (o Traefik roda em modo host, então o CRM publica numa rede própria: {1})" "$TRAEFIK_NETWORK")"
 fi
 if [ "$REVERSE_PROXY" = "traefik" ] && [ -z "${TRAEFIK_NETWORK:-}" ]; then
+  [ "$(printf '%s' "${traefik_redes:-}" | wc -w)" -gt 1 ] && \
+    die "$(t "O seu Traefik está em mais de uma rede Docker ({1}) e não sei por qual ele alcança os sites.
+Ponha TRAEFIK_NETWORK=<nome> no .env com a rede certa antes de tentar de novo." "${traefik_redes% }")"
   die "$(t "Não consegui descobrir a rede Docker do seu Traefik. Rode 'docker network ls',
 identifique a rede dele e ponha TRAEFIK_NETWORK=<nome> no .env antes de tentar de novo.")"
 fi

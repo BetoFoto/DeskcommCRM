@@ -1585,7 +1585,16 @@ rt_ok() {  # rt_ok <descrição> <esperado> <netmode> <redes do contêiner> <bri
 # devolve o nome dela nos dois campos; modo host devolve "host" nos dois.
 rt_ok "Traefik em bridge própria → a rede DELE"  coolify    coolify    "coolify "        crm_proxy
 rt_ok "Traefik na bridge default → bridge"       bridge     bridge     "bridge "         crm_proxy
-rt_ok "Traefik em 2 redes → a primeira"          coolify    coolify    "coolify web "    crm_proxy
+rt_ok "Traefik em 2 redes com a coolify → coolify" coolify    coolify    "coolify web "    crm_proxy
+# O docker devolve as redes em ORDEM ALFABÉTICA (o template percorre um mapa), e
+# "a primeira" era a rede que vence o sorteio do alfabeto, não a que o painel usa
+# para os sites. Medido numa VPS com Coolify: com uma rede "aaa-simulado"
+# pendurada no coolify-proxy, a descoberta devolveu aaa-simulado.
+rt_ok "2 redes, coolify NÃO é a primeira → coolify" coolify coolify   "aaa-simulado coolify " crm_proxy
+# Sem a coolify entre elas não há como saber qual é a do proxy: vazio, e quem
+# chama recusa mandando declarar TRAEFIK_NETWORK. Chutar pode ligar o CRM à rede
+# de outro projeto, ou a uma rede `internal` que derruba o `up -d`.
+rt_ok "2 redes sem a coolify → não escolhe (vazio)" ''      rede-a     "rede-a rede-b "  crm_proxy
 # ESTE é o defeito da issue #139: em modo host `.NetworkSettings.Networks` devolve
 # a string "host", que é uma rede de driver `host` — gravá-la em TRAEFIK_NETWORK
 # mata o `up -d` com "network host declared as external, but could not be found".
@@ -2821,6 +2830,68 @@ STUB
   printf '  ✓ com prova na coluna Ports segue sem perguntar, e usa a rede do proxy\n'
 ) || fail=1
 rm -rf "$TMP5"
+
+echo "integração: Traefik pendurado em MAIS DE UMA rede Docker"
+# A função acima decide; este caso prova que o install.sh obedece à decisão —
+# inclusive à recusa, que só vale se o instalador PARAR em vez de cair num
+# default. As redes do proxy vêm de REDES_DO_PROXY para a mesma VPS servir aos
+# três desfechos.
+TMP_REDES="$(mktemp -d)"
+(
+  montar_vps "$TMP_REDES" "crmredes" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$DOCKER_LOG"
+case "$1" in
+  compose) case "$*" in *" exec "*) printf 'healthy\n{"data":{"status":"healthy"}}\n' ;; esac; exit 0 ;;
+  run)     case "$*" in *--entrypoint*) exit 1 ;; esac; exit 0 ;;
+  ps)      for a in "$@"; do [ "$a" = "network=host" ] && em_host=1; done
+           [ "${em_host:-0}" = 1 ] && exit 0
+           printf 'coolify-proxy|coolify|traefik:v3.3|0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp\n'
+           exit 0 ;;
+  inspect) case "$*" in *NetworkMode*) printf '%s\n' "${REDES_DO_PROXY%% *}";; *Networks*) printf '%s \n' "$REDES_DO_PROXY";; esac; exit 0 ;;
+  network) case "$2" in inspect) printf 'bridge\n' ;; esac; exit 0 ;;
+esac
+exit 0
+STUB
+  export REDES_DO_PROXY="aaa-simulado coolify"
+  saida="$(rodar install.sh --yes)"
+  chegou_na_deteccao || exit 1
+  if ! grep -qx 'TRAEFIK_NETWORK="coolify"' "$VPS_PROJ/.env"; then
+    printf '  ✗ com aaa-simulado e coolify, TRAEFIK_NETWORK saiu %s (esperava coolify)\n' \
+      "$(grep -E '^TRAEFIK_NETWORK=' "$VPS_PROJ/.env" || echo '(ausente)')"; exit 1
+  fi
+  printf '  ✓ entre várias redes, prefere a coolify mesmo fora da ordem alfabética\n'
+
+  export REDES_DO_PROXY="rede-a rede-b"
+  saida="$(rodar install.sh --yes)"
+  chegou_na_deteccao || exit 1
+  if grep -qE '^TRAEFIK_NETWORK=' "$VPS_PROJ/.env"; then
+    printf '  ✗ sem a coolify escolheu às cegas: %s\n' "$(grep -E '^TRAEFIK_NETWORK=' "$VPS_PROJ/.env")"; exit 1
+  fi
+  if ! grep -q 'rede-a rede-b' <<<"$saida" || ! grep -q 'TRAEFIK_NETWORK=<nome>' <<<"$saida"; then
+    printf '  ✗ a recusa não nomeia as redes encontradas e/ou não manda declarar TRAEFIK_NETWORK\n'
+    printf '%s\n' "$saida" | tail -5 | sed 's/^/       /'; exit 1
+  fi
+  printf '  ✓ sem a coolify, para nomeando as redes e mandando declarar TRAEFIK_NETWORK\n'
+
+  saida="$(rodar install.sh --yes "TRAEFIK_NETWORK='rede-b'")"
+  chegou_na_deteccao || exit 1
+  if ! grep -qx 'TRAEFIK_NETWORK="rede-b"' "$VPS_PROJ/.env"; then
+    printf '  ✗ TRAEFIK_NETWORK declarado não venceu a descoberta: saiu %s\n' \
+      "$(grep -E '^TRAEFIK_NETWORK=' "$VPS_PROJ/.env" || echo '(ausente)')"; exit 1
+  fi
+  printf '  ✓ TRAEFIK_NETWORK declarado continua vencendo a descoberta\n'
+
+  # Exportado no ambiente (sem estar no .env) passa pela MESMA condição -z.
+  saida="$(TRAEFIK_NETWORK=rede-b rodar install.sh --yes)"
+  chegou_na_deteccao || exit 1
+  if ! grep -qx 'TRAEFIK_NETWORK="rede-b"' "$VPS_PROJ/.env"; then
+    printf '  ✗ TRAEFIK_NETWORK exportado não venceu a descoberta: saiu %s\n' \
+      "$(grep -E '^TRAEFIK_NETWORK=' "$VPS_PROJ/.env" || echo '(ausente)')"; exit 1
+  fi
+  printf '  ✓ TRAEFIK_NETWORK exportado no ambiente também vence a descoberta\n'
+) || fail=1
+rm -rf "$TMP_REDES"
 
 echo "DDL: a conexão do schema é separada da que vai para os contêineres (issue #192)"
 # `SUPABASE_DB_URL` acumulava dois papéis numa string só: ela vai para o `.env`
