@@ -314,6 +314,9 @@ y, si de verdad es un Traefik, pon REVERSE_PROXY=traefik en el .env y vuelve a e
 
   # ── install.sh: red del Traefik, telemetría, escritura del .env ─────────
   ["  (o Traefik roda em modo host, então o CRM publica numa rede própria: {1})"]="  (Traefik corre en modo host, así que el CRM publica en una red propia: {1})"
+  ["O seu Traefik está em mais de uma rede Docker ({1}) e não sei por qual ele alcança os sites.
+Ponha TRAEFIK_NETWORK=<nome> no .env com a rede certa antes de tentar de novo."]="Tu Traefik está en más de una red Docker ({1}) y no sé por cuál llega a los sitios.
+Pon TRAEFIK_NETWORK=<nombre> en el .env con la red correcta antes de volver a intentarlo."
   ["Não consegui descobrir a rede Docker do seu Traefik. Rode 'docker network ls',
 identifique a rede dele e ponha TRAEFIK_NETWORK=<nome> no .env antes de tentar de novo."]="No pude averiguar la red Docker de tu Traefik. Ejecuta 'docker network ls',
 identifica su red y pon TRAEFIK_NETWORK=<nombre> en el .env antes de volver a intentarlo."
