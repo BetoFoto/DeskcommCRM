@@ -125,4 +125,25 @@ describe("POST de teste do agente: isolamento e efeitos explícitos", () => {
       sampleMessage: "Mensagem de teste", channelId: null,
     }));
   });
+
+  it("candidato com a mídia pendente sai como teste BLOQUEADO (#2490)", async () => {
+    // Um send_message que falhou a foto e outro, sem produto_codigo, que gerou
+    // candidato: a tela não pode aprovar o teste com a foto por preparar.
+    mocks.preview.mockResolvedValue({
+      candidates: [{ body: "Segue a foto" }],
+      proposals: [],
+      trace: [],
+      midia: [{
+        codigo: "IP15", produtoResolvido: true, fotosCadastradas: 1, fotosPreparadas: 0, anexos: [],
+        falha: { code: "midia_nao_preparada", message: "x" },
+      }],
+    });
+    const db = bancoDaRota(ORG);
+    mocks.admin.mockReturnValue(db.admin);
+    const resposta = await POST(requisicao(), ctx);
+    expect(resposta.status).toBe(200);
+    const { data } = (await resposta.json()) as { data: { status: string; guardrails: { passou: boolean } } };
+    expect(data.status).toBe("blocked");
+    expect(data.guardrails.passou).toBe(false);
+  });
 });
