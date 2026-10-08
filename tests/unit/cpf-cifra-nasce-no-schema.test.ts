@@ -21,7 +21,7 @@
  * mínima (não preencher `cpf_hash`) como alternativa. Este gate cobra os DOIS
  * lados, porque só um deles reproduz o defeito:
  *
- *  - o SCHEMA: a tripla (migration 0591 + apêndice do baseline + `-- manifest:`),
+ *  - o SCHEMA: a tripla (migration 0597 + apêndice do baseline + `-- manifest:`),
  *    as assinaturas que o código chama, os grants da sessão e a chave vinda de
  *    `private.app_secrets`/GUC — nunca de literal versionado;
  *  - o CÓDIGO: `camposCpfParaGravar` devolve os dois campos ou `{}`, e nenhum
@@ -44,11 +44,11 @@ const BASELINE = readFileSync(join(SUPABASE, "baseline.sql"), "utf8");
 const ARQUIVO = readdirSync(MIGRACOES).find((f) => /_\d{4}_cpf_.*\.sql$/.test(f)) ?? "";
 const MIGRACAO = ARQUIVO ? readFileSync(join(MIGRACOES, ARQUIVO), "utf8") : "";
 
-/** Só o apêndice da 0591 no baseline: afirmar sobre o arquivo INTEIRO (48 mil
+/** Só o apêndice da 0597 no baseline: afirmar sobre o arquivo INTEIRO (48 mil
  *  linhas, 2,5 MB) mediria o resto do repo — `insert into public.api_audit_log`
  *  e `pgp_sym_decrypt` já existem bem antes dele. */
 const INICIO_APENDICE = BASELINE.indexOf(
-  "-- ---- cifragem at-rest do CPF: encrypt_cpf / decrypt_cpf (migration 0591",
+  "-- ---- cifragem at-rest do CPF: encrypt_cpf / decrypt_cpf (migration 0597",
 );
 const FIM_APENDICE = BASELINE.indexOf("-- ---- VARREDURA anon:");
 const APENDICE = INICIO_APENDICE > 0 ? BASELINE.slice(INICIO_APENDICE, FIM_APENDICE) : "";
@@ -60,10 +60,10 @@ function supabaseCom(resposta: { data?: unknown; error?: { message: string } | n
 
 const ORIGENS = [MIGRACAO, APENDICE];
 
-describe("a migration 0591 cria as RPCs que o código chama (tripla do repo)", () => {
+describe("a migration 0597 cria as RPCs que o código chama (tripla do repo)", () => {
   it("o arquivo existe, com NNNN no nome e a linha `-- manifest:`", () => {
     expect(ARQUIVO, "supabase/migrations/*_NNNN_cpf_*.sql não encontrado").not.toBe("");
-    expect(ARQUIVO).toMatch(/^\d{14}_0591_.*\.sql$/);
+    expect(ARQUIVO).toMatch(/^\d{14}_0597_.*\.sql$/);
     expect(MIGRACAO).toMatch(/^-- manifest: \S/m);
   });
 

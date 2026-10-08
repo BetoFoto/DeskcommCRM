@@ -4,7 +4,7 @@
  * `cpf_hash` is sha256(hex) of the 11-digit normalized CPF — used for exact-match
  * lookup and dedup without exposing plaintext. At-rest encryption lives in the
  * column `cpf_encrypted bytea`, written by the server-side `encrypt_cpf` RPC
- * (migration 0591, #2522).
+ * (migration 0597, #2522).
  *
  * ⚠️ The two columns are a PAIR: `contacts_cpf_consistency` requires
  * `(cpf_encrypted IS NULL) = (cpf_hash IS NULL)`, so a row with only `cpf_hash`
@@ -26,10 +26,10 @@ export function hashCpf(raw: string): string {
 }
 
 /**
- * At-rest CPF encryption via pgcrypto-backed `encrypt_cpf` RPC (migration 0591).
+ * At-rest CPF encryption via pgcrypto-backed `encrypt_cpf` RPC (migration 0597).
  *
  * Returns `null` whenever the database cannot produce the ciphertext — the RPC
- * still missing on a database that predates 0591, or `CPF_ENCRYPTION_KEY` not
+ * still missing on a database that predates 0597, or `CPF_ENCRYPTION_KEY` not
  * seeded yet (`encrypt_cpf` raises `CPF_ENCRYPTION_KEY ausente`). The caller
  * must then save the contact WITHOUT the CPF: `camposCpfParaGravar` is what
  * keeps the pair `cpf_hash`/`cpf_encrypted` consistent for the CHECK.

@@ -2406,7 +2406,7 @@ ensure_encryption_key() {
     || c_ylw "$(t "⚠ não consegui semear a chave de cifra no banco — segredos de webhook não poderão ser salvos até rodar update.sh de novo.")"
 
   # ── Chave do CPF (#2522) ───────────────────────────────────────────────────
-  # `encrypt_cpf`/`decrypt_cpf` (migration 0591) leem `private.app_secrets`
+  # `encrypt_cpf`/`decrypt_cpf` (migration 0597) leem `private.app_secrets`
   # na linha `cpf_key`. SEM esta linha toda gravação de contato COM CPF cai na
   # degradação: o contato é salvo sem CPF e a busca por CPF não acha ninguém —
   # exatamente o problema que o reportante do #2522 descreveu.

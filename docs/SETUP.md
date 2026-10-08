@@ -524,7 +524,7 @@ LGPD_SIGNING_KEY=<saída-6>
 > ⚠️ **NUNCA mude `CPF_ENCRYPTION_KEY` ou `NUVEMSHOP_OAUTH_ENCRYPTION_KEY` depois que tiver dados em prod** — você não consegue mais descriptografar o que foi salvo. Rotação dessas chaves exige migration de re-encryption.
 >
 > ⚠️ **A chave do CPF precisa chegar ao BANCO**: `encrypt_cpf`/`decrypt_cpf`
-> (migration 0591) leem `private.app_secrets` na linha `cpf_key`. O
+> (migration 0597) leem `private.app_secrets` na linha `cpf_key`. O
 > `install.sh`/`update.sh` semeia sozinho; numa instalação montada à mão:
 >
 > ```sql

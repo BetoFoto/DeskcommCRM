@@ -46095,8 +46095,8 @@ grant  execute on function public.fn_expurgar_checkpoints_superados(int,int) to 
 
 notify pgrst, 'reload schema';
 
--- ---- cifragem at-rest do CPF: encrypt_cpf / decrypt_cpf (migration 0591, issue #2522) ----
--- Racional e a história do defeito: cabeçalho da 0591. ANTES da VARREDURA anon,
+-- ---- cifragem at-rest do CPF: encrypt_cpf / decrypt_cpf (migration 0597, issue #2522) ----
+-- Racional e a história do defeito: cabeçalho da 0597. ANTES da VARREDURA anon,
 -- porque cria função. Corpo IDÊNTICO ao da migration — quem aplica a cadeia e
 -- quem aplica o baseline ficam com a mesma função (`apendice-do-baseline-nao-diverge`).
 --

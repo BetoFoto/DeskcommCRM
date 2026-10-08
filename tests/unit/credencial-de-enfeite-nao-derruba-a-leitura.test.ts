@@ -79,7 +79,7 @@ interface Definicao {
  * idempotentes que redefinem a função (o forward-fix da 0041, esta 0240). No
  * Postgres vence a ÚLTIMA aplicada — e é ela que este teste cobra, porque é ela
  * que fica instalada na VPS de quem atualiza. O nome é parâmetro porque a
- * catraca do item 3 mede DONOS, e são dois desde a 0591 (#2522).
+ * catraca do item 3 mede DONOS, e são dois desde a 0597 (#2522).
  */
 function definicoesDeFuncao(texto: string, nome: string): Definicao[] {
   const out: Definicao[] = [];
@@ -152,7 +152,7 @@ describe("credencial de enfeite não derruba a leitura (#754)", () => {
     expect(ocorrencias.length, "sumiu o pgp_sym_decrypt do baseline?").toBeGreaterThan(0);
 
     // Dois donos, e cada um com a SUA guarda: `fn_decrypt_oauth` (0240, itens
-    // 1–2) e `decrypt_cpf` (0591, #2522, medido no item 6 abaixo). Qualquer
+    // 1–2) e `decrypt_cpf` (0597, #2522, medido no item 6 abaixo). Qualquer
     // TERCEIRO sítio — um `pgp_sym_decrypt` solto em corpo de trigger ou em
     // apêndice de migration — continua reprovando com o mesmo motivo de sempre:
     // cifra nova, guarda nova. A lista de donos não encolhe sozinha: só entra
@@ -222,17 +222,17 @@ describe("credencial de enfeite não derruba a leitura (#754)", () => {
     expect(iTenancy, "quem não é da organização lê o CPF antes da checagem").toBeLessThan(iDecifra);
     expect(iAudit, "decrypt sairia sem deixar rastro").toBeLessThan(iDecifra);
 
-    // Quem instala (baseline) e quem atualiza (migration 0591) recebem igual.
-    const arquivo0591 = readdirSync(MIGRATIONS).find((n) => n.includes("_0591_"));
-    expect(arquivo0591, "migration 0591 não está em supabase/migrations/").toBeTruthy();
+    // Quem instala (baseline) e quem atualiza (migration 0597) recebem igual.
+    const arquivo0597 = readdirSync(MIGRATIONS).find((n) => n.includes("_0597_"));
+    expect(arquivo0597, "migration 0597 não está em supabase/migrations/").toBeTruthy();
     const naMigration = definicoesDeFuncao(
-      readFileSync(join(MIGRATIONS, arquivo0591!), "utf8"),
+      readFileSync(join(MIGRATIONS, arquivo0597!), "utf8"),
       "decrypt_cpf",
     );
     expect(naMigration.length, "a migration não define decrypt_cpf").toBe(1);
     expect(
       naMigration[0]!.corpo,
-      "corpo divergente entre baseline (install) e migration 0591 (update)",
+      "corpo divergente entre baseline (install) e migration 0597 (update)",
     ).toBe(corpo);
   });
 });

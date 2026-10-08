@@ -82,7 +82,7 @@ const BASELINE = "supabase/baseline.sql";
 // DEGRADAÇÃO — o ponto onde a chamada falha e o produto segue de pé. A lista só
 // encolhe: se o nome virar função de verdade numa migração, o teste fica
 // vermelho pedindo a remoção daqui (é o `it` abaixo que faz isso) — foi o que
-// aconteceu com `encrypt_cpf` e `decrypt_cpf`, que a migration 0591 (#2522)
+// aconteceu com `encrypt_cpf` e `decrypt_cpf`, que a migration 0597 (#2522)
 // trouxe para o schema e tirou daqui.
 
 const CONGELADAS: Record<string, { degradacao: string; porque: string }> = {

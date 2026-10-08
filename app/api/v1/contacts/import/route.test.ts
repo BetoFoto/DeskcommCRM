@@ -33,11 +33,11 @@ function banco(opcoes: {
   falhas?: Array<{ code: string; message: string } | null>;
   /** O país declarado pela organização; ausente/`null` é o Brasil. */
   pais?: string | null;
-  /** A RPC `encrypt_cpf` não responde — banco sem a migration 0591 ou sem a chave. */
+  /** A RPC `encrypt_cpf` não responde — banco sem a migration 0597 ou sem a chave. */
   cifraIndisponivel?: boolean;
 } = {}) {
   const tentativas: Record<string, unknown>[] = [];
-  // `encrypt_cpf` (migration 0591) devolve o ciphertext; sem ele,
+  // `encrypt_cpf` (migration 0597) devolve o ciphertext; sem ele,
   // `camposCpfParaGravar` grava a linha SEM CPF. `cifraIndisponivel` encena o
   // banco em que a RPC ainda não existe ou a chave não foi semeada (#2522).
   const rpc = vi.fn(async (nome: string) => {
