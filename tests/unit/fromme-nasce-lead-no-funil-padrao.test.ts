@@ -63,6 +63,12 @@ interface Cena {
   leadAberto: boolean;
   /** A mensagem já está gravada — eco/duplicata recusada antes de qualquer efeito. */
   jaRegistrada: boolean;
+  /**
+   * Envio NOSSO ainda em voo (linha `queued`, sem `external_id`) com o mesmo
+   * texto: o dedup não casa, quem reconhece é `ehEcoDeEnvioNosso`. Sem este
+   * caso, retirar o `if (!ehEco)` do nascimento passava com 7/7.
+   */
+  ecoEmVoo?: boolean;
   rpcs: Array<{ nome: string; args: Record<string, unknown> }>;
   inserts: Record<string, Array<Record<string, unknown>>>;
   conversationUpdates: Array<Record<string, unknown>>;
@@ -152,7 +158,14 @@ function makeAdmin(c: Cena, opcoes: Opcoes = {}) {
       gte: () => chain,
       order: () => chain,
       maybeSingle: () => Promise.resolve(resposta()),
-      then: (r: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(r),
+      then: (r: (v: unknown) => unknown) =>
+        Promise.resolve(
+          // A consulta de `ehEcoDeEnvioNosso` termina em `.limit(20)` e é
+          // aguardada direto: é ela que lê o envio em voo.
+          name === "messages" && selectCols === "id, body, type" && c.ecoEmVoo
+            ? { data: [{ id: "nossa-em-voo", body: envelopeFromMe.payload.body, type: "text" }], error: null }
+            : { data: null, error: null },
+        ).then(r),
     };
     return chain;
   };
@@ -252,6 +265,15 @@ describe("#2448 · a conversa que começa pelo celular nasce no funil padrão", 
     const c = novaCena({ jaRegistrada: true });
     await enviar(c);
 
+    expect(nascimentos(c)).toHaveLength(0);
+    expect(c.inserts["crm_lead_activities"]).toBeUndefined();
+  });
+
+  it("eco AINDA EM VOO (o dedup não casa) → a mensagem entra, mas não nasce lead", async () => {
+    const c = novaCena({ ecoEmVoo: true });
+    await enviar(c);
+
+    expect(c.inserts["messages"]).toHaveLength(1);
     expect(nascimentos(c)).toHaveLength(0);
     expect(c.inserts["crm_lead_activities"]).toBeUndefined();
   });
