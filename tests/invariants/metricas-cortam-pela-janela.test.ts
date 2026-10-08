@@ -388,6 +388,8 @@ function expectParidade(func: string, actor: string, org: string, de: string, at
 }
 
 type NoPlano = {
+  /** O EXPLAIN (FORMAT JSON) embrulha o plano em um nó `Plan`. */
+  Plan?: NoPlano;
   "Node Type"?: string;
   "Relation Name"?: string;
   "Actual Loops"?: number;
