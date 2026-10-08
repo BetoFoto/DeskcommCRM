@@ -352,6 +352,24 @@ export const RETENCAO_CHECKPOINTS_DIAS_PADRAO = 180;
 /** Piso de 30 dias: o turno de um mês atrás ainda é investigável por inteiro. */
 export const RETENCAO_CHECKPOINTS_DIAS_PISO = 30;
 
+/**
+ * Teto de 36500 dias (100 anos): o número acima do qual um prazo de retenção
+ * é REDUZIDO ao teto, com aviso no log, em vez de seguir adiante como estava.
+ *
+ * O piso impede apagar cedo demais; o teto impede é que o número gigante
+ * chegue ao banco ou ao `Date`. Medido na issue #2612: `9999999` dias vira
+ * `new Date(Date.now() - 9999999 * 86_400_000)` = o ano −25353, uma data que
+ * vai ao PostgREST como corte da poda; e um `1e9` estoura a faixa de `Date`
+ * e lança `RangeError: Invalid time value` antes de qualquer chamada. Um
+ * século fica muito além de qualquer janela que alguma tela lê
+ * (`MAX_RANGE_DAYS` é 90 dias) e de qualquer padrão razoável de `.env`.
+ *
+ * Vive num sítio só e é IMPORTADA por quem aplica, de propósito: dois teto
+ * definidos em dois lugares divergem, e a divergência vira bug silencioso.
+ * O teto é INCLUSIVO — `36500` passa intacto, sem aviso.
+ */
+export const RETENCAO_TETO_DIAS = 36500;
+
 export interface RetencaoInterpretada {
   /** Dias a pedir ao banco. Nunca abaixo do piso, nunca `NaN`. */
   readonly dias: number;
