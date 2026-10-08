@@ -14,6 +14,9 @@ const enviarPushDaOrgMock = vi.fn(async (_organizationId: string, _payload: Push
 const enviarPushAoUsuarioMock = vi.fn(
   async (_organizationId: string, _userId: string | null, _payload: PushPayload) => ({ sent: 0, gone: 0 }),
 );
+const enviarPushAQuemVeAConversaMock = vi.fn(
+  async (_organizationId: string, _conversationId: string, _payload: PushPayload) => ({ sent: 1, gone: 0 }),
+);
 vi.mock("./web_push", () => ({
   // Referências indiretas de propósito: o factory do `vi.mock` é hoisted
   // acima das declarações `const` deste arquivo, então gravar o mock
@@ -24,6 +27,8 @@ vi.mock("./web_push", () => ({
   enviarPushDaOrg: (organizationId: string, payload: PushPayload) => enviarPushDaOrgMock(organizationId, payload),
   enviarPushAoUsuario: (organizationId: string, userId: string | null, payload: PushPayload) =>
     enviarPushAoUsuarioMock(organizationId, userId, payload),
+  enviarPushAQuemVeAConversa: (organizationId: string, conversationId: string, payload: PushPayload) =>
+    enviarPushAQuemVeAConversaMock(organizationId, conversationId, payload),
 }));
 
 // A rota 1:1 (`handleInbound`) usa o admin client para buscar nome/avatar em
@@ -58,6 +63,7 @@ describe("webPushInboundHandler", () => {
     state.vapidPronto = false;
     enviarPushDaOrgMock.mockClear();
     enviarPushAoUsuarioMock.mockClear();
+    enviarPushAQuemVeAConversaMock.mockClear();
     createAdminClientMock.mockClear();
     fromMock.mockClear();
   });
@@ -76,6 +82,45 @@ describe("webPushInboundHandler", () => {
     });
     expect(result.status).toBe("skipped");
     expect(result.detail).toBe("vapid_ausente");
+  });
+
+  describe("mensagem recebida (message.received) — só a quem pode ver a conversa", () => {
+    beforeEach(() => {
+      state.vapidPronto = true;
+    });
+
+    function inboundRow(payload: Record<string, unknown> = {}) {
+      return {
+        id: "e-1a1",
+        organization_id: "org1",
+        event_type: "message.received",
+        entity_kind: "message",
+        entity_id: "m-1a1",
+        payload: { conversation_id: "conv-de-a", body_preview: "oi", type: "text", ...payload },
+        metadata: {},
+        consumed_by: [],
+        attempts: 0,
+      };
+    }
+
+    it("envia pelas inscrições que veem a conversa, nunca pela organização inteira", async () => {
+      const result = await webPushInboundHandler.handle(inboundRow());
+
+      expect(result.status).toBe("ok");
+      expect(enviarPushDaOrgMock).not.toHaveBeenCalled();
+      expect(enviarPushAQuemVeAConversaMock).toHaveBeenCalledTimes(1);
+      const [orgId, conversationId] = enviarPushAQuemVeAConversaMock.mock.calls[0]!;
+      expect(orgId).toBe("org1");
+      expect(conversationId).toBe("conv-de-a");
+    });
+
+    it("sem conversation_id não envia a ninguém", async () => {
+      const result = await webPushInboundHandler.handle(inboundRow({ conversation_id: undefined }));
+
+      expect(result).toMatchObject({ status: "skipped", detail: "sem_conversa" });
+      expect(enviarPushDaOrgMock).not.toHaveBeenCalled();
+      expect(enviarPushAQuemVeAConversaMock).not.toHaveBeenCalled();
+    });
   });
 
   describe("grupo (message.group_received) — nunca a cópia do 1:1", () => {

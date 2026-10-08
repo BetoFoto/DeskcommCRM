@@ -88,10 +88,40 @@ export async function enviarPushAoUsuario(
     logger.warn("push_subscriptions_user_list_failed", { detail: error.message });
     return { sent: 0, gone: 0 };
   }
-  return enviarPushDaOrg(organizationId, payload, {
+  return enviarPushDaOrg(organizationId, payload, inscricoesJaFiltradas(admin, data ?? []));
+}
+
+/**
+ * Push de mensagem recebida: só às inscrições de quem PODE VER a conversa.
+ *
+ * Quem decide é `fn_can_view_conversation` (a RLS de `conversations`), avaliada
+ * para cada inscrito por `fn_push_inscricoes_que_veem_a_conversa` — a regra não
+ * é repetida aqui. Falha na leitura não envia a ninguém.
+ */
+export async function enviarPushAQuemVeAConversa(
+  organizationId: string,
+  conversationId: string,
+  payload: PushPayload,
+): Promise<{ sent: number; gone: number }> {
+  if (!vapidPronto()) return { sent: 0, gone: 0 };
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("fn_push_inscricoes_que_veem_a_conversa", {
+    p_org: organizationId,
+    p_conversation: conversationId,
+  });
+  if (error) {
+    logger.warn("push_subscriptions_visible_list_failed", { detail: error.message });
+    return { sent: 0, gone: 0 };
+  }
+  return enviarPushDaOrg(organizationId, payload, inscricoesJaFiltradas(admin, data ?? []));
+}
+
+/** Lista já filtrada para `enviarPushDaOrg`; a faxina de inscrição morta (404/410) segue indo ao banco. */
+function inscricoesJaFiltradas(admin: ReturnType<typeof createAdminClient>, rows: PushSubRow[]): AdminLike {
+  return {
     from: (table: string) => ({
       select: () => ({
-        eq: async () => ({ data: (data ?? []) as PushSubRow[], error: null }),
+        eq: async () => ({ data: rows, error: null }),
       }),
       delete: () => ({
         eq: async (col: string, val: string) => {
@@ -100,5 +130,5 @@ export async function enviarPushAoUsuario(
         },
       }),
     }),
-  });
+  };
 }
