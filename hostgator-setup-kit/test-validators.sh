@@ -3050,6 +3050,64 @@ NEXT_PUBLIC_APP_URL='https://crm.exemplo.com.br'"
 ) || fail=1
 rm -rf "$TMP_AVISO"
 
+echo "e-mails de acesso: o aviso da 1ª atualização respeita a topologia"
+# O aviso acima é o da NUVEM (painel do Supabase + token sbp_). Ele saía em TODA
+# topologia — o install.sh nunca cria o marcador —, e mandava quem tem o
+# Supabase na própria VPS a outra conta. Pelo update.sh inteiro, até o fim:
+#   - Supabase próprio fora do kit: confere SITE_URL no .env DELE, sem sbp_;
+#   - single-server: nada a conferir (o kit grava SITE_URL e
+#     ADDITIONAL_REDIRECT_URLS), nenhum aviso.
+TMP_AVISO_TOPO="$(mktemp -d)"
+(
+  montar_vps "$TMP_AVISO_TOPO" "crmtopo" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$DOCKER_LOG"
+case "$1" in
+  compose) case "$*" in *" exec "*) printf 'healthy\n{"data":{"status":"healthy"}}\n' ;; esac; exit 0 ;;
+esac
+exit 0
+STUB
+  cp supabase-single-server.override.yml "$TMP_AVISO_TOPO/"
+  mkdir -p "$VPS_PROJ/supabase"; : > "$VPS_PROJ/supabase/baseline.sql"
+  (cd "$VPS_PROJ" && git init -q -b main . \
+    && git -c user.email=t@exemplo -c user.name=teste add -A \
+    && git -c user.email=t@exemplo -c user.name=teste commit -qm base \
+    && git tag v9.9.9) >/dev/null 2>&1
+  unset SUPABASE_ACCESS_TOKEN
+
+  proprio="$(rodar update.sh "" "INTERNAL_SECRET='segredo-de-teste'
+NEXT_PUBLIC_APP_URL='https://crm.exemplo.com.br'
+NEXT_PUBLIC_SUPABASE_URL='https://supabase.meucliente.com.br'")"
+  rm -f "$VPS_PROJ/.deskcomm-site-url-avisado"
+  mkdir -p "$VPS_PROJ/.runtime/supabase"
+  printf '%s\n' "SITE_URL=https://crm.exemplo.com.br" > "$VPS_PROJ/.runtime/supabase/.env"
+  single="$(rodar update.sh "" "INTERNAL_SECRET='segredo-de-teste'
+NEXT_PUBLIC_APP_URL='https://crm.exemplo.com.br'
+NEXT_PUBLIC_SUPABASE_URL='https://crm.exemplo.com.br'
+SINGLE_SERVER=1")"
+
+  for par in "proprio:$proprio" "single:$single"; do
+    nome="${par%%:*}"; saida="${par#*:}"
+    # CONTROLE POSITIVO: sem chegar ao fim, a ausência do aviso não mede nada.
+    if ! grep -q 'Atualização concluída' <<<"$saida"; then
+      printf '  ✗ %s: o update.sh não chegou ao fim — cenário inconclusivo, não verde\n' "$nome"
+      printf '     última linha: %s\n' "$(printf '%s' "$saida" | grep -v '^$' | tail -1)"
+      exit 1
+    fi
+    if grep -qE 'sbp_|painel do Supabase' <<<"$saida"; then
+      printf '  ✗ %s: a 1ª atualização mandou buscar o token sbp_ / o painel da nuvem\n' "$nome"; exit 1
+    fi
+  done
+  if ! grep -q 'SITE_URL=https://crm.exemplo.com.br' <<<"$proprio"; then
+    printf '  ✗ Supabase próprio: o aviso não manda conferir o SITE_URL no .env dele\n'; exit 1
+  fi
+  if grep -q 'CONFIRA UMA COISA' <<<"$single"; then
+    printf '  ✗ single-server: o aviso do Site URL saiu, e o Site URL ali é do kit\n'; exit 1
+  fi
+  printf '  ✓ Supabase próprio confere o SITE_URL dele, single-server fica calado — nenhum pede sbp_\n'
+) || fail=1
+rm -rf "$TMP_AVISO_TOPO"
+
 echo "DDL: nenhum script do kit manda a string do APP para o Postgres"
 # A guarda de CLASSE. Os três cenários acima provam o install.sh e o update.sh
 # pelo comportamento; esta linha alcança os irmãos que nenhuma fixture roda

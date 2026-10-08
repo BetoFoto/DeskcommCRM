@@ -115,9 +115,55 @@ montar vazia 'APP_NAME=Loja'
 rodar vazia
 check "URL vazia (controle): continua nomeando SUPABASE_ACCESS_TOKEN" diz vazia 'SUPABASE_ACCESS_TOKEN'
 
+# ── O MESMO defeito no update.sh ────────────────────────────────────────────
+# No primeiro `update.sh` SEM token, o aviso "CONFIRA UMA COISA, UMA VEZ SÓ"
+# saía em toda topologia (o install.sh nunca cria o marcador
+# `.deskcomm-site-url-avisado`) e mandava ao "painel do Supabase" e a
+# `export SUPABASE_ACCESS_TOKEN=sbp_...`. No single-server o Site URL é do kit
+# (install-single-server.sh grava SITE_URL e ADDITIONAL_REDIRECT_URLS desde o
+# nascimento); num Supabase próprio a conferência é no .env dele, não num painel
+# da nuvem. O texto mora em `aviso_do_site_url` (_common.sh), que o update.sh
+# relê depois do checkout.
+echo
+echo "update.sh: o aviso do Site URL, por topologia"
+
+aviso() {  # aviso <nome> <SINGLE_SERVER> <NEXT_PUBLIC_SUPABASE_URL>
+  env -u SUPABASE_ACCESS_TOKEN SINGLE_SERVER="$2" NEXT_PUBLIC_SUPABASE_URL="$3" NO_COLOR=1 \
+    bash -c '. "$1/hostgator-setup-kit/_common.sh"; set +e; aviso_do_site_url https://crm.exemplo.com.br' \
+    _ "$ROOT_DIR" > "$WORK/$1.out" 2>&1
+  echo $? > "$WORK/$1.rc"
+}
+
+aviso up-single 1 https://crm.exemplo.com.br
+# Sem a função, o "não diz" abaixo passaria por ausência de saída: o rc prende.
+check "update.sh single-server: a função existe e sai 0" saiu_zero up-single
+check "update.sh single-server: não pede SUPABASE_ACCESS_TOKEN" nao_diz up-single 'SUPABASE_ACCESS_TOKEN'
+check "update.sh single-server: não manda ao painel do Supabase" nao_diz up-single 'painel do Supabase'
+check "update.sh single-server: não imprime o aviso (o Site URL é do kit)" nao_diz up-single 'CONFIRA UMA COISA'
+
+aviso up-proprio 0 https://supabase.meucliente.com.br
+check "update.sh Supabase próprio: não manda buscar token sbp_" nao_diz up-proprio 'sbp_'
+check "update.sh Supabase próprio: não manda ao painel do Supabase" nao_diz up-proprio 'painel do Supabase'
+check "update.sh Supabase próprio: confere o SITE_URL no .env do Supabase dele" diz up-proprio 'SITE_URL=https://crm.exemplo.com.br'
+check "update.sh Supabase próprio: e o ADDITIONAL_REDIRECT_URLS" diz up-proprio 'ADDITIONAL_REDIRECT_URLS=https://crm.exemplo.com.br/auth/confirm'
+
+aviso up-nuvem 0 https://abcdefghijklmnop.supabase.co
+check "update.sh nuvem (controle): imprime o aviso" diz up-nuvem 'CONFIRA UMA COISA'
+check "update.sh nuvem (controle): aponta o painel do Supabase" diz up-nuvem 'painel do Supabase'
+check "update.sh nuvem (controle): receita o token sbp_" diz up-nuvem 'SUPABASE_ACCESS_TOKEN=sbp_'
+
+aviso up-vazia 0 ''
+check "update.sh URL vazia (controle): segue com o aviso da nuvem" diz up-vazia 'SUPABASE_ACCESS_TOKEN=sbp_'
+
+# A fiação: o update.sh imprime o aviso pela função, e não mais por um texto
+# próprio que ignora a topologia.
+UP="$ROOT_DIR/hostgator-setup-kit/update.sh"
+check "update.sh chama aviso_do_site_url" grep -qF 'aviso_do_site_url' "$UP"
+check "update.sh não receita o token sbp_ fora da função" bash -c '! grep -qF "SUPABASE_ACCESS_TOKEN=sbp_" "$1"' _ "$UP"
+
 if [[ "$FAILS" -ne 0 ]]; then
   printf '\n%d teste(s) falharam.\n' "$FAILS"
-  for n in single single-sem-moldes proprio; do
+  for n in single single-sem-moldes proprio up-single up-proprio; do
     printf -- '--- saída: %s ---\n' "$n"; cat "$WORK/$n.out"
   done
   exit 1
