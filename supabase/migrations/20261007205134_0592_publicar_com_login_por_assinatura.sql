@@ -1,3 +1,4 @@
+-- manifest: A publicação do agente confere modelos do login por assinatura (openai-assinatura) em models_available da credencial da própria empresa, como o custom, e não no catálogo global ai_models, que não tem os modelos de cada conta ChatGPT (#1639, #2456).
 -- ============================================================================
 -- 2026-10-07 — 0592: PUBLICAR AGENTE COM LOGIN POR ASSINATURA (#1639)
 --

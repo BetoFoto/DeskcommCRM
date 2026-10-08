@@ -23,6 +23,8 @@ import {
   CLIENTE_DINAMICO_SIWC,
   ENDPOINT_DE_TOKEN,
   ESCOPO_SIWC,
+  ErroDeToken,
+  NOME_DO_CLIENTE_SIWC,
   REDIRECT_URI_SIWC,
   codeChallengeS256,
   criarSessaoPkce,
@@ -240,3 +242,84 @@ describe("o retry único em 401", () => {
     expect(renovarApos401).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * O QUE O DOC 112 PEDIU A MAIS SOBRE O LOGIN (#2456): segredo nunca na URL, e
+ * revogação reconhecida como revogação.
+ *
+ * Sabotagens que confirmam: mandar o corpo da troca como query string
+ * (`${ENDPOINT_DE_TOKEN}?${corpo}`) deixa o primeiro caso vermelho; tirar o
+ * ramo `revoked` de `classificarFalhaDeToken` deixa o da revogação vermelho;
+ * mandar `agent_name_hint` sempre deixa o da reautorização vermelho.
+ */
+describe("o login por assinatura não põe segredo em URL", () => {
+  it("code, verifier e refresh_token vão no CORPO do POST, nunca na URL", async () => {
+    const fetchFalso = vi.fn(async () =>
+      resposta(200, { access_token: "a", refresh_token: "r", expires_in: 60 }),
+    );
+    const verifier = gerarCodeVerifier();
+    await trocarCodigoPorTokens({ code: "codigo-secreto", codeVerifier: verifier, clientId: "c", fetchImpl: fetchFalso });
+    await renovarPorRefreshToken({ refreshToken: "refresh-secreto", clientId: "c", fetchImpl: fetchFalso });
+
+    for (const chamada of fetchFalso.mock.calls as unknown as [string, RequestInit][]) {
+      const [url, init] = chamada;
+      expect(url).toBe(ENDPOINT_DE_TOKEN);
+      expect(init.method).toBe("POST");
+      for (const segredo of ["codigo-secreto", verifier, "refresh-secreto"]) {
+        expect(url).not.toContain(segredo);
+      }
+    }
+  });
+
+  it("a URL de authorize só leva o challenge, nunca o verifier", () => {
+    const sessao = criarSessaoPkce("state-x", { nonce: "n", extAgentHostId: "urn:uuid:h" });
+    expect(sessao.url).not.toContain(sessao.codeVerifier);
+  });
+});
+
+describe("a revogação da assinatura", () => {
+  it("refresh_token revogado na OpenAI vira o motivo `refresh_token_revoked`, não uma recusa genérica", async () => {
+    const fetchFalso = vi.fn(async () =>
+      resposta(400, { error: "invalid_grant", error_description: "Refresh token has been revoked" }),
+    );
+    const erro = await renovarPorRefreshToken({ refreshToken: "r", clientId: "c", fetchImpl: fetchFalso }).catch(
+      (e: unknown) => e,
+    );
+    expect(erro).toBeInstanceOf(ErroDeToken);
+    expect((erro as ErroDeToken).motivo).toBe("refresh_token_revoked");
+  });
+
+  it("outra recusa continua `recusado` (controle: o ramo da revogação não engole tudo)", async () => {
+    const fetchFalso = vi.fn(async () => resposta(400, { error: "invalid_client" }));
+    const erro = await renovarPorRefreshToken({ refreshToken: "r", clientId: "c", fetchImpl: fetchFalso }).catch(
+      (e: unknown) => e,
+    );
+    expect((erro as ErroDeToken).motivo).toBe("recusado");
+  });
+});
+
+/**
+ * O NOME NA TELA DA OPENAI É O DO APP, NÃO O DA MARCA DA INSTALAÇÃO.
+ *
+ * A documentação da OpenAI para apps auto-hospedados manda pôr em
+ * `agent_name_hint` "o nome real do seu app, usado de forma consistente entre
+ * instalações", e só no primeiro registro; na reautorização com o client_id
+ * emitido, omitir. Quem quiser outro nome o edita na própria tela de
+ * consentimento da OpenAI, antes de aprovar ("display metadata, not
+ * identity"). Fonte: https://developers.openai.com/siwc/token-sharing-open-source/sign-in
+ */
+describe("agent_name_hint", () => {
+  it("vai no primeiro registro, com o nome fixo do app", () => {
+    const url = new URL(montarUrlDeAutorizacao({ codeChallenge: "c", estado: "e", nonce: "n", extAgentHostId: "h" }));
+    expect(url.searchParams.get("agent_name_hint")).toBe(NOME_DO_CLIENTE_SIWC);
+  });
+
+  it("não vai na reautorização com o client_id emitido", () => {
+    const url = new URL(
+      montarUrlDeAutorizacao({ codeChallenge: "c", estado: "e", nonce: "n", extAgentHostId: "h", clientId: "emitido" }),
+    );
+    expect(url.searchParams.get("client_id")).toBe("emitido");
+    expect(url.searchParams.has("agent_name_hint")).toBe(false);
+  });
+});
+

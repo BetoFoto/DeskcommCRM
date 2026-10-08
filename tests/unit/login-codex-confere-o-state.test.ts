@@ -34,9 +34,14 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("next/headers", () => ({ headers: async () => new Map<string, string>() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+const jwtVerify = vi.hoisted(() =>
+  vi.fn(async (_token: string, _jwks: unknown, _opcoes: unknown): Promise<{ payload: Record<string, unknown> }> => ({
+    payload: { nonce: "nonce-test", sub: "siwc-subject" },
+  })),
+);
 vi.mock("jose", () => ({
   createRemoteJWKSet: vi.fn(() => vi.fn()),
-  jwtVerify: vi.fn(async () => ({ payload: { nonce: "nonce-test", sub: "siwc-subject" } })),
+  jwtVerify,
 }));
 vi.mock("@/lib/ai/credenciais/host-siwc", () => ({
   lerOuCriarHostIdSiwc: vi.fn(async () => "urn:uuid:host-test"),
@@ -64,6 +69,8 @@ vi.mock("@/lib/ai/pontos/pkce-da-assinatura", async (importOriginal) => ({
 }));
 
 import { conectarLoginCodex } from "@/app/actions/settings/conectarLoginCodex";
+import { audit } from "@/lib/audit";
+import { lerLoginCodex } from "@/lib/ai/credenciais/login-codex";
 import { emitirEstado } from "@/lib/agenda/google/estado";
 import { CLIENTE_DINAMICO_SIWC, lerRetornoColado } from "@/lib/ai/pontos/pkce-da-assinatura";
 
@@ -80,6 +87,9 @@ function retorno(code: string, state: string): string {
 beforeEach(() => {
   trocar.mockClear();
   guardar.mockClear();
+  vi.mocked(audit).mockClear();
+  jwtVerify.mockClear();
+  vi.mocked(lerLoginCodex).mockResolvedValue(null);
 });
 
 describe("lerRetornoColado", () => {
@@ -128,3 +138,154 @@ describe("conectarLoginCodex confere o state antes de trocar o código", () => {
     expect(trocar).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * OS RAMOS NOVOS DE SEGURANÇA DO SIGN IN WITH CHATGPT (#2456, doc 112 opção A).
+ *
+ * O `state` acima prova QUEM abriu o link. Estes casos provam o que o retorno
+ * traz: que a identidade foi assinada pela OpenAI PARA ESTE cliente (issuer e
+ * audience), que é a resposta DESTA tentativa (nonce do state), que o plano
+ * foi autorizado (escopos), que o client_id é o registrado, e que a conta
+ * ligada à empresa não é trocada em silêncio por outra.
+ *
+ * Em todos os recusados, nada é gravado. Sabotagens que confirmam (uma por
+ * vez): tirar `audience` do `jwtVerify`; tirar a comparação do nonce; tirar
+ * qualquer um dos dois `includes` de escopo; tirar a comparação de
+ * `retorno.clientId`; tirar a guarda de `conta_diferente` — cada uma deixa
+ * vermelho o caso de mesmo nome.
+ */
+function estadoComCliente(authSessionId: string): string {
+  return emitirEstado(
+    { organizationId: ORG, userId: PESSOA, authSessionId },
+    { segredo: SEGREDO, agora: new Date(), nonce: "nonce-test" },
+  );
+}
+
+function retornoComCliente(state: string, clientId?: string): string {
+  const cliente = clientId ? `&client_id=${encodeURIComponent(clientId)}` : "";
+  return `http://127.0.0.1:1455/auth/callback?code=code-bom${cliente}&state=${encodeURIComponent(state)}`;
+}
+
+const tokensBons = {
+  access_token: "at-segredo-de-acesso",
+  refresh_token: "rt-segredo-de-renovacao",
+  id_token: "signed-id-token",
+  scopes: ["chatgpt.tokens.use.direct", "resource.invoke"],
+  expires_at: null,
+};
+
+describe("conectarLoginCodex confere a identidade, o plano e o cliente devolvidos", () => {
+  it("a assinatura do id_token é conferida contra o emissor da OpenAI e ESTE client_id", async () => {
+    const r = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
+    expect(r).toEqual({ ok: true });
+    expect(jwtVerify).toHaveBeenCalledTimes(1);
+    const [token, , opcoes] = jwtVerify.mock.calls[0]!;
+    expect(token).toBe("signed-id-token");
+    expect(opcoes).toMatchObject({ issuer: "https://auth.openai.com", audience: "dynamic-client-test" });
+  });
+
+  it("id_token com assinatura inválida é recusado e nada é gravado", async () => {
+    jwtVerify.mockRejectedValueOnce(new Error("signature verification failed"));
+    const r = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
+    expect(r).toEqual({ ok: false, error: "identidade_invalida" });
+    expect(guardar).not.toHaveBeenCalled();
+  });
+
+  it("nonce do id_token diferente do nonce do state é recusado (resposta de outra tentativa)", async () => {
+    jwtVerify.mockResolvedValueOnce({
+      payload: { nonce: "nonce-de-outra-tentativa", sub: "siwc-subject" },
+    });
+    const r = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
+    expect(r).toEqual({ ok: false, error: "identidade_invalida" });
+    expect(guardar).not.toHaveBeenCalled();
+  });
+
+  it("id_token sem `sub` é recusado — sem ele não há como saber de quem é a conta", async () => {
+    jwtVerify.mockResolvedValueOnce({
+      payload: { nonce: "nonce-test" },
+    });
+    const r = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
+    expect(r).toEqual({ ok: false, error: "identidade_invalida" });
+    expect(guardar).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["sem o escopo do plano (chatgpt.tokens.use.direct)", { scopes: ["resource.invoke"] }],
+    ["sem o escopo de invocação (resource.invoke)", { scopes: ["chatgpt.tokens.use.direct"] }],
+    ["sem id_token", { id_token: undefined }],
+  ])("troca %s é recusada como plano não autorizado", async (_nome, troca) => {
+    trocar.mockResolvedValueOnce({ ...tokensBons, ...troca } as typeof tokensBons);
+    const r = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
+    expect(r).toEqual({ ok: false, error: "plano_nao_autorizado" });
+    expect(guardar).not.toHaveBeenCalled();
+  });
+
+  it("client_id do retorno diferente do registrado no state é recusado, sem chamar a OpenAI", async () => {
+    const r = await conectarLoginCodex({
+      codigo: retornoComCliente(estadoComCliente("cliente-registrado"), "cliente-de-outra-conta"),
+      codeVerifier: VERIFIER,
+    });
+    expect(r).toEqual({ ok: false, error: "registro_incompleto" });
+    expect(trocar).not.toHaveBeenCalled();
+  });
+
+  it("primeiro registro sem o client_id emitido no retorno é recusado, sem chamar a OpenAI", async () => {
+    const r = await conectarLoginCodex({
+      codigo: retornoComCliente(estadoComCliente(CLIENTE_DINAMICO_SIWC)),
+      codeVerifier: VERIFIER,
+    });
+    expect(r).toEqual({ ok: false, error: "registro_incompleto" });
+    expect(trocar).not.toHaveBeenCalled();
+  });
+
+  it("reautorização usa o client_id registrado no state, não o que o retorno trouxer", async () => {
+    const r = await conectarLoginCodex({
+      codigo: retornoComCliente(estadoComCliente("cliente-registrado")),
+      codeVerifier: VERIFIER,
+    });
+    expect(r).toEqual({ ok: true });
+    expect(trocar.mock.calls[0]![0]).toMatchObject({ clientId: "cliente-registrado" });
+    expect(jwtVerify.mock.calls[0]![2]).toMatchObject({ audience: "cliente-registrado" });
+  });
+
+  it("conta ChatGPT diferente da que a empresa já tem ligada é recusada, e a ligada fica", async () => {
+    vi.mocked(lerLoginCodex).mockResolvedValueOnce({
+      ...tokensBons,
+      client_id: "dynamic-client-test",
+      subject: "conta-ja-ligada",
+    });
+    const r = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
+    expect(r).toEqual({ ok: false, error: "conta_diferente" });
+    expect(guardar).not.toHaveBeenCalled();
+  });
+
+  it("consentimento recusado na OpenAI não chega à troca", async () => {
+    const r = await conectarLoginCodex({
+      codigo: `http://127.0.0.1:1455/auth/callback?error=access_denied&state=${encodeURIComponent(estadoPara(ORG, PESSOA))}`,
+      codeVerifier: VERIFIER,
+    });
+    expect(r).toEqual({ ok: false, error: "consentimento_recusado" });
+    expect(trocar).not.toHaveBeenCalled();
+  });
+});
+
+describe("os tokens não saem da action", () => {
+  it("o sucesso não devolve token, e a auditoria não leva token nenhum", async () => {
+    trocar.mockResolvedValueOnce(tokensBons);
+    const r = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
+    expect(r).toEqual({ ok: true });
+    expect(vi.mocked(audit)).toHaveBeenCalledTimes(1);
+    const rastro = JSON.stringify(vi.mocked(audit).mock.calls);
+    for (const segredo of ["at-segredo-de-acesso", "rt-segredo-de-renovacao", "signed-id-token", "code-bom", VERIFIER]) {
+      expect(rastro).not.toContain(segredo);
+    }
+  });
+
+  it("a falha da troca devolve só o código do erro, nunca a mensagem do provedor", async () => {
+    trocar.mockRejectedValueOnce(new Error("invalid_grant rt-segredo-de-renovacao"));
+    const r = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
+    expect(r).toEqual({ ok: false, error: "troca_recusada" });
+    expect(JSON.stringify(r)).not.toContain("segredo");
+  });
+});
+

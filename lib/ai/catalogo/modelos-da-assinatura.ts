@@ -36,9 +36,13 @@ export async function listarModelosDaAssinatura(orgId: string): Promise<ModeloDa
   if (!response.ok) return null;
 
   const body: unknown = await response.json().catch(() => null);
-  const rows = body && typeof body === "object" && "models" in body && Array.isArray(body.models)
-    ? body.models
-    : [];
+  // Um 200 em formato que não conhecemos não é "a conta não tem modelos":
+  // gravar `[]` a partir dele apagaria a lista válida e travaria todo
+  // "Publicar" da empresa. Responde vazio e não toca no espelho.
+  if (!body || typeof body !== "object" || !("models" in body) || !Array.isArray(body.models)) {
+    return [];
+  }
+  const rows: unknown[] = body.models;
   const models = rows.flatMap((row: unknown): ModeloDaAssinatura[] => {
     if (!row || typeof row !== "object") return [];
     const model = row as { slug?: unknown; id?: unknown; display_name?: unknown; visibility?: unknown };
