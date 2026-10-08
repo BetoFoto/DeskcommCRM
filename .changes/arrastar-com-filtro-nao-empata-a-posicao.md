@@ -12,4 +12,4 @@ Agora o vizinho de baixo do card solto é contado na etapa INTEIRA, lida do cach
 
 Não muda banco nenhum: esta entrega não cria migração.
 
-Contribuição de @webtecnica (#2558).
+Contribuição de @webtecnica (#2558), a partir da issue #2545 de @hudson-souza-mkt.
