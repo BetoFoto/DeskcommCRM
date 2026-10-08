@@ -10925,6 +10925,7 @@ export type Database = {
         Args: { p_org: string; p_conversation: string }
         Returns: {
           id: string
+          user_id: string
           endpoint: string
           p256dh: string
           auth: string

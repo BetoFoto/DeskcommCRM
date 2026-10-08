@@ -15,7 +15,7 @@
 create or replace function public.fn_push_inscricoes_que_veem_a_conversa(
   p_org uuid,
   p_conversation uuid
-) returns table (id uuid, endpoint text, p256dh text, auth text)
+) returns table (id uuid, user_id uuid, endpoint text, p256dh text, auth text)
 language plpgsql volatile security definer
 set search_path = public
 as $$
@@ -43,7 +43,7 @@ begin
     perform set_config('request.jwt.claims', jsonb_build_object('sub', v_user)::text, true);
     if public.fn_can_view_conversation(p_org, v_assigned) then
       return query
-        select s.id, s.endpoint, s.p256dh, s.auth
+        select s.id, s.user_id, s.endpoint, s.p256dh, s.auth
           from public.push_subscriptions s
          where s.organization_id = p_org and s.user_id = v_user;
     end if;

@@ -28048,8 +28048,13 @@ begin
     or p_manifest->>'publisher' is distinct from v_op.publisher or p_manifest->>'name' is distinct from v_op.name
     or p_manifest->>'version' is distinct from v_op.version
     or p_manifest->'dependencies' <> '[]'::jsonb or p_manifest->'data' <> '{"mode":"none"}'::jsonb
-    or (p_manifest - array['format_version','profile','dependencies','data','configuration','contributions'])
-      is distinct from (v_op.entry - array['sha256','byte_length']) then
+    -- 0511: projeta os dois lados sobre as chaves que a ENTRADA do catálogo anuncia. Comparar os
+    -- complementos fazia todo campo de vitrine da 0282 (publisher_label, homepage, repository,
+    -- tags, published_at) divergir, e nenhuma entrada do catálogo oficial instalava.
+    or exists (
+      select 1 from unnest(array['publisher','name','version','license','host_api','display','permissions']) k
+      where p_manifest->k is distinct from v_op.entry->k
+    ) then
     raise exception using errcode='P0001',message='extension_artifact_mismatch';
   end if;
   if v_op.status='completed' then
@@ -32333,8 +32338,13 @@ begin
     or p_manifest->>'publisher' is distinct from v_op.publisher or p_manifest->>'name' is distinct from v_op.name
     or p_manifest->>'version' is distinct from v_op.version
     or p_manifest->'dependencies' <> '[]'::jsonb or p_manifest->'data' <> '{"mode":"none"}'::jsonb
-    or (p_manifest - array['format_version','profile','dependencies','data','configuration','contributions'])
-      is distinct from (v_op.entry - array['sha256','byte_length']) then
+    -- 0511: projeta os dois lados sobre as chaves que a ENTRADA do catálogo anuncia. Comparar os
+    -- complementos fazia todo campo de vitrine da 0282 (publisher_label, homepage, repository,
+    -- tags, published_at) divergir, e nenhuma entrada do catálogo oficial instalava.
+    or exists (
+      select 1 from unnest(array['publisher','name','version','license','host_api','display','permissions']) k
+      where p_manifest->k is distinct from v_op.entry->k
+    ) then
     raise exception using errcode='P0001',message='extension_artifact_mismatch';
   end if;
   if v_op.status='completed' then
@@ -47513,7 +47523,7 @@ grant execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,bool
 create or replace function public.fn_push_inscricoes_que_veem_a_conversa(
   p_org uuid,
   p_conversation uuid
-) returns table (id uuid, endpoint text, p256dh text, auth text)
+) returns table (id uuid, user_id uuid, endpoint text, p256dh text, auth text)
 language plpgsql volatile security definer
 set search_path = public
 as $$
@@ -47541,7 +47551,7 @@ begin
     perform set_config('request.jwt.claims', jsonb_build_object('sub', v_user)::text, true);
     if public.fn_can_view_conversation(p_org, v_assigned) then
       return query
-        select s.id, s.endpoint, s.p256dh, s.auth
+        select s.id, s.user_id, s.endpoint, s.p256dh, s.auth
           from public.push_subscriptions s
          where s.organization_id = p_org and s.user_id = v_user;
     end if;

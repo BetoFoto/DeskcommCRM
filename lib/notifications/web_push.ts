@@ -97,14 +97,18 @@ export async function enviarPushAoUsuario(
  * Quem decide é `fn_can_view_conversation` (a RLS de `conversations`), avaliada
  * para cada inscrito por `fn_push_inscricoes_que_veem_a_conversa` — a regra não
  * é repetida aqui. Falha na leitura não envia a ninguém.
+ *
+ * `soUsuarios` é a lista de quem DEVE ser avisado (`./destinatarios-da-mensagem.ts`);
+ * ela só estreita o conjunto, nunca alarga além de quem pode ver.
  */
 export async function enviarPushAQuemVeAConversa(
   organizationId: string,
   conversationId: string,
   payload: PushPayload,
+  soUsuarios?: ReadonlyArray<string>,
+  admin: ReturnType<typeof createAdminClient> = createAdminClient(),
 ): Promise<{ sent: number; gone: number }> {
-  if (!vapidPronto()) return { sent: 0, gone: 0 };
-  const admin = createAdminClient();
+  if (!vapidPronto() || soUsuarios?.length === 0) return { sent: 0, gone: 0 };
   const { data, error } = await admin.rpc("fn_push_inscricoes_que_veem_a_conversa", {
     p_org: organizationId,
     p_conversation: conversationId,
@@ -113,7 +117,8 @@ export async function enviarPushAQuemVeAConversa(
     logger.warn("push_subscriptions_visible_list_failed", { detail: error.message });
     return { sent: 0, gone: 0 };
   }
-  return enviarPushDaOrg(organizationId, payload, inscricoesJaFiltradas(admin, data ?? []));
+  const linhas = (data ?? []).filter((l) => !soUsuarios || soUsuarios.includes(l.user_id));
+  return enviarPushDaOrg(organizationId, payload, inscricoesJaFiltradas(admin, linhas));
 }
 
 /** Lista já filtrada para `enviarPushDaOrg`; a faxina de inscrição morta (404/410) segue indo ao banco. */
