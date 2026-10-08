@@ -186,9 +186,10 @@ describe("interpretarRetencao — o knob nunca derruba o produto", () => {
     // `AUDIT_LOG_RETENTION_DAYS=9999999` chegaria ao Postgres como
     // `now() - make_interval(days => 9999999)` — antes do mínimo de
     // `timestamptz` (4713 a.C.) → `timestamp out of range`, o cron
-    // `data-retention` lançava a cada rodada e TODAS as tabelas paravam de
-    // ser podadas (#2509). O formato do aviso espelha o do piso: `chave=valor
-    // está <preposição> do <limite> de N dias — usando N.`
+    // `data-retention` lançava a cada rodada, e aquela tabela e as que vêm
+    // depois dela paravam de ser podadas (#2509). O formato do aviso espelha o
+    // do piso:
+    // `chave=valor está <preposição> do <limite> de N dias — usando N.`
     const r = interpretarRetencao("9999999", {
       chave: "AUDIT_LOG_RETENTION_DAYS",
       padrao: 90,

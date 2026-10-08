@@ -353,15 +353,19 @@ export const RETENCAO_CHECKPOINTS_DIAS_PADRAO = 180;
 export const RETENCAO_CHECKPOINTS_DIAS_PISO = 30;
 
 /**
- * Teto de 36500 dias (100 anos) para QUALQUER knob de retenção.
+ * Teto de 36500 dias (100 anos) para todo knob que passa por
+ * `interpretarRetencao`. Os dois do arquivo de webhooks
+ * (`WEBHOOK_LOG_*_RETENTION_DAYS`, `diasDeRetencao` em `lib/env.ts`) NÃO passam
+ * por aqui e seguem sem teto.
  *
  * O piso impede apagar cedo demais; o teto impede é que o número chegue ao
  * banco. `AUDIT_LOG_RETENTION_DAYS=9999999` vira
  * `now() - make_interval(days => 9999999)` — uns 27 mil anos antes do mínimo
  * de `timestamptz` (4713 a.C.) → `timestamp out of range`; e acima de 2³¹−1 o
  * parâmetro `int` nem é aceito. Como o cron `data-retention` roda toda
- * rodada, UMA linha no `.env` parava a poda de TODAS as tabelas (e, pelo
- * acoplamento da #2508, a varredura de LGPD D+15), com `sweep_run
+ * rodada, UMA linha no `.env` parava a poda daquela tabela e de todas as que
+ * vêm depois dela em `podarHistorico` (e, pelo acoplamento da #2508, a
+ * varredura de LGPD D+15), com `sweep_run
  * {falhou:true}` como única pista.
  *
  * Um século fica muito além de qualquer janela que alguma tela lê
