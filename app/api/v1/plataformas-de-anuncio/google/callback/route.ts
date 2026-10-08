@@ -61,7 +61,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const app = configuracaoDoGoogleAds(estado.api);
   if (!app) return voltar(base, { erro: "google_ads_nao_configurado" });
 
-  // 3. Troca — só depois do state confirmado.
+  const admin = createAdminClient();
+
+  // O retorno vale UMA vez: o nonce do `state` é queimado ANTES da troca, na
+  // mesma tabela e pela mesma razão do callback do Google Agenda
+  // (`app/api/v1/agenda/google/callback/route.ts`). Antes da troca porque o
+  // `code` do Google é de uso único: queimar depois o gastaria antes de saber
+  // que o `state` era repetido. Qualquer erro recusa, não só o `23505`: sem
+  // gravar não há uso único a garantir.
+  const { error: erroDoNonce } = await admin.from("calendar_oauth_nonces").insert({
+    nonce: estado.nonce,
+    organization_id: estado.organizationId,
+    user_id: estado.userId,
+    expira_em: new Date(estado.expiraEmMs).toISOString(),
+  });
+  if (erroDoNonce) return voltar(base, { erro: "estado_invalido" });
+
+  // 3. Troca — só depois do state confirmado e queimado.
   const leitura = await trocarCodigoPorToken(app, code, { agora: new Date() });
   if (!leitura.ok) {
     logger.error("[plataformas-de-anuncio.google.callback] troca de código falhou", {
@@ -77,8 +93,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // funcionaria por uma hora e morreria calada.
     return voltar(base, { erro: "sem_refresh_token" });
   }
-
-  const admin = createAdminClient();
 
   // 4. Cifra antes do upsert.
   const cifrado = await encryptWebhookSecret(admin, leitura.token.refresh_token);
