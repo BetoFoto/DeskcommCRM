@@ -4114,6 +4114,8 @@
   "Endereço de retorno": "返回地址",
   "Já existe uma chave cadastrada. Deixe em branco para mantê-la, ou digite uma nova para substituir.": "已存在已注册的密钥。留空以保留它，或输入新密钥以替换。",
   "Ela é guardada cifrada e nunca volta a aparecer nesta tela.": "它会被加密保存，且不会再次出现在此屏幕上。",
+  "Essa chave tem aspas, vírgula ou espaço — sinal de que veio colada junto com o resto do arquivo. Copie só o valor que começa com GOCSPX-, sem nada colado depois.": "这个密钥包含引号、逗号或空格——说明它是和文件的其余内容一起粘贴的。请只复制以 GOCSPX- 开头的值，后面不要粘贴任何内容。",
+  "A chave secreta tem caracteres que não existem numa chave do Google (como aspas, vírgula ou espaço). Copie só o valor que começa com GOCSPX-, sem nada colado depois.": "该密钥包含 Google 密钥中不存在的字符（例如引号、逗号或空格）。请只复制以 GOCSPX- 开头的值，后面不要粘贴任何内容。",
   "Esta instalação já tem as credenciais no arquivo de configuração do servidor. O que você salvar aqui passa a valer no lugar delas; apagar o que está aqui faz o sistema voltar a usar as do arquivo.": "此安装已在服务器配置文件中拥有凭据。你在此保存的内容将取代它们生效；删除此处内容会使系统重新使用文件中的凭据。",
   "Ao trocar uma credencial já em uso:": "更换正在使用的凭据时：",
   "quem já conectou a agenda vai precisar conectar de novo. O Google invalida as autorizações antigas quando o aplicativo muda — não há como evitar, e ninguém perde compromisso por isso.": "已经连接过日历的人需要重新连接。当应用发生变化时，Google 会使旧授权失效——这无法避免，而且没有人会因此丢失日程。",
