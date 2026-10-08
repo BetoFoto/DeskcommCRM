@@ -64,6 +64,7 @@ const CAMPOS_PROIBIDOS: Array<[string, string]> = [
   ["case_events", "metadata"],
   ["passagens", "motor"],
   ["passagens", "origem"],
+  ["passagens", "body"],
   ["honorarios_contratos", "repasse_advogado_pct"],
   ["meeting_deliveries", "run_after"],
   ["avisos_de_caso", "destino_mascarado"],
@@ -134,17 +135,29 @@ function payloadCheio(): ExportPayload {
       { id: "SEGREDO-cfp", campo: "FICA-campo", trecho: "FICA-trecho", motivo_recusa: "NOTA-recusa" },
     ],
     appointment_notices: [{ id: "SEGREDO-an", title: "SEGREDO-aviso-da-central" }],
+    // A narrativa (`body`) repete entre aspas o `content` de quem passou
+    // (`montarBriefingDaPassagem`): se ela ficasse, o texto voltaria por ela.
     passagens: [
       {
         id: "SEGREDO-pa",
         conversation_id: "SEGREDO-pac",
         caso_id: "SEGREDO-paca",
         motor: "SEGREDO-motor",
-        origem: "SEGREDO-origem",
+        origem: "caso_escalado",
         motivo_codigo: "FICA-motivo",
+        title: "FICA-o-que-ele-quer",
+        body: 'SEGREDO-narrativa: A pessoa que escalou escreveu: "NOTA-razao-de-quem-escalou"',
         notes: "FICA-ultimas-palavras-do-cliente",
-        content: "NOTA-razao-de-quem-passou",
+        content: "NOTA-razao-de-quem-escalou",
         tentativas: ["FICA-tentativa"],
+      },
+      {
+        id: "SEGREDO-pa2",
+        motor: "SEGREDO-motor",
+        origem: "ferramenta_do_modelo",
+        motivo_codigo: "FICA-motivo-da-ia",
+        body: 'SEGREDO-narrativa: Quem passou escreveu: "SEGREDO-por-que-da-ia"',
+        content: "SEGREDO-por-que-da-ia",
       },
     ],
     avisos_de_caso: [
@@ -302,11 +315,20 @@ describe("doc 110 — as três respostas do dono", () => {
     for (const nota of JSON.stringify(payloadCheio()).match(/NOTA-[a-z-]+/g)!) expect(texto, nota).toContain(nota);
     expect(copia.conversation_notes).toEqual([{ body: "NOTA-nota-interna", created_at: "NOTA-data-da-nota" }]);
     for (const [secao, campo] of NOTAS)
-      for (const l of noCaminho(copia, secao)) expect(l, `${secao}.${campo}`).toHaveProperty(campo);
+      expect(noCaminho(copia, secao).some((l) => campo in l), `${secao}.${campo}`).toBe(true);
     // O nome do funcionário e o caminho do anexo: o art. 15.º, n.º 4 protege OUTRAS pessoas.
     expect(texto).not.toContain("SEGREDO-funcionario");
     expect(texto).not.toContain("SEGREDO-caminho-do-anexo");
   });
+
+  it.each(PAISES)(
+    "1A (%s): o `por_que` que a IA escreveu ao chamar um atendente não volta pela passagem, nem pela narrativa",
+    (pais) => {
+      const passagens = linhas(copiaDoTitular(payloadCheio(), pais).passagens);
+      expect(passagens[1]).toEqual({ motivo_codigo: "FICA-motivo-da-ia" });
+      for (const p of passagens) expect(p).not.toHaveProperty("body");
+    },
+  );
 
   it("3A: um país sem decisão segue o Brasil, não Portugal", () => {
     expect(copiaDoTitular(payloadCheio(), "XI")).toEqual(copiaDoTitular(payloadCheio(), "BR"));

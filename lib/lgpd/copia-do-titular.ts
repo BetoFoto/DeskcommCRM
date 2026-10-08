@@ -44,6 +44,7 @@
  * `reply_drafts.feedback`): o PDF não muda, e tirar do arquivo o que o relatório
  * entrega não protegeria nada.
  */
+import type { OrigemDaPassagem } from "@/lib/escalacao/passagem";
 import type { ExportPayload } from "@/lib/lgpd/export-collector";
 
 /** Seções que não vão no arquivo. */
@@ -102,7 +103,7 @@ export const O_QUE_FICA = {
     "a linha do tempo do caso dele: o que a IA registrou e o que ele respondeu (sem o texto de quem é da equipe)",
   demandas: "o pedido dele: assunto, estado, se quem cuida é a IA ou uma pessoa, próximo passo e desfecho",
   passagens:
-    "a passagem do atendimento dele a uma pessoa: o pedido em uma linha, a narrativa, as últimas palavras dele e o motivo",
+    "a passagem do atendimento dele a uma pessoa: o pedido em uma linha, o que a IA já tentou, as últimas palavras dele e o motivo",
   avisos_de_caso: "que a equipe foi avisada do caso dele, e quando",
   campaign_recipients: "as mensagens de campanha que ele recebeu, e por que foi ou não incluído",
   campaign_suppressions: "a exclusão dele das campanhas",
@@ -141,6 +142,8 @@ export const CAMPOS_DA_EQUIPE: Readonly<Record<string, Readonly<Record<string, s
   passagens: {
     motor: "qual dos dois motores do sistema passou a conversa",
     origem: "o caminho de código por onde a passagem entrou (o motivo, `motivo_codigo`, fica)",
+    body:
+      "a narrativa montada PARA quem vai atender (`montarBriefingDaPassagem`): repete entre aspas o texto livre de quem passou — o `por_que` da IA (doc 110, 1A) e a razão de quem escalou — e o resto já vai em `title`, `notes`, `tentativas` e `motivo_codigo`",
   },
   avisos_de_caso: {
     destino_mascarado: "telefone, mesmo mascarado, do FUNCIONÁRIO avisado: dado de terceiro",
@@ -164,7 +167,7 @@ export const NOTAS_SOBRE_O_TITULAR: Readonly<Record<string, Readonly<Record<stri
   contact_field_proposals: { motivo_recusa: "por que a equipe recusou a proposta de gravar um dado dele" },
   passagens: {
     content:
-      "o texto livre de quem passou: a razão que a pessoa da equipe escreveu ao escalar, ou o `por_que` da ferramenta (0291)",
+      "a razão que a pessoa da equipe escreveu ao escalar o caso (origem `caso_escalado`). Nas outras origens o campo é o `por_que` da IA ou o `reason` de um agente MCP — texto da máquina para a equipe, que sai em todo país (doc 110, 1A)",
   },
 };
 
@@ -173,6 +176,9 @@ export const NOTAS_SOBRE_O_TITULAR: Readonly<Record<string, Readonly<Record<stri
  * dono decidiu Portugal; país novo entra aqui por decisão, não por herança.
  */
 const PAISES_QUE_RECEBEM_AS_NOTAS = new Set(["PT"]);
+
+/** A única origem de passagem cujo `content` uma pessoa da equipe escreveu (`app/api/v1/ai/cases/[id]/reply`). */
+const ORIGEM_ESCRITA_PELA_EQUIPE: OrigemDaPassagem = "caso_escalado";
 
 /** As chaves de banco que ficam, e por quê — ver o item 1 do cabeçalho. */
 const CHAVES_QUE_FICAM = new Set(["external_id"]);
@@ -231,6 +237,9 @@ export function copiaDoTitular(data: ExportPayload, pais: string): Objeto {
   const recebeAsNotas = PAISES_QUE_RECEBEM_AS_NOTAS.has(pais);
 
   for (const secao of Object.keys(SECOES_DA_EQUIPE)) delete copia[secao];
+  // Antes de `origem` sair: só a passagem de um caso escalado tem `content`
+  // escrito por uma pessoa da equipe (0291).
+  for (const p of linhasDe(copia.passagens)) if (p.origem !== ORIGEM_ESCRITA_PELA_EQUIPE) delete p.content;
   // O anexo fica fora: o arquivo levaria só o caminho interno no armazenamento.
   if (recebeAsNotas && data.conversation_notes)
     copia.conversation_notes = data.conversation_notes.map(({ body, created_at }) => ({ body, created_at }));
