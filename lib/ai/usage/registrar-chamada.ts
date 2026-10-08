@@ -9,21 +9,21 @@
  * importadas de lá, nunca copiadas. O que muda é o tipo do `purpose`:
  * `InvocationKind` espelha o CHECK de `ai_invocations.invocation_kind` e é
  * vigiado por `tests/invariants/vocabulario-banco-x-typescript.test.ts`, então
- * acrescentar `visao_de_imagem` ali reprovaria o invariante por um valor que
+ * acrescentar `voz_ao_vivo` ali reprovaria o invariante por um valor que
  * aquela tabela nunca recebe. `llm_calls.purpose` é texto livre; o vocabulário
  * dele é o registro de pontos (`lib/ai/pontos/registro.ts`), cobrado por
  * `tests/unit/pontos-de-ia-completude.test.ts`.
  *
  * ═══ POR QUE EXISTE ═══
  *
- * Transcrição e visão de mídia (`workers/media-derive-worker.ts`) e a sessão de
- * voz (`workers/voice-agent/`) chamavam provedor pago sem deixar linha nenhuma:
- * a tela de Uso de IA somava zero para elas, e a régua do teto
- * (`fn_gasto_de_ia_do_mes`) também — gasto que existe e não aparece é gasto que
- * nenhum teto alcança.
+ * A sessão de voz (`workers/voice-agent/`) chamava provedor pago sem deixar
+ * linha nenhuma: a tela de Uso de IA somava zero para ela — gasto que existe e
+ * não aparece. A mídia (transcrição e visão) grava pelo próprio caminho, em
+ * `workers/media-derive-worker.ts`, porque passa também pelo teto
+ * (`aplicarOrcamento`); a voz ainda não tem tarifa no catálogo para entrar nele.
  *
- * Awaitable, mas NUNCA LANÇA: telemetria que falha não pode derrubar a leitura
- * de um áudio nem uma ligação em curso. A falha vai para o log.
+ * Awaitable, mas NUNCA LANÇA: telemetria que falha não pode derrubar uma
+ * ligação em curso. A falha vai para o log.
  */
 import { codigoDoErro, providerDoModelo } from "@/lib/ai/log-invocation";
 import { logger } from "@/lib/logger";
