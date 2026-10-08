@@ -28,9 +28,10 @@ describe("test:shell", () => {
     const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
       scripts: Record<string, string>;
     };
+    const testShell = pkg.scripts["test:shell"] ?? "";
     const foraDoScript = readdirSync(join(process.cwd(), "tests/shell"))
       .filter((f) => f.endsWith(".test.sh"))
-      .filter((f) => !pkg.scripts["test:shell"].includes(`bash tests/shell/${f}`));
+      .filter((f) => !testShell.includes(`bash tests/shell/${f}`));
     expect(foraDoScript).toEqual([]);
   });
 });
