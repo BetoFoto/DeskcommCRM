@@ -47,6 +47,17 @@ describe("proximoNaEtapaInteira", () => {
     expect(midpoint(acima.position_in_stage, oculto.position_in_stage)).toBe(1500);
   });
 
+  it("entre dois visíveis devolve o escondido do MEIO, não o visível de baixo", () => {
+    // A variante da #2545: A (1000) e C (3000) visíveis, B (2000) escondido.
+    // Com o `after` visível, `midpoint(1000, 3000)` = 2000 — a posição de B.
+    const acima = card("a", 1000);
+    const oculto = card("b", 2000);
+    const visivel = card("c", 3000);
+    const devolvido = proximoNaEtapaInteira(acima, visivel, [acima, oculto, visivel], ARRASTADO);
+    expect(devolvido).toBe(oculto);
+    expect(midpoint(acima.position_in_stage, oculto.position_in_stage)).toBe(1500);
+  });
+
   it("card escondido EMPATADO com o de cima é pulado (empate já gravado não vira NaN)", () => {
     const acima = card("a", 1000);
     const empatado = card("empatado", 1000);
