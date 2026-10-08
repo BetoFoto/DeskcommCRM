@@ -565,7 +565,9 @@ gravar_modelos_do_gotrue() {  # gravar_modelos_do_gotrue <.env do Supabase> [htt
 # Mora aqui, e não no update.sh, porque o update.sh relê este arquivo depois do
 # checkout: daqui em diante, um texto corrigido chega na própria atualização que
 # o traz. (A atualização que traz ESTA função ainda roda o update.sh anterior,
-# com o texto antigo embutido — o bash segue lendo o arquivo que abriu.)
+# com o texto antigo embutido — o bash segue lendo o arquivo que abriu. No
+# single-server ele não chega a sair: atualizar_supabase_single_server grava o
+# marcador antes. No Supabase próprio sai uma última vez.)
 aviso_do_site_url() {  # aviso_do_site_url <URL do app>
   local dom="${1%/}"
   [ "${SINGLE_SERVER:-0}" = "1" ] && return 0
@@ -601,7 +603,8 @@ AVISO
   própria senha.
 
   Vale conferir no .env do seu Supabase. Se já estiver assim, não há nada a
-  fazer; se mudar, reinicie o auth dele:
+  fazer; se mudar, recrie o contêiner auth dele (docker compose up -d auth,
+  na pasta do Supabase — um restart não relê o .env):
 
        SITE_URL=${dom}
        ADDITIONAL_REDIRECT_URLS=${dom}/auth/confirm
@@ -620,6 +623,11 @@ AVISO
 # CRM: o Supabase segue na versão de antes e a próxima rodada tenta de novo.
 atualizar_supabase_single_server() {
   local dir atual
+  # O aviso do Site URL não tem o que dizer aqui: o Site URL é do kit (ver
+  # aviso_do_site_url). O marcador nasce no corpo desta função, e não só no
+  # update.sh, pelo motivo do #1653 lá embaixo: o update.sh ANTIGO, com o texto
+  # da nuvem embutido, chama esta função antes de decidir o aviso pelo marcador.
+  : > "${PROJECT_DIR:-$PWD}/.deskcomm-site-url-avisado" 2>/dev/null || true
   dir="$(dir_do_supabase)"
   [ -f "$dir/.env" ] || { c_red "⛔ $(t "Modo single-server sem {1}/.env — rode install-single-server.sh." "$dir")"; return 1; }
   cp "$KIT_DIR/supabase-single-server.override.yml" "$dir/docker-compose.deskcomm.yml" || return 1

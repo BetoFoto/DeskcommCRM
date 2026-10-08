@@ -17,5 +17,8 @@ ali o endereço dos e-mails já é configurado pelo instalador.
 Quem usa um Supabase próprio, fora do kit, também deixa de ser mandado buscar o
 token: a instalação ensina as variáveis do GoTrue, e a primeira atualização
 pede para conferir `SITE_URL` e `ADDITIONAL_REDIRECT_URLS` no `.env` do Supabase
-dele. Quem usa o Supabase na nuvem continua recebendo o aviso do token, que ali
+dele — mas quem nunca atualizou sem o token ainda vê o texto antigo uma última
+vez, na atualização que traz este conserto (ela ainda roda o `update.sh`
+anterior). Com o Supabase na VPS, o texto antigo já não sai nessa atualização.
+Quem usa o Supabase na nuvem continua recebendo o aviso do token, que ali
 é o passo certo. Não é preciso fazer nada.

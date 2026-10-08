@@ -158,7 +158,8 @@ check "update.sh URL vazia (controle): segue com o aviso da nuvem" diz up-vazia 
 # A fiação: o update.sh imprime o aviso pela função, e não mais por um texto
 # próprio que ignora a topologia.
 UP="$ROOT_DIR/hostgator-setup-kit/update.sh"
-check "update.sh chama aviso_do_site_url" grep -qF 'aviso_do_site_url' "$UP"
+# Ancorada na CHAMADA: o comentário que aponta a função também tem o nome.
+check "update.sh chama aviso_do_site_url" grep -qE '^ *aviso_do_site_url ' "$UP"
 check "update.sh não receita o token sbp_ fora da função" bash -c '! grep -qF "SUPABASE_ACCESS_TOKEN=sbp_" "$1"' _ "$UP"
 
 if [[ "$FAILS" -ne 0 ]]; then
