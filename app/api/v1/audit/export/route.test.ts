@@ -41,7 +41,7 @@ interface Consulta {
   contou: boolean;
 }
 
-function fakeSupabase(dados: Record<string, Linha[]>) {
+function fakeSupabase(dados: Record<string, Linha[]>, maxRows = MAX_ROWS) {
   const consultas: Consulta[] = [];
 
   const client = {
@@ -55,7 +55,7 @@ function fakeSupabase(dados: Record<string, Linha[]>) {
       const executar = (faixa: [number, number] | null) => {
         const base = (dados[tabela] ?? []).filter((l) => filtros.every((f) => f(l)));
         const fatia = faixa ? base.slice(faixa[0], faixa[1] + 1) : base;
-        return { data: fatia.slice(0, MAX_ROWS), count: pediuCount ? base.length : null, error: null } as const;
+        return { data: fatia.slice(0, maxRows), count: pediuCount ? base.length : null, error: null } as const;
       };
 
       const builder: Record<string, unknown> = {};
@@ -96,7 +96,7 @@ function fakeSupabase(dados: Record<string, Linha[]>) {
       // O caminho de quem NÃO paginou (e o da sabotagem): também cortado.
       builder.limit = (n: number) => {
         const resposta = executar(null);
-        return Promise.resolve({ ...resposta, data: (resposta.data ?? []).slice(0, Math.min(n, MAX_ROWS)) });
+        return Promise.resolve({ ...resposta, data: (resposta.data ?? []).slice(0, Math.min(n, maxRows)) });
       };
       return builder;
     },
@@ -196,5 +196,15 @@ describe("o CSV de auditoria lê além de 1.000", () => {
     expect(dados).toHaveLength(1300);
     expect(dados.every((linha) => linha.includes(ACTOR_A))).toBe(true);
     expect(dados.some((linha) => linha.includes(ACTOR_B))).toBe(false);
+  });
+
+  it("instalação com `max_rows` MENOR que a página: página curta não vira fim, e o teto fica em 10.000 exatos", async () => {
+    const linhas = Array.from({ length: 15_000 }, (_, k) => auditoria(k + 1));
+    const { client } = fakeSupabase({ api_audit_log: linhas }, 300);
+    vi.mocked(createClient).mockResolvedValue(client as never);
+
+    const csv = await (await chamar()).text();
+
+    expect(dadosDoCsv(csv)).toHaveLength(TETO_DO_EXPORT);
   });
 });

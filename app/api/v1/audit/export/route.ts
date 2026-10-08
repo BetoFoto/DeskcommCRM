@@ -103,7 +103,10 @@ export async function GET(req: NextRequest): Promise<Response> {
     if (q.to) query = query.lte("created_at", q.to);
 
     // `range` fecha a cadeia (dispara a requisição) — depois dele só o `await`.
-    query = query.range(inicio, inicio + TAMANHO_DA_PAGINA - 1);
+    // A última página pede só o que falta até o teto: com `max_rows` menor que a
+    // página, uma faixa cheia passaria das 10.000 (10.200 com `max_rows` 300).
+    const pedaco = Math.min(TAMANHO_DA_PAGINA, TETO_DO_EXPORT - inicio);
+    query = query.range(inicio, inicio + pedaco - 1);
 
     const { data, error, count } = await query;
     if (error) return fail("internal_error", error.message, 500, { requestId });
