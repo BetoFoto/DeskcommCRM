@@ -7,7 +7,14 @@ source "$(dirname "$0")/_common.sh"
 enter_project
 
 BACKUP_DIR="${BACKUP_DIR:-$PROJECT_DIR/backups}"
+# Backup é o banco inteiro, a sessão do WhatsApp (quem a lê fala pelo número da
+# empresa) e os anexos dos clientes: só o dono lê. O umask cobre o que nasce no
+# host (o dump e a pasta nova); o `chmod` fecha a pasta que um backup antigo
+# deixou 755. Os `tar` dos contêineres NÃO herdam este umask — eles nascem com o
+# da imagem (022) — e por isso cada um fixa o próprio (`umask 077 && exec tar`).
+umask 077
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
 # Timestamp vem do host (não do script) pra manter determinismo do kit.
 ts="$(date +%Y%m%d-%H%M%S)"
 
@@ -46,7 +53,7 @@ vol="$(volume_waha_data)"
 # poupar — só se dava por perdido no dia do restore.
 parcial="$BACKUP_DIR/.waha-$ts.tgz.parcial"
 if ! docker run --rm -v "${vol}:/data:ro" -v "$BACKUP_DIR:/out" alpine:3.20 \
-       tar czf "/out/${parcial##*/}" -C /data . 2>/dev/null; then
+       sh -c "umask 077 && exec tar czf /out/${parcial##*/} -C /data ." 2>/dev/null; then
   rm -f "$parcial"
   c_ylw "⚠ não consegui ler o volume das sessões ('$vol'): o backup do banco está feito, mas o pareamento do WhatsApp NÃO entrou nele."
 elif ! tar_tem_sessao "$parcial"; then
@@ -64,7 +71,7 @@ fi
 if [ "${SINGLE_SERVER:-0}" = "1" ]; then
   step "Arquivos anexados (Storage) → $BACKUP_DIR/storage-$ts.tgz"
   docker run --rm -v "$(dir_do_supabase)/volumes/storage:/data:ro" -v "$BACKUP_DIR:/out" alpine:3.20 \
-    tar czf "/out/storage-$ts.tgz" -C /data . \
+    sh -c "umask 077 && exec tar czf /out/storage-$ts.tgz -C /data ." \
     || die "Não consegui salvar os arquivos anexados: este backup NÃO está completo."
   c_grn "✓ anexos: $(du -h "$BACKUP_DIR/storage-$ts.tgz" | awk '{print $1}')"
 fi
