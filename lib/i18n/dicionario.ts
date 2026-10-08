@@ -7344,6 +7344,12 @@ export const DICIONARIO: Traducoes = {
   "A mídia do modelo entra por link público — a plataforma baixa o arquivo na hora do envio.": {
     es: "El archivo multimedia de la plantilla va por enlace público: la plataforma lo descarga en el momento del envío.",
   },
+  // Prévia em tempo real da mensagem na janela fechada (#2446).
+  "Prévia da mídia do cabeçalho": { es: "Vista previa de la multimedia del encabezado" },
+  "Cole o link da mídia para ver a prévia aqui.": {
+    es: "Pega el enlace de la multimedia para ver la vista previa aquí.",
+  },
+  "Item do carrossel": { es: "Elemento del carrusel" },
   "Nenhum modelo aprovado ainda. Crie um em": { es: "Todavía no hay ninguna plantilla aprobada. Crea una en" },
   "Conexões → Templates": { es: "Conexiones → Plantillas" },
   "e envie quando a plataforma aprovar.": { es: "y envíala cuando la plataforma la apruebe." },
