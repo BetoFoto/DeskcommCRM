@@ -20,6 +20,8 @@
  *
  * - 1A: das ações da IA fica o nome e a data; nada do que ela digitou (o termo
  *   de busca de contato, a razão de chamar um atendente) — Brasil e Portugal;
+ *   e o que ela digitou ao chamar o atendente (marca `IA-DIGITOU`) também não
+ *   volta pela passagem que a chamada grava;
  * - 2A: o Brasil recebe TODAS as mensagens e a lista das seções no limite;
  * - 3A: em Portugal as seis notas da equipe sobre ele voltam (marca `NOTA`),
  *   com o texto e a data e sem o nome de quem escreveu; no Brasil, não.
@@ -156,8 +158,23 @@ function payloadCheio(): ExportPayload {
         motor: "SEGREDO-motor",
         origem: "ferramenta_do_modelo",
         motivo_codigo: "FICA-motivo-da-ia",
-        body: 'SEGREDO-narrativa: Quem passou escreveu: "SEGREDO-por-que-da-ia"',
-        content: "SEGREDO-por-que-da-ia",
+        body: 'SEGREDO-narrativa: Quem passou escreveu: "IA-DIGITOU-por-que"',
+        // O que a IA digitou em `request_human_handoff` (`human-handoff.ts` →
+        // `montarBriefingDaPassagem`): `cliente_quer` → title, `o_que_tentei` → tentativas.
+        title: "IA-DIGITOU-cliente-quer",
+        content: "IA-DIGITOU-por-que",
+        tentativas: [{ o_que: "IA-DIGITOU-o-que-tentei", desfecho: "IA-DIGITOU-desfecho" }],
+        notes: "FICA-palavras-dele-na-passagem-da-ia",
+      },
+      {
+        // `crm_request_human_handoff` por token: a linha não diz se quem chamou é
+        // IA, integração ou pessoa — então sai como da IA, também em Portugal.
+        origem: "mcp_externo",
+        motivo_codigo: "FICA-motivo-do-mcp",
+        body: "SEGREDO-narrativa-do-mcp",
+        title: "IA-DIGITOU-cliente-quer-mcp",
+        content: "IA-DIGITOU-reason-mcp",
+        tentativas: [{ o_que: "IA-DIGITOU-o-que-tentei-mcp" }],
       },
     ],
     avisos_de_caso: [
@@ -324,9 +341,23 @@ describe("doc 110 — as três respostas do dono", () => {
   it.each(PAISES)(
     "1A (%s): o `por_que` que a IA escreveu ao chamar um atendente não volta pela passagem, nem pela narrativa",
     (pais) => {
-      const passagens = linhas(copiaDoTitular(payloadCheio(), pais).passagens);
-      expect(passagens[1]).toEqual({ motivo_codigo: "FICA-motivo-da-ia" });
+      const copia = copiaDoTitular(payloadCheio(), pais);
+      const passagens = linhas(copia.passagens);
+      expect(passagens[1]).toEqual({
+        motivo_codigo: "FICA-motivo-da-ia",
+        notes: "FICA-palavras-dele-na-passagem-da-ia",
+      });
+      expect(passagens[2]).toEqual({ motivo_codigo: "FICA-motivo-do-mcp" });
       for (const p of passagens) expect(p).not.toHaveProperty("body");
+      expect(JSON.stringify(copia).match(/IA-DIGITOU[^"]*/g) ?? []).toEqual([]);
+    },
+  );
+
+  it.each(PAISES)(
+    "1A (%s): na passagem que a IA não digitou, o pedido em uma linha fica",
+    (pais) => {
+      const [escalado] = linhas(copiaDoTitular(payloadCheio(), pais).passagens);
+      expect(escalado).toMatchObject({ title: "FICA-o-que-ele-quer", tentativas: ["FICA-tentativa"] });
     },
   );
 

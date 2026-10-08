@@ -20,7 +20,9 @@
  * Duas decisões do doc 110 (o dono respondeu "1A, 2A, 3A"):
  *
  * - 1A: das ações da IA (`ai_agent_runs`) fica a LISTA do que ela fez — o nome
- *   de cada ação e quando rodou — e sai o que ela digitou em cada uma. O termo
+ *   de cada ação e quando rodou — e sai o que ela digitou em cada uma. O que
+ *   ela digitou ao chamar um atendente sai também da passagem que essa chamada
+ *   grava (`ORIGENS_DIGITADAS_PELA_IA`). O termo
  *   de uma busca de contato pode ser o nome ou o telefone de OUTRO cliente
  *   (`lib/mcp/tools/contacts.ts`), e a razão de chamar um atendente
  *   (`lib/mcp/tools/handoff.ts`) é texto escrito PARA a equipe. Por lista de
@@ -103,7 +105,7 @@ export const O_QUE_FICA = {
     "a linha do tempo do caso dele: o que a IA registrou e o que ele respondeu (sem o texto de quem é da equipe)",
   demandas: "o pedido dele: assunto, estado, se quem cuida é a IA ou uma pessoa, próximo passo e desfecho",
   passagens:
-    "a passagem do atendimento dele a uma pessoa: o pedido em uma linha, o que a IA já tentou, as últimas palavras dele e o motivo",
+    "a passagem do atendimento dele a uma pessoa: o motivo, quando, se ele foi avisado, as últimas palavras dele e — quando não foi a IA quem digitou — o pedido em uma linha",
   avisos_de_caso: "que a equipe foi avisada do caso dele, e quando",
   campaign_recipients: "as mensagens de campanha que ele recebeu, e por que foi ou não incluído",
   campaign_suppressions: "a exclusão dele das campanhas",
@@ -143,7 +145,7 @@ export const CAMPOS_DA_EQUIPE: Readonly<Record<string, Readonly<Record<string, s
     motor: "qual dos dois motores do sistema passou a conversa",
     origem: "o caminho de código por onde a passagem entrou (o motivo, `motivo_codigo`, fica)",
     body:
-      "a narrativa montada PARA quem vai atender (`montarBriefingDaPassagem`): repete entre aspas o texto livre de quem passou — o `por_que` da IA (doc 110, 1A) e a razão de quem escalou — e o resto já vai em `title`, `notes`, `tentativas` e `motivo_codigo`",
+      "a narrativa montada PARA quem vai atender (`montarBriefingDaPassagem`): repete o texto livre de quem passou — o `por_que`, o `cliente_quer` e o `o_que_tentei` da IA (doc 110, 1A) e a razão de quem escalou — e o resto já vai em `title`, `notes`, `tentativas` e `motivo_codigo`",
   },
   avisos_de_caso: {
     destino_mascarado: "telefone, mesmo mascarado, do FUNCIONÁRIO avisado: dado de terceiro",
@@ -167,7 +169,7 @@ export const NOTAS_SOBRE_O_TITULAR: Readonly<Record<string, Readonly<Record<stri
   contact_field_proposals: { motivo_recusa: "por que a equipe recusou a proposta de gravar um dado dele" },
   passagens: {
     content:
-      "a razão que a pessoa da equipe escreveu ao escalar o caso (origem `caso_escalado`). Nas outras origens o campo é o `por_que` da IA ou o `reason` de um agente MCP — texto da máquina para a equipe, que sai em todo país (doc 110, 1A)",
+      "a razão que a pessoa da equipe escreveu ao escalar o caso (origem `caso_escalado`). Nas outras origens ele sai em todo país: ver `ORIGENS_DIGITADAS_PELA_IA`",
   },
 };
 
@@ -177,8 +179,36 @@ export const NOTAS_SOBRE_O_TITULAR: Readonly<Record<string, Readonly<Record<stri
  */
 const PAISES_QUE_RECEBEM_AS_NOTAS = new Set(["PT"]);
 
-/** A única origem de passagem cujo `content` uma pessoa da equipe escreveu (`app/api/v1/ai/cases/[id]/reply`). */
+/**
+ * A origem em que a LINHA garante que o `content` foi escrito por uma pessoa da
+ * equipe (`app/api/v1/ai/cases/[id]/reply`). Não é a única em que uma pessoa
+ * pode ter escrito: ver `ORIGENS_DIGITADAS_PELA_IA`.
+ */
 const ORIGEM_ESCRITA_PELA_EQUIPE: OrigemDaPassagem = "caso_escalado";
+
+/**
+ * As origens em que o texto livre da passagem — `title` (o `cliente_quer`),
+ * `tentativas` (o `o_que_tentei`) e `content` (o `por_que`/`reason`) — foi
+ * digitado por quem chamou a ferramenta de atendente, e não montado pelo
+ * sistema (`montarBriefingDaPassagem`). Esse texto sai em todo país (doc 110,
+ * 1A: "a razão, o que a IA já tentou e o que o cliente quer").
+ *
+ * - `ferramenta_do_modelo`: a IA nativa (`lib/agent-engine/agent/human-handoff.ts`).
+ * - `mcp_externo`: quem chamou `crm_request_human_handoff` (`lib/mcp/tools/handoff.ts`)
+ *   com um token — um agente de IA, uma integração OU uma pessoa com token
+ *   próprio. A linha NÃO guarda o ator (0291 não tem coluna para isso), então a
+ *   autoria aqui é DESCONHECIDA e a regra é a conservadora: sai, inclusive em
+ *   Portugal, onde o `content` de uma pessoa voltaria pela 3A. Limite
+ *   conhecido: a razão que uma pessoa escreveu por MCP não volta em Portugal.
+ *   Para devolvê-la, a passagem precisa gravar o tipo do ator.
+ *
+ * Nas outras origens `tentativas` é sempre vazio e `title` é a leitura do
+ * checkpoint, que o arquivo já entrega em `checkpoints`.
+ */
+const ORIGENS_DIGITADAS_PELA_IA: ReadonlySet<string> = new Set<OrigemDaPassagem>([
+  "ferramenta_do_modelo",
+  "mcp_externo",
+]);
 
 /** As chaves de banco que ficam, e por quê — ver o item 1 do cabeçalho. */
 const CHAVES_QUE_FICAM = new Set(["external_id"]);
@@ -237,9 +267,14 @@ export function copiaDoTitular(data: ExportPayload, pais: string): Objeto {
   const recebeAsNotas = PAISES_QUE_RECEBEM_AS_NOTAS.has(pais);
 
   for (const secao of Object.keys(SECOES_DA_EQUIPE)) delete copia[secao];
-  // Antes de `origem` sair: só a passagem de um caso escalado tem `content`
-  // escrito por uma pessoa da equipe (0291).
-  for (const p of linhasDe(copia.passagens)) if (p.origem !== ORIGEM_ESCRITA_PELA_EQUIPE) delete p.content;
+  // Antes de `origem` sair (doc 110, 1A e 3A).
+  for (const p of linhasDe(copia.passagens)) {
+    if (p.origem !== ORIGEM_ESCRITA_PELA_EQUIPE) delete p.content;
+    if (ORIGENS_DIGITADAS_PELA_IA.has(String(p.origem))) {
+      delete p.title;
+      delete p.tentativas;
+    }
+  }
   // O anexo fica fora: o arquivo levaria só o caminho interno no armazenamento.
   if (recebeAsNotas && data.conversation_notes)
     copia.conversation_notes = data.conversation_notes.map(({ body, created_at }) => ({ body, created_at }));
