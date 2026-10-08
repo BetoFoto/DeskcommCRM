@@ -48,7 +48,12 @@ if crontab -l 2>/dev/null | grep -q 'hostgator-setup-kit/agent.sh'; then
   # agente que está falhando agora. `find -mmin` é portátil.
   if [ -s "$log" ] && [ -n "$(find "$log" -mmin -120 2>/dev/null)" ]; then
     c_ylw "⚠ o agente falhou recentemente ao falar com o app:"
-    c_ylw "  $(tail -2 "$log" | head -1)"
+    # A última ENTRADA, não a penúltima linha: uma falha de POST ocupa várias
+    # linhas (`<data> [agent] POST <url> -> <corpo>`, o código HTTP numa linha
+    # própria, e uma linha vazia no meio quando o corpo termina em \n) — o
+    # `tail -2 | head -1` de antes caía na vazia. Junta as linhas não vazias
+    # desde o último cabeçalho `[agent]`. O log não leva o Bearer (agent.sh, post()).
+    c_ylw "  $(awk '/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[^ ]* \[agent\] /{e=$0; next} NF{e=e" "$0} END{print e}' "$log")"
     c_ylw "  Se o botão de atualizar não aparece na tela, é por isto."
     c_ylw "  Quase sempre resolve rodando: bash hostgator-setup-kit/update.sh"
   else
