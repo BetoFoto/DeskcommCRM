@@ -14,4 +14,4 @@ cron `webhook-log-retention`. Os dois prazos do arquivo de webhooks
 política de retenção. Agora esses dois também: um valor acima do teto é
 trocado pelo teto e o boot avisa no log que o número escrito não foi usado,
 enquanto um valor dentro do intervalo passa intacto. Nada precisa ser feito ao
-atualizar. Contribuição de @webtecnica (issue #2612).
+atualizar. Contribuição de @webtecnica (#2623, issue #2612).
