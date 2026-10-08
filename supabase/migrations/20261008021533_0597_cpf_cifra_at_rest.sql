@@ -92,6 +92,12 @@ begin
     raise exception 'forbidden_org';
   end if;
 
+  -- Papel: a mesma régua de getContactHandler (manager+), conferida também
+  -- dentro da função, como fazem as funções irmãs.
+  if not public.fn_role_at_least(v_org, 'manager') and not public.fn_is_platform_admin() then
+    raise exception 'forbidden_role';
+  end if;
+
   -- Audit antes do plaintext: decrypt sem rastro é decrypt que a LGPD não vê.
   insert into public.api_audit_log
     (organization_id, actor_user_id, action, resource_type, resource_id, metadata)
