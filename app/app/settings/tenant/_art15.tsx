@@ -10,9 +10,9 @@
  * MESMO `art15SettingsSchema` da leitura: os limites 2000/2000/500 moram num
  * lugar só, e a `maxLength` daqui é só o aviso antes do 422 do servidor.
  *
- * Só fora do Brasil (`alineasDoArt15Visiveis`): o art. 15.º é do RGPD, e o
- * documento brasileiro (LGPD) não tem esta seção — esconder o cartão onde ele
- * não seria lido é o mesmo corte que o PDF já faz
+ * Só fora do Brasil (`alineasDoArt15Visiveis`, em `lib/legal/art15.ts`): o
+ * art. 15.º é do RGPD, e o documento brasileiro (LGPD) não tem esta seção —
+ * esconder o cartão onde ele não seria lido é o mesmo corte que o PDF já faz
  * (`lib/lgpd/pdf-renderer.tsx` só renderiza `art15` quando o coletor emitiu).
  */
 import { useState, useTransition } from "react";
@@ -32,15 +32,6 @@ export type AlineasPreenchidas = {
   destinatarios: string;
   prazo_conservacao: string;
 };
-
-/**
- * O cartão existe fora do Brasil. `null` de país é Brasil (migration 0277) —
- * a mesma convenção do seletor de `tenant/_form.tsx`, para não depender do
- * default implícito da coluna.
- */
-export function alineasDoArt15Visiveis(pais: string | null): boolean {
-  return (pais ?? "BR") !== "BR";
-}
 
 export function Art15Form({ initial }: { initial: AlineasPreenchidas }) {
   const t = useT();

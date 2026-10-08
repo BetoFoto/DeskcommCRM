@@ -30,7 +30,11 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { fail } from "@/lib/api/wrappers";
 import { ROLE_RANK, type AuthUser, type Role } from "@/lib/auth/types";
-import { art15DoControlador, NAO_INFORMADO_PELO_CONTROLADOR } from "@/lib/legal/art15";
+import {
+  alineasDoArt15Visiveis,
+  art15DoControlador,
+  NAO_INFORMADO_PELO_CONTROLADOR,
+} from "@/lib/legal/art15";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
@@ -75,9 +79,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 const { PATCH } = await import("@/app/api/v1/settings/art15/route");
-const { Art15Form, alineasDoArt15Visiveis } = await import(
-  "@/app/app/settings/tenant/_art15"
-);
+const { Art15Form } = await import("@/app/app/settings/tenant/_art15");
 
 function sessao(role: Role) {
   const user: AuthUser = {
