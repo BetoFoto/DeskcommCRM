@@ -34,7 +34,8 @@ São conclusões de leitura de código.
 | `/`, `/login`, `/signup`, `/auth/confirm` | Supabase Auth | ❌ |
 | `/team/accept-invite/:token` | HMAC-SHA256 + `timingSafeEqual` (`lib/auth/invite-token.ts`) | ❌ |
 | `/api/v1/health` | nenhum (por design) | ❌ |
-| `/api/v1/webhooks/waha/*` | HMAC-SHA512 + `timingSafeEqual` (`lib/waha/ingest.ts`) | ❌ |
+| `/api/v1/webhooks/waha/:token` | HMAC-SHA512 + `timingSafeEqual` (`lib/waha/ingest.ts`) | ❌ |
+| `/api/v1/webhooks/waha` (global, sem token) | só rede interna: requisição que atravessou proxy de borda recebe 404 (`chegouPelaBorda`, `lib/http/ip-do-cliente.ts`); depois, o mesmo HMAC | ❌ |
 | `/api/v1/webhooks/in/:token` | path token + assinatura opcional | ✅ 60/min por token |
 | `/api/v1/webhooks/nuvemshop/*` | HMAC | ❌ |
 | `/api/v1/cron/*` (9 rotas) | `Bearer INTERNAL_CRON_SECRET\|INTERNAL_SECRET`, **fail-closed** | ❌ |
