@@ -5837,6 +5837,11 @@ export const DICIONARIO: Traducoes = {
   "O card vai para esta etapa do mesmo funil — trocar de funil é recusado, como no quadro.": {
     es: "La tarjeta va a esta etapa del mismo embudo: cambiar de embudo se rechaza, igual que en el tablero.",
   },
+  // Motivo da perda no "mover lead" (etapa de perda exige motivo)
+  "Motivo da perda": { es: "Motivo de pérdida" },
+  "Escolha o motivo": { es: "Elige el motivo" },
+  "Escolha o motivo da perda.": { es: "Elige el motivo de pérdida." },
+  "falta o motivo da perda": { es: "falta el motivo de pérdida" },
   "Texto da mensagem": { es: "Texto del mensaje" },
   "Tags do contato": { es: "Etiquetas del contacto" },
   "Tag adicionada": { es: "Etiqueta agregada" },
@@ -7339,6 +7344,12 @@ export const DICIONARIO: Traducoes = {
   "A mídia do modelo entra por link público — a plataforma baixa o arquivo na hora do envio.": {
     es: "El archivo multimedia de la plantilla va por enlace público: la plataforma lo descarga en el momento del envío.",
   },
+  // Prévia em tempo real da mensagem na janela fechada (#2446).
+  "Prévia da mídia do cabeçalho": { es: "Vista previa de la multimedia del encabezado" },
+  "Cole o link da mídia para ver a prévia aqui.": {
+    es: "Pega el enlace de la multimedia para ver la vista previa aquí.",
+  },
+  "Item do carrossel": { es: "Elemento del carrusel" },
   "Nenhum modelo aprovado ainda. Crie um em": { es: "Todavía no hay ninguna plantilla aprobada. Crea una en" },
   "Conexões → Templates": { es: "Conexiones → Plantillas" },
   "e envie quando a plataforma aprovar.": { es: "y envíala cuando la plataforma la apruebe." },
@@ -8115,6 +8126,7 @@ export const DICIONARIO: Traducoes = {
   // ─── Contacts: vocabulário da timeline (lib/leads/activity-vocabulary.ts) ───
   "Entrou no funil": { es: "Entró al embudo" },
   "primeira mensagem recebida no WhatsApp": { es: "primer mensaje recibido en WhatsApp" },
+  "primeira mensagem enviada pelo celular": { es: "primer mensaje enviado desde el celular" },
   "primeira mensagem recebida no Instagram": { es: "primer mensaje recibido en Instagram" },
   "primeira mensagem recebida no Facebook": { es: "primer mensaje recibido en Facebook" },
   "primeira ligação recebida": { es: "primera llamada recibida" },
@@ -8185,6 +8197,9 @@ export const DICIONARIO: Traducoes = {
   "Fluxo concluído": { es: "Flujo concluido" },
   "O fluxo parou de tentar": { es: "El flujo dejó de intentarlo" },
   "Falhou neste passo": { es: "Falló en este paso" },
+  "Não conseguiu mover o card para a etapa escolhida": {
+    es: "No pudo mover la tarjeta a la etapa elegida",
+  },
   "O cliente respondeu — o fluxo acordou na hora": { es: "El cliente respondió: el flujo despertó al instante" },
   "Encerrado porque o cliente respondeu": { es: "Finalizado porque el cliente respondió" },
   "Encerrado porque o cliente pediu para parar": { es: "Finalizado porque el cliente pidió parar" },
@@ -9641,6 +9656,8 @@ export const DICIONARIO: Traducoes = {
   "Endereço de retorno": { es: "URL de redirección" },
   "Já existe uma chave cadastrada. Deixe em branco para mantê-la, ou digite uma nova para substituir.": { es: "Ya hay una clave registrada. Déjalo en blanco para mantenerla, o escribe una nueva para reemplazarla." },
   "Ela é guardada cifrada e nunca volta a aparecer nesta tela.": { es: "Se guarda cifrada y nunca vuelve a aparecer en esta pantalla." },
+  "Essa chave tem aspas, vírgula ou espaço — sinal de que veio colada junto com o resto do arquivo. Copie só o valor que começa com GOCSPX-, sem nada colado depois.": { es: "Esta clave tiene comillas, comas o espacios: señal de que se pegó junto con el resto del archivo. Copia solo el valor que empieza con GOCSPX-, sin nada pegado después." },
+  "A chave secreta tem caracteres que não existem numa chave do Google (como aspas, vírgula ou espaço). Copie só o valor que começa com GOCSPX-, sem nada colado depois.": { es: "La clave secreta tiene caracteres que no existen en una clave de Google (como comillas, comas o espacios). Copia solo el valor que empieza con GOCSPX-, sin nada pegado después." },
   "Esta instalação já tem as credenciais no arquivo de configuração do servidor. O que você salvar aqui passa a valer no lugar delas; apagar o que está aqui faz o sistema voltar a usar as do arquivo.": { es: "Esta instalación ya tiene credenciales en el archivo de configuración del servidor. Lo que guardes aquí las reemplaza. Si borras lo que hay aquí, el sistema vuelve a usar las del archivo." },
   "Ao trocar uma credencial já em uso:": { es: "Al cambiar una credencial ya en uso:" },
   "quem já conectou a agenda vai precisar conectar de novo. O Google invalida as autorizações antigas quando o aplicativo muda — não há como evitar, e ninguém perde compromisso por isso.": { es: "quien ya conectó su agenda tendrá que conectarla de nuevo. Google invalida las autorizaciones anteriores cuando cambia la aplicación. No hay forma de evitarlo, pero nadie pierde citas por eso." },
@@ -12195,6 +12212,49 @@ export const DICIONARIO: Traducoes = {
     es: "La IA llama a este número y conduce la llamada. Aún no es posible hablar tú mismo.",
   },
   "Número": { es: "Número" },
+  "Moeda (BRL)": { es: "Moneda (BRL)" },
+  "Uma resposta numérica não estava no formato aceito pelo formulário. Confira se o campo contém apenas números e use o formato BRL na pergunta de moeda.": {
+    es: "Una respuesta numérica no tenía un formato aceptado por el formulario. Comprueba que el campo contenga solo números y usa el formato BRL en la pregunta de moneda.",
+  },
+  "Fonte do formulário": { es: "Fuente del formulario" },
+  "Qualquer fonte": { es: "Cualquier fuente" },
+  "Fonte removida": { es: "Fuente eliminada" },
+  "Escolha uma fonte para limitar esta automação a um formulário. Qualquer fonte mantém o comportamento geral.": { es: "Elige una fuente para limitar esta automatización a un formulario. Cualquier fuente mantiene el comportamiento general." },
+  "Selecione uma opção": { es: "Selecciona una opción" },
+  "Informe um nome para a fonte.": { es: "Indica un nombre para la fuente." },
+  "Nome da fonte atualizado.": { es: "Nombre de la fuente actualizado." },
+  "Perguntas do formulário salvas.": { es: "Preguntas del formulario guardadas." },
+  "Salvar nome": { es: "Guardar nombre" },
+  "Cancelar edição do nome": { es: "Cancelar la edición del nombre" },
+  "Editar nome da fonte": { es: "Editar el nombre de la fuente" },
+  "Personalizar perguntas do formulário": { es: "Personalizar las preguntas del formulario" },
+  "As respostas extras ficam nos campos personalizados do lead e no histórico desta captação. O checkbox envia sim ou não; a lista permite escolher uma opção.": { es: "Las respuestas adicionales se guardan en los campos personalizados del lead y en el historial de esta captación. La casilla envía sí o no; la lista permite elegir una opción." },
+  "Salvar perguntas": { es: "Guardar preguntas" },
+  "Pergunta": { es: "Pregunta" },
+  "Pergunta exibida": { es: "Pregunta visible" },
+  "Qual serviço você procura?": { es: "¿Qué servicio buscas?" },
+  "Chave enviada ao CRM": { es: "Clave enviada al CRM" },
+  "Tipo de resposta": { es: "Tipo de respuesta" },
+  "Texto curto": { es: "Texto breve" },
+  "Lista de opções": { es: "Lista de opciones" },
+  "Caixa de seleção": { es: "Casilla de verificación" },
+  "Resposta obrigatória": { es: "Respuesta obligatoria" },
+  "Opções, uma por linha": { es: "Opciones, una por línea" },
+  "Sites": { es: "Sitios web" },
+  "Tráfego pago": { es: "Publicidad de pago" },
+  "Adicionar pergunta": { es: "Añadir pregunta" },
+  "O limite é de 20 perguntas extras por formulário.": { es: "El límite es de 20 preguntas adicionales por formulario." },
+  "A fonte escolhida não pertence a esta empresa.": { es: "La fuente elegida no pertenece a esta empresa." },
+  "Escolha uma fonte de formulário válida.": { es: "Elige una fuente de formulario válida." },
+  "Escreva o texto da pergunta.": { es: "Escribe el texto de la pregunta." },
+  "Use uma chave iniciada por letra minúscula, sem espaços.": { es: "Usa una clave que empiece con letra minúscula, sin espacios." },
+  "Essa chave é reservada pelo formulário ou pelo CRM.": { es: "Esa clave está reservada por el formulario o por el CRM." },
+  "Adicione pelo menos uma opção para a lista.": { es: "Añade al menos una opción a la lista." },
+  "As opções só se aplicam ao campo de lista.": { es: "Las opciones solo se aplican al campo de lista." },
+  "Remova opções repetidas.": { es: "Elimina las opciones repetidas." },
+  "O formulário pode ter até 20 perguntas.": { es: "El formulario puede tener hasta 20 preguntas." },
+  "Cada pergunta precisa ter uma chave diferente.": { es: "Cada pregunta necesita una clave diferente." },
+  "Revise os campos do formulário.": { es: "Revisa los campos del formulario." },
   "Ligar com IA": { es: "Llamar con IA" },
   "Chamadas": { es: "Llamadas" },
   "Histórico de ligações (voz por IA) com transcrição.": {
@@ -14774,6 +14834,33 @@ export const DICIONARIO: Traducoes = {
   "A conversa fica vinculada ao canal escolhido, e as próximas mensagens saem por ele.": { es: "La conversación queda vinculada al canal elegido, y los próximos mensajes salen por él." },
   "Canais disponíveis": { es: "Canales disponibles" },
   "Iniciar conversa": { es: "Iniciar conversación" },
+
+  // ─── Alíneas do art. 15.º que o controlador preenche (#2356) ───
+  // O cartão de Configurações › Empresa, só fora do Brasil. Os rótulos trazem
+  // a letra porque é assim que o relatório de acesso os imprime ("a) Finalidades:").
+  "Alíneas do art. 15.º do RGPD": { es: "Alíneas del art. 15.º del RGPD" },
+  "O relatório de acesso imprime estes três textos em nome da organização. Deixar em branco faz o documento mostrar «não informado pelo controlador» — nada é inventado no lugar do que falta.": {
+    es: "El informe de acceso imprime estos tres textos en nombre de la organización. Dejarlos en blanco hace que el documento muestre «no informado por el responsable»: no se inventa nada en lugar de lo que falta.",
+  },
+  "Finalidades do tratamento (alínea a))": {
+    es: "Finalidades del tratamiento (letra a))",
+  },
+  "Para que fins os dados pessoais são tratados: atendimento, faturação, marketing.": {
+    es: "Para qué fines se tratan los datos personales: atención, facturación, marketing.",
+  },
+  "Destinatários dos dados (alínea c))": { es: "Destinatarios de los datos (letra c))" },
+  "Com quem esses dados são compartilhados: prestadores, autoridades, parceiros.": {
+    es: "Con quién se comparten estos datos: proveedores, autoridades, socios.",
+  },
+  "Prazo de conservação dos dados (alínea d))": {
+    es: "Plazo de conservación de los datos (letra d))",
+  },
+  "Por quanto tempo os dados são guardados depois do último contato.": {
+    es: "Cuánto tiempo se conservan los datos después del último contacto.",
+  },
+  "Máximo de {n} caracteres.": { es: "Máximo de {n} caracteres." },
+  "Salvar alíneas": { es: "Guardar las letras" },
+  "Alíneas do art. 15.º salvas.": { es: "Las letras del art. 15.º quedaron guardadas." },
 };
 
 /**
