@@ -28,6 +28,10 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   **Confira o limite em Uso de IA depois de atualizar:** se "Parar a IA ao chegar no limite" está ligado, a IA pode parar mais cedo no mês do que parava, sobretudo onde chega muita foto. Com o limite atingido, a foto não é enviada ao provedor e a Central explica o motivo. Consultas prontas de custo e tempo de atendimento em `docs/runbooks/medir-custo-e-latencia-da-ia.md`.
 
+- **Gemini 3.5 Flash-Lite disponível no seletor de modelos Google** Aparece no seletor dos agentes quando a instalação usa credencial Google, com ferramentas e visão, e o custo entra no teto pelo preço Standard do Google. Modelos já configurados não mudam e nenhum agente é publicado sozinho.
+
+  Contribuição de @vitorlacerdadigital (#2453).
+
 - **Página inicial pública e política de privacidade com a seção de dados do Google, para a verificação do app no Google** O endereço principal abre, sem login, uma página com o nome da sua marca e os links da Política de Privacidade e dos Termos; a política ganhou a seção exigida pelo Google para Agenda e Google Ads. Quem confere o deploy: o domínio passa a responder 200 sem sessão (era 307), e o sinal de que o app responde passa a ser `/app` → 307.
 
   Contribuição de @paulolimajr77 (#2510).
