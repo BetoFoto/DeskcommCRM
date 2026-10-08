@@ -28,6 +28,7 @@ vi.mock("@/lib/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: 
 vi.mock("@/lib/impersonate/support", () => ({ supportCallbackWriteAllowed: async () => true }));
 vi.mock("@/lib/webhooks/secrets", () => ({ encryptWebhookSecret: async () => "cifrado" }));
 vi.mock("@/lib/plataformas-de-anuncio/google/config", () => ({
+  CAMINHO_DO_CALLBACK: "/api/v1/plataformas-de-anuncio/google/callback",
   configuracaoDoGoogleAds: () => ({ clientId: "id", clientSecret: "s", redirectUri: "http://localhost:3000/cb" }),
 }));
 vi.mock("@/lib/plataformas-de-anuncio/google/token", () => ({
@@ -77,12 +78,17 @@ describe("o retorno do OAuth vale uma vez", () => {
   it("Google Ads: o mesmo state na segunda volta é recusado sem trocar código", async () => {
     const { emitirEstado } = await import("@/lib/plataformas-de-anuncio/google/estado");
     const { GET } = await import("@/app/api/v1/plataformas-de-anuncio/google/callback/route");
+    const { assinarVinculo, NOME_DO_VINCULO } = await import("@/lib/agenda/google/vinculo");
+    const nonce = randomUUID().replace(/-/g, "");
     const state = emitirEstado(
       { organizationId: randomUUID(), userId: randomUUID() },
-      { segredo: SEGREDO, agora: new Date() },
+      { segredo: SEGREDO, agora: new Date(), nonce },
     );
+    // O mesmo navegador nas duas voltas: o que está sob teste aqui é o uso único.
     const pedido = () =>
-      new NextRequest(`http://localhost/api/v1/plataformas-de-anuncio/google/callback?code=c&state=${encodeURIComponent(state)}`);
+      new NextRequest(`http://localhost/api/v1/plataformas-de-anuncio/google/callback?code=c&state=${encodeURIComponent(state)}`, {
+        headers: { cookie: `${NOME_DO_VINCULO}=${assinarVinculo(nonce, SEGREDO)}` },
+      });
 
     const primeira = await GET(pedido());
     expect(new URL(primeira.headers.get("location")!).searchParams.get("ok")).toBe("1");
