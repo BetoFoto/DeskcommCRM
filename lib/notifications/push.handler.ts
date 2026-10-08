@@ -131,6 +131,8 @@ async function destinatariosDoInbound(
  * contato (a IA não serve grupos, e a Task 8 não abre exceção só para a
  * notificação), não cria nem roteia nada — só avisa o atendente que o grupo
  * está falando. Título fixo, igual em toda organização.
+ *
+ * Quem recebe é a mesma régua do 1:1: só quem pode ver a conversa do grupo.
  */
 async function handleGroupInbound(row: EventRow): Promise<HandlerResult> {
   // Canal DESATIVADO (#2329): a mesma régua de `handleInbound` — a inbox
@@ -138,8 +140,10 @@ async function handleGroupInbound(row: EventRow): Promise<HandlerResult> {
   if (await canalDoEventoDesativado(createAdminClient(), row.organization_id, row.payload)) {
     return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "skipped", detail: "canal_desativado" };
   }
-  const conversationId =
-    (typeof row.payload.conversation_id === "string" ? row.payload.conversation_id : null) ?? null;
+  const conversationId = typeof row.payload.conversation_id === "string" ? row.payload.conversation_id : null;
+  if (!conversationId) {
+    return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "skipped", detail: "sem_conversa" };
+  }
   const previewRaw = row.payload.body_preview;
   const preview = typeof previewRaw === "string" && previewRaw.trim() ? previewRaw : "Nova mensagem";
   const type = typeof row.payload.type === "string" ? row.payload.type : "text";
@@ -148,10 +152,10 @@ async function handleGroupInbound(row: EventRow): Promise<HandlerResult> {
   const payload: PushPayload = {
     title: "Nova mensagem no grupo",
     body: truncar(body),
-    tag: conversationId ? `msg:${conversationId}` : "msg",
-    href: conversationId ? `/app/inbox?id=${conversationId}` : "/app/inbox",
+    tag: `msg:${conversationId}`,
+    href: `/app/inbox?id=${conversationId}`,
   };
-  const { sent } = await enviarPushDaOrg(row.organization_id, payload);
+  const { sent } = await enviarPushAQuemVeAConversa(row.organization_id, conversationId, payload);
   return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "ok", detail: `sent:${sent}` };
 }
 

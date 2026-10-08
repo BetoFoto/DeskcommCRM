@@ -220,13 +220,14 @@ describe("consumidor 1 — push no celular", () => {
     const r = await webPushInboundHandler.handle(evento({ event_type: "message.group_received" }));
     expect(r).toMatchObject({ status: "skipped", detail: "canal_desativado" });
     expect(enviarPushDaOrg).not.toHaveBeenCalled();
+    expect(enviarPushAQuemVeAConversa).not.toHaveBeenCalled();
   });
 
   it("grupo em canal ligado → o push sai", async () => {
     canal.desativado = false;
     const r = await webPushInboundHandler.handle(evento({ event_type: "message.group_received" }));
     expect(r.status).toBe("ok");
-    expect(enviarPushDaOrg).toHaveBeenCalledTimes(1);
+    expect(enviarPushAQuemVeAConversa).toHaveBeenCalledTimes(1);
   });
 });
 

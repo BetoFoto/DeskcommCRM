@@ -39,6 +39,7 @@ begin
   perform set_config('request.jwt.claim.sub', '', true);
   for v_user in
     select distinct s.user_id from public.push_subscriptions s where s.organization_id = p_org
+     order by s.user_id
   loop
     perform set_config('request.jwt.claims', jsonb_build_object('sub', v_user)::text, true);
     if public.fn_can_view_conversation(p_org, v_assigned) then

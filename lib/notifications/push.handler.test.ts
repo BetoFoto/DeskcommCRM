@@ -151,21 +151,23 @@ describe("webPushInboundHandler", () => {
       state.vapidPronto = true;
     });
 
-    it("título é a cópia de grupo, href aponta pra conversa, envia pela ORG (não por usuário)", async () => {
+    it("título é a cópia de grupo, href aponta pra conversa, envia só a quem vê a conversa", async () => {
       const result = await webPushInboundHandler.handle(grupoRow());
 
       expect(result.status).toBe("ok");
-      expect(enviarPushDaOrgMock).toHaveBeenCalledTimes(1);
-      const [orgId, payload] = enviarPushDaOrgMock.mock.calls[0]!;
+      expect(enviarPushDaOrgMock).not.toHaveBeenCalled();
+      expect(enviarPushAQuemVeAConversaMock).toHaveBeenCalledTimes(1);
+      const [orgId, conversationId, payload, soUsuarios] = enviarPushAQuemVeAConversaMock.mock.calls[0]!;
       expect(orgId).toBe("org1");
+      expect(conversationId).toBe("conv-1");
+      // Grupo não tem regra própria de destinatário: o recorte é só a visibilidade.
+      expect(soUsuarios).toBeUndefined();
       expect(payload).toMatchObject({
         title: "Nova mensagem no grupo",
         href: "/app/inbox?id=conv-1",
       });
       // Nunca o desfecho do 1:1 ("Nova mensagem" quando não há nome de contato).
       expect(payload.title).not.toBe("Nova mensagem");
-      // Recipiente é a ORG inteira — nunca `enviarPushAoUsuario` (que é o
-      // caminho de lead.assigned/user.mentioned, dirigido a UM usuário).
       expect(enviarPushAoUsuarioMock).not.toHaveBeenCalled();
     });
 
@@ -174,10 +176,11 @@ describe("webPushInboundHandler", () => {
       expect(fromMock).not.toHaveBeenCalledWith("contacts");
     });
 
-    it("sem conversation_id: href cai para /app/inbox (mesma forma do 1:1 sem conversa)", async () => {
-      await webPushInboundHandler.handle(grupoRow({ conversation_id: undefined }));
-      const [, payload] = enviarPushDaOrgMock.mock.calls[0]!;
-      expect(payload).toMatchObject({ title: "Nova mensagem no grupo", href: "/app/inbox" });
+    it("sem conversation_id não envia a ninguém (mesma régua do 1:1)", async () => {
+      const result = await webPushInboundHandler.handle(grupoRow({ conversation_id: undefined }));
+      expect(result).toMatchObject({ status: "skipped", detail: "sem_conversa" });
+      expect(enviarPushDaOrgMock).not.toHaveBeenCalled();
+      expect(enviarPushAQuemVeAConversaMock).not.toHaveBeenCalled();
     });
   });
   describe("mensagem recebida (message.received) — responsável + admins, ou todos", () => {
@@ -242,10 +245,11 @@ describe("webPushInboundHandler", () => {
       expect(carregarDestinatariosMock).toHaveBeenCalledTimes(1);
     });
 
-    it("grupo NÃO passa pela regra — continua indo para a organização", async () => {
+    it("grupo NÃO passa pela regra de responsável — só pela de visibilidade", async () => {
       await webPushInboundHandler.handle(grupoRow());
       expect(carregarDestinatariosMock).not.toHaveBeenCalled();
-      expect(enviarPushDaOrgMock).toHaveBeenCalledTimes(1);
+      expect(enviarPushDaOrgMock).not.toHaveBeenCalled();
+      expect(enviarPushAQuemVeAConversaMock.mock.calls[0]![3]).toBeUndefined();
     });
   });
 });

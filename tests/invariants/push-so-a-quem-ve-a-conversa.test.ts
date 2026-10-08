@@ -7,6 +7,7 @@ import {
   GOV_CONV_UNASSIGNED,
   GOV_MANAGER,
   GOV_ORG,
+  GOV_SESSION,
   lastLine,
   seedGov,
   sql,
@@ -19,11 +20,17 @@ import {
  * de `gov-5-visibility-scope.test.ts`, agora do lado do envio.
  *
  * GOV_ORG está no default `own_and_unassigned`; GOV_CONV_AGENT_B é do agent B.
+ * Conversa de GRUPO está na mesma tabela e sob a mesma RLS: o push de grupo
+ * passa pela mesma função, e os casos de grupo abaixo medem isso.
  */
 
 // Namespace exclusivo deste arquivo.
 const REVOGADO = "abab0611-1111-4000-8000-000000000001";
 const OUTRA_ORG = "abab0611-0000-4000-8000-000000000001";
+const CONTATO_GRUPO_SEM_DONO = "abab0611-3333-4000-8000-000000000001";
+const CONTATO_GRUPO_DO_A = "abab0611-3333-4000-8000-000000000002";
+const GRUPO_SEM_DONO = "abab0611-4444-4000-8000-000000000001";
+const GRUPO_DO_A = "abab0611-4444-4000-8000-000000000002";
 
 const SUB = {
   a: "https://push.invariant.test/agente-a",
@@ -55,6 +62,16 @@ beforeAll(() => {
       ('${GOV_ORG}', '${GOV_MANAGER}', '${SUB.manager}', 'k', 'a'),
       ('${GOV_ORG}', '${REVOGADO}', '${SUB.revogado}', 'k', 'a')
     on conflict (endpoint) do nothing;
+    insert into public.contacts (id, organization_id, display_name, kind, source) values
+      ('${CONTATO_GRUPO_SEM_DONO}', '${GOV_ORG}', 'Push Grupo Sem Dono', 'whatsapp_group', 'whatsapp_group'),
+      ('${CONTATO_GRUPO_DO_A}', '${GOV_ORG}', 'Push Grupo do A', 'whatsapp_group', 'whatsapp_group')
+    on conflict do nothing;
+    insert into public.conversations
+      (id, organization_id, contact_id, channel_session_id, status, is_group, group_chat_id, assigned_to_user_id)
+    values
+      ('${GRUPO_SEM_DONO}', '${GOV_ORG}', '${CONTATO_GRUPO_SEM_DONO}', '${GOV_SESSION}', 'open', true, 'push-sem-dono@g.us', null),
+      ('${GRUPO_DO_A}', '${GOV_ORG}', '${CONTATO_GRUPO_DO_A}', '${GOV_SESSION}', 'claimed', true, 'push-do-a@g.us', '${GOV_AGENT_A}')
+    on conflict do nothing;
   `);
 });
 
@@ -75,7 +92,9 @@ describe("push de mensagem recebida: só a quem pode ver a conversa", () => {
 
   // Na MESMA transação, como o PostgREST chama: fora dela o set_config local
   // já se desfaria sozinho e o caso passaria sem medir nada. Sem `commit` de
-  // propósito: o psql imprimiria "COMMIT" como última linha.
+  // propósito: o psql imprimiria "COMMIT" como última linha. O laço da função
+  // segue `order by user_id`: o último inscrito é o manager, nunca o agent A
+  // que chama aqui — sem restaurar, as claims sairiam com o sub do manager.
   it("devolve as claims de quem chamou intactas", () => {
     const out = sql(`
       begin;
@@ -94,10 +113,30 @@ describe("push de mensagem recebida: só a quem pode ver a conversa", () => {
     expect(lastLine(out)).toBe("service_role");
   });
 
-  // Por último: muda o visibility_mode do GOV_ORG (cada arquivo tem banco próprio).
+  it("grupo sem dono em own_and_unassigned: os dois agents e o manager", () => {
+    expect(inscricoesQueVeem(GOV_ORG, GRUPO_SEM_DONO).sort()).toEqual([SUB.a, SUB.b, SUB.manager].sort());
+  });
+
+  // Daqui para baixo muda o visibility_mode do GOV_ORG (cada arquivo tem banco
+  // próprio); os casos rodam em ordem.
   it("conversa sem dono em 'own': só o manager", () => {
-    sql(`update public.organizations set settings = coalesce(settings, '{}'::jsonb) || '{"visibility_mode":"own"}'
-          where id = '${GOV_ORG}';`);
+    definirModo("own");
     expect(inscricoesQueVeem(GOV_ORG, GOV_CONV_UNASSIGNED)).toEqual([SUB.manager]);
   });
+
+  it("grupo em 'own': o agent sem acesso não recebe; o dono e o manager recebem", () => {
+    definirModo("own");
+    expect(inscricoesQueVeem(GOV_ORG, GRUPO_SEM_DONO)).toEqual([SUB.manager]);
+    expect(inscricoesQueVeem(GOV_ORG, GRUPO_DO_A).sort()).toEqual([SUB.a, SUB.manager].sort());
+  });
+
+  it("conversa de outro agent em 'all': todos os membros ativos; vínculo revogado nunca", () => {
+    definirModo("all");
+    expect(inscricoesQueVeem(GOV_ORG, GOV_CONV_AGENT_B).sort()).toEqual([SUB.a, SUB.b, SUB.manager].sort());
+  });
 });
+
+function definirModo(modo: "own" | "all"): void {
+  sql(`update public.organizations set settings = coalesce(settings, '{}'::jsonb) || '{"visibility_mode":"${modo}"}'
+        where id = '${GOV_ORG}';`);
+}
