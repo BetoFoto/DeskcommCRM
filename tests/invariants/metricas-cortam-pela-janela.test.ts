@@ -23,12 +23,14 @@ import { sql } from "./gov-helpers";
  *      atribuída DENTRO sem mensagem nenhuma (só a contagem/vazamento), e
  *      atribuída fora sem nada (era só peso morto do lateral).
  *
- *   2. **Custo proporcional à janela** — `EXPLAIN (ANALYZE, FORMAT JSON)` com o
- *      papel `authenticated` e `statement_timeout` de 8 s (o teto do banco
- *      real), contando as Vezes (`Actual Loops`) dos nós que tocam `messages`:
- *      é o número de conversas para as quais o lateral rodou. Curto tem de ser
- *      MENOR que longo — com a régua antiga os dois números são idênticos,
- *      porque a janela não entrava em lugar nenhum antes do trabalho.
+ *   2. **Custo proporcional à janela** — a mesma chamada, com o papel
+ *      `authenticated` e `statement_timeout` de 8 s (o teto do banco real),
+ *      contando as varreduras feitas em `messages` antes e depois: cada
+ *      execução do lateral é UMA varredura, e é ela que a janela tem de
+ *      encolher. Curto tem de varrer MENOS que longo — com a régua antiga os
+ *      dois números são idênticos, porque a janela não entrava em lugar nenhum
+ *      antes do trabalho (o plano da função também não serve: o Postgres não
+ *      inlina um corpo com CTE e o EXPLAIN devolve só um `Result` opaco).
  *
  * Namespace c2514… (exclusivo deste arquivo). Sem PII: @invariant.test.
  * Timestamps LITERAIS para agregações determinísticas.
@@ -399,32 +401,51 @@ function coleta(no: NoPlano, acc: NoPlano[]): NoPlano[] {
   return acc;
 }
 
-/** `EXPLAIN (ANALYZE, FORMAT JSON)` da RPC, sob RLS e com o teto de 8 s. */
-function medir(func: string, org: string, de: string, ate: string): { loops: number; ms: number } {
+/**
+ * A RPC sob RLS, com o `statement_timeout` de 8 s do banco real, medindo DUAS
+ * coisas: o tempo de execução e quantas varreduras ela fez em `messages`.
+ *
+ * O plano da função NÃO aparece no EXPLAIN — o Postgres não inlina um corpo com
+ * CTE e o que sobra é um `Result` opaco (medido: só esse nó vinha no JSON). Então
+ * o instrumento do custo é o contador de `pg_stat_user_tables`: cada execução do
+ * lateral sobre `messages` é UMA varredura, e é exatamente ela que a janela tem
+ * de encolher. Com a régua antiga o número é IGUAL para janela de 1 dia e de 90,
+ * porque a janela não entrava em lugar nenhum antes do trabalho — é essa a
+ * comparação que o teste faz.
+ */
+function medir(func: string, org: string, de: string, ate: string): { scans: number; ms: number; plano: string } {
+  // O contador de `pg_stat_user_tables` só chega ao compartilhado no fim de uma
+  // transação com mais de 500 ms desde o último relato (medido: leitura imediata
+  // devolve 0, leitura depois de `pg_sleep(1)` devolve o valor). Sem o sono a
+  // medição seria "0 < 0" — verde que não mede nada.
   const out = sql(`
+    select pg_sleep(0.7);
+    select 'ANTES:' || (coalesce(idx_scan,0) + coalesce(seq_scan,0))
+      from pg_stat_user_tables where relid = 'public.messages'::regclass;
     ${como(MANAGER)}
     set statement_timeout = '8s';
     explain (analyze, format json)
       select public.${func}('${org}', '${de}', '${ate}', null);
+    select pg_sleep(0.7);
+    select 'DEPOIS:' || (coalesce(idx_scan,0) + coalesce(seq_scan,0))
+      from pg_stat_user_tables where relid = 'public.messages'::regclass;
   `);
   const linhas = out.split("\n");
+  const antes = linhas.find((l) => l.startsWith("ANTES:"));
+  const depois = linhas.find((l) => l.startsWith("DEPOIS:"));
+  expect(antes, `o contador de antes não chegou: ${out.slice(0, 300)}`).toBeDefined();
+  expect(depois, `o contador de depois não chegou: ${out.slice(0, 300)}`).toBeDefined();
   const ini = linhas.findIndex((l) => l.trim() === "[");
   const fim = linhas.findLastIndex((l) => l.trim() === "]");
   expect(ini, `EXPLAIN devolveu algo inesperado: ${out.slice(0, 300)}`).toBeGreaterThan(-1);
-  const json = JSON.parse(linhas.slice(ini, fim + 1).join("\n")) as Array<{ Plan: NoPlano }>;
-  const nos = coleta(json[0]!.Plan, []);
-  const tocamMensagens = nos.filter(
-    (n) => n["Relation Name"] === "messages" || n["Node Type"] === "SubPlan" || n["Node Type"] === "SubPlan (initoff)",
-  );
-  expect(
-    tocamMensagens.length,
-    `o plano não mostrou o lateral sobre messages — o instrumento perdeu o alvo: ${nos
-      .map((n) => n["Node Type"])
-      .join(", ")}`,
-  ).toBeGreaterThan(0);
-  const loops = Math.max(...tocamMensagens.map((n) => Number(n["Actual Loops"] ?? 0)));
-  const ms = Number(json[0]!.Plan["Execution Time"]);
-  return { loops, ms };
+  const json = JSON.parse(linhas.slice(ini, fim + 1).join("\n")) as NoPlano[];
+  const plano = coleta(json[0]!.Plan!, []).map((n) => n["Node Type"] ?? "?").join(" > ");
+  return {
+    scans: Number(depois.slice("DEPOIS:".length)) - Number(antes.slice("ANTES:".length)),
+    // "Execution Time" é IRMÃO de "Plan" no JSON do EXPLAIN, não filho.
+    ms: Number(json[0]!["Execution Time"]),
+    plano,
+  };
 }
 
 describe("#2514 — o recorte antes do lateral", () => {
@@ -442,14 +463,14 @@ describe("#2514 — o recorte antes do lateral", () => {
     expectParidade("fn_channel_metrics", MANAGER, ORG_VOLUME, VOLUME_DE, VOLUME_ATE);
     expectParidade("fn_attendant_metrics", MANAGER, ORG_VOLUME, VOLUME_DE_CURTO, VOLUME_ATE_CURTO);
     expectParidade("fn_attendant_metrics", MANAGER, ORG_VOLUME, VOLUME_DE, VOLUME_ATE);
-  });
+  }, 240_000);
 
-  it("a média da janela curta traz a conversa atribuída FORA — recortar por `assigned_at` só mudaria o número", () => {
+  it("a média da janela curta traz a conversa atribuída FORA — recortar por assigned_at só mudaria o número", () => {
     // Controle da paridade: ela só significa alguma coisa se as duas consultas
     // forem de fato diferentes. No dia 15/07 o AGENT tem DUAS conversas com
     // resposta humana dentro da janela: CV_DENTRO (atribuída dentro, 60 s) e
-    // CV_FORA_RESP (atribuída em 20/06, 25 dias + 5 min). Um pré-filtro que
-    // cortasse só por `assigned_at` devolveria 60; a régua devolve a média das
+    // CV_FORA_RESP (atribuída em 20/06, 25 dias + 30 min). Um pré-filtro que
+    // cortasse só por assigned_at devolveria 60; a régua devolve a média das
     // duas — é o número que o recorte tem de preservar.
     const out = sql(`
       ${como(MANAGER)}
@@ -461,25 +482,36 @@ describe("#2514 — o recorte antes do lateral", () => {
       where x ->> 'user_id' = '${AGENT}';
     `);
     const media = Number(out.split("\n").pop()!.replace(/^ROW:/, ""));
-    expect(media).toBe((60 + (25 * 86400 + 300)) / 2);
+    expect(media).toBe((60 + (25 * 86400 + 30 * 60)) / 2);
     expect(media).not.toBe(60);
-  });
+  }, 60_000);
 
-  it.each([
-    ["fn_attendant_metrics"],
-    ["fn_channel_metrics"],
-  ])("%s: janela de 1 dia roda o lateral para MENOS conversas que janela de 90", (func) => {
-    const curto = medir(func, ORG_VOLUME, VOLUME_DE_CURTO, VOLUME_ATE_CURTO);
-    const longo = medir(func, ORG_VOLUME, VOLUME_DE, VOLUME_ATE);
-    // eslint-disable-next-line no-console
-    console.log(
-      `[2514] ${func}: 1 dia = ${curto.loops} execuções do lateral em ${curto.ms.toFixed(1)} ms · ` +
-        `${Math.round((Date.parse(VOLUME_ATE) - Date.parse(VOLUME_DE)) / 86400000)} dias = ${longo.loops} execuções em ${longo.ms.toFixed(1)} ms`,
-    );
-    expect(
-      curto.loops,
-      `janela curta tocou ${curto.loops} conversas e a longa ${longo.loops} — o recorte não entrou antes do lateral`,
-    ).toBeLessThan(longo.loops);
-    expect(curto.ms).toBeLessThan(longo.ms);
-  });
+  it.each([["fn_attendant_metrics"], ["fn_channel_metrics"]])(
+    "%s: janela de 1 dia varre menos messages que janela de 90 e custa menos",
+    (func) => {
+      const curto = medir(func, ORG_VOLUME, VOLUME_DE_CURTO, VOLUME_ATE_CURTO);
+      const longo = medir(func, ORG_VOLUME, VOLUME_DE, VOLUME_ATE);
+      // `+00` sem os minutos não é offset ISO para o JS (Date.parse devolve NaN).
+      const dias = Math.round(
+        (Date.parse(`${VOLUME_ATE}:00`) - Date.parse(`${VOLUME_DE}:00`)) / 86_400_000,
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        `[2514] ${func}: 1 dia = ${curto.scans} varreduras de messages em ${curto.ms.toFixed(1)} ms · ` +
+          `${dias} dias = ${longo.scans} varreduras em ${longo.ms.toFixed(1)} ms · plano: ${longo.plano}`,
+      );
+      // Instrumento vivo: a janela longa TEM de varrer messages. Se não varrer,
+      // o contador morreu, e "0 < 0" seria um verde que não mede nada.
+      expect(
+        longo.scans,
+        "o contador de varreduras de messages não andou — o instrumento perdeu o alvo, não é aprovação",
+      ).toBeGreaterThan(0);
+      expect(
+        curto.scans,
+        `janela curta varreu messages ${curto.scans} vezes e a longa ${longo.scans} — o recorte não entrou antes do lateral`,
+      ).toBeLessThan(longo.scans);
+      expect(curto.ms).toBeLessThan(longo.ms);
+    },
+    60_000,
+  );
 });
