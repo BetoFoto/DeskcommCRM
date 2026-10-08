@@ -11,7 +11,7 @@ Contribuição de @omayklourenco.
 
 ## Requer atenção
 
-Empresas que conectaram a assinatura do ChatGPT na 1.74 ou na 1.75 precisam conectar de novo:
+Empresas que conectaram a assinatura do ChatGPT antes desta versão precisam conectar de novo:
 abra **IA › Credenciais**, use o link de conexão da assinatura e entre com a mesma conta. Até
 isso ser feito, a tela avisa que o login anterior ainda não autorizou o uso do plano e o agente
 não usa a assinatura (se houver chave de API da empresa configurada como reserva, ela segue

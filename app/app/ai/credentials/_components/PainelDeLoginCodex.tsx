@@ -86,7 +86,7 @@ export function PainelDeLoginCodex({
     retorno_sem_estado:
       "Cole o endereço inteiro da barra do navegador (começa com http://127.0.0.1:1455/auth/callback), não só o código.",
     estado_invalido:
-      "Este endereço não veio do link desta tela, aberto por você nesta empresa — ou o link venceu (vale 10 minutos). Recarregue a página, abra o link de novo e cole o endereço novo.",
+      "Este endereço não veio do link desta tela, aberto por você nesta empresa — ou o link venceu (vale 10 minutos e uma vez só). Recarregue a página, abra o link de novo e cole o endereço novo.",
   };
 
   function conectar() {

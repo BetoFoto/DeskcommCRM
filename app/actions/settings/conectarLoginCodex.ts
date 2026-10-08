@@ -95,6 +95,20 @@ export async function conectarLoginCodex(
   const extAgentHostId = await lerOuCriarHostIdSiwc(admin);
   if (!extAgentHostId) return { ok: false, error: "host_siwc" };
 
+  // O retorno vale UMA vez: o nonce do `state` é queimado ANTES da troca, na
+  // mesma tabela e pela mesma razão do callback do Google Agenda
+  // (`app/api/v1/agenda/google/callback/route.ts`). O nonce tem 128 bits
+  // sorteados, então dividir a tabela com o Google não colide, e a poda do
+  // `data-retention` já a alcança. Unicidade (`23505`) = repetido; qualquer
+  // outro erro também recusa, porque sem gravar não há uso único a garantir.
+  const { error: erroDoNonce } = await admin.from("calendar_oauth_nonces").insert({
+    nonce: estado.nonce,
+    organization_id: activeOrg.orgId,
+    user_id: authUser.id,
+    expira_em: new Date(estado.expiraEmMs).toISOString(),
+  });
+  if (erroDoNonce) return { ok: false, error: erroDoNonce.code === "23505" ? "estado_invalido" : "banco" };
+
   let tokens: Awaited<ReturnType<typeof trocarCodigoPorTokens>>;
   try {
     tokens = await trocarCodigoPorTokens({

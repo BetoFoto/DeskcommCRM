@@ -31,7 +31,23 @@ vi.mock("@/lib/auth/server", () => ({
 vi.mock("@/lib/auth/pode-administrar-empresa", () => ({ podeAdministrarEmpresa: () => true }));
 vi.mock("@/lib/impersonate/support", () => ({ supportWriteError: () => null }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+// A tabela de nonces queimados, em memória: a chave primária do banco vira um
+// Set, e a segunda inserção do mesmo nonce devolve o `23505` do Postgres.
+const noncesQueimados = vi.hoisted(() => new Set<string>());
+const falhaDoBanco = vi.hoisted(() => ({ codigo: null as string | null }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from: (tabela: string) => ({
+      insert: async (linha: { nonce: string }) => {
+        if (tabela !== "calendar_oauth_nonces") throw new Error(`tabela inesperada: ${tabela}`);
+        if (falhaDoBanco.codigo) return { error: { code: falhaDoBanco.codigo } };
+        if (noncesQueimados.has(linha.nonce)) return { error: { code: "23505" } };
+        noncesQueimados.add(linha.nonce);
+        return { error: null };
+      },
+    }),
+  }),
+}));
 vi.mock("next/headers", () => ({ headers: async () => new Map<string, string>() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 const jwtVerify = vi.hoisted(() =>
@@ -85,6 +101,8 @@ function retorno(code: string, state: string): string {
 }
 
 beforeEach(() => {
+  noncesQueimados.clear();
+  falhaDoBanco.codigo = null;
   trocar.mockClear();
   guardar.mockClear();
   vi.mocked(audit).mockClear();
@@ -265,6 +283,42 @@ describe("conectarLoginCodex confere a identidade, o plano e o cliente devolvido
       codeVerifier: VERIFIER,
     });
     expect(r).toEqual({ ok: false, error: "consentimento_recusado" });
+    expect(trocar).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * O RETORNO VALE UMA VEZ SÓ (#2456, terceira passada).
+ *
+ * O `state` assinado vale 10 minutos, e sem queimar o nonce o mesmo retorno
+ * era aceito de novo dentro desse prazo. Sabotagem que confirma: tirar o
+ * `insert` em `calendar_oauth_nonces` (ou ignorar o erro dele) deixa os dois
+ * casos abaixo vermelhos, porque a segunda troca passa a ser chamada.
+ */
+describe("conectarLoginCodex queima o nonce do state antes da troca", () => {
+  it("o MESMO retorno colado de novo é recusado, sem chamar a OpenAI uma segunda vez", async () => {
+    const colado = retorno("code-bom", estadoPara(ORG, PESSOA));
+    expect(await conectarLoginCodex({ codigo: colado, codeVerifier: VERIFIER })).toEqual({ ok: true });
+    expect(trocar).toHaveBeenCalledTimes(1);
+
+    const segunda = await conectarLoginCodex({ codigo: colado, codeVerifier: VERIFIER });
+    expect(segunda).toEqual({ ok: false, error: "estado_invalido" });
+    expect(trocar).toHaveBeenCalledTimes(1);
+    expect(guardar).toHaveBeenCalledTimes(1);
+  });
+
+  it("o nonce é queimado mesmo quando a troca falha: a segunda tentativa com o mesmo state recusa", async () => {
+    trocar.mockRejectedValueOnce(new Error("invalid_grant"));
+    const colado = retorno("code-bom", estadoPara(ORG, PESSOA));
+    expect(await conectarLoginCodex({ codigo: colado, codeVerifier: VERIFIER })).toEqual({ ok: false, error: "troca_recusada" });
+    expect(await conectarLoginCodex({ codigo: colado, codeVerifier: VERIFIER })).toEqual({ ok: false, error: "estado_invalido" });
+    expect(trocar).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem conseguir gravar o nonce, recusa (falha fechada) e não troca", async () => {
+    falhaDoBanco.codigo = "08006";
+    const r = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
+    expect(r).toEqual({ ok: false, error: "banco" });
     expect(trocar).not.toHaveBeenCalled();
   });
 });
