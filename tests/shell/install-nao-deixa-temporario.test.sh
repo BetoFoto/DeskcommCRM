@@ -71,6 +71,8 @@ cat > "$WORK/bin/curl" <<'STUB'
 case "$*" in
   *ghcr.io/token*) printf '{"token":"duble"}' ;;
   *ghcr.io/v2/*)   printf 200 ;;
+  # v_supabase_url: só o GoTrue passa (400 + o "msg" dele, como medido).
+  */auth/v1/verify*) printf '{"msg":"Verify requires a verification type"}\n400' ;;
   *)               printf 200 ;;
 esac
 STUB
