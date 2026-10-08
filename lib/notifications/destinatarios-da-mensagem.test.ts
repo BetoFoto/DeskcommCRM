@@ -1,5 +1,5 @@
 /**
- * Quem é avisado de mensagem recebida — a regra do dono do produto e a
+ * Quem é avisado de mensagem recebida — a regra proposta e a
  * precedência atendente > dono de negócio aberto > todos.
  *
  * Roda com: npx vitest run lib/notifications/destinatarios-da-mensagem.test.ts

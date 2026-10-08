@@ -1,7 +1,7 @@
 /**
  * Quem é avisado de uma MENSAGEM RECEBIDA (`message.received`, conversa 1:1).
  *
- * ═══ A regra (decisão do dono do produto, 2026-10-07) ═══
+ * ═══ A regra (proposta em 2026-10-07; o mantenedor decide se entra) ═══
  *
  * - Conversa SEM responsável → o aviso vai para TODOS da organização (o
  *   comportamento de antes: alguém precisa pegar a fila).
