@@ -33,9 +33,8 @@
  * A defesa que não depende do WAHA saber assinar é de rede: a rota global (sem
  * token) só atende a rede interna do Docker, porque o WAHA fala com o app por
  * ali e nunca precisou dela pela internet. A própria rota recusa com 404 o que
- * atravessou um proxy de borda (`chegouPelaBorda`, lib/http/ip-do-cliente.ts),
- * qualquer que seja o proxy; o Caddyfile e o overlay do Traefik ainda a
- * bloqueiam antes, na borda.
+ * traz a marca de um proxy de borda (`chegouPelaBorda`, lib/http/ip-do-cliente.ts,
+ * régua válida nos proxies que o kit sobe).
  */
 import { env } from "@/lib/env";
 import { exigirAssinaturaNoWebhookDaInstalacao } from "@/lib/instalacao/comportamento";

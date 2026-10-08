@@ -7,10 +7,10 @@
  *
  * Só atende a REDE INTERNA. O WAHA da stack chama `http://app:3000` pela rede
  * do Docker; quem está do outro lado da borda pública usa a rota por token.
- * Requisição que atravessou um proxy de borda recebe 404, como rota que não
- * existe (`chegouPelaBorda`, lib/http/ip-do-cliente.ts). A regra mora aqui, e
- * não só no proxy, porque o kit sobe com proxies diferentes (Caddy, Traefik,
- * Nginx Proxy Manager…) e nem todo modo tem o bloqueio de caminho na borda.
+ * Requisição que traz a marca de um proxy de borda recebe 404
+ * (`chegouPelaBorda`, lib/http/ip-do-cliente.ts — régua de cabeçalho, válida
+ * nos proxies que o kit sobe). A regra mora na aplicação para valer igual em
+ * qualquer modo de instalação, sem depender da configuração do proxy.
  *
  * Pipeline: lookup session -> verifica HMAC SHA512 -> loga em
  * webhook_events_log -> processarEventoWaha (ingestão compartilhada, ver
@@ -40,6 +40,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Antes de ler o corpo e de tocar o banco: ver o cabeçalho deste arquivo.
   if (chegouPelaBorda(req.headers)) {
+    // `warn` e sem corpo: o rastro serve a quem configurou o WAHA por um
+    // endereço público e viu a ingestão parar — a rota certa é a por token.
+    logger.warn("[waha.webhook] rota global recusou requisição vinda da borda", {
+      request_id: requestId,
+    });
     return fail("not_found", "not found", 404, { requestId });
   }
 
@@ -74,8 +79,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return fail("invalid_request", "invalid_json", 400, { requestId });
     }
     // `error`, e aqui isto está certo: requisição vinda da borda pública já
-    // saiu com 404 no topo desta função (e o Caddy do kit ainda responde 403
-    // para este caminho), então quem chega aqui é o WAHA pela rede interna.
+    // saiu com 404 no topo desta função, então quem chega aqui é o WAHA pela
+    // rede interna.
     // Recusa de contrato nesta rota é o fio ter mudado.
     // Na rota por token, que é pública de propósito, o mesmo log é `warn`.
     logger.error("[waha.webhook] payload fora do contrato do canal", {

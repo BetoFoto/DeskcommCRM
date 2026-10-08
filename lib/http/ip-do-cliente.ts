@@ -112,17 +112,15 @@ const MARCAS_DE_PROXY = ["x-real-ip", "x-forwarded-server", "cf-connecting-ip", 
  *
  * ═══ Por que isto pode decidir, ao contrário de `ipDoCliente` ═══
  *
- * Só decide RECUSAR. Para uma requisição externa se passar por interna, ela
- * teria de chegar sem que o proxy deixasse rastro — e os proxies do kit deixam:
- * o Caddy substitui o `x-forwarded-for` recebido pelo endereço real e marca
+ * Só decide RECUSAR, e se apoia no que os proxies do kit escrevem: o Caddy
+ * substitui o `x-forwarded-for` recebido pelo endereço real e marca
  * `x-forwarded-proto: https`; o Traefik sempre escreve `x-real-ip` e
- * `x-forwarded-server`; o Nginx Proxy Manager escreve `x-real-ip` e acrescenta
- * o endereço real ao fim do `x-forwarded-for`. O `https` cobre também o caso em
- * que o Docker entrega ao proxy um endereço privado no lugar do cliente.
+ * `x-forwarded-server`; o Nginx Proxy Manager escreve `x-real-ip`; o túnel da
+ * Cloudflare escreve `cf-connecting-ip`. O `https` cobre também o caso em que
+ * o Docker entrega ao proxy um endereço privado no lugar do cliente.
  *
- * ponytail: régua de cabeçalho. Um proxy que não escreva cabeçalho de
- * encaminhamento nenhum não se distingue da rede interna por ela; a camada
- * seguinte é a assinatura do remetente (exigível em /admin/sistema).
+ * ponytail: régua de cabeçalho, válida nos proxies do kit. A camada seguinte
+ * é a assinatura do remetente (exigível em /admin/sistema).
  */
 export function chegouPelaBorda(headers: Headers): boolean {
   if (MARCAS_DE_PROXY.some((nome) => headers.has(nome))) return true;

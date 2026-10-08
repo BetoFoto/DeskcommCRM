@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *
  * O WAHA da stack chama `http://app:3000` pela rede do Docker; tudo que vem de
  * fora atravessa um proxy de borda (Caddy, Traefik, Nginx Proxy Manager, túnel)
- * e deve usar a rota por token. A regra mora na própria rota porque nem todo
- * modo de borda do kit bloqueia o caminho.
+ * e deve usar a rota por token. A regra mora na aplicação para valer igual em
+ * qualquer modo de instalação.
  *
  * Os cabeçalhos dos casos "interna" e "Traefik" são os MEDIDOS em
  * `webhook_events_log` de uma instalação real (08/10/2026; o endereço público
@@ -92,11 +92,11 @@ const PELA_BORDA: Record<string, Record<string, string>> = {
     "x-real-ip": "200.160.2.3",
   },
   "x-real-ip sozinho (Nginx Proxy Manager)": { "x-real-ip": "10.0.4.9" },
-  "Nginx Proxy Manager com x-forwarded-for forjado privado": {
+  "Nginx Proxy Manager com x-forwarded-for de dois saltos": {
     "x-forwarded-for": "10.0.4.3, 200.160.2.3",
     "x-real-ip": "200.160.2.3",
   },
-  "x-forwarded-for forjado + público no fim": { "x-forwarded-for": "10.0.4.3, 200.160.2.3" },
+  "x-forwarded-for com salto público no fim": { "x-forwarded-for": "10.0.4.3, 200.160.2.3" },
   forwarded: { forwarded: "for=200.160.2.3;proto=https" },
   "cf-connecting-ip": { "cf-connecting-ip": "200.160.2.3" },
   "x-forwarded-for que não é endereço": { "x-forwarded-for": "desconhecido" },
