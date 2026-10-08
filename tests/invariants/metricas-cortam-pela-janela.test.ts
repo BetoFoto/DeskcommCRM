@@ -425,7 +425,12 @@ function medir(func: string, org: string, de: string, ate: string): { scans: num
     select 'ANTES:' || (coalesce(idx_scan,0) + coalesce(seq_scan,0))
       from pg_stat_user_tables where relid = 'public.messages'::regclass;
     ${como(MANAGER)}
-    set statement_timeout = '8s';
+    -- 60 s, não os 8 s do banco real: o que este caso mede é a CONTAGEM de
+    -- varreduras (1 dia < 90 dias), não se 90 dias cabem no teto — e não cabem
+    -- (medido no #2514: 30 e 90 dias estouram 8 s nas duas versões). Com 8 s a
+    -- janela longa levava 5–6,4 s numa máquina boa e estourava no runner do CI
+    -- (main 3c29fa476, 08/10), deixando o \`invariants\` vermelho para todos.
+    set statement_timeout = '60s';
     explain (analyze, format json)
       select public.${func}('${org}', '${de}', '${ate}', null);
     select pg_sleep(0.7);
