@@ -291,6 +291,22 @@ describe("a recusa da RLS de crm_leads (42501) vira 403, não 500", () => {
     expect(leadsGravados()).toHaveLength(0);
   });
 
+  it("42501 de outra origem (GRANT faltando) continua 500 com a mensagem do banco", async () => {
+    recusaDoGatilho = { code: "42501", message: "permission denied for function fn_x" };
+    await expect(createLeadHandler(banco as never, ctx, novo())).rejects.toMatchObject({
+      status: 500,
+      code: "internal_error",
+      message: "permission denied for function fn_x",
+    });
+    recusaDoGatilho = {
+      code: "42501",
+      message: 'new row violates row-level security policy for table "crm_lead_activities"',
+    };
+    await expect(
+      updateLeadHandler(banco as never, ctx, LEAD, { title: "Outro título" } as never),
+    ).rejects.toMatchObject({ status: 500, code: "internal_error" });
+  });
+
   it("a frase explica o porquê, em vez de \"tente de novo\"", async () => {
     recusaDoGatilho = recusaDaRls;
     const recusa = await createLeadHandler(banco as never, ctx, novo()).catch((e) => e);

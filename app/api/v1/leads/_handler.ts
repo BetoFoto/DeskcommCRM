@@ -241,7 +241,7 @@ async function recusaPessoalNaEscrita(
  */
 function recusaDaGuardaDoBanco(
   ctx: HandlerCtx,
-  erro: { code?: string } | null,
+  erro: { code?: string; message?: string } | null,
 ): ApiError | null {
   if (erro?.code === "PT404") {
     return new ApiError(
@@ -261,7 +261,14 @@ function recusaDaGuardaDoBanco(
       traduzir("Responsável não é um atendente ativo desta organização.", ctx.idioma ?? "pt-BR"),
     );
   }
-  if (erro?.code === "42501") {
+  // Só a policy de `crm_leads`: o mesmo 42501 também é GRANT faltando numa
+  // função ou numa tabela que um gatilho alcança — defeito nosso, que tem de
+  // continuar 500 com a mensagem do banco, e não virar "visibilidade". A recusa
+  // de RLS nomeia a tabela entre aspas na mensagem em inglês, que é o
+  // lc_messages do Supabase (en_US); a de GRANT ("permission denied for table
+  // crm_leads") não. Num Postgres com mensagens em de, es ou fr as aspas mudam
+  // e a recusa cai no 500 antigo, que é a direção segura.
+  if (erro?.code === "42501" && erro.message?.includes('"crm_leads"')) {
     return new ApiError(
       403,
       "forbidden",
