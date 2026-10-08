@@ -111,6 +111,9 @@ sin eso un contenedor de compose común no puede entrar en ella."
   ["✓ chave de cifra dos segredos gerada e gravada no .env"]="✓ Clave de cifrado de los secretos generada y guardada en el .env"
   ["✓ chave de cifra ativa no banco (segredos de webhook são guardados cifrados)"]="✓ Clave de cifrado activa en la base de datos (los secretos de webhook se guardan cifrados)"
   ["⚠ não consegui semear a chave de cifra no banco — segredos de webhook não poderão ser salvos até rodar update.sh de novo."]="⚠ No pude sembrar la clave de cifrado en la base de datos — los secretos de webhook no podrán guardarse hasta volver a ejecutar update.sh."
+  ["✓ chave de cifra do CPF gerada e gravada no .env"]="✓ Clave de cifrado del CPF generada y guardada en el .env"
+  ["✓ chave de cifra do CPF ativa no banco (contato com CPF é salvo cifrado)"]="✓ Clave de cifrado del CPF activa en la base de datos (el contacto con CPF se guarda cifrado)"
+  ["⚠ não consegui semear a chave de cifra do CPF no banco — o contato será salvo sem CPF até rodar update.sh de novo."]="⚠ No pude sembrar la clave de cifrado del CPF en la base de datos — el contacto se guardará sin CPF hasta volver a ejecutar update.sh."
 
   # ── install.sh: banner() e show_recovery() ──────────────────────────────
   ["  Agentes de IA que atendem no WhatsApp, dentro do seu CRM."]="  Agentes de IA que atienden por WhatsApp, dentro de tu CRM."
