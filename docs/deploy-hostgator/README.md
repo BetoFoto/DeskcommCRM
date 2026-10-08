@@ -231,7 +231,7 @@ regras que você definir.
 
 | Sintoma | O que fazer |
 |---|---|
-| Site não abre / erro de segurança | O domínio ainda não apontou pro servidor, ou faltou liberar as portas. Rode `ufw allow 80,443,22/tcp` e espere o domínio propagar. |
+| Site não abre / erro de segurança | O domínio ainda não apontou pro servidor, ou faltou liberar as portas. Rode `ufw allow 22,22022,80,443/tcp` e espere o domínio propagar. |
 | A página fica recarregando/erro | Faltou alguma chave. Rode `docker compose -f docker-compose.prod.yml logs app` e procure a linha que diz qual variável falta. |
 | WhatsApp não conecta | Veja `docker compose -f docker-compose.prod.yml logs waha`. Confirme que o número não está conectado em outro computador. |
 

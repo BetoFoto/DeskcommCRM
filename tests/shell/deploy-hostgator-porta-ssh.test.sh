@@ -39,9 +39,16 @@ check "todo comando scp do guia leva -P 22022 (maiúsculo: no scp, -p é outra c
 ufw_libera_22022() { codigo | grep -E '^[[:space:]]*ufw allow ' | grep -qE '(^|[ ,])22022([,/ ]|$)'; }
 check "o ufw do guia libera a 22022 antes de ser ativado" ufw_libera_22022
 
+# Todo `ufw allow` do guia, não só os dos blocos: a tabela de problemas manda rodar um
+# entre crases, e quem o segue com o ufw desligado e depois o ativa se tranca fora igual.
+ufw_sem_22022() { grep -oE 'ufw allow [^`|]*' "$GUIA" | grep -vE '(^|[ ,])22022([,/ ]|$)'; }
+todo_ufw_com_22022() { [ -z "$(ufw_sem_22022)" ]; }
+check "todo ufw allow do guia (em bloco ou entre crases) libera a 22022" todo_ufw_com_22022
+
 if [ "$FAILS" -gt 0 ]; then
   ssh_sem_porta | sed 's/^/    sem porta: /'
   scp_sem_porta | sed 's/^/    sem porta: /'
+  ufw_sem_22022 | sed 's/^/    ufw sem a 22022: /'
   printf '\n%d falha(s)\n' "$FAILS"; exit 1
 fi
 printf '\ntudo verde\n'
