@@ -202,7 +202,7 @@ describe("credencial de enfeite não derruba a leitura (#754)", () => {
 
     const iNull = corpo.search(/v_cipher is null/);
     const iTamanho = corpo.search(/octet_length\s*\(\s*v_cipher\s*\)\s*<\s*66/);
-    const iPacote = corpo.search(/get_byte\s*\(\s*v_cipher\s*,\s*0\s*\)\s*>=\s*128/);
+    const iPacote = corpo.search(/get_byte\s*\(\s*v_cipher\s*,\s*0\s*\)\s*<\s*128/);
     const iTenancy = corpo.indexOf("fn_user_org_ids()");
     const iAudit = corpo.indexOf("insert into public.api_audit_log");
     const iDecifra = corpo.indexOf("pgp_sym_decrypt");

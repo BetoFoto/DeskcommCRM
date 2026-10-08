@@ -46303,7 +46303,7 @@ begin
   if octet_length(v_cipher) < 66 then
     raise exception 'cpf_ciphertext_invalido';
   end if;
-  if get_byte(v_cipher, 0) >= 128 then
+  if get_byte(v_cipher, 0) < 128 then
     raise exception 'cpf_ciphertext_invalido';
   end if;
 
