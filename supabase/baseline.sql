@@ -10173,7 +10173,7 @@ alter table public.agent_inbox_items
     -- pausa e se resolve sozinho na retomada ou no arquivamento, com o motivo
     -- no corpo (laço do canal-mudo-watcher, só que instantâneo).
     'canal_pausado',
-    -- (migration 0584) a cobrança do revendedor fala com a empresa: os avisos
+    -- (migration 0601) a cobrança do revendedor fala com a empresa: os avisos
     -- da régua (teste acabando, venceu, suspende em breve, suspensa) nascem sem
     -- referência, e o de 80% do teto de IA do plano nasce com ref_kind plano. Os
     -- dois abrem Configurações › Plano e cobrança, só para quem administra.
@@ -14506,7 +14506,7 @@ alter table public.webhook_events_log
 alter table public.webhook_events_log
   add constraint webhook_events_log_provider_check check (provider in (
     'waha', 'nuvemshop', 'generic', 'meta_cloud', 'zernio', 'datafy',
-    -- (migration 0584) os provedores de cobrança do revendedor. A linha deles
+    -- (migration 0601) os provedores de cobrança do revendedor. A linha deles
     -- nasce com organization_id nulo e corpo {id,type}: é ponteiro, nunca o
     -- corpo do provedor, e fica invisível ao tenant pela própria policy.
     'stripe', 'asaas'
@@ -47518,9 +47518,9 @@ $$;
 revoke execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) from public,anon,authenticated;
 grant execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) to service_role;
 
--- ---- cobrança do revendedor: webhook, avisos e reconciliação (migration 0584) ----
+-- ---- cobrança do revendedor: webhook, avisos e reconciliação (migration 0601) ----
 -- Spec cobrança do revendedor §2.4, §2.5, §8. Corpo e porquê: a migration
--- 0584, copiada seção a seção, byte a byte. As seções que alargam CHECK (A e C)
+-- 0601, copiada seção a seção, byte a byte. As seções que alargam CHECK (A e C)
 -- editam o bloco único de cada constraint, mais acima; aqui só o que é novo.
 -- ANTES da VARREDURA anon porque cria função; DEPOIS do bloco do PR 2.
 
