@@ -14774,6 +14774,33 @@ export const DICIONARIO: Traducoes = {
   "A conversa fica vinculada ao canal escolhido, e as próximas mensagens saem por ele.": { es: "La conversación queda vinculada al canal elegido, y los próximos mensajes salen por él." },
   "Canais disponíveis": { es: "Canales disponibles" },
   "Iniciar conversa": { es: "Iniciar conversación" },
+
+  // ─── Alíneas do art. 15.º que o controlador preenche (#2356) ───
+  // O cartão de Configurações › Empresa, só fora do Brasil. Os rótulos trazem
+  // a letra porque é assim que o relatório de acesso os imprime ("a) Finalidades:").
+  "Alíneas do art. 15.º do RGPD": { es: "Alíneas del art. 15.º del RGPD" },
+  "O relatório de acesso imprime estes três textos em nome da organização. Deixar em branco faz o documento mostrar «não informado pelo controlador» — nada é inventado no lugar do que falta.": {
+    es: "El informe de acceso imprime estos tres textos en nombre de la organización. Dejarlos en blanco hace que el documento muestre «no informado por el responsable»: no se inventa nada en lugar de lo que falta.",
+  },
+  "Finalidades do tratamento (alínea a))": {
+    es: "Finalidades del tratamiento (letra a))",
+  },
+  "Para que fins os dados pessoais são tratados: atendimento, faturação, marketing.": {
+    es: "Para qué fines se tratan los datos personales: atención, facturación, marketing.",
+  },
+  "Destinatários dos dados (alínea c))": { es: "Destinatarios de los datos (letra c))" },
+  "Com quem esses dados são compartilhados: prestadores, autoridades, parceiros.": {
+    es: "Con quién se comparten estos datos: proveedores, autoridades, socios.",
+  },
+  "Prazo de conservação dos dados (alínea d))": {
+    es: "Plazo de conservación de los datos (letra d))",
+  },
+  "Por quanto tempo os dados são guardados depois do último contato.": {
+    es: "Cuánto tiempo se conservan los datos después del último contacto.",
+  },
+  "Máximo de {n} caracteres.": { es: "Máximo de {n} caracteres." },
+  "Salvar alíneas": { es: "Guardar las letras" },
+  "Alíneas do art. 15.º salvas.": { es: "Las letras del art. 15.º quedaron guardadas." },
 };
 
 /**
