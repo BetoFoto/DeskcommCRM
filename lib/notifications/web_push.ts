@@ -117,7 +117,9 @@ export async function enviarPushAQuemVeAConversa(
     logger.warn("push_subscriptions_visible_list_failed", { detail: error.message });
     return { sent: 0, gone: 0 };
   }
-  const linhas = (data ?? []).filter((l) => !soUsuarios || soUsuarios.includes(l.user_id));
+  // O admin client não é tipado pelo schema: a forma vem de `lib/database.types.ts`.
+  const visiveis: Array<PushSubRow & { user_id: string }> = data ?? [];
+  const linhas = visiveis.filter((l) => !soUsuarios || soUsuarios.includes(l.user_id));
   return enviarPushDaOrg(organizationId, payload, inscricoesJaFiltradas(admin, linhas));
 }
 
