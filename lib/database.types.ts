@@ -9757,6 +9757,7 @@ export type Database = {
           default_pipeline_id: string
           default_stage_id: string
           field_map: Json
+          form_fields: Json
           id: string
           is_active: boolean
           kind: string
@@ -9777,6 +9778,7 @@ export type Database = {
           default_pipeline_id: string
           default_stage_id: string
           field_map?: Json
+          form_fields?: Json
           id?: string
           is_active?: boolean
           kind?: string
@@ -9797,6 +9799,7 @@ export type Database = {
           default_pipeline_id?: string
           default_stage_id?: string
           field_map?: Json
+          form_fields?: Json
           id?: string
           is_active?: boolean
           kind?: string
@@ -11451,4 +11454,3 @@ export const Constants = {
     },
   },
 } as const
-
