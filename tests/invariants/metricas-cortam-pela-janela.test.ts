@@ -441,7 +441,7 @@ function medir(func: string, org: string, de: string, ate: string): { scans: num
   const json = JSON.parse(linhas.slice(ini, fim + 1).join("\n")) as NoPlano[];
   const plano = coleta(json[0]!.Plan!, []).map((n) => n["Node Type"] ?? "?").join(" > ");
   return {
-    scans: Number(depois.slice("DEPOIS:".length)) - Number(antes.slice("ANTES:".length)),
+    scans: Number(depois!.slice("DEPOIS:".length)) - Number(antes!.slice("ANTES:".length)),
     // "Execution Time" é IRMÃO de "Plan" no JSON do EXPLAIN, não filho.
     ms: Number(json[0]!["Execution Time"]),
     plano,
