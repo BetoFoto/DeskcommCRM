@@ -126,4 +126,23 @@ describe("copyToClipboard — fallback dentro de painel modal com focus trap", (
     await expect(copyToClipboard("abc")).resolves.toBe(true);
     expect(textareaNoBody).toBe(true);
   });
+
+  it("o foco volta ao botão depois da cópia, DENTRO do diálogo", async () => {
+    montaDialogo();
+    const botao = document.querySelector("#copiar") as HTMLButtonElement;
+    vi.stubGlobal("navigator", {});
+    document.execCommand = vi.fn().mockReturnValue(true);
+    await copyToClipboard("abc");
+    expect(document.activeElement).toBe(botao);
+  });
+
+  it("o foco volta ao botão depois da cópia, SEM diálogo aberto", async () => {
+    document.body.innerHTML = `<button id="soltinho">copiar</button>`;
+    const botao = document.querySelector("#soltinho") as HTMLButtonElement;
+    botao.focus();
+    vi.stubGlobal("navigator", {});
+    document.execCommand = vi.fn().mockReturnValue(true);
+    await copyToClipboard("abc");
+    expect(document.activeElement).toBe(botao);
+  });
 });

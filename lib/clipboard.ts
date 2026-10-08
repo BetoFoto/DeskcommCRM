@@ -45,6 +45,10 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   // #2580: o textarea nasce DENTRO do diálogo/elemento ativo (focus trap) e
   // recebe focus() ANTES de select() — browsers só selecionam o textarea
   // focado, e fora da árvore do diálogo o trap bloqueia a seleção.
+  // O focus() acima tira o foco do botão em TODO caminho de reserva (com ou
+  // sem diálogo), e o textarea é removido logo depois: sem devolver, o foco
+  // cai no body e quem usa teclado/leitor de tela perde o lugar.
+  const focoAnterior = document.activeElement;
   containerDoFallback().appendChild(textarea);
   textarea.focus();
   textarea.select();
@@ -55,5 +59,6 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     ok = false;
   }
   textarea.remove();
+  if (focoAnterior instanceof HTMLElement) focoAnterior.focus({ preventScroll: true });
   return ok;
 }
