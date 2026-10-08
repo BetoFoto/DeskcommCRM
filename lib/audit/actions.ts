@@ -1032,6 +1032,17 @@ export const AUDIT_ACTIONS = [
   // (#2098): gravada pela tela de Conversões, em `organizations.settings.conversions`.
   "conversions.meta_identity_updated",
 
+  // ── Cobrança do revendedor — rotas do dono (spec 2026-09-29, PR 2) ───────
+  // Plano criado/editado e arquivado; plano atribuído ou trocado numa empresa
+  // (`metadata.quando`: atribuido | imediato); prazo dado e isenção
+  // (`metadata.reativada` diz se a suspensão por cobrança saiu junto); a chave
+  // desligada em /admin/sistema, com quantas suspensas foram liberadas.
+  "cobranca.plano_salvo",
+  "cobranca.plano_arquivado",
+  "cobranca.plano_trocado",
+  "cobranca.prazo_concedido",
+  "cobranca.isencao_definida",
+  "cobranca.modulo_desligado",
   // O servidor MCP externo registrado pela instalação (#2147): gravado (ou
   // apagado, com `registrado: false` no metadata) em
   // `organizations.settings.mcp_externo`. É mutação de TENANT — o endereço que
