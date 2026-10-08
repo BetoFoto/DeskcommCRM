@@ -84,7 +84,7 @@ interface Definicao {
 function definicoesDeFuncao(texto: string, nome: string): Definicao[] {
   const out: Definicao[] = [];
   const re = new RegExp(
-    `create\s+or\s+replace\s+function\s+("?public"?\s*\.\s*)?"?${nome}"?\s*\(`,
+    `create\\s+or\\s+replace\\s+function\\s+("?public"?\\s*\\.\\s*)?"?${nome}"?\\s*\\(`,
     "gi",
   );
   for (const m of texto.matchAll(re)) {
@@ -223,10 +223,10 @@ describe("credencial de enfeite não derruba a leitura (#754)", () => {
     expect(iAudit, "decrypt sairia sem deixar rastro").toBeLessThan(iDecifra);
 
     // Quem instala (baseline) e quem atualiza (migration 0591) recebem igual.
-    const arquivo0591 = readdirSync(MIGRACOES).find((n) => n.includes("_0591_"));
+    const arquivo0591 = readdirSync(MIGRATIONS).find((n) => n.includes("_0591_"));
     expect(arquivo0591, "migration 0591 não está em supabase/migrations/").toBeTruthy();
     const naMigration = definicoesDeFuncao(
-      readFileSync(join(MIGRACOES, arquivo0591!), "utf8"),
+      readFileSync(join(MIGRATIONS, arquivo0591!), "utf8"),
       "decrypt_cpf",
     );
     expect(naMigration.length, "a migration não define decrypt_cpf").toBe(1);
