@@ -156,6 +156,19 @@ describe("trocarPlanoDaOrg", () => {
     } finally { PLANOS.pop(); }
   });
 
+  it("⭐ teste grátis com link de pagamento em aberto: a troca é recusada com 409 checkout_em_aberto e nada muda", async () => {
+    m.linha = { ...EM_TESTE, provedor: "stripe", checkout_url: "https://pagar.exemplo/s1", checkout_expira_em: "2026-10-10T13:00:00Z" };
+    expect(await trocar("pro")).toMatchObject({ ok: false, status: 409, code: "checkout_em_aberto" });
+    expect(escritas()).toEqual([]);
+    expect(trocarNoProvedor).not.toHaveBeenCalled();
+  });
+
+  it("teste grátis com link de pagamento já expirado: a troca vale na hora e o link sai junto", async () => {
+    m.linha = { ...EM_TESTE, provedor: "stripe", checkout_url: "https://pagar.exemplo/s1", checkout_expira_em: "2026-10-10T11:00:00Z" };
+    expect(await trocar("pro")).toMatchObject({ ok: true, quando: "imediato", planoId: "pro" });
+    expect(argumentos(escritas()[0]!, "update")?.[0]).toMatchObject({ plano_id: "pro", checkout_url: null, checkout_expira_em: null });
+  });
+
   it("desfazer o agendamento com uso acima do plano atual não dá 409 plan_limit_reached", async () => {
     m.linha = { ...PAGANDO, plano_id: "mini", plano_agendado_id: "pro" };
     m.assentos = 3;
