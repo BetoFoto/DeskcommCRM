@@ -26,7 +26,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const update = vi.hoisted(() => vi.fn());
-const semConta = vi.hoisted(() => vi.fn(() => ({ access_token: "at" })));
+const semConta = vi.hoisted(() => vi.fn((): { access_token: string } | null => ({ access_token: "at" })));
 
 vi.mock("@/lib/ai/credenciais/login-codex", () => ({
   lerLoginCodexRenovandoSeProxima: vi.fn(async () => semConta()),
@@ -89,7 +89,7 @@ describe("listarModelosDaAssinatura", () => {
     const modelos = await listarModelosDaAssinatura("org-1");
 
     expect(chamada).toHaveBeenCalledTimes(1);
-    const [url, init] = chamada.mock.calls[0] as [string, RequestInit];
+    const [url, init] = chamada.mock.calls[0] as unknown as [string, RequestInit];
     expect(url, "a listagem foi para o endpoint errado (#2602)").toBe(ENDPOINT_DO_CODEX);
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer at");
     expect(modelos?.map((m) => m.model_id)).toEqual(["gpt-a"]);
@@ -163,7 +163,7 @@ describe("listarModelosDaAssinatura", () => {
 
     await listarModelosDaAssinatura("org-1");
 
-    const [url] = chamada.mock.calls[0] as [string];
+    const [url] = chamada.mock.calls[0] as unknown as [string];
     expect(url).toBe(`${ENDPOINT_DO_CODEX}?client_version=0.160.1`);
   });
 });
