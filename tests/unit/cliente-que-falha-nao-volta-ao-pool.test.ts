@@ -27,6 +27,8 @@ import type pg from 'pg';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type * as SuporteDeImpersonate from '@/lib/impersonate/support';
+
 import { markAwaitingLead } from '@/lib/agent-engine/agent/human-cases';
 import { seedPlatformPlaybook } from '@/lib/agent-engine/agent/playbook-seed';
 import { tickCron, type CronTickConfig } from '@/lib/agent-engine/cron/scheduler';
@@ -51,7 +53,7 @@ vi.mock('@/lib/agent-engine/agent/human-handoff', () => ({
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => ({})) }));
 // A autoridade de suporte é exercitada na suíte própria daquele módulo.
 vi.mock('@/lib/impersonate/support', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/impersonate/support')>()),
+  ...(await importOriginal<typeof SuporteDeImpersonate>()),
   requireSupportWrite: vi.fn(async () => null),
   authenticatedSessionId: vi.fn(async () => 'f2200000-0000-4000-8000-000000000099'),
 }));
