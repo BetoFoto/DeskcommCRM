@@ -229,6 +229,10 @@ show_recovery() {
 }
 # O temporário da pendência de e-mail (passo 7) também sai aqui, em QUALQUER
 # saída: sem isto cada instalação deixava um /tmp/tmp.* com o aviso dentro.
+# Zerado aqui para o trap só apagar o que ESTE script criou: um valor herdado do
+# ambiente apontaria o `rm -f` para um arquivo alheio se a instalação morresse
+# antes do passo 7.
+PENDENCIA_EMAIL=
 apaga_temporarios() { [ -z "${PENDENCIA_EMAIL:-}" ] || rm -f "$PENDENCIA_EMAIL"; }
 trap 'rc=$?; apaga_temporarios; [ "$rc" -ne 0 ] && show_recovery; exit $rc' EXIT
 

@@ -14,6 +14,13 @@
 #      arquivo não pode sumir ANTES de ser lido);
 #   2. "quase lá — falta o app responder" (o ramo que desliga o trap de saída);
 #   3. a morte no meio, depois do passo 7 (o bootstrap do dono falha → `die`).
+# E o inverso: o trap só apaga o que o próprio install.sh criou — um
+# `PENDENCIA_EMAIL` herdado do ambiente sobrevive a uma morte ANTES do passo 7.
+#
+# O mktemp do macOS ignora o TMPDIR quando não recebe modelo (o GNU respeita):
+# sem o dublê abaixo, no Mac o temporário iria para /var/folders e a pasta do
+# teste ficaria vazia COM o defeito — verde falso. O controle 0 prova que o
+# mktemp que o install.sh vai chamar cai mesmo na pasta do teste.
 #
 # NÃO prova nada sobre uma VPS de verdade: nenhum contêiner sobe.
 #
@@ -36,6 +43,7 @@ check() {  # check <descrição> <comando de verificação...>
 
 # ── Dublês ───────────────────────────────────────────────────────────────────
 REAL_UNAME="$(command -v uname)"
+REAL_MKTEMP="$(command -v mktemp)"
 mkdir -p "$WORK/bin"
 # docker: registra a chamada; `APP_DOENTE=1` faz o probe do app não responder
 # (ramo "quase lá"); `FALHA_BOOTSTRAP=1` faz o psql do bootstrap do dono falhar
@@ -44,6 +52,7 @@ cat > "$WORK/bin/docker" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
+  *baseline.sql*) [ "${FALHA_BASELINE:-0}" = 1 ] && exit 1; exit 0 ;;
   *psql*)
     if [ "${FALHA_BOOTSTRAP:-0}" = 1 ] && grep -q 'declare v_org' 2>/dev/null; then exit 1; fi
     exit 0 ;;
@@ -78,6 +87,16 @@ cat > "$WORK/bin/uname" <<STUB
 #!/usr/bin/env bash
 [ "\$*" = "-m" ] && { printf 'x86_64\n'; exit 0; }
 exec "$REAL_UNAME" "\$@"
+STUB
+# mktemp sem modelo (e `-d` sem modelo): modelo explícito em $TMPDIR, que é onde
+# o GNU já cria. Qualquer outra forma vai intacta para o mktemp real.
+cat > "$WORK/bin/mktemp" <<STUB
+#!/usr/bin/env bash
+case "\$*" in
+  '')   exec "$REAL_MKTEMP" "\${TMPDIR:-/tmp}/tmp.XXXXXXXXXX" ;;
+  -d)   exec "$REAL_MKTEMP" -d "\${TMPDIR:-/tmp}/tmp.XXXXXXXXXX" ;;
+esac
+exec "$REAL_MKTEMP" "\$@"
 STUB
 chmod +x "$WORK/bin/"*
 
@@ -119,8 +138,23 @@ sobras() { find "$TMPD" -mindepth 1 | sed "s#^$TMPD/#  sobra: #"; }
 vazio() { [ -z "$(find "$TMPD" -mindepth 1 -print -quit)" ] || { sobras; return 1; }; }
 passou_do_passo_7() { grep -q 'Criando o primeiro admin' "$OUT"; }
 
+echo '── 0. controle: o mktemp que o install.sh chama cai no TMPDIR do teste'
+CTRL="$WORK/controle"; mkdir -p "$CTRL"
+for forma in '' -d; do
+  f="$(env PATH="$WORK/bin:$PATH" TMPDIR="$CTRL" mktemp $forma)"
+  case "$f" in
+    "$CTRL"/*) printf '  ✓ mktemp %s cria dentro do TMPDIR\n' "${forma:-(sem modelo)}"; rm -rf "$f" ;;
+    *) rm -rf "$f"
+       echo "  ✗ SONDA CEGA: 'mktemp $forma' criou '$f', fora de '$CTRL'." >&2
+       echo "    As provas de 'pasta vazia' abaixo passariam mesmo com o defeito." >&2
+       exit 1 ;;
+  esac
+done
+
+echo
 echo '── 1. instalação concluída'
 rodar concluida
+check "saiu com 0" [ "$RC" -eq 0 ]
 check "chegou à tela final (controle: o cenário mede a instalação inteira)" \
   grep -q 'Instalação concluída' "$OUT"
 check "a pendência dos e-mails ainda aparece na tela final" \
@@ -130,6 +164,7 @@ check "nenhum arquivo temporário ficou para trás" vazio
 echo
 echo '── 2. "quase lá" — o app não respondeu (o ramo que desliga o trap)'
 rodar quase APP_DOENTE=1
+check "saiu com 1 (contrato: automação sabe que não terminou)" [ "$RC" -eq 1 ]
 check "passou do passo 7 (controle)" passou_do_passo_7
 check "terminou na tela de 'falta o app responder' (controle)" \
   grep -q 'falta o app responder' "$OUT"
@@ -138,14 +173,26 @@ check "nenhum arquivo temporário ficou para trás" vazio
 echo
 echo '── 3. a instalação morre depois do passo 7 (bootstrap do dono falha)'
 rodar morre FALHA_BOOTSTRAP=1
+check "saiu com != 0" [ "$RC" -ne 0 ]
 check "passou do passo 7 (controle)" passou_do_passo_7
 check "morreu com a tela de recuperação (controle)" \
   grep -q 'A instalação parou' "$OUT"
 check "nenhum arquivo temporário ficou para trás" vazio
 
 echo
+echo '── 4. PENDENCIA_EMAIL herdado do ambiente, morte ANTES do passo 7'
+mkdir -p "$WORK/herdado"
+ALHEIO="$WORK/herdado/arquivo-alheio.txt"; echo 'não é do install.sh' > "$ALHEIO"
+rodar herdado FALHA_BASELINE=1 PENDENCIA_EMAIL="$ALHEIO"
+check "morreu no baseline, antes do passo 7 (controle)" \
+  grep -q 'baseline falhou' "$OUT"
+check "não passou do passo 7 (controle)" eval '! passou_do_passo_7'
+check "saiu com != 0" [ "$RC" -ne 0 ]
+check "o arquivo que o install.sh não criou continua lá" [ -f "$ALHEIO" ]
+
+echo
 if [ "$FAILS" -eq 0 ]; then
-  echo "OK — o install.sh não deixa temporário em nenhuma das três saídas."
+  echo "OK — o install.sh não deixa temporário e só apaga o que criou."
 else
   echo "FALHOU — $FAILS prova(s)."
 fi
