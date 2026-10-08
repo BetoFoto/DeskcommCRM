@@ -70,6 +70,7 @@ const CADASTRO = {
   locale: "pt-BR",
   currency: "BRL",
   media_retention_days: 90,
+  media_retention_enforced: false,
 };
 const pedido = (body: unknown) =>
   new NextRequest(`http://localhost/api/v1/admin/tenants/${TENANT}`, {
@@ -121,6 +122,9 @@ describe("PATCH /admin/tenants/[id]", () => {
     const res = await PATCH(pedido(CADASTRO), ctx);
     expect(res.status).toBe(200);
     expect(h.updates).toHaveLength(1);
+    // O interruptor de retenção (0557) vai na gravação compartilhada: sem ele,
+    // Configurações › Empresa deixaria de gravá-lo (achado de @Draven9).
+    expect(h.updates[0]).toMatchObject({ media_retention_enforced: false });
     expect(h.audit).toHaveBeenCalledTimes(1);
     expect(h.audit.mock.calls[0]?.[0]).toMatchObject({
       action: "org.updated",

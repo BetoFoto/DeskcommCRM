@@ -30,6 +30,9 @@ export interface TenantOrganization {
   locale: string | null;
   currency: string | null;
   media_retention_days: number | null;
+  // Interruptor da limpeza de mídia (0557). Nulo não vem do banco (not null
+  // default true); o tipo aceita para fixtures que não o declaram.
+  media_retention_enforced: boolean | null;
   dpo_email: string | null;
   privacy_policy_url: string | null;
 }

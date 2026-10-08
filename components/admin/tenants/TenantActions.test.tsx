@@ -34,6 +34,7 @@ const ORG: TenantOrganization = {
   locale: null,
   currency: null,
   media_retention_days: null,
+  media_retention_enforced: true,
   dpo_email: null,
   privacy_policy_url: null,
 };

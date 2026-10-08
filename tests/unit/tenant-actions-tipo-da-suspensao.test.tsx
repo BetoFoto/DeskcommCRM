@@ -24,6 +24,7 @@ function org(status: TenantOrganization["status"], suspended_kind?: TenantOrgani
     id: "bbbbbbbb-0000-4000-8000-000000000001", slug: "b", display_name: "B", legal_name: null, cnpj: null,
     status, onboarded_at: null, suspended_at: null, suspended_kind, created_at: "2026-01-01T12:00:00.000Z",
     settings: null, country: null, timezone: null, locale: null, currency: null, media_retention_days: null,
+    media_retention_enforced: true,
     dpo_email: null, privacy_policy_url: null,
   };
 }
