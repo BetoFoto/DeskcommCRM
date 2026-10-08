@@ -44,10 +44,10 @@ on conflict (provider, model_id) do update set
 insert into public.ai_pricing
   (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
 values
-  ('gemini-3.1-flash-lite', 25, 150, 'catálogo 0591'),
-  ('gemini-3.6-flash',      75, 375, 'catálogo 0591 — promo até 31/12/2026'),
-  ('gemini-3.7-flash',      75, 375, 'catálogo 0591 — promo até 31/12/2026'),
-  ('gemini-3.8-flash',      75, 375, 'catálogo 0591 — promo até 31/12/2026')
+  ('gemini-3.1-flash-lite', 25, 150, 'catálogo 0600'),
+  ('gemini-3.6-flash',      75, 375, 'catálogo 0600 — promo até 31/12/2026'),
+  ('gemini-3.7-flash',      75, 375, 'catálogo 0600 — promo até 31/12/2026'),
+  ('gemini-3.8-flash',      75, 375, 'catálogo 0600 — promo até 31/12/2026')
 on conflict (model) do update set
   prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
   completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,

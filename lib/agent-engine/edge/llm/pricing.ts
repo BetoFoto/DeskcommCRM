@@ -104,7 +104,7 @@ const USD_PER_MTOK: Record<string, Preco> = {
   // fica sem efeito. O 2.0 Flash não tem cache implícito nem aparece mais na
   // página: leitura = entrada, que nunca é aplicada porque nunca vem leitura.
   // Fora da tabela: a faixa acima de 200K tokens de entrada do 2.5 Pro e do 3.1 Pro.
-  // Gemini 3.x da migration 0591 (#2533), preço Standard de
+  // Gemini 3.x da migration 0600 (#2533), preço Standard de
   // ai.google.dev/gemini-api/docs/pricing conferido em 08/10/2026. 3.6/3.7/3.8
   // Flash estão em promoção até 31/12/2026 e passam a 1.5 / 7.5 (cache 0.15)
   // em 01/01/2027 — esta tabela e o ai_pricing precisam mudar juntos nessa data.

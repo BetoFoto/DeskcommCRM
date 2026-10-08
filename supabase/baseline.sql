@@ -48720,7 +48720,7 @@ create unique index if not exists agent_inbox_canal_pausado_aberto_unico
   on public.agent_inbox_items (organization_id, kind, ref_id)
   where status = 'open' and kind = 'canal_pausado';
 
--- ---- catálogo: Gemini 3.x adicionais (migration 0591) ----
+-- ---- catálogo: Gemini 3.x adicionais (migration 0600) ----
 -- O dump --schema-only não traz seed pós-snapshot. Sem este apêndice, clones
 -- novos (install.sh) e clones atualizando (update.sh reaplica baseline.sql)
 -- ficam sem os modelos 3.1 Flash-Lite e 3.6/3.7/3.8 Flash no
@@ -48748,10 +48748,10 @@ on conflict (provider, model_id) do update set
 insert into public.ai_pricing
   (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
 values
-  ('gemini-3.1-flash-lite', 25, 150, 'catálogo 0591'),
-  ('gemini-3.6-flash',      75, 375, 'catálogo 0591 — promo até 31/12/2026'),
-  ('gemini-3.7-flash',      75, 375, 'catálogo 0591 — promo até 31/12/2026'),
-  ('gemini-3.8-flash',      75, 375, 'catálogo 0591 — promo até 31/12/2026')
+  ('gemini-3.1-flash-lite', 25, 150, 'catálogo 0600'),
+  ('gemini-3.6-flash',      75, 375, 'catálogo 0600 — promo até 31/12/2026'),
+  ('gemini-3.7-flash',      75, 375, 'catálogo 0600 — promo até 31/12/2026'),
+  ('gemini-3.8-flash',      75, 375, 'catálogo 0600 — promo até 31/12/2026')
 on conflict (model) do update set
   prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
   completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,
