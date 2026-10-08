@@ -13514,6 +13514,8 @@ export const DICIONARIO: Traducoes = {
   "Nenhuma linha retornada.": { es: "No se devolvió ninguna fila." },
   "Chave primária": { es: "Clave primaria" },
   "Ajustar largura da coluna": { es: "Ajustar ancho de la columna" },
+  "Ajustar largura da lista de conversas": { es: "Ajustar ancho de la lista de conversaciones" },
+  "Ajustar largura da ficha do contato": { es: "Ajustar ancho de la ficha del contacto" },
   "Arraste para ajustar a largura": { es: "Arrastra para ajustar el ancho" },
   "Ajustar altura da linha": { es: "Ajustar alto de la fila" },
   "Arraste para ajustar a altura": { es: "Arrastra para ajustar el alto" },
