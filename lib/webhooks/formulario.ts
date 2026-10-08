@@ -76,7 +76,7 @@ export function gerarHtmlDoFormulario(
     .map((field) => {
       const key = escapeHtml(field.key);
       const label = escapeHtml(field.label);
-      const id = `deskcomm-${key}`;
+      const id = `webhook-form-${key}`;
       if (field.type === "textarea") {
         return `  <label for="${id}">${label}</label>\n  <textarea id="${id}" name="${key}" rows="4"${required(field.required)}></textarea>`;
       }
@@ -92,26 +92,26 @@ export function gerarHtmlDoFormulario(
         return `  <input type="hidden" name="${key}" value="false" />\n  <label for="${id}"><input id="${id}" type="checkbox" name="${key}" value="true"${required(field.required)} /> ${label}</label>`;
       }
       if (field.type === "number") {
-        return `  <label for="${id}">${label}</label>\n  <input id="${id}" name="${key}" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]+)?" data-deskcomm-number="true"${required(field.required)} />`;
+        return `  <label for="${id}">${label}</label>\n  <input id="${id}" name="${key}" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]+)?" data-form-number="true"${required(field.required)} />`;
       }
       if (field.type === "currency") {
-        return `  <label for="${id}">${label}</label>\n  <input id="${id}" name="${key}" type="text" inputmode="decimal" autocomplete="off" data-deskcomm-currency="brl" placeholder="R$ 0,00"${required(field.required)} />`;
+        return `  <label for="${id}">${label}</label>\n  <input id="${id}" name="${key}" type="text" inputmode="decimal" autocomplete="off" data-form-currency="brl" placeholder="R$ 0,00"${required(field.required)} />`;
       }
       return `  <label for="${id}">${label}</label>\n  <input id="${id}" name="${key}" type="text"${required(field.required)} />`;
     })
     .join("\n");
 
   const currencyScript = fields.some((field) => field.type === "currency" || field.type === "number")
-    ? `\n<script>\n(() => {\n  const form = document.currentScript.previousElementSibling;\n  const fields = form.querySelectorAll('[data-deskcomm-currency="brl"]');\n  const numbers = form.querySelectorAll('[data-deskcomm-number="true"]');\n  const format = (input) => {\n    const raw = input.value.trim().replace(/^R\\$\\s*/i, '').replace(/\\s/g, '');\n    if (!raw) return;\n    if (!/^(?:\\d+|\\d{1,3}(?:\\.\\d{3})+)(?:,\\d{1,2})?$/.test(raw)) return;\n    const normalized = raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw.replace(/\\./g, '');\n    const value = Number(normalized);\n    if (Number.isFinite(value)) input.value = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);\n  };\n  fields.forEach((input) => {\n    input.addEventListener('input', () => { input.value = input.value.replace(/[^0-9,.\\sR$-]/g, ''); });\n    input.addEventListener('blur', () => format(input));\n  });\n  numbers.forEach((input) => input.addEventListener('input', () => { input.value = input.value.replace(/[^0-9.]/g, '').replace(/(\\..*)\\./g, '$1'); }));\n  form.addEventListener('submit', () => fields.forEach(format));\n})();\n</script>`
+    ? `\n<script>\n(() => {\n  const form = document.currentScript.previousElementSibling;\n  const fields = form.querySelectorAll('[data-form-currency="brl"]');\n  const numbers = form.querySelectorAll('[data-form-number="true"]');\n  const format = (input) => {\n    const raw = input.value.trim().replace(/^R\\$\\s*/i, '').replace(/\\s/g, '');\n    if (!raw) return;\n    if (!/^(?:\\d+|\\d{1,3}(?:\\.\\d{3})+)(?:,\\d{1,2})?$/.test(raw)) return;\n    const normalized = raw.includes(',') ? raw.replace(/\\./g, '').replace(',', '.') : raw.replace(/\\./g, '');\n    const value = Number(normalized);\n    if (Number.isFinite(value)) input.value = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);\n  };\n  fields.forEach((input) => {\n    input.addEventListener('input', () => { input.value = input.value.replace(/[^0-9,.\\sR$-]/g, ''); });\n    input.addEventListener('blur', () => format(input));\n  });\n  numbers.forEach((input) => input.addEventListener('input', () => { input.value = input.value.replace(/[^0-9.]/g, '').replace(/(\\..*)\\./g, '$1'); }));\n  form.addEventListener('submit', () => fields.forEach(format));\n})();\n</script>`
     : "";
 
   return `<form action="${escapeHtml(endpoint)}" method="POST">
-  <label for="deskcomm-nome">${escapeHtml(textos.nome)}</label>
-  <input id="deskcomm-nome" name="nome" type="text" required />
-  <label for="deskcomm-telefone">${escapeHtml(textos.telefone)}</label>
-  <input id="deskcomm-telefone" name="telefone" type="tel" required />
-  <label for="deskcomm-email">${escapeHtml(textos.email)}</label>
-  <input id="deskcomm-email" name="email" type="email" />${extra ? `\n${extra}` : ""}
+  <label for="webhook-form-nome">${escapeHtml(textos.nome)}</label>
+  <input id="webhook-form-nome" name="nome" type="text" required />
+  <label for="webhook-form-telefone">${escapeHtml(textos.telefone)}</label>
+  <input id="webhook-form-telefone" name="telefone" type="tel" required />
+  <label for="webhook-form-email">${escapeHtml(textos.email)}</label>
+  <input id="webhook-form-email" name="email" type="email" />${extra ? `\n${extra}` : ""}
   <button type="submit">${escapeHtml(textos.enviar)}</button>
 </form>${currencyScript}`;
 }

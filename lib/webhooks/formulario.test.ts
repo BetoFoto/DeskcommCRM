@@ -28,7 +28,7 @@ describe("campos numéricos de formulário webhook", () => {
       { nome: "Nome", telefone: "Telefone", email: "E-mail", enviar: "Enviar", selecione: "Selecione" },
     );
     expect(html).toContain('name="quantidade" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]+)?"');
-    expect(html).toContain('data-deskcomm-number="true" required');
+    expect(html).toContain('data-form-number="true" required');
     expect(html).toContain('name="faturamento" type="text" inputmode="decimal"');
     expect(html).toContain("currency: 'BRL'");
   });
