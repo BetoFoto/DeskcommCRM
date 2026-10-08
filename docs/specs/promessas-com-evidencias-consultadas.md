@@ -24,10 +24,25 @@ do agente, de notas do cliente ou de `crm_get_org_memory`. Seleção da consulta
 não concede ao modelo poder de fabricar seu resultado. Os retornos MCP continuam
 atravessando a ponte de autorização e auditoria já existente.
 
-Limites do coletor: até 20 evidências, 4.000 caracteres JSON por evidência e 16.000
-no conjunto serializado. Itens repetidos são substituídos; os mais antigos saem
-quando falta espaço. Um item grande é descartado inteiro, nunca truncado no meio
-de uma ressalva. Não há cache entre turnos/organizações nem nova busca/embedding.
+O acervo temporário do turno conserva até 100 itens/100.000 caracteres por
+origem (conhecimento e catálogo). Consultas de uma origem não expulsam a outra.
+Para o revisor são selecionados até 20 itens/16.000 caracteres, com até 4.000 por
+item. A candidata orienta a relevância lexical, ponderada pela frequência no
+acervo, sem decidir autorização. Há espaço inicial para até três itens de cada
+origem, seguido da relevância global. Itens repetidos são substituídos; no teto
+do acervo sai o mais antigo da mesma origem. Um item grande é descartado inteiro,
+nunca truncado no meio de uma ressalva. Não há cache entre turnos/organizações.
+
+Antes da revisão semântica, o servidor complementa o contexto com até cinco
+trechos pertinentes à candidata, por busca textual parametrizada sem embedding
+ou nova chamada de LLM. A consulta filtra organização, fontes habilitadas que
+podem provar oferta, fonte ativa/pronta e versão de índice ativa. O texto da
+candidata apenas seleciona termos: não fornece evidência. Consultas iguais são
+deduplicadas, inclusive em paralelo, e há até quatro consultas distintas por
+turno. Erro preserva as evidências já consultadas e emite evento de falha sem
+texto comercial/pessoal; não fabrica autorização nem interrompe o atendimento.
+O enriquecimento precede a chave de memoização do classificador, que inclui o
+acervo inteiro. Uma nova consulta pode mudar a classificação da mesma mensagem.
 
 As fontes são dados em JSON, separados da instrução de sistema. O classificador
 deve conferir **todas** as promessas, a correspondência de produto/plano e seus
@@ -35,6 +50,12 @@ requisitos. Paráfrase fiel de condição explícita pode passar; mudar anual pa
 mensal, ampliar prazo, inventar vaga ou juntar oferta válida com desconto não
 autorizado continua sujeito a veto. Contradição, dúvida e exemplo hipotético não
 autorizam. Não existe bypass determinístico nem remoção de trechos da candidata.
+Convite curto à oferta aprovada não precisa repetir toda a política, desde que
+não dispense requisitos, amplie limites ou confirme reserva. A instrução com
+evidências distingue essa informação do compromisso sem respaldo, mantendo
+independentes a detecção de retorno humano e suas regras de caso/follow-up.
+O veto orienta recuperar a política e preservar gratuidade autorizada, sem
+contorná-lo por sinônimos ou por remoção de informação comercial correta.
 
 Sem evidências, a chamada conserva a instrução anterior. Envios fixos de
 follow-up, que não consultam essas ferramentas, permanecem nesse caminho.
@@ -54,10 +75,12 @@ de tentativas recusadas. Custo continua registrado em `llm_calls`, propósito
 
 ## Living System Checklist
 
-1. Entrada: resultados reais das três ferramentas de consulta citadas.
+1. Entrada: resultados reais das três ferramentas de consulta citadas e busca
+   textual complementar sobre os índices ativos dos materiais habilitados.
 2. Saída: `classifyPromise` → `semanticPromiseGate` → resposta ou veto instrutivo.
 3. Registro: auditoria MCP existente, `llm_calls` e trace da cadeia; nenhum texto
-   comercial ou pessoal acrescentado aos logs.
+   comercial ou pessoal acrescentado aos logs. Consulta complementar registra
+   `promise_evidence_lookup` (contagem) ou `promise_evidence_lookup_failed`.
 4. Tela: Teste do agente (`TurnPreview.result.impediments` e `candidates`) e
    observabilidade da cadeia existente.
 5. Porta: Agentes → Teste; Catálogo/Conhecimento e Provedores de IA existentes.
