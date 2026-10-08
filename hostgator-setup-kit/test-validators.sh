@@ -1500,12 +1500,13 @@ rt_ok "Traefik em bridge própria → a rede DELE"  coolify    coolify    "cooli
 rt_ok "Traefik na bridge default → bridge"       bridge     bridge     "bridge "         crm_proxy
 rt_ok "Traefik em 2 redes com a coolify → coolify" coolify    coolify    "coolify web "    crm_proxy
 # O docker devolve as redes em ORDEM ALFABÉTICA (o template percorre um mapa), e
-# "a primeira" era a rede que vence o sorteio do alfabeto, não a do proxy. Medido
-# numa VPS com Coolify: com uma rede "aaa-simulado" pendurada no coolify-proxy a
-# descoberta gravou TRAEFIK_NETWORK=aaa-simulado — e o Traefik nunca enxerga o app.
+# "a primeira" era a rede que vence o sorteio do alfabeto, não a que o painel usa
+# para os sites. Medido numa VPS com Coolify: com uma rede "aaa-simulado"
+# pendurada no coolify-proxy, a descoberta devolveu aaa-simulado.
 rt_ok "2 redes, coolify NÃO é a primeira → coolify" coolify coolify   "aaa-simulado coolify " crm_proxy
 # Sem a coolify entre elas não há como saber qual é a do proxy: vazio, e quem
-# chama recusa mandando declarar TRAEFIK_NETWORK. Chutar publica um CRM mudo.
+# chama recusa mandando declarar TRAEFIK_NETWORK. Chutar pode ligar o CRM à rede
+# de outro projeto, ou a uma rede `internal` que derruba o `up -d`.
 rt_ok "2 redes sem a coolify → não escolhe (vazio)" ''      rede-a     "rede-a rede-b "  crm_proxy
 # ESTE é o defeito da issue #139: em modo host `.NetworkSettings.Networks` devolve
 # a string "host", que é uma rede de driver `host` — gravá-la em TRAEFIK_NETWORK
@@ -2790,6 +2791,15 @@ STUB
       "$(grep -E '^TRAEFIK_NETWORK=' "$VPS_PROJ/.env" || echo '(ausente)')"; exit 1
   fi
   printf '  ✓ TRAEFIK_NETWORK declarado continua vencendo a descoberta\n'
+
+  # Exportado no ambiente (sem estar no .env) passa pela MESMA condição -z.
+  saida="$(TRAEFIK_NETWORK=rede-b rodar install.sh --yes)"
+  chegou_na_deteccao || exit 1
+  if ! grep -qx 'TRAEFIK_NETWORK="rede-b"' "$VPS_PROJ/.env"; then
+    printf '  ✗ TRAEFIK_NETWORK exportado não venceu a descoberta: saiu %s\n' \
+      "$(grep -E '^TRAEFIK_NETWORK=' "$VPS_PROJ/.env" || echo '(ausente)')"; exit 1
+  fi
+  printf '  ✓ TRAEFIK_NETWORK exportado no ambiente também vence a descoberta\n'
 ) || fail=1
 rm -rf "$TMP_REDES"
 

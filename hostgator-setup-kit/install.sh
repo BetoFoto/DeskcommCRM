@@ -784,9 +784,12 @@ unico_traefik() {  # unico_traefik  < linhas "nome|projeto|imagem|portas"  → e
 #
 #   Traefik em MAIS DE UMA rede  → a `coolify` se ela estiver entre elas; senão
 #     vazio, e quem chama recusa pedindo TRAEFIK_NETWORK. O docker lista as redes
-#     em ordem alfabética, então "a primeira" é a que vence o alfabeto — medido
-#     numa VPS com Coolify: uma rede `aaa-simulado` pendurada no coolify-proxy
-#     virou TRAEFIK_NETWORK e o Traefik nunca enxergaria o app.
+#     em ordem alfabética, então "a primeira" é a que vence o alfabeto, não a que
+#     o painel usa para os sites — medido numa VPS com Coolify: com uma rede
+#     `aaa-simulado` pendurada no coolify-proxy, esta função devolveu
+#     `aaa-simulado`. O que aconteceria com o domínio NÃO foi medido; o risco de
+#     escolher às cegas é ligar o CRM à rede de outro projeto, ou a uma rede
+#     `internal`/não-attachable que derruba o `up -d`.
 rede_do_traefik() {  # rede_do_traefik <NetworkMode do contêiner> <redes do contêiner> <bridge do projeto>
   local netmode="${1:-}" redes="${2:-}" nossa="${3:-}"
   [ "$netmode" = host ] && { printf '%s' "$nossa"; return 0; }
