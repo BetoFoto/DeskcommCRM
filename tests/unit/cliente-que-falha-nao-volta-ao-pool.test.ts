@@ -378,7 +378,12 @@ describe('#2506 · cases/[id]/reply/route.ts (transição + enqueue)', () => {
     const res = await chamarRota();
 
     expect(res.status).toBe(200);
-    expect(comandosDaTransacao(cliente)).toEqual(['begin', 'commit']);
+    // begin → insert do enqueueJob (o efeito vai no MESMO commit) → commit.
+    expect(comandosDaTransacao(cliente)).toEqual([
+      'begin',
+      expect.stringContaining('insert into job_queue'),
+      'commit',
+    ]);
     liberouSemErro(cliente);
   });
 });
