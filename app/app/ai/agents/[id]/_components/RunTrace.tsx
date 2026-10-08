@@ -2,9 +2,16 @@
 /**
  * RunTrace — render passo-a-passo dos `tool_calls` de um run (S-13.12).
  *
- * Estrutura esperada (definida pelo runtime da S-13.08 e pelo stub do
- * endpoint `:test`): array de
- *   { step, tool_name, args, result, started_at, ended_at, latency_ms?, error? }.
+ * Estrutura esperada: array de
+ *   { step, tool_name, args, result, started_at, ended_at, latency_ms?, error? }
+ * — o formato canônico do runtime (runs gravados, `serializeSteps` em
+ * lib/ai/runtime/agent.ts), lido também pelo RunDetailDrawer.
+ *
+ * DUAS origens (#2550): a prévia do endpoint `:test`
+ * (lib/agent-engine/agent/preview.ts) entrega { tool, arguments }, então aqui
+ * vale o fallback nome = `tool_name ?? tool` e args = `args ?? arguments`.
+ * NÃO normalizar na rota nem no serializador: mudaria o contrato gravado em
+ * `ai_agent_runs.tool_calls` que o RunDetailDrawer lê.
  *
  * Renderização tolerante: campos faltando viram "—". Cada step é um
  * `<details>` nativo (acessível, keyboard-friendly) com JSON pretty.
@@ -23,6 +30,9 @@ interface ToolCallStep {
   ended_at?: string;
   latency_ms?: number;
   error?: string | { message?: string } | null;
+  /** Formato das ações propostas pela prévia do endpoint `:test` (#2550). */
+  tool?: string;
+  arguments?: unknown;
 }
 
 interface Props {
@@ -72,7 +82,7 @@ export function RunTrace({
         const errMsg = errMsgBruto ? t(errMsgBruto) : null;
         return (
           <details
-            key={`${stepNum}-${s.tool_name ?? idx}`}
+            key={`${stepNum}-${s.tool_name ?? s.tool ?? idx}`}
             className="group rounded-md border border-border/60 bg-background"
           >
             <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm">
@@ -80,7 +90,7 @@ export function RunTrace({
                 <Badge variant="outline" className="font-mono text-xs">
                   #{stepNum}
                 </Badge>
-                <span className="font-mono">{s.tool_name ?? t("(sem nome)")}</span>
+                <span className="font-mono">{s.tool_name ?? s.tool ?? t("(sem nome)")}</span>
                 {errMsg ? (
                   <Badge variant="destructive" className="text-xs">
                     {t("erro")}
@@ -95,7 +105,7 @@ export function RunTrace({
               <div>
                 <p className="mb-1 font-medium text-muted-foreground">{t("Args")}</p>
                 <pre className="overflow-x-auto rounded-md bg-muted/40 p-2 font-mono leading-relaxed">
-                  {clip(fmtJson(s.args))}
+                  {clip(fmtJson(s.args ?? s.arguments))}
                 </pre>
               </div>
               <div>
