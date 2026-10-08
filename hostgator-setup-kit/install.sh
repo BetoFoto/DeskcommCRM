@@ -305,7 +305,7 @@ v_supabase_url() {
   case "$1" in
     https://*.supabase.co) ;;
     # Supabase SELF-HOSTED (ex.: https://db-crm.exemplo.com.br). A prova é a
-    # chamada a /auth/v1/health logo abaixo, que vale para qualquer host — o
+    # chamada a /auth/v1/verify logo abaixo, que vale para qualquer host — o
     # que se dispensa aqui é só a suposição de que todo Supabase é o da nuvem.
     https://*) ;;
     *supabase.co*) echo "$(t "Cole a URL completa, começando com https:// — ex.: https://abcdefgh.supabase.co")"; return 1;;
@@ -321,13 +321,25 @@ v_supabase_url() {
       *) echo "$(t "O modo single-server exige SUPABASE_INTERNAL_URL com http:// ou https:// para validar o Supabase local.")"; return 1;;
     esac
   fi
-  local code
-  code="$(curl -s -o /dev/null -w '%{http_code}' -m 15 "${health_url%/}/auth/v1/health" 2>/dev/null)" || code=000
+  # Responder não basta: tem de ser o GoTrue. Qualquer código ≠ 000 passava, e
+  # numa VPS com Coolify a 127.0.0.1:8000 é o PAINEL dele (302 para /login) —
+  # medido no PR 4. A URL é perguntada ANTES das chaves, então não há apikey, e
+  # sem ela o gateway (Envoy no self-hosted, o da nuvem) barra /auth/v1/health
+  # com 401. /auth/v1/verify é rota aberta (é o link dos e-mails): quem responde
+  # é o próprio GoTrue, com o JSON de erro dele (`"msg"`), na nuvem e no
+  # self-hosted.
+  local resp code
+  resp="$(curl -s -m 15 -w '\n%{http_code}' "${health_url%/}/auth/v1/verify" 2>/dev/null)" || resp=000
+  code="${resp##*$'\n'}"
   if [ "$code" = "000" ]; then
     echo "$(t "Não consegui alcançar {1} — confira se o projeto existe, está ativo (projeto pausado não responde) e se o VPS tem internet." "$health_url")"
     return 1
   fi
-  return 0
+  case "${resp%$'\n'*}" in
+    *'"msg"'*) return 0;;
+  esac
+  echo "$(t "{1} respondeu (HTTP {2}), mas não é o Supabase: o serviço de login dele não atendeu em /auth/v1/verify. Confira o endereço (e a porta, se houver outro painel no servidor)." "$health_url" "$code")"
+  return 1
 }
 
 # Confere formato + faz a chamada real que só a chave certa responde.
