@@ -19,8 +19,12 @@ import { MARCADOR_NAO_LIDA, TIPOS_DERIVAVEIS } from "@/lib/messaging/media/deriv
 import { deriveVideoText } from "@/lib/messaging/media/video-derive";
 import {
   decidirTranscricao,
+  type AnuncioDaTranscricao,
   type DecisaoDeTranscricao,
 } from "@/lib/messaging/media/escada-de-transcricao";
+import type { TranscriptionProvider } from "@/lib/messaging/media/transcription";
+import { computeCost } from "@/lib/ai/cost";
+import { registrarChamadaDeIa } from "@/lib/ai/usage/registrar-chamada";
 import { logger } from "@/lib/logger";
 import { validarParProvedorModelo } from "@/lib/ai/par-provedor-modelo";
 import { reagirAConclusaoDeDerivacao } from "@/lib/escalacao/handoff-tecnico";
@@ -666,18 +670,61 @@ function buildDeriveDeps(
       await avisarMidiaNaoLida(orgId, "imagem", parDaVisao.motivo);
       return MARCADOR_NAO_LIDA;
     }
-    const res = await generateText({
-      model: factory(llm.apiKey, llm.defaultModel ?? "", baseUrlDaVisao ?? undefined),
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Descreva objetivamente esta imagem em 1-2 frases, em português, para um atendente de vendas entender o que o cliente enviou." },
-            // AI SDK v7: file part com mediaType (o antigo image part é deprecated).
-            { type: "file", data: buffer, mediaType: mime.split(";")[0]! },
-          ],
-        },
-      ],
+    // ─── O CUSTO DA VISÃO VAI PARA `llm_calls` ─────────────────────────────
+    //
+    // Esta chamada não passa pelo seam do engine, e até aqui não deixava linha
+    // nenhuma: a tela de Uso de IA e a régua do teto (`fn_gasto_de_ia_do_mes`)
+    // somavam zero para toda foto lida. O uso vem do próprio `generateText`, e
+    // o preço da MESMA régua do classificador de clima (`computeCost`). A falha
+    // também vira linha — é ela que a tela de Execuções precisa para dizer por
+    // que a foto não foi lida.
+    const modeloDaVisao = llm.defaultModel ?? "";
+    const inicio = Date.now();
+    let res: Awaited<ReturnType<typeof generateText>>;
+    try {
+      res = await generateText({
+        model: factory(llm.apiKey, modeloDaVisao, baseUrlDaVisao ?? undefined),
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Descreva objetivamente esta imagem em 1-2 frases, em português, para um atendente de vendas entender o que o cliente enviou." },
+              // AI SDK v7: file part com mediaType (o antigo image part é deprecated).
+              { type: "file", data: buffer, mediaType: mime.split(";")[0]! },
+            ],
+          },
+        ],
+      });
+    } catch (err) {
+      await registrarChamadaDeIa(admin, {
+        organization_id: orgId,
+        purpose: "visao_de_imagem",
+        provider: llm.provider,
+        model: modeloDaVisao,
+        input_tokens: 0,
+        output_tokens: 0,
+        cost_cents: 0,
+        latency_ms: Date.now() - inicio,
+        erro: erroParaRegistro(err),
+      });
+      throw err;
+    }
+    const uso = lerUso(res.usage);
+    await registrarChamadaDeIa(admin, {
+      organization_id: orgId,
+      purpose: "visao_de_imagem",
+      provider: llm.provider,
+      model: modeloDaVisao,
+      input_tokens: uso.entrada,
+      output_tokens: uso.saida,
+      // Falha ao precificar não derruba a leitura: o custo vira desconhecido
+      // (`null`), nunca um zero inventado.
+      cost_cents: await computeCost({
+        model: modeloDaVisao,
+        promptTokens: uso.entrada,
+        completionTokens: uso.saida,
+      }).catch(() => null),
+      latency_ms: Date.now() - inicio,
     });
     return res.text;
   };
@@ -733,11 +780,18 @@ function buildDeriveDeps(
   // `semTranscricao` continua sendo o fallback de quem não é áudio (vídeo e
   // imagem têm o caminho deles), porque o degrau 4 `nada` já foi tratado no
   // corpo do handler — lá em cima, com `failed` + motivo.
-  const transcriber: DeriveDeps["transcriber"] = !decisao.transcriber
+  //
+  // O degrau escolhido sai MEDIDO (`comRegistroDeUso`): a chamada que de fato vai
+  // ao provedor vira linha em `llm_calls`. A recusa de destino do degrau 1 fica
+  // POR FORA do registro — nela nada saiu para a rede, então não houve chamada.
+  const ouvido = decisao.transcriber
+    ? comRegistroDeUso(decisao.transcriber, decisao.anuncio, orgId, admin)
+    : null;
+  const transcriber: DeriveDeps["transcriber"] = !ouvido
     ? semTranscricao
     : decisao.origem === "servico_da_instalacao"
-      ? transcriberDeServico(decisao.transcriber)
-      : decisao.transcriber;
+      ? transcriberDeServico(ouvido)
+      : ouvido;
   return {
     transcriber,
     describeImage,
@@ -745,6 +799,81 @@ function buildDeriveDeps(
     // Onda 3.1: vídeo → ffmpeg (áudio+frames) reusando transcrição e visão da org.
     deriveVideo: (buffer) => deriveVideoText(buffer, { transcriber, describeImage }),
   };
+}
+
+/**
+ * O transcriber do degrau escolhido, com a chamada registrada em `llm_calls`
+ * (purpose `transcricao_de_audio`, provedor e modelo do `anuncio` da escada —
+ * o mesmo par que a tela de Provedores mostra).
+ *
+ * ⚠️ CUSTO REGISTRADO COMO 0, E É LIMITAÇÃO DECLARADA, NÃO PREÇO. A interface
+ * `TranscriptionProvider` devolve só o texto: o serviço `/v1/audio/transcriptions`
+ * cobra por DURAÇÃO do áudio, que não chega até aqui, e o degrau do modelo da
+ * organização (`transcricaoPeloModelo`) descarta o `usage` do `generateText`
+ * dentro de `lib/messaging/media/escada-de-transcricao.ts`. Sem uso medido não
+ * há o que precificar — e inventar minutos ou tokens seria pior que a lacuna.
+ * O que a linha entrega hoje: a CONTAGEM de transcrições, a latência e as
+ * falhas, em Uso de IA e em Execuções. O custo real dela fica de fora da régua
+ * do teto até a interface devolver o uso.
+ *
+ * Vídeo passa pelo MESMO transcriber (`deriveVideoText`), então a faixa de
+ * áudio de um vídeo também vira linha.
+ */
+function comRegistroDeUso(
+  servico: TranscriptionProvider,
+  anuncio: AnuncioDaTranscricao,
+  orgId: string,
+  admin: ReturnType<typeof createAdminClient>,
+): TranscriptionProvider {
+  const base = {
+    organization_id: orgId,
+    purpose: "transcricao_de_audio",
+    provider: anuncio.provider,
+    model: anuncio.modelId ?? "desconhecido",
+    input_tokens: 0,
+    output_tokens: 0,
+    cost_cents: 0,
+  } as const;
+  return {
+    transcribe: async (audio, mime) => {
+      const inicio = Date.now();
+      try {
+        const texto = await servico.transcribe(audio, mime);
+        await registrarChamadaDeIa(admin, { ...base, latency_ms: Date.now() - inicio });
+        return texto;
+      } catch (err) {
+        await registrarChamadaDeIa(admin, {
+          ...base,
+          latency_ms: Date.now() - inicio,
+          erro: erroParaRegistro(err),
+        });
+        throw err;
+      }
+    },
+  };
+}
+
+/** O `usage` do AI SDK nas duas grafias (v5+ `inputTokens`, legado `promptTokens`). */
+function lerUso(usage: unknown): { entrada: number; saida: number } {
+  const u = (usage ?? {}) as {
+    inputTokens?: number;
+    outputTokens?: number;
+    promptTokens?: number;
+    completionTokens?: number;
+  };
+  return {
+    entrada: u.inputTokens ?? u.promptTokens ?? 0,
+    saida: u.outputTokens ?? u.completionTokens ?? 0,
+  };
+}
+
+/** Mensagem + status HTTP, quando o erro trouxer — o que `codigoDoErro` lê. */
+function erroParaRegistro(err: unknown): { message: string; status?: number } {
+  const e = err as { message?: unknown; status?: unknown; statusCode?: unknown } | null;
+  const message = err instanceof Error ? err.message : String(err);
+  const status =
+    typeof e?.status === "number" ? e.status : typeof e?.statusCode === "number" ? e.statusCode : undefined;
+  return status === undefined ? { message } : { message, status };
 }
 
 // Mora em lib/messaging/media/derivable.ts (sem import nenhum) porque o balão
