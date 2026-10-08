@@ -4,14 +4,14 @@
  *
  * Estrutura esperada: array de
  *   { step, tool_name, args, result, started_at, ended_at, latency_ms?, error? }
- * — o formato canônico do runtime (runs gravados, `serializeSteps` em
- * lib/ai/runtime/agent.ts), lido também pelo RunDetailDrawer.
+ * — o formato que este componente sempre leu, herdado do runtime da S-13.08 e
+ * hoje sem escritor vivo.
  *
- * DUAS origens (#2550): a prévia do endpoint `:test`
- * (lib/agent-engine/agent/preview.ts) entrega { tool, arguments }, então aqui
- * vale o fallback nome = `tool_name ?? tool` e args = `args ?? arguments`.
- * NÃO normalizar na rota nem no serializador: mudaria o contrato gravado em
- * `ai_agent_runs.tool_calls` que o RunDetailDrawer lê.
+ * O dado que chega aqui é o da prévia do endpoint `:test`
+ * (lib/agent-engine/agent/preview.ts), que entrega { tool, arguments } — e é
+ * também o que a rota `:test` grava em `ai_agent_runs.tool_calls`. Por isso
+ * (#2550) vale o fallback nome = `tool_name ?? tool` e args = `args ?? arguments`.
+ * O RunDetailDrawer recebe `tool_calls: null` da rota /runs (que lê `llm_calls`).
  *
  * Renderização tolerante: campos faltando viram "—". Cada step é um
  * `<details>` nativo (acessível, keyboard-friendly) com JSON pretty.
