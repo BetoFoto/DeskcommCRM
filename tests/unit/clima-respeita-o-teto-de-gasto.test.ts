@@ -118,8 +118,16 @@ function banco(o: { modo: string | null; avisosNoMes: number }): Record<string, 
         metadata: {},
       },
     ],
+    // `organizations` é o embed que o portão de elegibilidade lê: sem status a
+    // empresa não opera, e o worker pula antes de chegar ao teto (02a4a7832).
     conversations: [
-      { id: CONV, organization_id: ORG, channel_session_id: SESSAO, active_ai_agent_id: null },
+      {
+        id: CONV,
+        organization_id: ORG,
+        channel_session_id: SESSAO,
+        active_ai_agent_id: null,
+        organizations: { status: "active" },
+      },
     ],
     ai_agents: [
       {
