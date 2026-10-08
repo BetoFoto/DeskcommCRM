@@ -11,3 +11,5 @@ Nada aparecia de errado na hora. O problema aparecia quando o filtro saía: os d
 Agora o vizinho de baixo do card solto é contado na etapa INTEIRA, lida do cache do quadro (que a página preenche sem filtro), em vez da lista visível que o filtro reduziu. Sem filtro as duas listas coincidem e o arrasto continua exatamente como antes.
 
 Não muda banco nenhum: esta entrega não cria migração.
+
+Contribuição de @webtecnica (#2558).
