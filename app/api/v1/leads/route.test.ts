@@ -317,13 +317,16 @@ describe("POST /api/v1/leads — responsável padrão do Atendente no modo 'own'
     expect(createAdminClient).not.toHaveBeenCalled();
   });
 
-  it("leitura da org falha → 500 e nada é criado (não adivinha o modo)", async () => {
+  it("leitura da org falha → segue sem o padrão (a RLS decide) e registra no log", async () => {
     papel("agent");
     orgCom(null, { message: "boom" });
+    const erro = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const res = await POST(req(criarBody()));
+    await POST(req(criarBody()));
 
-    expect(res.status).toBe(500);
-    expect(createLeadHandler).not.toHaveBeenCalled();
+    expect(createLeadHandler).toHaveBeenCalledTimes(1);
+    expect(donoEnviado()).toBeUndefined();
+    expect(erro.mock.calls.flat().join(" ")).toContain("leitura do modo de visibilidade falhou");
+    erro.mockRestore();
   });
 });

@@ -15,6 +15,7 @@ import {
 } from "@/lib/leads/negocio-aberto-duplicado";
 import { createLeadSchema, validateRequest, type CreateLeadInput } from "@/lib/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
 import { createLeadHandler } from "./_handler";
@@ -70,8 +71,16 @@ export async function POST(req: NextRequest): Promise<Response> {
       .select("settings")
       .eq("id", activeOrg.orgId)
       .maybeSingle();
+    // Leitura do modo falhou: segue SEM o padrão e registra. Seguir não amplia
+    // acesso (a RLS de `crm_leads` lê o mesmo modo e decide); derrubar a criação
+    // criaria uma falha nova nos modos em que ela daria certo — as leituras
+    // vizinhas deste fluxo (moeda, origem) também degradam em vez de falhar.
     if (orgErr) {
-      return fail("internal_error", orgErr.message, 500, { requestId });
+      logger.error("leads.create: leitura do modo de visibilidade falhou; segue sem responsável padrão", {
+        requestId,
+        orgId: activeOrg.orgId,
+        error: orgErr.message,
+      });
     }
     const modo = (orgRow?.settings as { visibility_mode?: VisibilityMode } | null)?.visibility_mode;
     if (modo === "own") input = { ...input, owner_user_id: authUser.id };
