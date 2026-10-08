@@ -135,6 +135,19 @@ function parseFilterParam(v: string | null): InboxTab {
   return v && FILTER_TABS.includes(v as InboxTab) ? (v as InboxTab) : "unassigned";
 }
 
+/**
+ * O getter de `window.localStorage` LANÇA (`SecurityError`) quando o navegador
+ * bloqueia o armazenamento do site. O `try` de `lerLarguras`/`gravarLarguras`
+ * só protege `getItem`/`setItem`; o getter tem de ser lido aqui dentro.
+ */
+function armazenamentoDoNavegador(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 interface InboxLayoutProps {
   initialSelectedId?: string | null;
   /** Rascunho sugerido por integração (issue #1611) — `null` é o caso comum. */
@@ -447,7 +460,7 @@ export function InboxLayout({ initialSelectedId = null, rascunho = null }: Inbox
     }
     const grade = gradeRef.current;
     const largura = grade ? grade.getBoundingClientRect().width : 0;
-    const salvas = lerLarguras(window.localStorage, faixa.id);
+    const salvas = lerLarguras(armazenamentoDoNavegador(), faixa.id);
     aplicarLarguras(
       salvas
         ? resolverLarguras({ ...salvas, larguraContainer: largura, temFicha: faixa.temFicha })
@@ -499,7 +512,7 @@ export function InboxLayout({ initialSelectedId = null, rascunho = null }: Inbox
     const aoSoltar = () => {
       window.removeEventListener("pointermove", aoMover);
       window.removeEventListener("pointerup", aoSoltar);
-      gravarLarguras(window.localStorage, faixaAtual.id, largurasRef.current);
+      gravarLarguras(armazenamentoDoNavegador(), faixaAtual.id, largurasRef.current);
     };
     window.addEventListener("pointermove", aoMover);
     window.addEventListener("pointerup", aoSoltar);
@@ -517,13 +530,13 @@ export function InboxLayout({ initialSelectedId = null, rascunho = null }: Inbox
     aplicarLarguras(
       resolverLarguras({ ...base, larguraContainer: larguraDaGrade(), temFicha: faixa.temFicha }),
     );
-    gravarLarguras(window.localStorage, faixa.id, largurasRef.current);
+    gravarLarguras(armazenamentoDoNavegador(), faixa.id, largurasRef.current);
   };
 
   /** Duplo clique na divisória: apaga a memória da faixa e volta ao CSS. */
   const restaurarPadrao = useCallback(() => {
     if (!faixa) return;
-    gravarLarguras(window.localStorage, faixa.id, null);
+    gravarLarguras(armazenamentoDoNavegador(), faixa.id, null);
     aplicarLarguras(null);
   }, [faixa, aplicarLarguras]);
 

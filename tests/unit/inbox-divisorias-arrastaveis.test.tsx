@@ -425,4 +425,25 @@ describe("no layout — duas divisorias arrastáveis (#2579)", () => {
     expect(screen.getAllByRole("separator")).toHaveLength(1);
     expect(grade().style.gridTemplateColumns).toBe("");
   });
+
+  it("armazenamento bloqueado no navegador não derruba o Inbox", async () => {
+    const original = Object.getOwnPropertyDescriptor(window, "localStorage");
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("blocked", "SecurityError");
+      },
+    });
+    try {
+      montar();
+      expect(await screen.findByText("Selecione uma conversa")).toBeInTheDocument();
+      const lista = await alca(0);
+      fireEvent.keyDown(lista, { key: "ArrowRight" });
+      expect(lista).toHaveAttribute("aria-valuenow", String(272 + PASSO_TECLADO));
+      fireEvent.doubleClick(lista);
+      expect(lista).toHaveAttribute("aria-valuenow", "272");
+    } finally {
+      if (original) Object.defineProperty(window, "localStorage", original);
+    }
+  });
 });
