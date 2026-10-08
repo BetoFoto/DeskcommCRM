@@ -12,351 +12,147 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ### Adicionado
 
-- **O inbox mostra por qual canal cada conversa entrou, na lista e no cabeçalho da conversa aberta** Com mais de um número conectado, a lista de conversas já mostrava um selo com o canal, mas ele preferia o número cru ao nome que você deu ao canal: um canal chamado "Peças" aparecia como +55 17 9XXXX-XXXX. Agora o selo mostra o mesmo nome da tela de Conexões (o nome amigável primeiro, o número só quando o canal não tem nome) e o cabeçalho da conversa aberta também passa a mostrar esse selo, para distinguir "Peças" de "Vendas" mesmo quando os dois usam o mesmo provedor. O nome vem sempre do canal ligado à própria conversa, nunca do contato. Nomes longos encolhem com reticências e o nome inteiro aparece ao passar o mouse. Conversa sem canal, ou com canal sem nome e sem número, fica como estava. Não é preciso fazer nada na instalação.
+- **O inbox mostra por qual canal cada conversa entrou, na lista e no cabeçalho da conversa aberta** O selo do canal passa a mostrar o nome dado em Conexões (o número só quando o canal não tem nome) e aparece também no cabeçalho da conversa aberta. Nada a fazer na atualização.
 
   Contribuição de @webtecnica (#2499), a partir da issue #2383 de @gleisaum.
 
-- **Pausar uma conexão agora avisa a equipe inteira na Central, e o aviso some sozinho quando ela volta** Até aqui, pausar uma conexão só ficava visível para quem clicou: quem estava no celular, no plantão ou em outro turno continuava achando que o número estava no ar. Agora a pausa abre um aviso na Central com o nome do canal, quem pausou e quando. Pausar de novo atualiza o mesmo aviso, sem criar outro, e a pausa em lote abre um aviso por canal.
+- **Pausar uma conexão agora avisa a equipe inteira na Central, e o aviso some sozinho quando ela volta** O aviso diz o canal, quem pausou e quando; pausar de novo atualiza o mesmo aviso, e retomar, arquivar, excluir ou desconectar a conexão o resolve. Queda por falha de conexão continua com o aviso próprio. A mudança de banco vem na atualização.
 
-  Quando a conexão é retomada, o aviso se resolve sozinho, com o motivo escrito no texto; o mesmo acontece se a conexão for arquivada, excluída ou desconectada em Redes Sociais enquanto estava pausada. Canal fora do ar por falha de conexão não gera este aviso, porque esse caso já tem o seu. Nada precisa ser feito ao atualizar: a mudança de banco vem na própria atualização. Contribuição de @webtecnica (#2496, issue #2389).
+  Contribuição de @webtecnica (#2496, issue #2389).
 
-- **Ganhar um negócio pode abrir a comanda com o valor e o contato, opcional por funil** Fechar um negócio como ganho não dizia nada ao financeiro: quem vendia pelo Kanban tinha de lembrar de abrir a comanda à mão, em outra tela, sem vínculo entre as duas. Agora cada funil tem, em Configurações › Funis, a caixa "Abrir comanda ao ganhar um negócio neste funil". Ligada, ganhar um negócio abre **uma comanda** com o **valor** e o **contato** do negócio, na moeda da organização, e grava o vínculo dela com o negócio.
+- **Ganhar um negócio pode abrir a comanda com o valor e o contato, opcional por funil** Em Configurações › Funis, a caixa "Abrir comanda ao ganhar um negócio neste funil" abre uma comanda com o valor e o contato do negócio, na moeda da organização, por qualquer caminho de ganho. A caixa nasce **desligada** em todo funil; a comanda nasce aberta, segundos depois do ganho, e reabrir e ganhar de novo não abre outra.
 
-  A caixa vem **desligada** em todo funil, novo ou existente: desligada, ganhar não toca no financeiro, como antes desta versão. A decisão é do funil porque em loja com checkout, infoproduto ou imobiliária o valor do negócio não é conta a receber.
+  Contribuição de @webtecnica (#2220), a partir da issue #1477 de @AnditecDev.
 
-  Vale para qualquer caminho de ganho — o arrasto para a etapa de ganho, o botão Ganhar e os demais fechamentos — porque quem abre a comanda é o consumidor do evento `lead.won`, que o banco grava em toda transição para ganho. A comanda nasce alguns segundos depois do fecho, no processamento de eventos, e nasce **aberta**: o operador confere o valor e finaliza com a forma de pagamento pelo caminho de sempre. Fechar, reabrir e fechar de novo devolve a comanda que já existe em vez de abrir outra. O atendente da comanda é o responsável pelo negócio, e ela nasce sem atendente quando o negócio não tem responsável.
+- **O gasto de IA com fotos, áudios e vídeos passa a aparecer em Uso de IA e em Execuções** Descrever foto, ler quadros de vídeo e transcrever áudio pelo modelo de conversa eram gastos que não apareciam; agora aparecem e somam no gasto do mês. O áudio do serviço de transcrição (`whisper-1` ou o da instalação) aparece sem valor e não conta para o limite.
 
-  O valor e o status são sempre relidos do negócio no banco, nunca tirados do evento. O item da comanda leva o vocabulário e o nome do funil (por exemplo "Pedido · Vendas"), e não o título do negócio, que costuma ser o nome ou o telefone do contato: assim nada de pessoal fica fora do alcance da anonimização da LGPD.
+  **Confira o limite em Uso de IA depois de atualizar:** se "Parar a IA ao chegar no limite" está ligado, a IA pode parar mais cedo no mês do que parava, sobretudo onde chega muita foto. Com o limite atingido, a foto não é enviada ao provedor e a Central explica o motivo. Consultas prontas de custo e tempo de atendimento em `docs/runbooks/medir-custo-e-latencia-da-ia.md`.
 
-  Contribuição de @webtecnica (#2220, refs #1477).
+- **Página inicial pública e política de privacidade com a seção de dados do Google, para a verificação do app no Google** O endereço principal abre, sem login, uma página com o nome da sua marca e os links da Política de Privacidade e dos Termos; a política ganhou a seção exigida pelo Google para Agenda e Google Ads. Quem confere o deploy: o domínio passa a responder 200 sem sessão (era 307), e o sinal de que o app responde passa a ser `/app` → 307.
 
-- **O gasto de IA com fotos, áudios e vídeos passa a aparecer em Uso de IA e em Execuções** Até aqui, descrever a foto que o cliente mandou, transcrever o áudio dele e ler os quadros de um vídeo eram chamadas pagas que não deixavam rastro: não entravam na tela de Uso de IA, não apareciam em Execuções e não contavam para o teto de orçamento. Agora cada uma dessas chamadas grava uma linha, nos pontos "Ver a imagem do cliente" e "Ouvir o áudio do cliente", e a que falha no provedor também aparece em Execuções, como erro. A imagem aparece com tokens e custo quando o modelo está na tabela de preços do sistema. O áudio depende de quem o transcreve. Quando é o próprio modelo de conversa da organização que ouve o áudio (o caso de quem não tem chave OpenAI e usa, por exemplo, Gemini), a transcrição é uma chamada de IA cobrada por token como as outras: aparece com tokens e custo, soma no gasto do mês e, se o modelo não estiver na tabela de preços, acende o aviso de "preço do modelo desconhecido" no cartão de Uso de IA. Quando é o serviço de transcrição (o configurado na instalação, ou a chave OpenAI com `whisper-1`), o áudio aparece com a contagem e o tempo de cada chamada, mas sem valor, porque esse serviço tem preço próprio, que o sistema ainda não conhece; por isso esse áudio não conta para o teto e não acende o aviso. Quando a leitura é recusada antes de sair (endereço não aceito, ou chave da instalação num endereço da empresa), nada é gravado, porque nada foi cobrado.
+  Contribuição de @paulolimajr77 (#2510).
 
-  As fotos e os quadros de vídeo passam a somar no gasto do mês, e é essa soma que decide a parada da IA. Não é custo novo, é custo que já existia e não aparecia. Mas, se você ligou "Parar a IA ao chegar no limite" com um valor escolhido olhando o número antigo, a IA pode parar mais cedo no mês do que parava, sobretudo onde os clientes mandam muita foto. Você é avisado na Central antes da parada; ainda assim, vale conferir o limite em Uso de IA depois de atualizar. E a leitura de foto passa a obedecer à mesma parada: com o limite atingido e a parada ligada, a foto (e cada quadro de vídeo) não é enviada ao provedor, o agente recebe a marcação de mídia não lida, a Central explica que foi o limite de gasto, e a recusa aparece em Execuções como as demais paradas por orçamento — sem custo, porque nada saiu. O mesmo vale para o áudio transcrito pelo modelo de conversa da organização, que é gasto de IA como a foto. O áudio transcrito pelo serviço de transcrição continua acontecendo depois da parada, de propósito: o preço dele ainda não é conhecido e por isso ele não conta para o limite, ele pode estar usando o serviço da própria instalação, e é justamente com as conversas na fila humana que o áudio transcrito ajuda quem atende.
-
-  O worker também passa a gravar, para cada atendimento, quanto ele esperou na fila e quanto durou. O novo guia `docs/runbooks/medir-custo-e-latencia-da-ia.md` traz as consultas prontas: custo e cache por ponto, atendimentos por dia e custo médio de cada um, e o tempo até a primeira resposta da IA, com a espera proposital antes de responder (a janela que aguarda o cliente terminar de escrever e a pausa que imita digitação) separada da demora de verdade.
-
-- **Página inicial pública e política de privacidade com a seção de dados do Google, para a verificação do app no Google** O endereço principal da instalação agora abre, sem pedir login, uma página com o nome do produto (o da marca da sua instalação), o que ele faz e os links da Política de Privacidade e dos Termos de Uso, com um botão "Entrar". Quem já está logado continua indo direto para o painel.
-
-  A Política de Privacidade ganhou a seção "Dados do Google (Agenda e Google Ads)": diz o que é lido de cada conta Google conectada e para quê, que os dados não são vendidos, usados para publicidade nem para treinar modelos de inteligência artificial, que o uso segue a Política de Dados de Usuário dos Serviços de API do Google (incluindo Uso Limitado) e como desfazer a conexão. Sem isso, o Google recusa a verificação do app e bloqueia a conexão de quem não é testador.
-
-  Quem confere o endereço no deploy: o domínio passa a responder 200 para quem não tem sessão (antes era 307); `/app` segue respondendo 307 para o login, e é ele o sinal de que quem responde é o app; 404 continua significando rotas perdidas. Os guias de deploy foram atualizados. Nada precisa ser feito na VPS. Crédito: @paulolimajr77.
-
-- **Planos de tarefa — a sequência de tarefas salva uma vez e aplicada a cada negócio por uma regra** Em **Tarefas › Planos** (pelo hub do CRM e pelo ⌘K) quem é gerente ou administrador monta uma sequência de tarefas uma vez: título, prazo em dias contado a partir da aplicação, prioridade e responsável de cada passo (o dono do negócio ou uma pessoa da equipe). No editor de regras, a ação nova **Aplicar um plano de tarefas ao negócio** escolhe um dos planos cadastrados e cria as tarefas na ordem, todas de uma vez. Um plano que já foi aplicado ao negócio não é aplicado de novo: a aplicação fica registrada na linha do tempo do negócio. Se algum passo não pode virar tarefa (o negócio não tem dono, ou o título fica vazio sem o nome do contato), o plano não cria tarefa nenhuma e a regra mostra o motivo no histórico. Os planos ficam nas configurações da empresa; não há nada a configurar na atualização.
+- **Planos de tarefa — a sequência de tarefas salva uma vez e aplicada a cada negócio por uma regra** Em Tarefas › Planos, gerente ou administrador monta a sequência (título, prazo, prioridade, responsável); a ação de automação "Aplicar um plano de tarefas ao negócio" cria todas de uma vez, uma vez só por negócio. Nada a configurar na atualização.
 
   Contribuição de @webtecnica (#2213), a partir da issue #1752 de @franceschini-lucas.
 
-- **Métricas ganham o quadro "Por canal", com conversas, 1ª resposta humana e conversas sem resposta de cada número** Em Métricas, abaixo da tabela por atendente, aparece o quadro "Por canal": uma linha por número ou conexão, com quantas conversas foram atribuídas nos últimos 30 dias, o tempo médio até a primeira resposta de uma pessoa e quantas dessas conversas nunca tiveram resposta de uma pessoa. Até aqui, o relatório só cortava por atendente e por atividade, e não havia como saber quanto cada número atendeu.
-
-  A conta é a mesma da tabela por atendente. Resposta da IA ou de automação não conta como primeira resposta. Quem respondeu pelo celular, fora do sistema, também não entra nessa conta, e a conversa aparece como "sem resposta". Conversa sem resposta fica fora da média, e a média aparece como "—" quando não há o que medir. Canal arquivado continua listado, marcado como arquivado. O filtro de atendente da página também vale para este quadro. Quem é atendente vê só as próprias conversas, e gerente ou administrador vê a organização inteira.
-
-  A instalação recebe uma função nova no banco pela atualização normal. Não é preciso fazer nada.
+- **Métricas ganham o quadro "Por canal", com conversas, 1ª resposta humana e conversas sem resposta de cada número** Uma linha por número, nos últimos 30 dias, com a mesma conta da tabela por atendente: resposta da IA, de automação ou pelo celular não conta como resposta humana. A função de banco vem na atualização.
 
   Contribuição de @webtecnica (#2504, refs #2390).
 
-- **Os registros que a IA grava a cada conversa passam a ter prazo de guarda configurável** Sete tabelas que a IA preenche a cada mensagem nunca eram limpas e cresciam para sempre: o custo de cada chamada à IA, as métricas dos turnos, as ativações de skills, as decisões do roteador, o registro de envios do ritmo anti-banimento, as cópias das mensagens enviadas e os resumos de atendimento do agente. A limpeza diária que já existia (`data-retention`) passa a cuidar delas também, em lotes pequenos, e cada rodada que apaga alguma coisa deixa uma linha `retention.sweep_run` na auditoria com a contagem.
+- **Os registros que a IA grava a cada conversa passam a ter prazo de guarda configurável** Sete tabelas da IA que cresciam para sempre entram na limpeza diária. Padrões: custo, métricas, skills e roteador 400 dias (`AI_TELEMETRY_RETENTION_DAYS`); registro do ritmo de envio 2 dias (`PACING_LEDGER_RETENTION_DAYS`); cópias das mensagens enviadas 30 dias (`OUTBOUND_COPIES_RETENTION_DAYS`); resumos substituídos 180 dias (`LEAD_CHECKPOINT_RETENTION_DAYS`).
 
-  Os padrões, que valem sem você mexer em nada:
-  - custo, métricas, skills e roteador: 400 dias (`AI_TELEMETRY_RETENTION_DAYS`, mínimo 100). As telas de uso olham no máximo 90 dias, e o orçamento olha o mês corrente;
-  - registro de envios do ritmo: 2 dias (`PACING_LEDGER_RETENTION_DAYS`, mínimo 2). O último envio de cada número nunca é apagado;
-  - cópias das mensagens enviadas: 30 dias (`OUTBOUND_COPIES_RETENTION_DAYS`, mínimo 7). As últimas que o bloqueio de texto repetido compara (20 por número, ou o que estiver configurado) nunca são apagadas;
-  - resumos de atendimento: 180 dias (`LEAD_CHECKPOINT_RETENTION_DAYS`, mínimo 30), e só os resumos já substituídos por um mais novo. O resumo em vigor de cada atendimento nunca sai, nem o que um trabalho ainda na fila vai ler.
+  **Quer guardar mais que o padrão? Ponha a variável no `.env` ANTES de atualizar:** a primeira limpeza já apaga pelo prazo em vigor, e o apagado não volta. Para mudar um prazo, ponha a variável com o número de dias e recrie o app; valor abaixo do mínimo vira o mínimo. Numa instalação antiga a limpeza anda em lotes por alguns dias, sem travar o sistema.
 
-  **Se você quer guardar mais histórico do que o padrão, suba a variável ANTES de atualizar:** a primeira limpeza depois da atualização já apaga pelo prazo em vigor, e o que ela apagou não volta.
-
-  Para mudar um prazo, ponha a variável no `.env` com o número de dias e recrie o app. Um valor abaixo do mínimo vira o mínimo, com aviso no log; um valor que não é número vira o padrão. Os mínimos moram dentro das funções de limpeza do banco, então nem chamando a limpeza à mão dá para apagar menos dias do que o mínimo. O mínimo vale para a limpeza: um `DELETE` digitado direto no banco não passa por ele.
-
-  O primeiro dia depois da atualização pode apagar bastante numa instalação antiga: a limpeza anda em lotes e termina ao longo de alguns dias, sem travar o sistema. O espaço liberado volta a ser usado pelo banco, mas o tamanho do arquivo no disco só diminui com um `VACUUM FULL`, que o runbook `docs/runbooks/custo-e-cota-do-supabase.md` explica. A fila de gatilhos de tempo (`event_log`) continua sem limpeza de propósito: é ela que impede o mesmo WhatsApp de ser enviado duas vezes.
-
-- **Ao iniciar uma conversa pela lista de contatos, escolha por qual número ela sai** Em empresas com mais de um número de WhatsApp conectado, o botão "Iniciar conversa no Inbox" da lista de contatos agora pergunta por qual número a conversa vai nascer. Cada opção mostra o nome do canal, o número, o tipo e o estado. A conversa fica presa ao número escolhido, e as próximas mensagens saem por ele. Números fora do ar aparecem com o estado e não podem ser escolhidos; canais desativados não aparecem. Com um só número conectado nada muda: a conversa abre direto, como antes.
+- **Ao iniciar uma conversa pela lista de contatos, escolha por qual número ela sai** Com mais de um número conectado, "Iniciar conversa no Inbox" pergunta o número; números fora do ar não podem ser escolhidos. Com um só número, nada muda.
 
   Contribuição de @webtecnica (#2491), a partir da issue #2382 de @gleisaum.
 
-- **Base para o agente de IA chamar um servidor MCP externo (ainda sem tela de cadastro)** Um servidor MCP externo registrado pela instalação passa a ser enxergado e
-  chamado pelo agente: a descoberta fala o contrato MCP (`initialize`,
-  `tools/list`, `tools/call`) pelo cliente do próprio `@modelcontextprotocol/sdk`,
-  com o cabeçalho de autenticação em toda requisição. As ferramentas anunciadas
-  entram no turno AO LADO das compiladas e passam pelo MESMO `wrapMcpTool`, então
-  auditoria, papel e escopo valem para elas — a recusa do ERP (um `403`) sobe como
-  falha auditada e volta em texto para o modelo, porque a permissão continua
-  morando no servidor, onde o dado está.
+- **Base para o agente de IA chamar um servidor MCP externo (ainda sem tela de cadastro)** O agente passa a poder chamar ferramentas de um servidor MCP externo registrado, com auditoria, chave cifrada e proteção contra endereços internos. Nenhuma tela usa isso ainda e cada agente precisa escolher as ferramentas, então nenhuma instalação muda de comportamento nesta versão.
 
-  O desenho da revisão do mantenedor, ponto a ponto:
-
-  - **Quem cadastra é o dono da instalação** (`platform admin`), pela mesma regra
-    das extensões, e o gate de permissão vem ANTES da validação de forma. O
-    registro continua POR ORGANIZAÇÃO: a linha gravada é a da organização da
-    sessão e o runtime lê pelo `organization_id` do run, nunca por um id do corpo.
-  - **A chave sai do jsonb para colunas cifradas** (migration `0580`, apêndice
-    idempotente no `baseline.sql`): `organizations.settings` era entregue pela RLS
-    a todo membro, inclusive `viewer`. Agora é AES-256-GCM nas colunas
-    `mcp_externo_chave_*`; o cadastro devolve só os últimos 4, e o endpoint segue no
-    bolso de sempre (merge em dois níveis).
-  - **Anti-SSRF em três peças** no caminho de chamada (`assertSafeOutboundUrl`,
-    `assertDestinoResolvidoSeguro` e `redirect: "manual"` dentro do
-    `allowlistedFetch`, com allowlist nascida do host cadastrado) e já no
-    cadastro do endereço.
-  - **Nada de segredo no endereço**: querystring, fragmento ou credencial embutida
-    não é registrável, e a trilha de auditoria e o log levam SÓ o host.
-  - **Cada agente escolhe as próprias ferramentas**, pelo `tool_ids` da versão, no
-    prefixo estável `mcp_externo:<leitura|escrita>:<nome>`; o editor do agente tem
-    uma action de listagem pronta que devolve os ids, um por marca aceita (a tela do editor ainda não a usa).
-  - **Desligado por padrão**: sem registro, ou com registro mas sem escolha no
-    agente, o catálogo é o de sempre e nenhuma rede é aberta (a descoberta só
-    acontece quando o agente escolheu ao menos uma remota); a escolha nasce
-    vazia.
-  - **Durante conversa só entra leitura de verdade**: a remota só conta como `read`
-    quando o servidor anuncia `annotations.readOnlyHint === true` E quem administra
-    marcou `leitura`; o resto sai `write` e cai na conferência de escopo do turno
-    (`escrita_sem_escopo_do_turno`). Até existir identificação forçada do contato
-    na chamada, turno com contato nenhum carrega servidor remoto — Conversador e
-    Operador.
-
-  Sem registro nada muda: o catálogo compilado segue sendo a única fonte do turno
-  e nenhuma chamada de rede é aberta. Servidor registrado fora do ar também não
-  derruba o turno — ele volta sem as ferramentas remotas, com o motivo no log.
-  Esta fatia entrega a base REGISTRÁVEL + INVOCÁVEL, ainda sem porta na tela:
-  nenhuma tela chama a action de cadastro nem a de listagem, então nenhuma
-  instalação muda de comportamento com esta versão. A tela de cadastro, a
-  escolha das ferramentas no editor do agente e os limites ficam para depois.
-  Fora de conversa (turno sem contato), uma ferramenta marcada como escrita
-  executa no servidor remoto; durante conversa, não.
-
-  Contribuição de @webtecnica (PR #2204, Refs #2147).
+  Contribuição de @webtecnica (#2204), a partir da issue #2147 de @brunno-soaress.
 
 ### Alterado
 
-- **O agente deixa de pagar classificações repetidas e lê menos para sugerir a etapa do funil** Antes de responder, o agente classifica a mensagem do cliente: em que etapa do funil ele está e se a mensagem tenta manipular a IA. Essas duas consultas rodavam também nos follow-ups e nas respostas a casos, turnos em que o cliente não mandou nada novo. Nesses turnos, a última mensagem dele, já classificada no turno em que chegou, era classificada de novo e paga de novo. Agora só a mensagem nova é classificada. A etapa também deixa de ser estimada quando quem move o lead no funil é o Operador e não o agente da conversa: o agente recebia uma dica que não tinha como usar. Para sugerir a etapa, o classificador passa a ler o resumo do atendimento, a situação da última proposta e as últimas dez mensagens em texto corrido, no lugar do registro inteiro do contato. Telefone e e-mail do cliente saíram do que vai para esse classificador. Não é preciso fazer nada na instalação.
+- **O agente deixa de pagar classificações repetidas e lê menos para sugerir a etapa do funil** As classificações de etapa e de manipulação só rodam quando chega mensagem nova do cliente, não em follow-ups nem respostas a casos, e telefone e e-mail saíram do que o classificador lê. Nada a fazer.
 
-- **As classificações de etapa e de manipulação passam a usar o modelo mais econômico do mesmo provedor** Em todo atendimento, antes de responder, o agente faz duas classificações curtas da mensagem do cliente: em que etapa do funil ele está e se a mensagem tenta manipular a IA. Até aqui, quando ninguém escolhia um modelo para essas duas tarefas, elas usavam o mesmo modelo do agente. Agora, sem escolha explícita, usam o modelo mais econômico do mesmo provedor do agente (Anthropic, OpenAI ou Google), com a mesma chave. Quando o modelo do agente tem preço na tabela do produto, o econômico só é escolhido entre os que também têm, para o teto de gastos contar essas chamadas; se nenhum dos modelos permitidos à organização tiver, as duas tarefas ficam no modelo do agente. A economia depende do modelo do seu agente. Para quem usa o modelo padrão de cada provedor, a tabela de preços do produto dá estas chamadas cerca de 2 vezes mais baratas na Anthropic, 10 vezes na OpenAI e 15 vezes no Google. Se o provedor recusar o modelo econômico, a mesma chamada se repete sozinha no modelo de antes, e a organização volta ao modelo de antes nessas tarefas por meia hora; em Execuções, essa falha aparece marcada como coberta. A conferência de promessas, a memória do atendimento, os follow-ups, a validação de fluxo e a escolha do agente que vai responder continuam no modelo do agente. Em IA › Provedores, as duas tarefas mostram o modelo que está valendo e o motivo, e quem preferir outro modelo pode escolher ali, como antes. Quem usa OpenRouter, Requesty, DeepSeek ou provedor personalizado não vê mudança. Não é preciso fazer nada na instalação.
+- **As classificações de etapa e de manipulação passam a usar o modelo mais econômico do mesmo provedor** Sem modelo escolhido para essas duas tarefas, elas usam o modelo mais barato do mesmo provedor e da mesma chave, entre os que têm preço. Se o provedor recusar, a chamada se repete no modelo de antes. Em IA › Provedores aparece o modelo em uso, e escolher outro continua possível.
 
-- **Cada mensagem do agente faz menos consultas ao banco antes de sair** Cada bolha que o agente manda conferia, antes de sair, se o atendimento ainda era o mesmo e se o agente ainda estava no ar. Dentro do trabalho do agente essa conferência era feita duas vezes por ponto de corte — uma pela conexão direta com o banco, outra pela API do banco, com a mesma pergunta. Agora a segunda leitura só é pulada quando a primeira acabou de responder sobre exatamente o mesmo atendimento e o mesmo agente; o carimbo de última atividade do contato, o registro de auditoria e o evento `message.sent` passam a ser gravados sem segurar a resposta do envio.
+- **Cada mensagem do agente faz menos consultas ao banco antes de sair** A conferência repetida antes de cada bolha sai, e os registros do envio deixam de segurar a resposta. Pausar o agente continua calando as bolhas seguintes, e o ritmo de envio não mudou.
 
-  O que NÃO muda: pausar o agente no meio de uma resposta continua calando as bolhas seguintes sem deixar envio pendente no registro, e a conferência imediatamente antes de a mensagem ir para o WhatsApp continua lá. Envios pela tela, pelo MCP e pelas automações seguem conferindo como antes. O ritmo de envio (intervalo entre mensagens, variação aleatória, janela de horário) não foi tocado. Não há nada a fazer na atualização.
+- **O envio de mensagens deixa de reler o histórico inteiro do número a cada mensagem** As leituras feitas a cada envio deixam de crescer com o histórico, e o `/healthz` do worker deixa de percorrer a fila inteira (a contagem de `dead` segue no `/metrics`). Espaçamento, limite diário e proteção contra envio em dobro não mudaram.
 
-- **O envio de mensagens deixa de reler o histórico inteiro do número a cada mensagem** Antes de cada mensagem sair, o atendimento fazia leituras no banco que ficavam mais lentas conforme o histórico crescia: procurava a mensagem por um campo sem índice mesmo quando ela acabava de ser criada, contava todos os envios do número desde sempre para saber quantos saíram hoje, e contava todos os envios ao contato só para saber se já existia algum. Essas leituras acontecem enquanto o número está reservado para aquele envio, então o tempo delas se somava à espera das próximas mensagens do mesmo número. Agora a busca da mensagem só acontece quando o envio está sendo retomado, a contagem do dia lê só as linhas de hoje pelo índice que o banco já tem, e a do contato para no primeiro envio que encontrar (no primeiríssimo envio a um contato ela ainda percorre os envios da empresa, até o banco ganhar o índice por contato). As regras não mudaram: o espaçamento entre mensagens, o limite diário, a apresentação na primeira mensagem e a proteção contra envio em dobro continuam iguais. A verificação de saúde do worker (`/healthz`), que o Docker consulta a cada 30 segundos, também deixou de percorrer a fila inteira. Ela agora mostra só os trabalhos pendentes e em andamento; a contagem de trabalhos que desistiram (`dead`) continua no `/metrics`. Não é preciso fazer nada na instalação.
+- **A IA para de gastar com trabalho de fundo que não muda nada** O clima da conversa deixa de ser medido onde a IA não atende, a rotina do agente antigo sai cedo para quem já publicou agente, e a avaliação automática não reavalia atendimento já avaliado.
 
-- **A IA para de gastar com trabalho de fundo que não muda nada** Três rotinas de fundo da IA pagavam o modelo ou consultavam o banco mesmo quando o resultado não tinha como ser usado. Agora não pagam mais.
+- **O banco ganha índices para as consultas que o agente e a limpeza diária repetem** Cinco consultas frequentes deixam de ficar mais lentas conforme o banco cresce. Durante a criação dos índices, na atualização, gravar em envios, chamadas de IA, memória do agente, etapas e eventos fica travado: instantes numa instalação pequena, mais tempo quanto maior o histórico.
 
-  - **Clima da conversa (sentimento):** deixa de ser medido nas conversas em que a IA não pode atender, porque uma pessoa da equipe está no comando, a conversa foi silenciada ou o contato foi passado a humano. Nessas conversas o aviso de cliente irritado já era descartado antes de chegar a alguém. Nas conversas que a IA atende, o clima continua sendo medido a cada mensagem e continua chamando uma pessoa quando o cliente se irrita. Uma consequência: a nota de clima das mensagens dessas conversas deixa de ser gravada, então a comparação do cartão do Jev passa a usar só as conversas que a IA atende.
-  - **Respostas do agente antigo:** a rotina que só existe para empresas com agente antigo, sem versão publicada, agora confere isso primeiro. Quem já usa agente publicado sai dela com uma consulta ao banco por mensagem. Quem ainda tem o agente antigo mantém tudo como estava, inclusive a passagem para humano quando o cliente pede uma pessoa.
-  - **Avaliação automática das conversas (flywheel):** a rodada agendada não avalia de novo atendimentos que já têm avaliação, pega só um atendimento por contato e olha só os atendimentos recentes, até o dobro do intervalo entre rodadas. Uma rodada sem atendimento novo não chama o modelo nenhuma vez.
+- **Versão que pede alguma ação antes de atualizar passa a sair como minor, com o aviso em destaque** Major só sai por decisão do dono do projeto. Leia o aviso "Requer atenção" sempre que ele aparecer, qualquer que seja o número.
 
-  Não é preciso fazer nada na instalação.
+- **O agente começa a responder mais cedo — as leituras do turno que não dependem umas das outras correm juntas** As leituras antes de chamar o modelo caem de 16 idas ao banco em série para 5, com até 4 em paralelo por turno. No pico, elas podem esperar pelas 10 conexões padrão (`DB_POOL_MAX`).
 
-- **O banco ganha índices para as consultas que o agente e a limpeza diária repetem** Cinco consultas que rodam o tempo todo procuravam linha por linha em tabelas que crescem com o uso: a que confere se é a primeira mensagem do agente para um contato, a que impede o agente de responder duas vezes à mesma mensagem, a soma do custo de cada atendimento, a limpeza diária da fila de trabalhos e a busca por eventos travados. Agora cada uma tem o seu índice. Nada muda na tela nem no comportamento; numa instalação com muito histórico, essas consultas deixam de ficar mais lentas conforme o banco cresce.
+- **A tela "Uso de IA" passa a contar o período inteiro e separa chamadas de turnos do agente** Acima de mil chamadas no período a tela somava só as primeiras mil; agora a conta é inteira. "Atendimentos com IA" vira "Chamadas de IA", e entram os cartões "Turnos do agente" e "Taxa de cache". O orçamento do mês não mudou. A função de banco vem na atualização.
 
-  Na atualização, o banco cria os cinco índices. Enquanto isso acontece, gravar nas tabelas de envios, de chamadas de IA, de memória do agente, de etapas do funil e de eventos fica travado. Numa instalação pequena isso dura instantes; quanto mais histórico, mais demora. Não é preciso fazer nada na instalação.
+- **A resposta do agente começa mais cedo — a mensagem que chega não espera mais a fila de eventos de todas as empresas** Com o `worker` de pé (o padrão), o recebimento pede o turno do agente antes de drenar a fila; notificações e automações de mensagem recebida podem chegar alguns segundos depois. Para o comportamento antigo, grave `EVENT_LOG_WORKER_DRAINS=false` no `.env` e reinicie o app.
 
-- **Versão que pede alguma ação antes de atualizar passa a sair como minor, com o aviso em destaque** Até aqui, uma versão que pedia alguma ação de quem opera o servidor antes de atualizar
-  subia o primeiro número (de 1.x para 2.0.0). A partir de agora ela sai como minor, e o
-  que precisa ser feito continua aparecendo em destaque, no aviso "Requer atenção" da tela
-  de atualização e das notas da versão. Uma versão major só sai quando o dono do projeto
-  decidir. Para quem já roda o sistema, nada muda na instalação: leia o aviso "Requer
-  atenção" sempre que ele aparecer, qualquer que seja o número.
-
-- **O agente começa a responder mais cedo — as leituras do turno que não dependem umas das outras correm juntas** Antes de chamar o modelo, o turno do agente fazia as leituras de abertura uma de cada vez: playbook, skills, memória da organização, checkpoint, estágio do lead, mensagem que acordou o turno, contexto do contato (decisão humana, proposta, histórico, desfechos) e a memória do lead. Como o banco é remoto, cada leitura em série é uma ida e volta de rede que o cliente espera sem o "digitando…". Pela contagem do código, num turno de resposta eram 16 dessas idas e voltas em série nesse trecho; agora são 5, porque as leituras independentes correm juntas — no máximo 4 ao mesmo tempo por turno. Com muitos atendimentos abrindo no mesmo instante, as leituras podem passar das 10 conexões que o banco usa por padrão (ajustável em `DB_POOL_MAX`); o excesso espera na fila em vez de falhar, o que come parte do ganho justamente no pico. O que depende de outra leitura continua depois dela (o playbook depois da campanha de prospecção, o contexto depois do contato, a memória do lead depois da gravação de notas). Uma leitura que antes derrubava o turno quando falhava continua derrubando; a que era tolerada continua tolerada. A latência ganha depende da distância entre a VPS e o banco e não foi medida em produção. Nenhuma ação é necessária.
-
-- **A tela "Uso de IA" passa a contar o período inteiro e separa chamadas de turnos do agente** Em instalações com mais de mil chamadas à IA no período, a tela "Uso de IA" somava só as primeiras mil e deixava de fora justamente os dias mais recentes: o custo, os tokens e o tempo apareciam menores do que eram. A taxa de conversas passadas para uma pessoa também era calculada sobre um recorte. Agora a conta é feita inteira no banco, para o período todo.
-
-  Os cartões também passaram a dizer o que medem. "Atendimentos com IA" virou "Chamadas de IA", porque contava cada chamada ao modelo, e uma resposta do agente costuma fazer várias. Há um cartão novo, "Turnos do agente", com o custo médio de cada resposta. Uma tentativa em que a chamada à IA falhou (chave recusada, sem crédito) não conta como turno, e o custo de cada turno inclui todas as chamadas daquela resposta, mesmo com o filtro de agente ou de tipo ligado. Ele conta só os turnos que a fila de tarefas ainda guarda, por padrão os últimos 90 dias. Outro cartão novo, "Taxa de cache", mostra quanto do texto enviado à IA veio do cache, que custa bem menos. "Tempo de resposta" virou "Tempo de uma chamada à IA": é o tempo de uma chamada ao modelo, não o tempo que o cliente esperou pela resposta inteira. O filtro "Tipo de uso" oferecia uma lista fixa quase toda de nomes que nunca existiam nas chamadas, e escolher um deles mostrava zero; agora ele lista só os tipos que aparecem no período, com o nome em português (por exemplo, "Responder o cliente" ou "Identificar a etapa do lead").
-
-  O cartão de orçamento do mês não mudou e continua usando a mesma conta que decide o limite de gasto. A atualização traz uma função nova no banco (migration 0586), aplicada pelo `update.sh` de sempre. Não é preciso fazer nada na instalação.
-
-- **A resposta do agente começa mais cedo — a mensagem que chega não espera mais a fila de eventos de todas as empresas** Cada mensagem recebida pedia o turno do agente só depois de processar, dentro do próprio recebimento, até 50 eventos pendentes da fila interna — de qualquer empresa da instalação, inclusive a preparação de PDFs, a mídia e as notificações. Agora o pedido do turno sai logo depois de o follow-up do contato reagir à mensagem, e a fila vem depois.
-
-  Numa instalação com o `worker` de pé (o padrão do `docker-compose.prod.yml`), o recebimento passa a processar só o que é da mesma empresa e só os gatilhos que inscrevem o contato num fluxo — o "cliente voltou depois de um tempo" e o "lead novo". Sentimento, notificações, mídia, automações e a contagem de resposta de campanha seguem para o `worker`, que já drena essa fila em poucos segundos (a cada 2 s quando há fila, até 10 s quando está parado). Por isso a notificação de nova mensagem ao atendente e as automações de mensagem recebida podem chegar alguns segundos depois do que chegavam. A ordem que importa para o cliente não muda: quem responde a um fluxo de follow-up avança o fluxo antes de o agente ser chamado, e a primeira mensagem de um fluxo de lead novo continua saindo na hora.
-
-  A atualização não pede nada. O compose novo declara `EVENT_LOG_WORKER_DRAINS=true` para o app sozinho. Quem quiser o comportamento antigo grava `EVENT_LOG_WORKER_DRAINS=false` no `.env` e reinicia o app. Sem o `worker` (desenvolvimento com `npm run dev`, por exemplo), a variável fica vazia e nada muda.
-
-- **O envio pelo WhatsApp para de perguntar ao WAHA, a cada mensagem, se o número existe** Antes de mandar uma mensagem a um celular brasileiro, o sistema pergunta ao WAHA qual grafia do número existe no WhatsApp (com ou sem o nono dígito). Essa pergunta era feita de novo a cada mensagem, até duas vezes por mensagem, mesmo quando o agente respondia em várias mensagens seguidas ao mesmo cliente. Agora a resposta positiva fica guardada por 10 minutos na memória do próprio sistema, separada por conexão de WhatsApp. Se a pergunta falhar, ou se o WAHA responder que o número não existe, nada fica guardado, e a próxima mensagem pergunta de novo. O que sai para o cliente e o ritmo de envio continuam os mesmos. Se o WhatsApp de um cliente trocar de grafia nesse meio-tempo, o sistema pode levar até esses 10 minutos para perceber. Não é preciso fazer nada na instalação.
+- **O envio pelo WhatsApp para de perguntar ao WAHA, a cada mensagem, se o número existe** A resposta positiva fica guardada por 10 minutos por conexão. Se o número de um cliente mudar de grafia, o sistema pode levar esses 10 minutos para perceber.
 
 ### Corrigido
 
-- **Aba que estava carregando quando o acompanhamento de suporte começou ou terminou passa a mostrar a organização certa** Quem abre o acompanhamento de suporte com mais de uma aba do mesmo navegador aberta
-  via, às vezes, uma das abas continuar mostrando a organização anterior por até 15
-  segundos depois de entrar ou sair do acompanhamento. Isso acontecia quando a aba
-  estava no meio de um carregamento no instante da troca e perdia o aviso enviado
-  pela outra aba.
+- **Aba que estava carregando quando o acompanhamento de suporte começou ou terminou passa a mostrar a organização certa** Era só a tela: o servidor já recusava gravar na organização errada.
 
-  Agora a aba confere, ao terminar de carregar, se a troca aconteceu enquanto ela
-  carregava, e se atualiza na hora. Nenhum dado era gravado na organização errada,
-  porque o servidor já recusava essas gravações: o problema era só o que a tela
-  mostrava.
+- **Reservas chegam à IA com a hora local e são relidas após as ações** O agente recebe a hora da reserva no fuso do compromisso, e o resumo relê a agenda depois de criar, remarcar ou cancelar.
 
-- **Reservas chegam à IA com a hora local e são relidas após as ações** O agente recebe a hora da reserva já convertida para o fuso do compromisso, tanto na abertura quanto nos resultados das ferramentas. O resumo passa a receber os resultados de todas as etapas do atendimento, incluindo as ações já concluídas. Depois de uma criação, remarcação ou cancelamento, o fechamento recebe uma nova leitura da agenda para não conservar no resumo o horário anterior à ação. Os instantes gravados, as permissões e as integrações de agenda permanecem os mesmos; não é preciso configurar nada. Crédito: @ozzure.
+  Contribuição de @ozzure (#2523).
 
-- **Arrastar um card no funil com filtro ligado não embaralha mais a ordem da etapa** Com qualquer filtro ligado no funil (busca, tag, responsável), soltar um card podia dar a ele a MESMA `position_in_stage` de um card que o filtro estava escondendo. Acontecia em dois lugares: no fim da coluna visível, onde a conta era `último + 1000` — exatamente a posição do card escondido logo abaixo —, e entre dois cards visíveis, onde a média podia cair em cima do escondido do meio.
-
-  Nada aparecia de errado na hora. O problema aparecia quando o filtro saía: os dois cards ficavam empatados e a ordem entre eles passava a ser a que o banco devolvia em cada refetch, e arrastar outro card PARA ENTRE os dois era cancelado sem aviso — o card voltava ao lugar de origem sem toast, sem erro e sem requisição.
-
-  Agora o vizinho de baixo do card solto é contado na etapa INTEIRA, lida do cache do quadro (que a página preenche sem filtro), em vez da lista visível que o filtro reduziu. Sem filtro as duas listas coincidem e o arrasto continua exatamente como antes.
-
-  Não muda banco nenhum: esta entrega não cria migração.
+- **Arrastar um card no funil com filtro ligado não embaralha mais a ordem da etapa** Soltar um card com filtro ligado podia empatar a posição com um card escondido, e arrastos seguintes eram cancelados sem aviso.
 
   Contribuição de @webtecnica (#2558), a partir da issue #2545 de @hudson-souza-mkt.
 
-- **Resposta do cliente "em cima" de uma mensagem agora aparece no fio da conversa** Quando o cliente usava o "Responder" do WhatsApp em cima de uma mensagem que a IA ou o atendente tinham mandado, a resposta chegava ao CRM solta: a bolha não mostrava o fio, e o agente não tinha como saber a qual mensagem ela se referia — num caso real, a IA tinha mandado o programa A, o programa B e uma pergunta, o cliente respondeu "explica melhor isso aqui" em cima de uma das bolhas, e a IA explicou as duas.
+- **Resposta do cliente "em cima" de uma mensagem agora aparece no fio da conversa** A mensagem que chega guarda a que ela responde, e o fio aparece no inbox. O agente ainda não usa a citação para responder (próximo passo da #2474).
 
-  Agora o CRM guarda, na mensagem que chega, o ponteiro para a mensagem respondida, e o fio passa a aparecer na conversa. Quando a mensagem respondida é anterior à instalação (não existe no CRM), nada se perde nem quebra: a resposta entra como sempre, e o texto citado fica guardado junto dela. Mensagem sem citação continua entrando igual.
+  Contribuição de @Tong-bit-art (#2485), a partir da issue #2474 de @marcelovolei15, construído sobre o #305 de @jmpo.
 
-  Vale também para quando o dono responde "em cima" pelo celular. Nenhum dado era gravado errado antes: era só o fio que não aparecia.
+- **Comanda do ganho: moeda certa, audit da abertura e corrida fechada** Com a moeda do negócio declarada e diferente da organização, a comanda não abre; a abertura entra na auditoria; duas comandas para o mesmo negócio deixam de ser possíveis; e uma comanda que ficou sem item é completada na repetição.
 
-  O agente de IA ainda não lê a citação para responder só sobre a bolha certa — essa é a segunda metade da #2474, que vem num passo seguinte.
+  Contribuição de @webtecnica (#2479, refs #2475).
 
-  Contribuição de @Tong-bit-art (#2485, refs #2474, relatado por @marcelovolei15).
-
-- **Comanda do ganho: moeda certa, audit da abertura e corrida fechada** A comanda aberta ao arrastar um negócio para **Ganho** recebe quatro
-  consertos, sobre as pendências anotadas na issue #2475 (a numeração abaixo
-  é deste texto, não a da issue).
-
-  **1. A moeda do negócio decide se a comanda nasce.** Antes, o valor era copiado
-  do lead para a comanda sem ninguém perguntar em que moeda ele estava — dois
-  centavos de moedas diferentes no mesmo relatório, sem aviso. Agora o handler
-  compara a moeda do negócio com a da organização (`moedaDaOrganizacao`) e, quando
-  as duas estão DECLARADAS e diferentes, a comanda não abre: o desfecho é
-  `skipped` com `moeda_divergente:<a>!=<b>` no `detail`, que é o registro do
-  porquê. **A pegadinha do `DEFAULT 'BRL'`**: `crm_leads.currency` nasce `'BRL'`
-  por conta do banco, então uma organização em EUR cujo lead nunca escolheu moeda
-  carrega `'BRL'` sem ser escolha nenhuma — a guarda trata esse default como
-  "não declarado" e **não pula**. Uma comparação ingênua (`lead.currency !==
-  org.currency`) derrubaria o financeiro inteiro dessa organização. Nenhuma
-  decisão aqui é de auditoria: quem pula, pula, e o `detail` diz.
-
-  **2. A abertura da comanda ganha rastro no audit.** O handler emite
-  `comanda.aberta` (ação que já existia em `lib/audit/actions.ts`) com
-  `resourceType: sale`, o id da comanda e `origem: ganho_no_kanban` no metadata —
-  com a abertura antes invisível no painel de auditoria, não havia como saber
-  quando e por qual caminho uma conta a receber nasceu. Quando a comanda é
-  pulada, o audit não registra nada (não abriu). O evento não carrega ator: o
-  `event_log` não guarda quem arrastou.
-
-  **3. A corrida entre o worker e o `drain-loop` fecha com índice.** Duas linhas
-  `lead.won` do mesmo negócio — fechar, reabrir, fechar — em instâncias
-  diferentes passavam as duas pela trava de leitura do vínculo (a primeira ainda
-  não gravou) e abriam duas comandas para o mesmo negócio. A migration **0582**
-  cria o índice único parcial `uniq_comanda_do_ganho_por_negocio` em
-  `crm_lead_links (organization_id, lead_id) WHERE link_kind = 'comanda_no_ganho'`
-  — o índice anterior trazia `target_id` na chave, e por isso não segurava duas
-  comandas. A limpeza de duplicatas pré-existente mantém a mais antiga e só toca
-  `crm_lead_links`, nenhum dinheiro é apagado. No código, o vínculo agora é
-  gravado **antes** do item: a perdedora da corrida (23505) cancela a comanda
-  vazia que acabou de abrir (`cancel_reason = 'corrida_do_ganho'`; `sales`
-  cancela, nunca apaga) e devolve `ja_existia` com a comanda da vencedora, em vez de virar um
-  `falhou` que o dreno reagendaria para sempre — a ordem é o que decide o tamanho
-  do estrago.
-
-  **4. O retry agora completa o que faltava.** O vínculo é gravado mesmo quando o
-  insert do item falha (duplicar dinheiro é pior que um item faltando), mas o
-  desfecho seguinte era `ja_existia` → `ok` → a comanda ficava com total 0 para
-  sempre e ninguém avisado. A repetição agora lê a comanda: aberta e sem item, reinsere o
-  valor (sem abrir segunda comanda e sem consultar a numeração); com item, ou já
-  finalizada ou cancelada, não mexe em nada. Limitação conhecida: o gatilho é
-  "comanda vinculada, aberta e sem item", e isso inclui o item que o operador
-  removeu à mão de uma comanda ainda aberta — a repetição seguinte do mesmo
-  evento o devolveria.
-
-  Dois arquivos de teste (`comanda-do-ganho.test.ts` e
-  `comanda-do-ganho.handler.test.ts`) cobrem os quatro itens. Os testes que
-  vigiam a mudança foram sabotados (código antigo no lugar) e ficaram vermelhos;
-  os de controle de não-regressão seguem verdes nos dois sentidos.
-
-  Refs #2475
-
-  Contribuição de @webtecnica.
-
-- **"Conversar sobre o caso" volta a aparecer quando a IA é configurada só por Credenciais, sem chave no ambiente** O assistente interno "Conversar sobre o caso" mostrava "Nenhum provedor de IA está configurado" e escondia o campo em instalações que configuram a IA por IA › Credenciais e não têm chave de IA no `.env`. O sinal que decide se o painel aparece olhava só as variáveis de ambiente, enquanto a conversa usa a credencial da organização.
-
-  Agora o painel pergunta ao mesmo resolvedor que a conversa usa para escolher a credencial: aparece quando a conversa acharia credencial (a do agente do caso, a padrão da organização ou a chave do ambiente) e some quando a conversa também não acharia. Quem já tinha chave no `.env` não vê diferença.
+- **"Conversar sobre o caso" volta a aparecer quando a IA é configurada só por Credenciais, sem chave no ambiente** O painel passa a usar a mesma credencial que a conversa usaria.
 
   Contribuição de @Aleshan-dev (#2495).
 
-- **O gasto de quem atende com Gemini passa a ser contado, e o teto mensal passa a valer** Os seis modelos Gemini oferecidos na escolha de modelo do agente (Gemini 3.5 Flash, 3.1 Pro, 2.5 Pro, 2.5 Flash, 2.5 Flash-Lite e 2.0 Flash) não tinham preço na conta que o atendimento faz a cada resposta. Cada chamada era registrada com custo desconhecido, e o orçamento conta custo desconhecido como zero: em Uso e orçamento o gasto de uma organização em Google aparecia zerado, e o teto mensal de gasto com IA nunca disparava, por maior que fosse o uso.
+- **O gasto de quem atende com Gemini passa a ser contado, e o teto mensal passa a valer** Os seis modelos Gemini do catálogo eram registrados sem custo. **Com teto no modo que bloqueia e o gasto real do mês já acima dele, as respostas da IA passam a ser barradas** e as conversas vão para a fila humana; confira em IA › Uso e orçamento. O gasto passado não é recalculado.
 
-  Agora cada resposta do agente em Gemini é registrada com o preço do catálogo, o mesmo que a tela já mostrava na escolha do modelo. O trecho repetido da conversa, que o Google cobra com desconto, é contado pela tarifa de cache publicada pelo Google (um décimo do preço de entrada). O gasto aparece em Uso e orçamento e o teto mensal passa a valer para quem usa Google.
+- **Três dependências internas sobem para versões corrigidas** `sharp`, `seroval` e `source-map-js` sobem para versões com correção de segurança, e o Next.js vai de 16.3.6 para 16.3.8 pelo mesmo motivo (#2536).
 
-  O que isso muda na prática: numa organização em Gemini com o teto ligado no modo que bloqueia, se o gasto real do mês já estiver acima do teto escolhido, as respostas da IA passam a ser barradas e as conversas vão para a fila humana. É o teto fazendo o que foi configurado para fazer, e que antes não fazia porque o gasto chegava zerado. Com o teto desligado (o padrão) ou só avisando, nada é barrado. O gasto de cada organização e o teto ficam em IA › Uso e orçamento.
+- **Os avisos de negócio ganho, perdido, reaberto ou com novo responsável só nascem do próprio negócio** Notificação, webhook de saída e conversão para anúncios seguem funcionando por tela, automação e IA.
 
-  Uma limitação declarada: as conversas acima de 200 mil tokens de entrada no 2.5 Pro e no 3.1 Pro, que o Google cobra mais caro, são contadas pelo preço normal.
+- **Mensagem enviada pelo CRM não aparece mais duas vezes nas conversas individuais com o motor WEBJS** O envio guarda o identificador no formato do eco. Grupos e o motor NOWEB não mudam.
 
-  O gasto passado não é recalculado: chamadas antigas continuam sem custo. A atualização não pede nenhuma mudança na instalação.
+  Contribuição de @webtecnica (#2525), a partir da issue #196 de @Gervanno.
 
-- **Três dependências internas sobem para versões corrigidas** As bibliotecas de imagem (`sharp`), de serialização (`seroval`) e de mapa de código (`source-map-js`) sobem para as versões com correção de segurança publicada. Nada muda no uso: a atualização é interna e não pede ação de quem opera o servidor.
-
-- **Os avisos de negócio ganho, perdido, reaberto ou com novo responsável só nascem do próprio negócio** Os avisos que saem quando um negócio é ganho, perdido, reaberto ou muda de responsável — notificação, webhook de saída e conversão para anúncios — passam a nascer só da mudança registrada no próprio negócio. Ganhar, perder e reatribuir pela tela, pela automação ou pela IA continuam funcionando como antes.
-
-- **Mensagem enviada pelo CRM não aparece mais duas vezes nas conversas individuais com o motor WEBJS** Nas conexões WhatsApp com o motor WEBJS, uma mensagem mandada pelo CRM ou pelo agente às vezes aparecia duas vezes numa conversa individual: a do envio e o eco que o WhatsApp devolve. O motivo era que as duas linhas guardavam o mesmo identificador escrito de jeitos diferentes, e a proteção do banco contra duplicata não reconhecia que era a mesma mensagem. Agora o envio guarda o identificador no mesmo formato do eco, e a proteção passa a valer.
-
-  Nos grupos e no motor padrão (NOWEB) nada muda. Mensagens antigas continuam recebendo os avisos de entregue e lida normalmente, e nada precisa ser feito ao atualizar.
-
-  Contribuição de @webtecnica (#2525, refs #196).
-
-- **Excluir um funil que já está no arquivo não manda mais arquivar de novo** Quem arquivou um funil que já recebeu negócio e tenta excluí-lo pela gaveta do arquivo recebia a orientação de arquivar em vez de excluir — conselho impossível de seguir, porque o funil já estava arquivado e a tela não tinha por onde seguir adiante. A recusa não mudou: o funil com negócios continua sem ser apagado, nenhuma gravação sai, e para quem tem o funil na lista viva o convite de arquivar continua igual. Muda só o conselho oferecido a quem clicou de dentro do arquivo, que agora manda tirar o funil do arquivo e resolver os negócios antes de excluir. Não é preciso fazer nada na instalação.
+- **Excluir um funil que já está no arquivo não manda mais arquivar de novo** A recusa continua; muda o conselho, que agora é tirar o funil do arquivo e resolver os negócios.
 
   Contribuição de @webtecnica (#2532), a partir da issue #979 de @rafaelbatistazz.
 
-- **As mensagens da IA chegam ao WhatsApp sem "\n" escrito e sem asteriscos duplos** Medido em conversas reais: às vezes o modelo escrevia o salto de linha como texto — o cliente lia "Tómate tu tiempo.\n\nCualquier duda…" com a barra e o "n" na tela — e usava o negrito do Markdown (`**texto**`), que o WhatsApp não entende e mostra com os asteriscos duplos.
-
-  Agora, antes de sair, a mensagem do agente passa para o formato do WhatsApp: o `\n` escrito vira salto de linha de verdade, `**negrito**` e `__negrito__` viram `*negrito*`, um título `## Assim` vira negrito (sem os asteriscos duplos quando o título já vinha com negrito), e linhas em branco em excesso são juntadas. Texto que já vem no formato do WhatsApp não muda, nem os asteriscos e sublinhados duplos colados em palavra, em caminho ou em parâmetro de link (um link com `?__hstc=1` ou `/__init__`, uma senha). A conversão acontece antes das outras conferências do envio, então o corpo vazio, a divisão em bolhas e a pausa humana medem exatamente o que o cliente recebe. A mesma conversão vale para a ação de automação "Mensagem escrita pela IA" e para a primeira mensagem da prospecção, que também levam texto do modelo direto ao cliente.
-
-  Não é preciso fazer nada na instalação.
+- **As mensagens da IA chegam ao WhatsApp sem "\n" escrito e sem asteriscos duplos** Antes de sair, o texto do agente, da automação "Mensagem escrita pela IA" e da prospecção passa para o formato do WhatsApp, sem mexer em links.
 
   Contribuição de @mentitaa (#2512).
 
-- **A IA volta a responder sozinha quando a conexão com o banco morre sem aviso** Quando o servidor do banco sumia sem responder nem fechar a conexão (o que
-  suspeitamos ter acontecido num reinício do Supabase), o agente de IA podia parar
-  de responder no WhatsApp e só voltar depois de alguém reiniciar o `worker` na
-  VPS. Nada indicava o problema: a checagem de saúde seguia dizendo que estava tudo
-  bem, e os pedidos de resposta ficavam acumulando sem ninguém pegar.
+- **A IA volta a responder sozinha quando a conexão com o banco morre sem aviso** A consulta presa desiste em até um minuto e a IA retoma sem reiniciar o `worker`.
 
-  Agora são duas proteções. Se a conexão morreu sem aviso, o sistema percebe em
-  cerca de 20 segundos; se o banco travou e não responde, a consulta desiste em um
-  minuto. Nos dois casos a consulta presa termina com erro em vez de esperar para
-  sempre, e a IA tenta de novo e retoma sozinha. Crédito: @rafaelbatistazz.
+  Contribuição de @rafaelbatistazz (#2501).
 
-- **Um negócio recusado pela regra de visibilidade agora sai como "sem permissão", e não mais como erro interno** Quando a organização enxerga "Só os seus" e um Atendente cria um negócio pelo botão "Novo Lead", o sistema avisava "Erro interno. Tente de novo em instantes." — e tentar de novo nunca resolvia, porque quem recusava a gravação era a própria regra de visibilidade da empresa. Agora a resposta é uma recusa de permissão, com a frase explicando que o negócio ficaria fora do que a pessoa pode ver. O mesmo vale quando o Atendente passa o próprio negócio para um colega e, pela regra, deixaria de vê-lo. A regra de visibilidade em si não mudou: quem não podia criar ou passar o negócio continua sem poder, agora sabendo por quê. Nada muda para quem já gravava normalmente.
+- **Um negócio recusado pela regra de visibilidade agora sai como "sem permissão", e não mais como erro interno** No modo "Só os seus", o Atendente que cria ou repassa negócio fora do que pode ver recebe a explicação, em vez de "Erro interno". A regra em si não mudou.
 
-  Contribuição de @webtecnica (#2556, refs #2547).
+  Contribuição de @webtecnica (#2556), a partir da issue #2547 de @hudson-souza-mkt.
 
-- **O agente que opera o funil pelo MCP consegue marcar um negócio como perdido** Mover um negócio para uma etapa de perda pela ferramenta `crm_move_lead_stage` era recusado com "Informe o motivo da perda" quando o negócio ainda não tinha motivo gravado, mesmo quando o agente mandava o motivo: a ferramenta descartava o campo antes de chegar ao CRM. Agora ela aceita `lost_reason` e grava o motivo na mesma escrita que muda a etapa, como já acontecia com o motivo do ganho. O motivo passa pela mesma conferência do arrasto no Kanban: tem de estar na lista de motivos do funil. Mover para uma etapa comum continua igual.
+- **O agente que opera o funil pelo MCP consegue marcar um negócio como perdido** `crm_move_lead_stage` aceita `lost_reason`, conferido contra os motivos do funil.
 
-  Contribuição de @erikyudi (#2500, refs #917).
+  Contribuição de @erikyudi (#2500), a partir da issue #917 de @glrmelage.
 
-- **Menção apagada da nota interna não notifica mais a pessoa errada** Na nota interna, quem escolhia um atendente na lista de menção e depois apagava o nome do texto continuava com a escolha guardada: ao salvar, o aviso podia sair para a pessoa apagada em vez da que ficou no texto. Com duas pessoas de mesmo nome na equipe o caso ficava invisível, porque o texto das duas é idêntico. Agora cada edição do texto remove da lista as escolhas cujo nome não está mais lá, e o que o sino usa é sempre o id de quem está no texto na hora de salvar. Menção digitada à mão (sem passar pela lista) continua como sempre foi.
+- **Menção apagada da nota interna não notifica mais a pessoa errada** O aviso sai só para quem está no texto ao salvar.
 
-  Contribuição de @Tong-bit-art (#2489), a partir da issue #2463.
+  Contribuição de @Tong-bit-art (#2489, refs #2463).
 
-- **Os quadros "Performance por atendente" e "Por canal" deixam de ler o histórico inteiro a cada visita** Os dois quadros de Métricas mostram os últimos 30 dias, mas liam todas as conversas da empresa desde o início para calcular esse período. Agora só as conversas do período entram na conta, e os números mostrados não mudam. Quanto mais antigo o histórico da empresa, maior o ganho. Em empresas com muito volume dentro dos próprios 30 dias, os quadros ainda podem demorar ou passar do limite de 8 segundos do banco e mostrar erro; isso segue em acompanhamento na issue #2514. Nada precisa ser feito ao atualizar: a mudança de banco vem na própria atualização. Contribuição de @webtecnica (#2554), a partir da issue #2514.
+- **Os quadros "Performance por atendente" e "Por canal" deixam de ler o histórico inteiro a cada visita** Os números não mudam. Com muito volume nos próprios 30 dias, ainda podem passar do limite de 8 s (issue #2514). A mudança de banco vem na atualização.
 
-- **As páginas de política de privacidade e termos de uso, e a tela de cadastro, passam a mostrar o nome da marca configurado na tela** Quem mudou o nome do sistema em Administração › Marca via o nome novo no resto do produto, mas a política de privacidade, os termos de uso e a frase de boas-vindas da tela de cadastro continuavam com o nome antigo, o que estava no arquivo de instalação. Agora essas páginas usam o mesmo nome configurado na tela, e o arquivo de instalação só vale quando nada foi configurado.
+  Contribuição de @webtecnica (#2554, refs #2514).
 
-  O nome que aparece como responsável pelos dados continua sendo o da empresa que opera a instalação: a marca entra só onde o texto nomeia o software. O PDF de dados pessoais (LGPD) não leva marca, como antes. Nada precisa ser feito ao atualizar.
+- **As páginas de política de privacidade e termos de uso, e a tela de cadastro, passam a mostrar o nome da marca configurado na tela** O responsável pelos dados continua sendo a empresa que opera a instalação, e o PDF de LGPD segue sem marca.
 
-  Contribuição de @webtecnica (#2534, issue #2511).
+  Contribuição de @webtecnica (#2534, refs #2511).
 
-- **Regra de automação salva pela tela não perde mais o filtro de funil e de etapa** A regra de "card parado N dias na mesma etapa" criada pela API com filtro de funil e de etapa perdia os dois filtros quando alguém a abria e salvava pela tela, mesmo sem mudar nada: o editor reconstruía a configuração só com o que ele próprio desenha (os dias e a proteção da agenda). Sem o filtro, a regra passa a valer para todos os funis em silêncio — ela dispara onde ninguém pediu, e a tela não mostra diferença nenhuma. Agora o que a tela não edita sobrevive ao salvar, e a herança só vale dentro do mesmo gatilho: trocar o gatilho na tela não herda a configuração do anterior. Vale também para o filtro de funil do gatilho de silêncio. Nenhum dado era gravado errado antes: era a configuração da regra que se perdia.
+- **Regra de automação salva pela tela não perde mais o filtro de funil e de etapa** O que a tela não edita sobrevive ao salvar; antes, a regra passava a valer para todos os funis em silêncio.
 
   Contribuição de @Tong-bit-art (#2487), a partir da issue #2483 de @aleflores35.
 
-- **A tela da organização passa a usar os rótulos do país dela (Denominação social e NIPC em Portugal)** Uma organização em Portugal via "Razão social" e "CNPJ" na tela Configurações › Organização — a mesma tela em que o campo País dizia Portugal. Agora os dois rótulos vêm do país escolhido: "Denominação social" e "NIPC" em Portugal. No Brasil nada muda: continuam "Razão social" e "CNPJ". O dado gravado e a validação do campo não mudaram, só o nome que aparece na tela.
+- **A tela da organização passa a usar os rótulos do país dela (Denominação social e NIPC em Portugal)** No Brasil, continuam "Razão social" e "CNPJ".
 
-  Contribuição de @webtecnica (#2502, refs #1946, relatado por @maclevison).
+  Contribuição de @webtecnica (#2502), a partir da issue #1946 de @maclevison.
 
-- **O segredo usado pelo agendador deixa de aparecer na lista de processos do servidor** O agendador das rotinas automáticas passa a ler o segredo de autorização de um
-  arquivo interno do próprio contêiner, acessível só por ele, em vez de levá-lo na
-  linha de comando de cada rotina. Assim o valor deixa de aparecer na lista de
-  processos do servidor enquanto uma rotina está em execução.
+- **O segredo usado pelo agendador deixa de aparecer na lista de processos do servidor** Nada muda na configuração: continua o `INTERNAL_SECRET` do `.env`. Quem trocá-lo por precaução: sem `INVITE_TOKEN_SECRET`, os convites ainda não aceitos deixam de valer.
 
-  Nada muda na configuração: o segredo continua vindo do mesmo `INTERNAL_SECRET`
-  do `.env`, e a atualização normal já traz a imagem nova do agendador.
-
-  Quem preferir trocar o segredo por precaução pode fazê-lo como sempre, editando
-  `INTERNAL_SECRET` no `.env` e recriando os serviços. Vale saber que, quando
-  `INVITE_TOKEN_SECRET` não está definido, esse mesmo valor assina os links de
-  convite: trocá-lo invalida os convites ainda não aceitos, que precisariam ser
-  reenviados.
-
-- **Reabrir uma tarefa cancelada a devolve para Pendente, não para Concluída** Na tela de Tarefas, a caixa de uma tarefa cancelada já aparecia marcada e com o rótulo "Reabrir a tarefa", mas o clique gravava a tarefa como CONCLUÍDA em vez de reabri-la. Se a tarefa estiver ligada a um negócio, a linha do tempo desse negócio também ganhava "Tarefa concluída" de um trabalho que ninguém fez. Agora o clique devolve a tarefa para Pendente, como já acontecia com uma concluída, e nenhuma linha de tarefa concluída é registrada no processo. Não é preciso fazer nada na instalação.
+- **Reabrir uma tarefa cancelada a devolve para Pendente, não para Concluída** E a linha do tempo do negócio deixa de ganhar "Tarefa concluída".
 
   Contribuição de @webtecnica (#2557), a partir da issue #2549 de @hudson-souza-mkt.
 
