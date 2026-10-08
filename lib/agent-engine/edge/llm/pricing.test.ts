@@ -82,6 +82,7 @@ describe("costCents — cada tarifa isolada, por modelo", () => {
     ["gemini-3.6-flash", 75, 375, 7.5, 75, 75],
     ["gemini-3.1-flash-lite", 25, 150, 2.5, 25, 25],
     ["gemini-3.5-flash", 150, 900, 15, 150, 150],
+    ["gemini-3.5-flash-lite", 30, 250, 3, 30, 30],
     ["gemini-3.1-pro-preview", 200, 1200, 20, 200, 200],
     ["gemini-2.5-pro", 125, 1000, 12.5, 125, 125],
     ["gemini-2.5-flash", 30, 250, 3, 30, 30],
@@ -145,6 +146,7 @@ describe("costCents — id com prefixo provider/ (formato OpenRouter)", () => {
     ["anthropic/claude-sonnet-4-6", 300, 1500, 30, 375, 600],
     ["anthropic/claude-haiku-4-5", 100, 500, 10, 125, 200],
     ["anthropic/claude-opus-5", 500, 2500, 50, 625, 1000],
+    ["google/gemini-3.5-flash-lite", 30, 250, 3, 30, 30],
   ])("%s custa como o id sem prefixo", (model, cIn, cOut, cLeitura, cGrav5m, cGrav1h) => {
     expect(entrada(model)).toBeCloseTo(cIn, 6);
     expect(saida(model)).toBeCloseTo(cOut, 6);
