@@ -51,8 +51,9 @@ export interface PreviewResult {
   /**
    * O que NÃO impediu o candidato, mas o operador precisa ver sobre o ENVIO real:
    * um gate que o barraria agora, ou uma mídia que não sairia (produto sem fotos,
-   * #2490). Só o sandbox escreve aqui (ver `gatesDoSandbox`); o rascunho assistido
-   * continua tratando o mesmo veto como impedimento.
+   * #2490). O aviso de gate só o sandbox escreve (ver `gatesDoSandbox`) — o rascunho
+   * assistido trata o mesmo veto como impedimento; o de produto sem fotos
+   * (`midia_sem_fotos`) sai nos dois.
    */
   warnings: Array<{ code: string; message: string }>;
   restrictions: string[];

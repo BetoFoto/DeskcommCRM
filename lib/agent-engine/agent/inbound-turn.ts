@@ -4250,9 +4250,11 @@ async function executarTurnoDoAgente(
             }),
             // #2490 — a MESMA `prepararFotosDoProduto` do caminho de produção,
             // com a MESMA cópia por service role e a MESMA query no catálogo:
-            // o teste só troca o destino, a pasta temporária `dry-run` em vez da
-            // conversa. Aqui não há conversa (cenario sem contato) e anexo em
-            // pasta de conversa seria efeito permanente — proibido no preview.
+            // a prévia só troca o destino, a pasta `dry-run` da organização em vez
+            // da conversa: anexo em pasta de conversa seria efeito no cliente —
+            // proibido no preview. Vale para o sandbox e para o rascunho assistido
+            // (que tem conversa, mas não pode anexar nela). A pasta é permanente:
+            // o nome da cópia é determinístico, então repetir o teste não duplica.
             // Nada é enviado: o `send_message` da prévia nem chega perto do canal.
             (codigo: string) =>
               prepararFotosDoProduto(pool, copiarFotoNoStorage(runLog), {

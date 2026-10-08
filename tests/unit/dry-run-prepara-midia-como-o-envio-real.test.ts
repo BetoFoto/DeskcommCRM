@@ -6,14 +6,14 @@
  * no atendimento real. O conserto é de FIÇÃO, não de reimplementação: o `send_message`
  * da prévia chama a MESMA `prepararFotosDoProduto` do caminho de produção
  * (injetada pelo turno), com a MESMA cópia por service role; só o destino muda —
- * a pasta temporária `dry-run`, porque anexo em conversa seria efeito permanente.
+ * a pasta `dry-run` da organização, porque anexo em conversa seria efeito no cliente.
  *
  * E a proibição de efeito externo continua intacta: nenhum cenário aqui chama
  * canal de entrega nem roda o executor original do `send_message` — a mensagem
  * não sai.
  *
  * Sabotagem medida (remover o bloco de mídia de `preview.ts`):
- * **7 vermelhos de 8** — sucesso, pasta temporária, sem-fotos, código inexistente,
+ * **7 vermelhos de 8** — sucesso, pasta de teste, sem-fotos, código inexistente,
  * cópia falhada, sem produto_codigo (a asserção do registro `midia`) e sem preparador;
  * verde só a fiação por fonte, que lê `inbound-turn.ts`. Previsão escrita antes da
  * rodada: 6 — o caso "sem produto_codigo" entrou porque também afirma que o registro
@@ -161,7 +161,7 @@ describe("dry-run prepara a mídia do produto como o envio real (#2490)", () => 
     ]);
   });
 
-  it("a cópia sai para a pasta TEMPORÁRIA do teste — nunca para a pasta de uma conversa", async () => {
+  it("a cópia sai para a pasta de TESTE — nunca para a pasta de uma conversa", async () => {
     const { db } = catalogo({ IP15: { fotos: [CAPA] } });
     const copias: Array<[origem: string, destino: string]> = [];
     const { chamar } = cenario(db, {
