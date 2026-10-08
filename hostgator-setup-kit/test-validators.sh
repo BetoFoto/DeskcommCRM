@@ -223,6 +223,10 @@ gotrue_curl_duble() {
         body='{"code":400,"error_code":"validation_failed","msg":"Verify requires a verification type"}'; code=400;;
       http://127.0.0.1:8001/*|https://*.supabase.co/*|https://db-crm.exemplo.com.br/*)
         body='Unauthorized'; code=401;;
+      https://api.exemplo.com.br/*)
+        # Uma API qualquer que devolve JSON com "msg" e 200: o corpo sozinho
+        # não separa ela do GoTrue; o código separa.
+        body='{"ok":true,"msg":"pong"}'; code=200;;
       http://127.0.0.1:8000/*)
         body='<!DOCTYPE html><html><head><title>Redirecting to http://127.0.0.1:8000/login</title></head></html>'; code=302;;
       *)
@@ -272,6 +276,10 @@ gotrue_ok "Supabase próprio atrás de domínio é ACEITO" pass \
 # do Supabase respondia 200 e passava.
 gotrue_ok "um site qualquer (200 HTML) é RECUSADO" reject \
   "https://www.exemplo.com.br" 0 "" "não é o Supabase"
+# "msg" no corpo não basta: o GoTrue devolve 400 ali (medido no GoTrue do kit,
+# v2.196.0). Uma API que responda 200 com "msg" não é o Supabase.
+gotrue_ok "200 com 'msg' no corpo é RECUSADO" reject \
+  "https://api.exemplo.com.br" 0 "" "não é o Supabase" "HTTP 200"
 
 echo "chaves do Supabase (formato/papel/projeto)"
 ok "rejeita service_role no campo anon" reject v_anon    "$(mkjwt service_role abcdefghijklmnop)" "preciso da 'anon'"

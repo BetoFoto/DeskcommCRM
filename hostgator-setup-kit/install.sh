@@ -327,7 +327,10 @@ v_supabase_url() {
   # sem ela o gateway (Envoy no self-hosted, o da nuvem) barra /auth/v1/health
   # com 401. /auth/v1/verify é rota aberta (é o link dos e-mails): quem responde
   # é o próprio GoTrue, com o JSON de erro dele (`"msg"`), na nuvem e no
-  # self-hosted.
+  # self-hosted. O corpo sozinho não basta (qualquer API pode ter "msg"): exige
+  # também o 400 que o GoTrue devolve ali sem parâmetros — medido no GoTrue do
+  # kit (supabase/gotrue v2.196.0): `{"code":400,...,"msg":"Verify requires a
+  # verification type"}`. Com `type`+`token` ele devolve 303, mas não mandamos.
   local resp code
   resp="$(curl -s -m 15 -w '\n%{http_code}' "${health_url%/}/auth/v1/verify" 2>/dev/null)" || resp=000
   code="${resp##*$'\n'}"
@@ -335,8 +338,8 @@ v_supabase_url() {
     echo "$(t "Não consegui alcançar {1} — confira se o projeto existe, está ativo (projeto pausado não responde) e se o VPS tem internet." "$health_url")"
     return 1
   fi
-  case "${resp%$'\n'*}" in
-    *'"msg"'*) return 0;;
+  case "$code:${resp%$'\n'*}" in
+    400:*'"msg"'*) return 0;;
   esac
   echo "$(t "{1} respondeu (HTTP {2}), mas não é o Supabase: o serviço de login dele não atendeu em /auth/v1/verify. Confira o endereço (e a porta, se houver outro painel no servidor)." "$health_url" "$code")"
   return 1
