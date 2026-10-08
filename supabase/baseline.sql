@@ -10178,7 +10178,7 @@ alter table public.agent_inbox_items
     -- referência, e o de 80% do teto de IA do plano nasce com ref_kind plano. Os
     -- dois abrem Configurações › Plano e cobrança, só para quem administra.
     'cobranca',
-    -- (migration 0556) o admin da plataforma trocou o e-mail de login de uma
+    -- (migration 0614) o admin da plataforma trocou o e-mail de login de uma
     -- pessoa da equipe (PATCH .../members/[userId]/email): a empresa fica
     -- sabendo pela Central — com o nome e a data, nunca o endereço.
     'email_de_login_trocado',
@@ -48499,8 +48499,8 @@ create trigger trg_cobranca_trava_exclusao_com_assinatura_viva
   before delete on public.organizations
   for each row execute function public.fn_cobranca_trava_exclusao_com_assinatura_viva();
 
--- ---- gestão de tenants: exclusão completa e arquivos da organização (migration 0556) ----
--- Idempotente (create or replace + revoke/grant). Corpo e porquê: a migration 0556.
+-- ---- gestão de tenants: exclusão completa e arquivos da organização (migration 0614) ----
+-- Idempotente (create or replace + revoke/grant). Corpo e porquê: a migration 0614.
 -- A parte C dela (o kind 'email_de_login_trocado') entra no bloco único de
 -- `agent_inbox_items_kind_check`, não aqui.
 --

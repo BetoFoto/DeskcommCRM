@@ -1089,7 +1089,7 @@ export const AUDIT_ACTIONS = [
   // `settings/task-plans` — mesma família de `campaign.settings_updated`.
   "task_plans.settings_updated",
 
-  // Gestão de tenants pelo admin da plataforma (migration 0556).
+  // Gestão de tenants pelo admin da plataforma (migration 0614).
   // A LÁPIDE, gravada pelo banco dentro de `fn_excluir_organizacao`, com
   // `organization_id` nulo e `resource_id` = a organização excluída.
   "organization.deleted",

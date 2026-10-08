@@ -2,7 +2,7 @@
  * EXCLUSÃO DE UMA ORGANIZAÇÃO — o procedimento inteiro, na ordem que não deixa
  * órfão.
  *
- * O banco faz a parte transacional (`fn_excluir_organizacao`, migration 0556):
+ * O banco faz a parte transacional (`fn_excluir_organizacao`, migration 0614):
  * lápide na auditoria, cascata em ~155 tabelas, conferência de que nada ficou.
  * O que mora FORA do Postgres não entra numa transação, e por isso a ordem é o
  * desenho:
@@ -46,7 +46,7 @@
  * SUSPENSA, a suspensão é ADMINISTRATIVA (a por cobrança é recusada — excluir
  * deixaria a assinatura cobrando no provedor) e a confirmação é o slug dela.
  * Aqui se olha só o tipo; o banco olha também o histórico da suspensão atual,
- * porque uma administrativa por cima da cobrança troca o tipo (migration 0556)
+ * porque uma administrativa por cima da cobrança troca o tipo (migration 0614)
  * — essa recusa chega como `PT409 organizacao_com_cobranca_pendente`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -106,7 +106,7 @@ export class ExclusaoInterrompida extends Error {
   }
 }
 
-/** O que a lápide da migration 0556 guarda e a retomada lê. */
+/** O que a lápide da migration 0614 guarda e a retomada lê. */
 interface LapideDaExclusao {
   slug: string;
   contagens?: Record<string, number>;
@@ -455,7 +455,7 @@ async function concluirDepoisDoCommit(
     // 6. O registro final. `organizationId` nulo: a organização não existe mais.
     // Ele e a lápide são achados por `resource_id`; as linhas antigas da org,
     // que perderam a atribuição no SET NULL, só são DELIMITADAS pela lápide
-    // (membros, contagem e intervalo) — ver o cabeçalho da migration 0556.
+    // (membros, contagem e intervalo) — ver o cabeçalho da migration 0614.
     await audit({
       action: "organization.deletion_completed",
       actorUserId: entrada.atorId,

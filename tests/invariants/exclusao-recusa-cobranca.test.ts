@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
 /**
- * Exclusão de tenant e suspensão por cobrança (migration 0556).
+ * Exclusão de tenant e suspensão por cobrança (migration 0614).
  *
  * EXCLUIR NÃO APAGA QUEM DEVE. Uma organização suspensa por COBRANÇA não se
  * exclui: a assinatura continuaria cobrando no provedor e ninguém mais teria
