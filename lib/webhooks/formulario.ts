@@ -11,7 +11,7 @@ export const webhookFormFieldSchema = z
       .min(1)
       .max(CHAVE_MAX)
       .regex(/^[a-z][a-z0-9_]*$/, "Use uma chave iniciada por letra minúscula, sem espaços."),
-    label: z.string().trim().min(1).max(120),
+    label: z.string().trim().min(1, "Escreva o texto da pergunta.").max(120),
     type: z.enum(["text", "textarea", "number", "currency", "select", "checkbox"]),
     required: z.boolean().default(false),
     options: z.array(z.string().trim().min(1).max(OPCAO_MAX)).max(30).optional(),
