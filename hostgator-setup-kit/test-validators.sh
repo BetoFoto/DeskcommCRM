@@ -154,7 +154,7 @@ echo "URL do Supabase: a da nuvem E a de um Supabase próprio"
 # recria o mesmo beco em prosa.
 #
 # FRONTEIRA (o cabeçalho deste arquivo): aqui se mede só o `case` de formato. A
-# chamada a /auth/v1/health é dublada, porque prender esta suíte a DNS é trocar
+# chamada a /auth/v1/verify é dublada, porque prender esta suíte a DNS é trocar
 # um teste por um oráculo. O que aquela chamada prova de fato — e o que ela NÃO
 # prova — é medição de instalação real; ver o relatório da triagem.
 sburl_ok() {  # sburl_ok <descrição> <pass|reject> <url> [trecho esperado]...
@@ -163,8 +163,9 @@ sburl_ok() {  # sburl_ok <descrição> <pass|reject> <url> [trecho esperado]...
   out="$(bash -c '
       INSTALL_SH_LIB=1 . ./install.sh
       set +e
-      # Só o formato está sob teste: para o dublê, a rede responde 200 a todos.
-      curl() { printf 200; }
+      # Só o formato está sob teste: para o dublê, todo host é um GoTrue (o
+      # JSON que /auth/v1/verify devolve sem parâmetros, como medido).
+      curl() { printf '\''{"msg":"Verify requires a verification type"}\n400'\''; }
       v_supabase_url "$1"' _ "$url" 2>&1)"; rc=$?
   if [ "$expect" = pass ]; then
     if [ $rc -eq 0 ]; then printf '  ✓ %s\n' "$desc"
@@ -193,6 +194,92 @@ sburl_ok "rejeita http:// (sem TLS)"               reject "http://db-crm.exemplo
 # migraria do `case` para a prosa, onde não há catraca nenhuma.
 sburl_ok "a recusa ensina o caso da NUVEM"         reject "meu-supabase" "supabase.co"
 sburl_ok "a recusa ensina o caso do Supabase PRÓPRIO" reject "meu-supabase" "servidor"
+
+echo "URL do Supabase: quem responde tem de ser o GoTrue, não qualquer servidor"
+# O validador aceitava QUALQUER código HTTP diferente de 000. Medido numa VPS
+# com Coolify (PR 4, E7 Passo 1): a 127.0.0.1:8000 é o PAINEL do Coolify e
+# responde 302 — e teria passado como "o Supabase local". A 8001 (o Envoy do
+# Supabase) é a certa.
+#
+# O dublê reproduz o que foi MEDIDO, sem chave (a URL é perguntada antes das
+# chaves, então o validador não tem apikey para mandar):
+#   - Envoy self-hosted e gateway da nuvem: /auth/v1/health → 401 (o gateway
+#     exige apikey; ninguém do GoTrue respondeu ainda); /auth/v1/verify é rota
+#     ABERTA (link de e-mail) e quem responde é o GoTrue: 400 com o JSON dele.
+#   - Coolify na 8000: 302 com HTML de redirecionamento para /login, em tudo.
+#   - Um site qualquer: 200 com HTML.
+# O dublê imita `-o` e `-w` do curl de verdade, para não amarrar o teste à
+# forma da chamada — só ao que o servidor responde.
+gotrue_curl_duble() {
+  curl() {
+    local a prev="" url="" fmt="" so_codigo=0 body code
+    for a; do
+      case "$prev" in -w) fmt="$a";; -o) so_codigo=1;; esac
+      case "$a" in http://*|https://*) url="$a";; esac
+      prev="$a"
+    done
+    case "$url" in
+      http://127.0.0.1:8001/auth/v1/verify*|https://*.supabase.co/auth/v1/verify*|https://db-crm.exemplo.com.br/auth/v1/verify*)
+        body='{"code":400,"error_code":"validation_failed","msg":"Verify requires a verification type"}'; code=400;;
+      http://127.0.0.1:8001/*|https://*.supabase.co/*|https://db-crm.exemplo.com.br/*)
+        body='Unauthorized'; code=401;;
+      https://api.exemplo.com.br/*)
+        # Uma API qualquer que devolve JSON com "msg" e 200: o corpo sozinho
+        # não separa ela do GoTrue; o código separa.
+        body='{"ok":true,"msg":"pong"}'; code=200;;
+      http://127.0.0.1:8000/*)
+        body='<!DOCTYPE html><html><head><title>Redirecting to http://127.0.0.1:8000/login</title></head></html>'; code=302;;
+      *)
+        body='<!DOCTYPE html><html><body>Bem-vindo</body></html>'; code=200;;
+    esac
+    [ "$so_codigo" = 1 ] || printf '%s' "$body"
+    [ -z "$fmt" ] || { fmt="${fmt//%\{http_code\}/$code}"; printf "$fmt"; }
+    return 0
+  }
+}
+gotrue_ok() {  # gotrue_ok <descrição> <pass|reject> <url> <single-server: 0|1> <url interna> [trecho esperado]...
+  local desc="$1" expect="$2" url="$3" ss="$4" interna="$5" out rc want
+  shift 5
+  out="$(bash -c "
+      INSTALL_SH_LIB=1 . ./install.sh
+      set +e
+      $(declare -f gotrue_curl_duble)
+      gotrue_curl_duble
+      SINGLE_SERVER=\"\$2\" SUPABASE_INTERNAL_URL=\"\$3\"
+      v_supabase_url \"\$1\"" _ "$url" "$ss" "$interna" 2>&1)"; rc=$?
+  if [ "$expect" = pass ]; then
+    if [ $rc -eq 0 ]; then printf '  ✓ %s\n' "$desc"
+    else printf '  ✗ %s  (esperava aceitar, rejeitou: %s)\n' "$desc" "$(printf '%s' "$out" | head -1)"; fail=1; fi
+    return
+  fi
+  if [ $rc -eq 0 ]; then printf '  ✗ %s  (esperava rejeitar, aceitou)\n' "$desc"; fail=1; return; fi
+  for want in "$@"; do
+    if ! grep -qi -- "$want" <<<"$out"; then
+      printf '  ✗ %s  (rejeitou, mas a mensagem não fala de: %s)\n     disse: %s\n' \
+        "$desc" "$want" "$(printf '%s' "$out" | head -1)"; fail=1; return
+    fi
+  done
+  printf '  ✓ %s\n' "$desc"
+}
+# O caso medido: single-server apontando para a porta do painel do Coolify.
+gotrue_ok "single-server: painel do Coolify (302) é RECUSADO" reject \
+  "https://crm.exemplo.com.br" 1 "http://127.0.0.1:8000" "não é o Supabase" "127.0.0.1:8000"
+# O caso certo da mesma VPS: o Envoy do Supabase na 8001.
+gotrue_ok "single-server: o Envoy do Supabase (GoTrue) é ACEITO" pass \
+  "https://crm.exemplo.com.br" 1 "http://127.0.0.1:8001"
+# Sem quebrar a nuvem: o gateway dela também deixa /auth/v1/verify aberto.
+gotrue_ok "nuvem: projeto .supabase.co é ACEITO" pass \
+  "https://abcdefghijklmnop.supabase.co" 0 ""
+gotrue_ok "Supabase próprio atrás de domínio é ACEITO" pass \
+  "https://db-crm.exemplo.com.br" 0 ""
+# O mesmo defeito fora do single-server: a URL do SITE da empresa no lugar da
+# do Supabase respondia 200 e passava.
+gotrue_ok "um site qualquer (200 HTML) é RECUSADO" reject \
+  "https://www.exemplo.com.br" 0 "" "não é o Supabase"
+# "msg" no corpo não basta: o GoTrue devolve 400 ali (medido no GoTrue do kit,
+# v2.196.0). Uma API que responda 200 com "msg" não é o Supabase.
+gotrue_ok "200 com 'msg' no corpo é RECUSADO" reject \
+  "https://api.exemplo.com.br" 0 "" "não é o Supabase" "HTTP 200"
 
 echo "chaves do Supabase (formato/papel/projeto)"
 ok "rejeita service_role no campo anon" reject v_anon    "$(mkjwt service_role abcdefghijklmnop)" "preciso da 'anon'"
@@ -1738,7 +1825,8 @@ montar_vps() {
   cp -R manutencao "$raiz/"
   : > "$VPS_PROJ/docker-compose.prod.yml"
   cat > "$raiz/bin/docker"
-  # Só o v_supabase_url exige resposta online (000 reprova); os outros toleram.
+  # Só o v_supabase_url exige resposta online (000 reprova, e quem responde tem
+  # de ser o GoTrue — o ramo `*auth/v1/verify*`); os outros toleram.
   #
   # O dublê fala DOIS protocolos porque o install.sh passou a sondar o GHCR
   # antes de pinar as imagens (`ghcr_status`/`trio_publicado` no _common.sh): o
@@ -1754,6 +1842,8 @@ montar_vps() {
 case "$*" in
   *ghcr.io/token*) printf '{"token":"dublê"}' ;;
   *ghcr.io/v2/*)   printf '%s' "${DUBLE_GHCR:-200}" ;;
+  # O v_supabase_url exige o GoTrue: o JSON de /auth/v1/verify sem parâmetros.
+  *auth/v1/verify*) printf '{"msg":"Verify requires a verification type"}\n400' ;;
   *)               printf 200 ;;
 esac
 STUBCURL
