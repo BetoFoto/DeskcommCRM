@@ -11495,6 +11495,11 @@ export const DICIONARIO: Traducoes = {
   },
 
   // ─── Fase B: handlers compartidos REST/MCP (leads/_handler.ts) ───
+  // A recusa da policy `crm_leads` (SQLSTATE 42501) traduzida em 403 — ver
+  // `recusaDaGuardaDoBanco`.
+  "Sem permissão para salvar este negócio: pela visibilidade definida na organização, ele ficaria fora do que você pode ver.": {
+    es: "Sin permiso para guardar este negocio: por la visibilidad definida en la organización, quedaría fuera de lo que puedes ver.",
+  },
   "Um lead tem um dono: informe owner_user_id OU owner_agent_id.": {
     es: "Un lead tiene un dueño: indica owner_user_id O owner_agent_id.",
   },
