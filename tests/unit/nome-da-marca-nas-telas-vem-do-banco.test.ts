@@ -139,6 +139,18 @@ describe("o nome em texto das páginas públicas vem do BANCO", () => {
     }
   });
 
+  it("o corpo de /legal (`sistema` de `lib/legal/operador.ts`) também vem do banco", () => {
+    // A varredura acima só olha `page.tsx`/`layout.tsx`. O nome que aparece no
+    // TEXTO da política e dos termos ("Como esta instalação do X…") vem de
+    // `resolverOperador().sistema`, montado em `lib/legal/operador.ts` — fora da
+    // varredura. Sem este caso, devolver `branding()` ali deixava a cerca verde
+    // com o defeito do #2511 de volta no corpo do documento (medido na triagem
+    // do #2534).
+    const fonte = codigo("lib/legal/operador.ts");
+    expect(fonte).not.toMatch(/\bbranding\(\)/);
+    expect(fonte).toContain(`import { ${RESOLVEDOR} } from "@/lib/branding/saida"`);
+  });
+
   it("o onboarding (connect-nuvemshop), que é client, lê do CONTEXTO do banco", () => {
     // O `_client.tsx` não pode chamar `marcaDaSaida` (server-only); o caminho
     // certo lá é `useMarcaDaInstalacao()` do contexto que o layout raiz monta a
