@@ -737,6 +737,28 @@ describe("#2582 — a paráfrase com o preço na evidência não pode virar veta
     expect(factualClaimGate.evaluate(gateContexto(r)).pass).toBe(false);
   });
 
+  // Achados da triagem: cada caso abaixo passava com a 1ª versão da corroboração.
+  it.each([
+    // "3D" não é número: o 3D custa R$ 79,90, não R$ 119,90.
+    ["preço de outro item", "3D: R$ 119,90"],
+    // Preço sem item nomeado não amarra a nada; o "17" de "17%" vem de "iPhone 17".
+    ["preço sem item", "Sai por R$ 119,90"],
+    ["percentual sem item", "Tem 17% de desconto"],
+    // O que vem depois do último preço não foi conferido.
+    ["fato extra depois do preço", "Flexível sai por R$ 119,90 e tem frete grátis"],
+    ["valor que só contém o da base", "Flexível: R$ 1.199,00"],
+    ["valor que só se parece com o da base", "Flexível: R$ 11,99"],
+    ["parcela que não está na base", "Flexível em 12x de R$ 9,99"],
+  ])("REGRESSÃO: %s segue vetado (%s)", async (_caso, frase) => {
+    const r = await conferirAfirmacoes(
+      adminFalso(banco()),
+      naLoja("decidindo", frase),
+      { ...DEPS, fetchImpl: fetchCom(JEV_NEGA).fetchImpl },
+    );
+    expect(`${frase} → ${r.veredito}`).toBe(`${frase} → nao_esta_na_base`);
+    expect(factualClaimGate.evaluate(gateContexto(r)).pass).toBe(false);
+  });
+
   it("REGRESSÃO: frase sem número nenhum não ganha corroboração — segue vetada", async () => {
     const r = await conferirAfirmacoes(
       adminFalso(banco()),

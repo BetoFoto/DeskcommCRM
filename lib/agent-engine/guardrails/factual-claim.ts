@@ -159,7 +159,7 @@ export interface ResultadoDoCalculo {
 // só `nao_esta_na_base` é resgatado, e só com prova mecânica na mão.
 
 /** Um valor no texto: `R$ 1.234,56` / `119.90` / `8h` — inteiro + decimais opcionais. */
-const VALOR = /(?:r\$\s*)?(\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,](\d{1,2}))?/gi;
+const VALOR = /(?<![\p{L}\p{N}])(?:r\$\s*)?(\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,](\d{1,2}))?(?![\p{L}\p{N}%])/giu;
 
 /** O valor em forma canônica: `R$ 119,90` ≡ `119,90` ≡ `119.90` → `119.90`. */
 function canonico(inteiro: string, decimais: string | undefined): string {
@@ -257,14 +257,17 @@ export function temBaseNumerica(frase: string, evidencia: string): boolean {
     // O preço não existe em lugar nenhum da evidência.
     if (comEstePreco.length === 0) return false;
     const bolsas = comEstePreco.map((t) => tokens(t.rotulo));
-    for (const item of itensDoRotulo(rotulo)) {
-      const nomes = tokensDoItem(item);
-      // Só a cola ("sai por ") — não há item nomeado a conferir.
-      if (nomes.length === 0) continue;
+    const itens = itensDoRotulo(rotulo).map(tokensDoItem).filter((nomes) => nomes.length > 0);
+    // Preço sem item nomeado ("Sai por R$ 119,90") não amarra a nada: segue vetado.
+    if (itens.length === 0) return false;
+    for (const nomes of itens) {
       if (!bolsas.some((b) => nomes.every((n) => nomeBate(n, b)))) return false;
     }
   }
-  return true;
+  // O que vem depois do último preço não foi conferido ("… e tem frete grátis").
+  const ultimo = [...frase.matchAll(VALOR)].at(-1);
+  const cauda = ultimo ? frase.slice(ultimo.index + ultimo[0].length) : "";
+  return tokensDoItem(cauda).length === 0;
 }
 
 /**
