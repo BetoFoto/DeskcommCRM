@@ -1952,6 +1952,15 @@ export const DICIONARIO: Traducoes = {
   Modelo: { es: "Modelo" },
   "Selecione um modelo": { es: "Selecciona un modelo" },
   "Digite o identificador do modelo": { es: "Escribe el identificador del modelo" },
+  "Conecte a assinatura do ChatGPT em IA › Credenciais para listar os modelos.": {
+    es: "Conecta la suscripción de ChatGPT en IA › Credenciales para listar los modelos.",
+  },
+  "Não consegui listar os modelos da assinatura do ChatGPT. A conta continua conectada; tente de novo ou reconecte-a em IA › Credenciais.": {
+    es: "No pude listar los modelos de la suscripción de ChatGPT. La cuenta sigue conectada; inténtalo de nuevo o reconéctala en IA › Credenciales.",
+  },
+  "Não consegui carregar a lista de modelos. Digite o identificador abaixo.": {
+    es: "No pude cargar la lista de modelos. Escribe el identificador abajo.",
+  },
   "Nenhum modelo disponível": { es: "Ningún modelo disponible" },
   "Nenhuma capacidade disponível ainda para esta jornada.": {
     es: "Todavía no hay capacidades disponibles para esta jornada.",
