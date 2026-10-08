@@ -8,11 +8,13 @@ import { type NextRequest } from "next/server";
 import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import type { VisibilityMode } from "@/lib/auth/types";
 import {
   AVISO_NEGOCIO_ABERTO_EXISTENTE,
   negocioAbertoExistente,
 } from "@/lib/leads/negocio-aberto-duplicado";
 import { createLeadSchema, validateRequest, type CreateLeadInput } from "@/lib/schemas";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 import { createLeadHandler } from "./_handler";
@@ -41,6 +43,38 @@ export async function POST(req: NextRequest): Promise<Response> {
       });
     }
     throw err;
+  }
+
+  // ─── NO "SÓ OS SEUS", O QUE O ATENDENTE CRIA É DELE (issue #2547) ──────────
+  //
+  // Em `visibility_mode = 'own'` a policy de `crm_leads` só deixa o Atendente
+  // gravar o negócio que ele enxergaria depois — o que tem ELE de responsável.
+  // O "Novo Lead" não manda responsável, então a criação era recusada (500, e
+  // 403 explicado desde o #2556). Decisão do mantenedor (opção A): sem
+  // responsável no corpo, o responsável é o próprio Atendente. Ele passa pela
+  // mesma régua de atribuição de quem manda o campo (`ownerPatchOrThrow`:
+  // membro ativo, `owner_kind`, `assigned_at`).
+  //
+  // Só quando o corpo NÃO menciona dono: `owner_user_id: null` explícito ou um
+  // colega de responsável continuam sendo pedidos que a regra recusa (403).
+  // Gerente e admin enxergam a organização inteira e criam como sempre. O modo
+  // vem da org do cookie validado, nunca do corpo — admin client, como em
+  // `app/app/layout.tsx`.
+  if (
+    activeOrg.role === "agent" &&
+    input.owner_user_id === undefined &&
+    input.owner_agent_id === undefined
+  ) {
+    const { data: orgRow, error: orgErr } = await createAdminClient()
+      .from("organizations")
+      .select("settings")
+      .eq("id", activeOrg.orgId)
+      .maybeSingle();
+    if (orgErr) {
+      return fail("internal_error", orgErr.message, 500, { requestId });
+    }
+    const modo = (orgRow?.settings as { visibility_mode?: VisibilityMode } | null)?.visibility_mode;
+    if (modo === "own") input = { ...input, owner_user_id: authUser.id };
   }
 
   const supabase = await createClient();
