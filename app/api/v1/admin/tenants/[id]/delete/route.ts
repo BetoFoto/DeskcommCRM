@@ -49,6 +49,7 @@ const STATUS_DA_RECUSA: Record<ExclusaoRecusada["codigo"], number> = {
   not_found: 404,
   state_conflict: 409,
   exclusao_com_cobranca_pendente: 409,
+  exclusao_com_assinatura_viva: 409,
   confirmacao_divergente: 400,
   motivo_curto: 400,
 };

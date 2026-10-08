@@ -85,6 +85,7 @@ export class ExclusaoRecusada extends Error {
       | "not_found"
       | "state_conflict"
       | "exclusao_com_cobranca_pendente"
+      | "exclusao_com_assinatura_viva"
       | "confirmacao_divergente"
       | "motivo_curto",
     message: string,
@@ -139,6 +140,16 @@ function mensagemDe(err: unknown): string {
 
 const MENSAGEM_DE_COBRANCA =
   "Esta empresa está suspensa por falta de pagamento. Excluí-la deixaria a assinatura cobrando no provedor: resolva a cobrança antes.";
+
+/**
+ * A recusa do gatilho da migration 0601 (`organizacao_com_assinatura_viva`).
+ * A suspensão por cobrança já foi recusada antes, então quem chega aqui é a
+ * empresa suspensa pelo ADMINISTRADOR que ainda tem assinatura viva no
+ * provedor — "falta de pagamento" seria falso, e "não está mais suspensa"
+ * também.
+ */
+const MENSAGEM_DE_ASSINATURA_VIVA =
+  "Esta empresa ainda tem assinatura ativa no provedor de cobrança. Cancele a assinatura antes de excluir: excluí-la agora deixaria o provedor cobrando sem ninguém aqui para cancelar.";
 
 /** Passo 3 — a voz é por organização, não por canal; o id veio do inventário. */
 async function desligarVoz(orgId: string, sessaoDeVoz: string | null): Promise<DesfechoExterno> {
@@ -349,6 +360,8 @@ export async function excluirOrganizacao(
     // cima daria. Nada lá fora foi tocado.
     if (rpcErr.code === "PT409" && rpcErr.message === "organizacao_com_cobranca_pendente")
       throw new ExclusaoRecusada("exclusao_com_cobranca_pendente", MENSAGEM_DE_COBRANCA);
+    if (rpcErr.code === "PT409" && rpcErr.message === "organizacao_com_assinatura_viva")
+      throw new ExclusaoRecusada("exclusao_com_assinatura_viva", MENSAGEM_DE_ASSINATURA_VIVA);
     if (rpcErr.code === "PT409")
       throw new ExclusaoRecusada("state_conflict", "A organização não está mais suspensa.");
     if (rpcErr.code === "PT404")

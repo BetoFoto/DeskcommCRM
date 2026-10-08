@@ -96,6 +96,11 @@ export const ApiErrorCodes = {
   // POST /admin/tenants/[id]/delete sobre suspensão por falta de pagamento:
   // excluir deixaria a assinatura cobrando no provedor. Irmão do de cima.
   exclusao_com_cobranca_pendente: "exclusao_com_cobranca_pendente",
+  // POST /admin/tenants/[id]/delete sobre empresa suspensa pelo ADMINISTRADOR
+  // que ainda tem assinatura viva no provedor: o gatilho da migration 0601
+  // recusa a exclusão (PT409 organizacao_com_assinatura_viva). Não é falta de
+  // pagamento — é cobrança que seguiria correndo sem ninguém para cancelar.
+  exclusao_com_assinatura_viva: "exclusao_com_assinatura_viva",
   // POST /admin/tenants/[id]/suspend|reactivate quando o descarte da fila bate
   // na trava do aviso do Meet (`appointment_notice_busy`, 40001): outra escrita
   // do mesmo contato está em curso. Nada foi gravado; tentar de novo resolve.
