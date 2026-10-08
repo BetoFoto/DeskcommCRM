@@ -67,7 +67,9 @@ export async function GET(
         "internal_error",
         `Não consegui listar os modelos da assinatura do ChatGPT (${motivo}). A conta continua conectada; tente de novo ou reconecte-a em IA › Credenciais.`,
         502,
-        { requestId },
+        // O motivo também viaja estruturado: o seletor de modelo do editor o
+        // mostra ao lado do texto traduzido, sem recortar esta frase em pt-BR.
+        { requestId, details: { motivo } },
       );
     }
     if (!models) {

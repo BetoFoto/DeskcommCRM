@@ -258,9 +258,13 @@ describe("GET /api/v1/ai/providers/:provider/models — a falha da listagem apar
     const res = await listar("openai-assinatura");
 
     expect(res.status).toBe(502);
-    const corpo = (await res.json()) as { error: { code: string; message: string } };
+    const corpo = (await res.json()) as {
+      error: { code: string; message: string; details?: { motivo?: string } };
+    };
     expect(corpo.error.code).toBe("internal_error");
     expect(corpo.error.message).toContain("http_403");
+    // O seletor de modelo lê o motivo daqui, não da frase.
+    expect(corpo.error.details?.motivo).toBe("http_403");
     expect(corpo.error.message).not.toContain("Conecte a assinatura");
   });
 
