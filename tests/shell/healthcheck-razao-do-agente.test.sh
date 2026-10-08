@@ -74,5 +74,25 @@ r="$(razao)"
 printf '    razão mostrada: [%s]\n' "$r"
 check "a mensagem inteira aparece" contem "$r" "PREV_IMAGE vazio"
 
+echo "── 4. página de erro HTML grande (proxy devolvendo KBs) não inunda o terminal"
+{
+  echo '2026-10-07T15:20:00Z [agent] POST https://crm.exemplo.com.br/api/v1/system/agent -> <html>'
+  for i in $(seq 1 80); do echo "<p>linha $i da pagina de erro do proxy, texto de enchimento</p>"; done
+  echo 'FIM-DA-PAGINA </html>'
+  echo '502'
+} > "$LOG"
+r="$(razao)"
+printf '    razão mostrada (%s caracteres): [%.80s...]\n' "${#r}" "$r"
+check "a razão começa pela entrada (data e POST)" contem "$r" "2026-10-07T15:20:00Z [agent] POST"
+check "a razão cabe numa linha curta (≤ 310 caracteres)" test "${#r}" -le 310
+check "o fim da página não é despejado" bash -c '! printf "%s" "$1" | grep -qF "FIM-DA-PAGINA"' _ "$r"
+
+echo "── 5. cabeçalho cortado pelo tail -n 200 do log_err (o log começa no meio do corpo)"
+printf '%s\n' 'resto de um corpo cujo cabeçalho saiu do log' '' '502' > "$LOG"
+r="$(razao)"
+printf '    razão mostrada: [%s]\n' "$r"
+check "a razão aparece" contem "$r" "resto de um corpo"
+check "sem espaço sobrando na frente (só o recuo de 2)" bash -c '! printf "%s" "$1" | grep -q "^   "' _ "$r"
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "ok — todas as verificações passaram"; else echo "FALHOU: $FAILS verificação(ões)"; exit 1; fi

@@ -53,7 +53,10 @@ if crontab -l 2>/dev/null | grep -q 'hostgator-setup-kit/agent.sh'; then
     # própria, e uma linha vazia no meio quando o corpo termina em \n) — o
     # `tail -2 | head -1` de antes caía na vazia. Junta as linhas não vazias
     # desde o último cabeçalho `[agent]`. O log não leva o Bearer (agent.sh, post()).
-    c_ylw "  $(awk '/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[^ ]* \[agent\] /{e=$0; next} NF{e=e" "$0} END{print e}' "$log")"
+    # Cortada em 300 caracteres: o corpo pode ser uma página de erro HTML de KBs
+    # (proxy na frente do app). O `sub` tira o espaço da frente quando o
+    # `tail -n 200` do log_err já levou o cabeçalho embora.
+    c_ylw "  $(awk '/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[^ ]* \[agent\] /{e=$0; next} NF{e=e" "$0} END{sub(/^ +/, "", e); if (length(e) > 300) e = substr(e, 1, 300) "..."; print e}' "$log")"
     c_ylw "  Se o botão de atualizar não aparece na tela, é por isto."
     c_ylw "  Quase sempre resolve rodando: bash hostgator-setup-kit/update.sh"
   else
