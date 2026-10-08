@@ -216,11 +216,11 @@ describe("a regra pura — limites, piso da conversa e memória por faixa", () =
   it("a seta move a divisória no passo e trava nos limites", () => {
     expect(moverPorSeta("lista", 300, "ArrowRight")).toBe(300 + PASSO_TECLADO);
     expect(moverPorSeta("lista", 300, "ArrowLeft")).toBe(300 - PASSO_TECLADO);
-    expect(moverPorSeta("ficha", 300, "ArrowRight")).toBe(300 + PASSO_TECLADO);
+    expect(moverPorSeta("ficha", 300, "ArrowRight")).toBe(300 - PASSO_TECLADO);
     // Travado no limite: a tecla não passa pano.
     expect(moverPorSeta("lista", LIMITES_LISTA.max, "ArrowRight")).toBe(LIMITES_LISTA.max);
     expect(moverPorSeta("lista", LIMITES_LISTA.min, "ArrowLeft")).toBe(LIMITES_LISTA.min);
-    expect(moverPorSeta("ficha", LIMITES_FICHA.max, "ArrowRight")).toBe(LIMITES_FICHA.max);
+    expect(moverPorSeta("ficha", LIMITES_FICHA.max, "ArrowLeft")).toBe(LIMITES_FICHA.max);
     // Tecla que não ajusta largura devolve `null` (o componente não a come).
     expect(moverPorSeta("lista", 300, "Enter")).toBeNull();
     expect(moverPorSeta("lista", 300, "ArrowUp")).toBeNull();
@@ -424,6 +424,17 @@ describe("no layout — duas divisorias arrastáveis (#2579)", () => {
     expect(lista).toHaveAttribute("aria-valuenow", "300");
     expect(screen.getAllByRole("separator")).toHaveLength(1);
     expect(grade().style.gridTemplateColumns).toBe("");
+  });
+
+  it("seta direita na alça da ficha leva a alça para a direita (a ficha encolhe)", async () => {
+    montar();
+    const ficha = await alca(1);
+    expect(ficha.style.right).toBe("296px");
+    fireEvent.keyDown(ficha, { key: "ArrowRight" });
+    expect(ficha).toHaveAttribute("aria-valuenow", String(296 - PASSO_TECLADO));
+    expect(ficha.style.right).toBe(`${296 - PASSO_TECLADO}px`);
+    fireEvent.keyDown(ficha, { key: "ArrowLeft" });
+    expect(ficha.style.right).toBe("296px");
   });
 
   it("armazenamento bloqueado no navegador não derruba o Inbox", async () => {

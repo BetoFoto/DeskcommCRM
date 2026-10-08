@@ -137,10 +137,10 @@ export function resolverLarguras(pedido: {
 }
 
 /**
- * O que a tecla faz: seta move a DIVISÓRIA, então quem está à esquerda cresce
- * para a direita e quem está à direita também (a alça anda para a direita e a
- * ficha cresce junto). `null` = tecla que não ajusta largura, para o componente
- * não comer o evento.
+ * O que a tecla faz: seta move a DIVISÓRIA no sentido da seta (padrão Window
+ * Splitter do WAI-ARIA). A lista fica à esquerda da alça, então seta direita a
+ * faz crescer; a ficha fica à DIREITA da alça, então seta direita a encolhe.
+ * `null` = tecla que não ajusta largura, para o componente não comer o evento.
  */
 export function moverPorSeta(
   coluna: "lista" | "ficha",
@@ -151,7 +151,7 @@ export function moverPorSeta(
   if (passo === 0) return null;
   return coluna === "lista"
     ? limitarLista(atual + passo)
-    : limitarFicha(atual + passo);
+    : limitarFicha(atual - passo);
 }
 
 /** Recorte mínimo do `Storage` — o teste passa um objeto falso e segue o resto. */
