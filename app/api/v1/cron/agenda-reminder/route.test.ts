@@ -26,7 +26,8 @@ import { describe, expect, it } from "vitest";
 import {
   CHANNEL_PROVIDER_SOCIAL,
   CHANNEL_PROVIDER_WACALLS,
-  CHANNEL_PROVIDER_WAHA,
+  DEFAULT_CHANNEL_PROVIDER,
+  PROVIDERS_DE_MENSAGEM,
 } from "@/lib/channels/capabilities";
 import { canalAceitaTextoLivreAgora } from "@/lib/channels/janela";
 
@@ -351,7 +352,7 @@ describe("escolherCanalDoLembrete — fora da janela de 24 h não vira \"enviado
   const ha3Dias = new Date(agora.getTime() - 3 * 24 * 60 * MIN).toISOString();
   const ha1Hora = new Date(agora.getTime() - 60 * MIN).toISOString();
   const social = { id: "canal-social", provider: CHANNEL_PROVIDER_SOCIAL, lastInboundAt: ha3Dias };
-  const waha = { id: "canal-waha", provider: CHANNEL_PROVIDER_WAHA, lastInboundAt: null };
+  const livre = { id: "canal-livre", provider: DEFAULT_CHANNEL_PROVIDER, lastInboundAt: null };
 
   it("(a) canal de hetero-restrição fora da janela: NÃO escolhe — o degrau fica pendente", () => {
     // O lembrete de "3 horas antes" de quem reservou dias antes: o cliente não
@@ -375,8 +376,8 @@ describe("escolherCanalDoLembrete — fora da janela de 24 h não vira \"enviado
   });
 
   it("(c) canal que pode texto livre (freeformOutsideWindow: true) segue como hoje, sem inbound registrado", () => {
-    const escolha = escolherCanalDoLembrete([waha], agora);
-    expect(escolha.canal?.id).toBe("canal-waha");
+    const escolha = escolherCanalDoLembrete([livre], agora);
+    expect(escolha.canal?.id).toBe("canal-livre");
     expect(escolha.motivo).toBeNull();
   });
 
@@ -387,8 +388,8 @@ describe("escolherCanalDoLembrete — fora da janela de 24 h não vira \"enviado
   });
 
   it("o SOCIAL fora da janela cede a vez ao PRÓXIMO canal WORKING que possa", () => {
-    const escolha = escolherCanalDoLembrete([social, waha], agora);
-    expect(escolha.canal?.id).toBe("canal-waha");
+    const escolha = escolherCanalDoLembrete([social, livre], agora);
+    expect(escolha.canal?.id).toBe("canal-livre");
     expect(escolha.motivo).toBeNull();
   });
 
@@ -444,6 +445,6 @@ describe("a rota escolhe o canal ANTES do carimbo e registra o pulo (#2595)", ()
     // `lib/channels/janela.ts`; aqui não há string de provider — o lint de
     // canais (`scripts/lint-channels.ts`) cobraria.
     expect(fonte).toContain("canalAceitaTextoLivreAgora");
-    expect(fonte).not.toMatch(/zernio|meta_cloud|waha"/);
+    for (const provider of PROVIDERS_DE_MENSAGEM) expect(fonte).not.toContain(`"${provider}"`);
   });
 });

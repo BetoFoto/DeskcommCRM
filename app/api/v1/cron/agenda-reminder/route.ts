@@ -28,7 +28,7 @@
  *
  * **FORA DA JANELA DE 24 H DO CLIENTE NÃO VIRA "ENVIADO" (issue #2595).** O
  * cron escolhia o primeiro canal WORKING e carimbava antes de enviar — e num
- * canal com hetero-restrição (Instagram via Zernio: `freeformOutsideWindow:
+ * canal com hetero-restrição (o canal social do parceiro: `freeformOutsideWindow:
  * false` em `lib/channels/capabilities.ts`, e o comentário do arquivo mede que
  * a API aceita com 200 e a Meta recusa a ENTREGA com 131047) o lembrete de quem
  * reservou dias antes cairia fora da janela de 24 h da última mensagem do
@@ -725,7 +725,7 @@ async function handle(req: NextRequest): Promise<Response> {
     // mesmo insumo de `before-send`/`followup-turn`, sempre recortado à
     // conversa do contato NESTE canal (responder no número A não abre licença
     // para o número B). A consulta só roda quando algum candidato É de
-    // hetero-restrição: em organização só de WAHA — a maioria — nada muda nem
+    // hetero-restrição: em organização só de canal sem janela — a maioria — nada muda nem
     // custa uma linha de ida ao banco.
     const ultimoInboundPorCanal = new Map<string, string | null>(
       canais.map((c) => [c.id, null]),
