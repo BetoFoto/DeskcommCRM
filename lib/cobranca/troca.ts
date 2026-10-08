@@ -110,8 +110,7 @@ export async function trocarPlanoDaOrg(
   if (!novo || !antigo || (!desfazendo && (novo.arquivado_em !== null || novo.intervalo !== antigo.intervalo))) {
     return recusa(422, "plano_invalido", "Escolha um plano ativo com o mesmo intervalo de cobrança.");
   }
-  // O link de pagamento em aberto foi gerado com o preço do plano atual e segue
-  // válido no provedor até expirar: enquanto ele vale, o plano não muda.
+  // Enquanto houver link de pagamento em aberto, o plano não muda.
   const linkEmAberto = atual.checkout_url !== null && atual.checkout_expira_em !== null && Date.parse(atual.checkout_expira_em) > agora.getTime();
   if (!desfazendo && emTeste && atual.provedor && !atual.provedor_assinatura_id && linkEmAberto) {
     return recusa(409, "checkout_em_aberto", "Há um link de pagamento em aberto com o plano atual. Conclua o pagamento ou aguarde o link expirar para trocar de plano.");

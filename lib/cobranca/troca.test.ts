@@ -42,7 +42,7 @@ const trocar = (planoId: string, origem?: "empresa" | "dono") =>
     origem,
   });
 const escritas = () => banco.cadeias.filter((c) => c.tabela === "cobranca_assinaturas" && operacao(c) === "update");
-const EM_TESTE = { plano_id: "basico", plano_agendado_id: null, estado: "trial", trial_ate: "2026-10-20T00:00:00Z", provedor: null, provedor_assinatura_id: null, proximo_vencimento: null, checkout_url: null };
+const EM_TESTE = { plano_id: "basico", plano_agendado_id: null, estado: "trial", trial_ate: "2026-10-20T00:00:00Z", provedor: null, provedor_assinatura_id: null, proximo_vencimento: null, checkout_url: null, checkout_expira_em: null };
 const PAGANDO = { ...EM_TESTE, estado: "ativa", provedor: "stripe", provedor_assinatura_id: "sub_1", proximo_vencimento: "2026-11-01T00:00:00Z" };
 
 beforeEach(() => {
