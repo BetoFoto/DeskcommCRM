@@ -1147,6 +1147,17 @@ async function revogarComando(
  * Conversa que já tinha card não ganha um segundo; conversa antiga que ficou
  * órfã ganha o seu na primeira fala seguinte.
  *
+ * ═══ Só contato que NUNCA teve lead ═══
+ *
+ * Aqui a régua é mais estreita que a do recebido. Lá, lead fechado (ganho ou
+ * perdido) + a pessoa volta a escrever = demanda nova, e nasce outro card. Aqui
+ * quem fala é o OPERADOR: o código de rastreio depois da venda, o "chegou
+ * certinho?" — falar com cliente de lead fechado não é demanda nova. Sem esta
+ * guarda, toda mensagem do celular para um contato sem lead ABERTO abria card
+ * no funil de entrada e disparava `lead.created`. A issue pede o número que
+ * "ainda não tem conversa nem lead"; contato com qualquer lead, aberto ou
+ * fechado, não nasce nada por aqui.
+ *
  * Best-effort, como todo efeito desta ingestão: a mensagem JÁ está gravada.
  * Uma exceção daqui subiria para o webhook, o WAHA reenviaria tudo, e
  * trocaríamos um lead que não nasceu por uma tempestade de reentrega.
@@ -1158,6 +1169,24 @@ async function nascerLeadDaConversaPeloCelular(
   conversationId: string,
 ): Promise<void> {
   try {
+    const { data: qualquerLead, error: erroDoHistorico } = await admin
+      .from("crm_leads")
+      .select("id")
+      .eq("organization_id", session.organization_id)
+      .eq("contact_id", contactId)
+      .limit(1)
+      .maybeSingle();
+    if (erroDoHistorico) throw new Error(erroDoHistorico.message);
+    if (qualquerLead) {
+      logger.info("waha.ingest: lead nao criado a partir do celular", {
+        organization_id: session.organization_id,
+        conversation_id: conversationId,
+        contact_id: contactId,
+        motivo: "contato_ja_tem_lead",
+      });
+      return;
+    }
+
     const nascimento = await garantirLeadDaConversa(admin, {
       organizationId: session.organization_id,
       contactId,

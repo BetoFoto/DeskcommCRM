@@ -61,6 +61,12 @@ interface Cena {
   funilPadrao: boolean;
   /** O contato JÁ tem lead aberto (conversa que já existia, card já nascido). */
   leadAberto: boolean;
+  /**
+   * O contato só tem lead FECHADO (ganho/perdido): o operador manda o rastreio
+   * depois da venda. A trava de `garantirLeadDaConversa` olha só `status='open'`;
+   * quem segura este caso é a guarda do celular.
+   */
+  leadFechado?: boolean;
   /** A mensagem já está gravada — eco/duplicata recusada antes de qualquer efeito. */
   jaRegistrada: boolean;
   /**
@@ -110,6 +116,7 @@ interface Opcoes {
 function makeAdmin(c: Cena, opcoes: Opcoes = {}) {
   const table = (name: string) => {
     let selectCols = "";
+    const filtros: Record<string, unknown> = {};
     let mode: "select" | "insert" | "update" = "select";
 
     const resposta = (): { data: unknown; error: null } => {
@@ -125,7 +132,10 @@ function makeAdmin(c: Cena, opcoes: Opcoes = {}) {
       if (name === "crm_pipelines") return { data: c.funilPadrao ? { id: "funil-padrao" } : null, error: null };
       if (name === "crm_stages") return { data: c.funilPadrao ? { id: "etapa-1" } : null, error: null };
       if (name === "crm_leads" && mode === "select") {
-        return { data: c.leadAberto ? { id: "lead-aberto" } : null, error: null };
+        // Com `status='open'` responde só o lead aberto; sem filtro de status,
+        // qualquer lead do contato.
+        const achou = filtros.status === "open" ? c.leadAberto : c.leadAberto || c.leadFechado;
+        return { data: achou ? { id: "lead-do-contato" } : null, error: null };
       }
       return { data: null, error: null };
     };
@@ -146,7 +156,10 @@ function makeAdmin(c: Cena, opcoes: Opcoes = {}) {
         if (name === "conversations") c.conversationUpdates.push(p);
         return chain;
       },
-      eq: () => chain,
+      eq: (col: string, val: unknown) => {
+        filtros[col] = val;
+        return chain;
+      },
       in: () => chain,
       limit: () => chain,
       // `ehEcoDeEnvioNosso` consulta com `.is(...).in(...).gte(...)`, e a
@@ -257,7 +270,20 @@ describe("#2448 · a conversa que começa pelo celular nasce no funil padrão", 
     // "falhou ao nascer".
     expect(logger.info).toHaveBeenCalledWith(
       "waha.ingest: lead nao criado a partir do celular",
-      expect.objectContaining({ motivo: "ja_existe" }),
+      expect.objectContaining({ motivo: "contato_ja_tem_lead" }),
+    );
+  });
+
+  it("contato com lead GANHO/PERDIDO → o operador falando pelo celular não abre card novo", async () => {
+    const c = novaCena({ leadFechado: true });
+    await enviar(c);
+
+    expect(c.inserts["messages"]).toHaveLength(1);
+    expect(nascimentos(c)).toHaveLength(0);
+    expect(c.inserts["crm_lead_activities"]).toBeUndefined();
+    expect(logger.info).toHaveBeenCalledWith(
+      "waha.ingest: lead nao criado a partir do celular",
+      expect.objectContaining({ motivo: "contato_ja_tem_lead" }),
     );
   });
 
