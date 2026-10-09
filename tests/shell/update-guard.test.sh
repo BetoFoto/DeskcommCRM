@@ -709,14 +709,15 @@ cd "$PROJ" || exit 1
 
 echo "── 12. VPS de outra arquitetura: atualizar se recupera sozinho (issue 1060)"
 # O defeito: o registro responde "no matching manifest for linux/arm64/v8", o
-# `pull` não traz imagem nenhuma e o `up -d` morre junto. O fallback automático
-# do Compose não é garantia — nos três relatos reais o `up -d` morreu com erro
-# também nos serviços que JÁ tinham `build:` —, então quem responde é a guarda.
-# Antes da
-# guarda o script terminava como se tivesse dado certo: o CRM ficava na versão
-# velha e o dono não era avisado. Pelo botão "Atualizar" nem isso, porque o
-# agente roda sozinho no cron. O desfecho certo é construir aqui a MESMA versão
-# alvo e dizer, em português, o que aconteceu.
+# `pull` não traz imagem nenhuma e o `up -d` morre junto. Medido no Compose,
+# worker, scheduler e voz — que TÊM `build:` ao lado do `image:` — são
+# reconstruídos sozinhos em qualquer falha de pull; o `app` fica SEM `build:`
+# de propósito (#1060), e é a falta da imagem dele que faz o `up -d` falhar e
+# entrega a decisão à guarda, que é quem julga quando o registro não responde.
+# Antes da guarda o script terminava como se tivesse dado certo: o CRM ficava
+# na versão velha e o dono não era avisado. Pelo botão "Atualizar" nem isso,
+# porque o agente roda sozinho no cron. O desfecho certo é construir aqui a
+# MESMA versão alvo e dizer, em português, o que aconteceu.
 cd "$PROJ" || exit 1
 export DOCKER_BUILD_FEITO="$WORK/build-feito"
 rm -f "$DOCKER_BUILD_FEITO"
@@ -759,14 +760,24 @@ check "caminho feliz: a saída não fala em arquitetura nem em construção loca
 check "install.sh chama a recuperação depois de um up -d que pode falhar" \
   bash -c "grep -A1 'if ! dc up -d; then' '$REPO_ROOT/hostgator-setup-kit/install.sh' | grep -q 'construir_aqui_e_subir'"
 
-echo "── 12b. As quatro imagens nossas têm \`build:\` ao lado do \`image:\` (#1060)"
-# A outra metade do conserto: o `up -d` documentado nas mensagens do próprio kit
-# (`docker compose ... up -d`, a dica que o dono roda à mão) tem de conseguir
-# CONSTRUIR quando o registro não serve a plataforma da VPS. Worker, scheduler e
-# voice-agent já tinham; o `app` não tinha, e é ele que derruba a página inteira.
-# Serviço `build:`-only continuaria proibido (invariante 1 da doutrina de
-# packaging) — por isso a prova exige as DUAS chaves no mesmo bloco.
-# Sabotagem: apagar o `build:` do `app` em docker-compose.prod.yml reprova isto.
+echo "── 12b. Worker, scheduler e voz com image: + build:; o app SEM build:, de propósito (#1060)"
+# A parte boa medida no Compose fica: com `image:` + `build:` no mesmo bloco,
+# o `up -d` CONSTRÓI em QUALQUER falha de pull (tag inexistente, registro fora
+# por DNS, "no matching manifest", com `pull_policy` `always`, `missing` ou sem
+# a chave) — é o escape do `up -d` à mão que as mensagens do próprio kit
+# ensinam (`docker compose ... up -d`), e o build de worker, scheduler e voz é
+# barato (`pnpm install` e `apk add`).
+# O `app` fica SEM `build:` de propósito, e é o outro lado da mesma régua: ele
+# é o único build pesado, e com `build:` aqui o Compose construiria o Next
+# sozinho em QUALQUER falha de pull — o portão `build_local_permitido` do
+# update.sh, que recusa construir com o registro fora, só é consultado quando o
+# `up -d` FALHA (#1955). Quem quer construir o app usa o
+# docker-compose.build.yml, que passa APP_VERSION como argumento (por este
+# `build:` ele sairia com `APP_VERSION=dev`).
+# Serviço `build:`-only continua proibido (invariante 1 da doutrina de
+# packaging) — por isso a prova exige as DUAS chaves nos serviços que constroem.
+# Sabotagem: pôr `build:` de volta no `app` em docker-compose.prod.yml reprova
+# o teste de unit (packaging-artefato-do-cliente) E esta prova.
 bloco_do_servico() { # <nome> → bloco (4 espaços) do serviço no compose de produção
   awk -v alvo="  $1:" '
     $0 == alvo { dentro = 1; next }
@@ -796,10 +807,29 @@ imagem_e_build_juntos() { # <serviço> → 0 quando image: e build: convivem no 
   tem_chave "$bloco" "    build:" || return 1
   return 0
 }
-for svc in app worker scheduler voice-agent; do
+for svc in worker scheduler voice-agent; do
   check "o serviço '$svc' declara image: e build: no mesmo bloco" \
     imagem_e_build_juntos "$svc"
 done
+
+# O outro lado da régua, invertido: o `app` declara `image:` (nunca build-only)
+# e NÃO declara `build:` — de propósito. É a falta da imagem dele que faz o
+# `up -d` falhar e entrega a decisão ao portão do update.sh; com `build:` aqui o
+# Compose construiria o Next sozinho em QUALQUER falha de pull e o portão nunca
+# seria consultado.
+app_sem_build() {
+  local bloco
+  bloco="$(bloco_do_servico app)"
+  [ -n "$bloco" ] || return 1
+  tem_chave "$bloco" "    image:" || return 1
+  if tem_chave "$bloco" "    build:"; then
+    echo "o serviço 'app' ganhou build: no compose de produção"
+    return 1
+  fi
+  return 0
+}
+check "o serviço 'app' declara image: e NÃO declara build: (o portão depende do up -d falhar)" \
+  app_sem_build
 
 # O outro lado da régua: `build:` é só das NOSSAS imagens. Ganhar build num
 # binário de terceiro seria construir na VPS do cliente algo que ninguém aqui
@@ -815,7 +845,7 @@ nenhum_build_upstream() {
   done
   return 0
 }
-check "nenhum serviço upstream ganhou build: (só as nossas quatro constroem)" \
+check "nenhum serviço upstream ganhou build: (worker, scheduler e voz são as únicas com build:)" \
   nenhum_build_upstream
 
 echo "── 13. \"Nada a atualizar\" derruba o aviso de manutenção preso (PR #1524)"
