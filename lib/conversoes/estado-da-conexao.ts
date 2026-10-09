@@ -152,6 +152,8 @@ export const MOTIVO_LEGIVEL: Record<string, string> = {
     "A venda fechou sem valor preenchido. A Meta exige valor e moeda em uma compra — preencha o valor do negócio e use o botão de reprocessamento. No Google, você também pode escolher enviar a venda sem valor em \"Valor do negócio\".",
   sem_conexao:
     "Nenhuma conta de anúncios conectada nesta organização. Preencha o formulário acima.",
+  evento_fora_do_canal:
+    "Este evento de etapa não sai pelo canal; escolha um dos eventos que o canal repassa (Purchase, InitiateCheckout, LeadSubmitted ou AddToCart) ou configure a conexão direta da Meta.",
   conexao_desabilitada: "A conexão existe mas está desligada. Ligue o envio no formulário acima.",
   credencial_incompleta:
     "Falta o identificador do destino ou o token. Complete o formulário acima.",
