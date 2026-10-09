@@ -46,7 +46,9 @@ Edite o `.env` e preencha (mínimo):
   > (é o caso da nuvem: a string do pooler já vem privilegiada). Preencha quando
   > o Postgres for **seu** e a de cima for uma role menor — ver §2.
 - **Domínio**: `DOMAIN`, `NEXT_PUBLIC_APP_URL=https://SEU_DOMINIO`,
-  `WAHA_WEBHOOK_BASE_URL=https://SEU_DOMINIO`
+  `WAHA_WEBHOOK_BASE_URL=http://app:3000`
+  > O WAHA da stack chama o app pela rede interna do Docker — nunca pelo
+  > domínio: a rota global do webhook só atende a rede interna.
   > Rodando SEM TLS (ex.: `http://IP:PORTA`, sem o Caddy)? Basta o
   > `NEXT_PUBLIC_APP_URL` começar com `http://` — o cookie de sessão deixa de
   > ser `Secure` automaticamente e o login funciona. Com `https://`, `Secure`
@@ -217,6 +219,12 @@ sem quebrar nada.
    link correto. Esta seção ensinava a forma com `?` até 2026-08-14, e o
    projeto Supabase de produção estava com ela gravada: quem seguiu a receita
    reproduziu o defeito.
+
+   O link abre a tela **Confirmar acesso**, com o botão **Continuar**, e é de
+   propósito: o token é de uso único, e verificadores de link (Safe Links do
+   Hotmail/Outlook, gateways de e-mail corporativos) abrem cada link na entrega.
+   Quando abrir o link já gastava o token, essas pessoas recebiam "link inválido
+   ou expirado" no próprio clique. Quem gasta o token agora é o botão.
 
 4. **SMTP próprio** (Authentication → SMTP): o sender embutido do Supabase tem
    limite baixo (~2 e-mails/h) — configure Resend/SES/etc. para produção.
