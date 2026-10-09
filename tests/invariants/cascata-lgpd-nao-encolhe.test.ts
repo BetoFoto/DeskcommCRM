@@ -99,9 +99,10 @@ const TABELAS_NA_CASCATA = [
   // `trg_lgpd_secoes_de_modulo` aplica nos dois caminhos de anonimização e que
   // `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` mede como caminho
   // `secao`. Esta lista é a catraca do que o NÚCLEO redige com o corpo na mão;
-  // tabela de módulo vive no mecanismo declarado, não aqui. Eram: `notes` some,
-  // `cancel_reason`/`reverse_reason` viram rótulo, o valor/status/datas e o
-  // vínculo com o contato FICAM (mesmo corte, agora na seção).
+  // tabela de módulo vive no mecanismo declarado, não aqui. Na seção, `notes`,
+  // `cancel_reason` e `reverse_reason` somem (NULO) — mais conservador que a
+  // cascata antiga: o motivo some inteiro, e coluna que era nula continua nula —,
+  // e o valor/status/datas e o vínculo com o contato FICAM.
   // 0345 — nome, telefone, endereço e `maps_url` do negócio raspado antes de
   // existir conversa. O passo alcança por vínculo OU POR TELEFONE (variantes do
   // nono dígito): quando o número já era de um contato conhecido, o candidato

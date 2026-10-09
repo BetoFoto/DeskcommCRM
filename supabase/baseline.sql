@@ -43576,18 +43576,20 @@ begin
   if to_regclass('public.sales') is null then
     return;
   end if;
-  -- `notes` é texto livre da pessoa e some (NULO), como a cascata fazia.
-  -- `cancel_reason`/`reverse_reason` são rótulo: viram a marca de anonimizado em
-  -- vez de sumir, para o histórico continuar mostrando que houve motivo — o mesmo
-  -- corte que a cascata descrevia ("redige o texto, preserva o valor, status e
-  -- datas, e não desliga o contato").
+  -- As três colunas são texto livre da pessoa e somem (NULO): `notes`,
+  -- `cancel_reason` e `reverse_reason`. Os motivos NÃO vão para `colunas_rotulo`:
+  -- o mecanismo da 0485 grava o rótulo em toda linha alcançada, inclusive onde a
+  -- coluna era nula, e uma comanda finalizada sem cancelamento sairia com
+  -- `cancel_reason = 'Cliente Anonimizado #N'` — um motivo inventado (medido no
+  -- teste de efeito `tests/invariants/comanda-anonimizada-pela-secao.test.ts`).
+  -- Valor, status, datas e o vínculo com o contato ficam.
   insert into public.modulo_secoes_lgpd (modulo, tabela, ligacao, colunas, colunas_rotulo)
     values (
       'financeiro',
       'sales',
       'organization_id = $1 and contact_id = $2',
-      array['notes'],
-      array['cancel_reason', 'reverse_reason']
+      array['notes', 'cancel_reason', 'reverse_reason'],
+      '{}'::text[]
     )
     on conflict (modulo, tabela) do nothing;
 end $f$;
