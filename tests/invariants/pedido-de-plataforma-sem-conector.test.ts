@@ -36,8 +36,11 @@ import { GOV_ORG, seedGov, sql } from "./gov-helpers";
  * 5. **o clone da própria issue atualiza** — a instalação que alargou a lista à
  *    mão e gravou pedidos 'tray' re-aplica o bloco do `baseline.sql` (o que o
  *    update.sh faz) e termina COM a guarda e com a linha convertida. Sem o
- *    backfill, o `drop` vale, o `add` recebe 23514 e o update.sh — que roda sem
- *    ON_ERROR_STOP — deixa a tabela sem restrição nenhuma, a cada atualização.
+ *    backfill, o bloco falharia e o update repetiria o erro a cada vez,
+ *    mantendo a restrição que havia, sem nunca aceitar 'external';
+ * 6. **falhar não deixa a tabela sem guarda** — drop, conversão e add formam um
+ *    bloco DO só. Numa colisão forjada da conversão, o bloco inteiro é desfeito
+ *    e a restrição de antes continua lá, sem linha convertida pela metade.
  *
  * A plataforma fica no `payload` e NÃO no `external_provider`: o único que
  * precisava de nome era quem lê o pedido (o agente, pela ferramenta
@@ -48,6 +51,9 @@ import { GOV_ORG, seedGov, sql } from "./gov-helpers";
  * aplica, install E update): cai "a origem genérica grava" e "a lista vigente é
  * a de quatro" — 2 vermelhos de 4, os dois previstos; as pernas 2 e 3 continuam
  * verdes porque a restrição antiga não mexe no que já passava.
+ * Com os três comandos soltos no lugar do bloco DO (o head 9b5507382): cai só a
+ * perna 6, com "expected '' to contain 'tray'" — a falha deixou a tabela sem
+ * restrição nenhuma.
  * Linha para reverter: bloco `orders_external_provider_check` no fim de
  * `supabase/baseline.sql` (e `supabase/migrations/<timestamp>_..._2442.sql`).
  */
