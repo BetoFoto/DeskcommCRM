@@ -127,6 +127,11 @@ function buildPromiseMessage(candidate: string): string {
 
 const INSTRUCAO_COM_EVIDENCIAS =
   CABECALHO +
+  PERGUNTA_COMERCIAL_SEM_EVIDENCIA +
+  "Com evidências, aplique as categorias comerciais acima salvo quando a evidência " +
+  "sustentar o compromisso específico. Um material sem relação com entrega não autoriza " +
+  "'entrego amanhã'; uma oferta gratuita aprovada autoriza informar essa oferta. " +
+  "Os exemplos de frases que NÃO são promessa continuam valendo.\n" +
   "## Pergunta 1 — isPromise (compromisso NÃO autorizado)\n" +
   "isPromise=true SOMENTE quando a mensagem INTEIRA contém ao menos um compromisso concreto " +
   "que não é sustentado pelas evidências. Informar uma oferta gratuita, isenção ou duração " +

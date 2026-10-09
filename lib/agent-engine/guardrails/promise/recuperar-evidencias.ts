@@ -45,10 +45,18 @@ export function consultaDaCandidata(candidata: string): string {
   const palavras =
     candidata
       .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .match(/[a-z]+/g) ?? [];
-  return [...new Set(palavras.filter((p) => p.length >= 3 && !PALAVRAS_VAZIAS.has(p)))]
+      // O mesmo stemmer português trata consulta e conteúdo. Tirar acento só
+      // daqui muda os radicais e deixa de encontrar matrícula/demonstração.
+      .normalize("NFC")
+      .match(/\p{L}+/gu) ?? [];
+  return [
+    ...new Set(
+      palavras.filter(
+        (p) =>
+          p.length >= 3 && !PALAVRAS_VAZIAS.has(p.normalize("NFD").replace(/[\u0300-\u036f]/g, "")),
+      ),
+    ),
+  ]
     .slice(0, 48)
     .join(" OR ");
 }

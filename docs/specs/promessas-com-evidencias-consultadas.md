@@ -164,4 +164,22 @@ tentativa. Não há retentativa, modelo substituto ou autorização aprendida
 introduzidos por esta classificação. As políticas existentes de orçamento e
 fila permanecem. Destino: núcleo; diagnóstico e revisão já são capacidades
 comuns, sem depender de extensão. Mapa: turno → diagnóstico → Execuções/prévia.
-Sem schema novo, consulta a outra organização ou credencial adicional.
+Sem nova tabela, consulta a outra organização ou credencial adicional.
+
+## Busca textual e limite do recuperador
+
+A consulta preserva letras Unicode e os acentos em NFC; tanto consulta quanto
+conteúdo passam pelo stemmer português do Postgres. A normalização sem acento
+serve apenas para descartar palavras vazias. A expressão
+`to_tsvector('portuguese'::regconfig, content)` tem índice GIN idempotente no
+baseline e na migration 0617. O índice não altera linhas ou políticas de acesso.
+
+Cada turno continua limitado a quatro consultas distintas e cada consulta a
+cinco trechos. Os filtros exigem organização, fonte aprovada/ativa/pronta e
+versão ativa. A instrução com evidências mantém as categorias de compromisso
+concreto e os exemplos de slogans da instrução sem evidências; a autorização
+comercial sustenta apenas a oferta correspondente.
+
+`tests/invariants/recuperacao-promessas-com-postgres.test.ts` mede acentos,
+isolamento/versões, cinco resultados, uso do índice num acervo sintético e a
+recuperação no turno antes do revisor, sem uma busca explícita pelo agente.

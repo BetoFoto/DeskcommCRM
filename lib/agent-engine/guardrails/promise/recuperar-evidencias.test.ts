@@ -31,12 +31,13 @@ describe("recuperação complementar antes do revisor", () => {
     expect(parametros).toEqual([
       "org-do-servidor",
       ["fonte-aprovada"],
-      "demonstracao OR gratuita OR qual OR periodo OR prefere",
+      "demonstração OR gratuita OR qual OR período OR prefere",
     ]);
     expect(sql).toContain("c.organization_id = $1");
     expect(sql).toContain("s.organization_id = c.organization_id");
     expect(sql).toContain("s.is_active and s.status = 'ready'");
     expect(sql).toContain("c.kb_version_id = s.active_kb_version_id");
+    expect(sql).toMatch(/limit 5\b/);
     expect(sql).not.toContain("demonstração gratuita");
     expect(e.ler()[0]?.conteudo).toBe(politica);
     expect(e.ler()).toHaveLength(1);
@@ -79,5 +80,13 @@ describe("recuperação complementar antes do revisor", () => {
     expect(registrar).not.toHaveBeenCalled();
     expect(JSON.stringify(warn.mock.calls)).not.toContain("texto privado");
     expect(consultaDaCandidata("x ".repeat(3000))).toBe("");
+  });
+
+  it("preserva acentos em NFC e não transforma saudações acentuadas em busca", () => {
+    expect(consultaDaCandidata("Temos matrícula grátis no período de demonstração")).toBe(
+      "matrícula OR grátis OR período OR demonstração",
+    );
+    expect(consultaDaCandidata("matrícula".normalize("NFD"))).toBe("matrícula");
+    expect(consultaDaCandidata("Olá, você não? Bom dia!")).toBe("");
   });
 });
