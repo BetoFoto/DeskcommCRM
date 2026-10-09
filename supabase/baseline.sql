@@ -51151,3 +51151,11 @@ create unique index if not exists agent_inbox_budget_aberto_unico
 create unique index if not exists agent_inbox_budget_do_plano_aberto_unico
   on public.agent_inbox_items (organization_id)
   where status = 'open' and kind = 'budget_exceeded' and ref_kind = 'plano';
+
+
+-- ---- Índice textual do acervo da revisão de promessas (migration 0617) ----
+-- manifest: Índice textual português para recuperar evidências de ofertas antes da revisão de promessas.
+-- A expressão é a mesma da consulta e mantém acentos nos dois lados.
+-- Sem alteração de linhas, políticas RLS ou concessões de acesso.
+create index if not exists ai_chunks_content_pt_gin
+  on public.ai_chunks using gin (to_tsvector('portuguese'::regconfig, content));
