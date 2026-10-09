@@ -52349,32 +52349,40 @@ create index if not exists ai_chunks_content_pt_gin
 -- external_provider, external_id)` passa a valer para DUAS plataformas, então a
 -- ponte namespaceia o `external_id` (ex.: 'tray:10231') — pedido 10231 da Tray
 -- e pedido 10231 da Loja Integrada não podem disputar a mesma linha.
-alter table public.orders
-  drop constraint if exists orders_external_provider_check;
-
--- Entre o `drop` e o `add` (a restrição alargada à mão ainda recusaria
--- 'external'), a linha que a instalação gravou com uma origem fora da lista
--- (o caso da própria #2442, 'tray'). Sem isto o
--- `drop` vale, o `add` recebe 23514 e — como o update.sh aplica o baseline sem
--- ON_ERROR_STOP — a instalação fica SEM guarda nenhuma, com o erro repetido a
--- cada atualização. A linha vira a origem genérica no formato que a ponte deve
--- usar daqui em diante: a plataforma vai para `payload->>'platform'` (sem
--- sobrescrever uma que já esteja lá) e o `external_id` ganha o prefixo dela
--- ('tray:10231'), que é o que mantém a chave única NA PRÁTICA: o par (origem,
--- id) já era único, e (external, origem:id) só colide em caso forjado — uma
--- linha 'external' prévia com o mesmo id prefixado, ou ':' dentro da origem ou
--- do id ('tray','a:b' e 'tray:a','b' viram ambos 'tray:a:b'). Nesses casos o
--- UPDATE recebe 23505, a linha fica fora da lista e o `add` volta a falhar
--- (caso não coberto pelo invariante).
+-- O drop, a conversão e o add vão num bloco SÓ, que é um único comando: se
+-- qualquer passo falhar, nada fica feito e a restrição de antes continua de
+-- pé. Antes eram três comandos soltos e, como o update.sh aplica o baseline
+-- sem ON_ERROR_STOP, um `add` que falhasse deixava a tabela SEM restrição
+-- nenhuma. Agora a falha deixa a instalação exatamente como estava, e o erro
+-- aparece no update.
+--
+-- O drop do começo existe porque a restrição alargada à mão (o caso da própria
+-- #2442) ainda recusaria 'external' na conversão. A conversão pega a linha que
+-- a instalação gravou com uma origem fora da lista ('tray') e a põe no formato
+-- que a ponte deve usar daqui em diante: a plataforma vai para
+-- `payload->>'platform'` (sem sobrescrever uma que já esteja lá) e o
+-- `external_id` ganha o prefixo dela ('tray:10231'). É isso que mantém a chave
+-- única NA PRÁTICA: o par (origem, id) já era único, e (external, origem:id)
+-- só colide em caso forjado — uma linha 'external' prévia com o mesmo id
+-- prefixado, ou ':' dentro da origem ou do id ('tray','a:b' e 'tray:a','b'
+-- viram ambos 'tray:a:b'). Nesse caso o bloco inteiro é desfeito e a
+-- instalação segue com a restrição que tinha.
 -- Idempotente: na segunda passada não sobra linha fora da lista.
-update public.orders
-   set payload = jsonb_build_object('platform', external_provider) || payload,
-       external_id = external_provider || ':' || external_id,
-       external_provider = 'external'
- where external_provider not in ('nuvemshop', 'vtex', 'shopify', 'external');
+do $pedido_sem_conector$
+begin
+  alter table public.orders
+    drop constraint if exists orders_external_provider_check;
 
-alter table public.orders
-  drop constraint if exists orders_external_provider_check,
-  add constraint orders_external_provider_check check (external_provider in (
-    'nuvemshop', 'vtex', 'shopify', 'external'
-  ));
+  update public.orders
+     set payload = jsonb_build_object('platform', external_provider) || payload,
+         external_id = external_provider || ':' || external_id,
+         external_provider = 'external'
+   where external_provider not in ('nuvemshop', 'vtex', 'shopify', 'external');
+
+  alter table public.orders
+    drop constraint if exists orders_external_provider_check,
+    add constraint orders_external_provider_check check (external_provider in (
+      'nuvemshop', 'vtex', 'shopify', 'external'
+    ));
+end
+$pedido_sem_conector$;

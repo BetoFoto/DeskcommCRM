@@ -182,4 +182,45 @@ describe("pedido de plataforma sem integração nativa: origem genérica", () =>
       sql(bloco);
     }
   });
+
+  it("se a conversão colide, o bloco inteiro desfaz — a instalação fica com a restrição que tinha", () => {
+    seedGov();
+    const baseline = readFileSync(join(process.cwd(), "supabase", "baseline.sql"), "utf8");
+    const marcador = "-- ---- pedidos de plataforma sem conector próprio entram por origem genérica";
+    const inicio = baseline.indexOf(marcador);
+    const fim = baseline.indexOf("\n-- ---- ", inicio + marcador.length);
+    const bloco = fim < 0 ? baseline.slice(inicio) : baseline.slice(inicio, fim);
+    const ja = "eeeeeeee-0000-4000-8000-000000002671";
+    const tray = "eeeeeeee-0000-4000-8000-000000002672";
+
+    sql(`
+      alter table public.orders drop constraint orders_external_provider_check;
+      alter table public.orders add constraint orders_external_provider_check
+        check (external_provider in ('nuvemshop', 'vtex', 'shopify', 'tray', 'external')) not valid;
+    `);
+    try {
+      // caso forjado: a linha 'external' com o id prefixado já existe, então a
+      // conversão da linha 'tray' recebe 23505
+      gravaPedido({ id: ja, externalId: "tray:30001", provedor: "external" });
+      gravaPedido({ id: tray, externalId: "30001", provedor: "tray" });
+
+      const erro = recusaDe(bloco);
+      expect(erro, "o bloco devia falhar na colisão").toMatch(/duplicate key|23505/);
+
+      expect(
+        sql(
+          `select pg_get_constraintdef(oid) from pg_constraint
+            where conname = 'orders_external_provider_check';`,
+        ),
+        "a falha deixou a tabela sem a restrição (o drop ficou feito)",
+      ).toContain("'tray'");
+      expect(
+        sql(`select external_provider || '|' || external_id from public.orders where id = '${tray}';`),
+        "a falha deixou a conversão pela metade",
+      ).toBe("tray|30001");
+    } finally {
+      sql(`delete from public.orders where id in ('${ja}', '${tray}');`);
+      sql(bloco);
+    }
+  });
 });
