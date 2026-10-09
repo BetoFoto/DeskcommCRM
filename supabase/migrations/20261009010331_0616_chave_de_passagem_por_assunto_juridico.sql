@@ -1,5 +1,5 @@
 -- manifest: A chave que liga e desliga a passagem para pessoa por ASSUNTO JURÍDICO passa a morar na versão do agente: coluna nova `handoff_legal_enabled` em `ai_agent_versions` (padrão ligado) e a trava de imutabilidade cobrindo a coluna (PR #2156, issue #2097).
--- 0615 — Passar para uma pessoa por assunto jurídico vira escolha POR AGENTE
+-- 0616 — Passar para uma pessoa por assunto jurídico vira escolha POR AGENTE
 -- (#2097, #2156). Atendia-se a um escritório de advocacia onde "processo",
 -- "advogado" e "Procon" são o vocabulário normal do cliente: o agente publicado
 -- passava a conversa quase sempre, e não concluía a qualificação. A decisão do
