@@ -49383,11 +49383,13 @@ begin
   -- seção declarada, com o nome da tabela, contando pela MESMA `ligacao` do
   -- gatilho ($1 = organização, $2 = contato). Conta ANTES do passo 1 (que
   -- dispara o gatilho): a seção que soltar a própria ligação seguiria contada.
-  -- Sem o módulo a tabela não existe e a chave não aparece — igual à D8.
+  -- Sem o módulo a tabela não existe e a chave não aparece. Seção com ligação
+  -- vazia não é contada: o erro nomeado (`modulo_secao_invalida`) é do gatilho.
   for v_secao in
     select tabela, ligacao from public.modulo_secoes_lgpd order by modulo, tabela
   loop
-    if to_regclass(format('public.%I', v_secao.tabela)) is not null then
+    if to_regclass(format('public.%I', v_secao.tabela)) is not null
+       and btrim(v_secao.ligacao) <> '' then
       execute format('select count(*) from public.%I where (%s)', v_secao.tabela, v_secao.ligacao)
         into v_count using p_organization_id, p_contact_id;
       v_secoes := v_secoes || jsonb_build_object(v_secao.tabela, v_count);

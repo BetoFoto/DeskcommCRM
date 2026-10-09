@@ -8,7 +8,8 @@
  * nomear tabela. Régua: o valor do 6c = todas as comandas do contato naquela org.
  *
  * Sabotagem medida: sem o laço de contagem na 0620 (apêndice do baseline) → vermelho
- * no segundo caso (`sales` ausente do retorno e do audit).
+ * no segundo caso (`sales` ausente do retorno e do audit); sem a guarda de ligação vazia
+ * no laço → vermelho no terceiro (o `count` quebra com `syntax error` antes do gatilho).
  */
 import { describe, expect, it } from "vitest";
 
@@ -22,6 +23,14 @@ const PIX = "19070000-4444-4000-8000-0000000000c1";
 
 function cascata(contato: string): string {
   return sql(`select (public.fn_lgpd_cascade_redact_contact('${ORG}', '${contato}', gen_random_uuid()) -> 'counts')::text;`);
+}
+
+function tentar(script: string): string {
+  try {
+    return `OK:${sql(script)}`;
+  } catch (e) {
+    return `ERRO:${(e as { stderr?: string }).stderr ?? String(e)}`;
+  }
 }
 
 function auditado(contato: string): string {
@@ -61,5 +70,20 @@ describe("a cascata de LGPD conta as seções de módulo", () => {
     const counts = JSON.parse(cascata(C_COM)) as Record<string, number>;
     expect(counts.sales, "comandas do contato, sem a vizinha").toBe(3);
     expect((JSON.parse(auditado(C_COM)) as Record<string, number>).sales, "a evidência no audit").toBe(3);
+  });
+
+  it("seção com ligação vazia: o erro segue sendo o NOMEADO do gatilho (D8), não o do count", () => {
+    // Uma transação que aborta: a seção errada e a tabela-sonda não sobrevivem ao caso.
+    const r = tentar(`
+      begin;
+      create table public.zz_sonda_1907 (organization_id uuid, contact_id uuid, t text);
+      insert into public.modulo_secoes_lgpd (modulo, tabela, ligacao, colunas)
+        values ('zz1907', 'zz_sonda_1907', '', '{t}');
+      select public.fn_lgpd_cascade_redact_contact('${ORG}', '${C_VIZ}', gen_random_uuid());
+      commit;
+    `);
+    expect(r).toContain("modulo_secao_invalida");
+    expect(r).toContain("zz1907/zz_sonda_1907");
+    expect(sql(`select coalesce(to_regclass('public.zz_sonda_1907')::text, 'ausente');`)).toBe("ausente");
   });
 });
