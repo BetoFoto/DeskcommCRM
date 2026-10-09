@@ -411,6 +411,7 @@ export async function publishAgentAction(
     orgId: activeOrg.orgId,
     agentId,
     versionId,
+    quemPublicou: { actorUserId: authUser.id, requestId },
   });
 
   if (!result.ok) {
@@ -633,6 +634,7 @@ export async function revertToVersionAction(
     orgId: activeOrg.orgId,
     agentId,
     versionId: createdId,
+    quemPublicou: { actorUserId: authUser.id, requestId },
   });
   if (!result.ok) {
     // Rollback: remove draft órfã para não deixar lixo (a draft só existe
