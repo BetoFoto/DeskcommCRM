@@ -13,12 +13,14 @@
  *       sempre (o que o titular recebe não muda por isto);
  *    b) o maior pedaço que existe de uma vez é UMA LINHA, e não cresce quando o
  *       arquivo cresce quatro vezes;
- *    c) a causa da issue se REPRODUZ: a receita de antes acrescenta ao heap mais
- *       que um arquivo inteiro por cima do payload;
+ *    c) a causa da issue se REPRODUZ, nos DOIS tamanhos que a issue pede (50 mil
+ *       e 100 mil mensagens): a receita de antes acrescenta ao heap mais que
+ *       CINCO vezes o arquivo por cima do payload — e imprime também o RSS do
+ *       processo, não só o heap do trecho;
  *    d) depois: o que a escrita acrescenta ao heap, com o payload vivo e GC
- *       forçado, cabe em MENOS que UM arquivo — e o maior pedaço de uma vez é
- *       constante entre 25k e 100k mensagens (memória por alocação constante
- *       em payload grande);
+ *       forçado, cabe em MENOS que UM arquivo nos mesmos dois tamanhos — e o
+ *       maior pedaço de uma vez é constante entre 25k e 100k mensagens (memória
+ *       por alocação constante em payload grande);
  *    e) nenhuma cópia profunda sobrou no caminho do arquivo (guarda de fonte).
  *
  *    As medições de heap usam o GC forçado (`--expose_gc` via
@@ -403,38 +405,46 @@ describe("memória constante no arquivo grande", () => {
     120_000,
   );
 
-  it(
-    "depois: o heap vivo durante a escrita fica perto da base — sem subir com o payload",
-    () => {
+  it.each([50_000, 100_000])(
+    "depois: escrever o arquivo de %i mensagens não passa de um arquivo de heap",
+    (mensagens) => {
       const gc = gcObrigatorio();
-      const data = payloadGrande(100_000);
+      const data = payloadGrande(mensagens);
       gc?.();
       const base = emUso();
+      const rssBase = process.memoryUsage().rss;
       let pico = 0;
       let bytes = 0;
       let vivo = base;
+      let rssPico = rssBase;
       let pedaco = 0;
       for (const parte of partesDoArquivoDoTitular(data, "BR")) {
         const n = Buffer.byteLength(parte, "utf-8");
         bytes += n;
         if (n > pico) pico = n;
         pedaco += 1;
+        rssPico = Math.max(rssPico, process.memoryUsage().rss);
         // Uma amostra a cada 5k linhas, SEMPRE depois de coletar: mede o que
         // está vivo de verdade, não o lixo que ainda não foi recolhido.
-        if (pedaco % 5_000 === 0 && gc) {
-          gc();
-          vivo = Math.max(vivo, emUso());
+        if (pedaco % 5_000 === 0) {
+          if (gc) {
+            gc();
+            vivo = Math.max(vivo, emUso());
+          }
+          rssPico = Math.max(rssPico, process.memoryUsage().rss);
         }
       }
       gc?.();
       vivo = Math.max(vivo, emUso());
+      rssPico = Math.max(rssPico, process.memoryUsage().rss);
       console.info(
-        `#2576 DEPOIS: base ${mb(base)} MB → pico vivo ${mb(vivo)} MB durante a escrita ` +
-          `(+${mb(vivo - base)} MB) de um arquivo de ${mb(bytes)} MB`,
+        `#2576 DEPOIS (${mensagens} mensagens): heap base ${mb(base)} MB → vivo ${mb(vivo)} MB ` +
+          `(+${mb(vivo - base)} MB), RSS ${mb(rssBase)} → pico ${mb(rssPico)} MB, ` +
+          `arquivo de ${mb(bytes)} MB em ${pedaco} pedaços`,
       );
-      expect(bytes).toBeGreaterThan(20 * 1024 * 1024);
-      // Sem depender do GC do host: escrever um arquivo de 35 MB nunca
-      // materializa um pedaço maior que uma linha (constante em payload grande).
+      expect(bytes).toBeGreaterThan(12 * 1024 * 1024);
+      // Sem depender do GC do host: escrever o arquivo nunca materializa um
+      // pedaço maior que uma linha (constante em payload grande).
       expect(pico).toBeLessThan(16_384);
       if (gc) {
         // O que sobrou da escrita, com o payload vivo e GC forçado, cabe em MENOS
@@ -445,9 +455,6 @@ describe("memória constante no arquivo grande", () => {
         // "copiar a linha + JSON.stringify" cresce a mesma ordem de grandeza —
         // ~200 B por linha para as mesmas 100k linhas).
         expect(vivo - base).toBeLessThan(bytes);
-      } else {
-        // Sem GC exposto a prova é a de cima: o maior pedaço continua pequeno.
-        expect(pico).toBeLessThan(16_384);
       }
     },
     180_000,
@@ -459,13 +466,14 @@ describe("memória constante no arquivo grande", () => {
 // ---------------------------------------------------------------------------
 
 describe("a causa descrita na issue se reproduz na medição", () => {
-  it(
-    "a receita de antes (cópia profunda + string + buffer) acrescenta mais que um arquivo inteiro ao payload",
-    () => {
+  it.each([50_000, 100_000])(
+    "a receita de antes com %i mensagens acrescenta mais que um arquivo inteiro ao payload",
+    (mensagens) => {
       const gc = gcObrigatorio();
-      const data = payloadGrande(100_000);
+      const data = payloadGrande(mensagens);
       gc?.();
       const base = emUso();
+      const rssBase = process.memoryUsage().rss;
       // Exatamente o que o worker fazava: copiar o payload inteiro (o
       // `copiaDoTitular` de antes fazia isto para poder apagar em cima), passar
       // a cópia pela projeção, serializar com indentação e jogar tudo num Buffer
@@ -477,9 +485,11 @@ describe("a causa descrita na issue se reproduz na medição", () => {
       const buffer = Buffer.from(texto, "utf-8");
       gc?.();
       const extra = emUso() - base;
+      const rssDepois = process.memoryUsage().rss;
       console.info(
-        `#2576 ANTES: payload ${mb(base)} MB + cópia/string/buffer ${mb(extra)} MB, ` +
-          `para um arquivo de ${mb(buffer.byteLength)} MB (${texto.length} caracteres, ` +
+        `#2576 ANTES (${mensagens} mensagens): payload ${mb(base)} MB + cópia/string/buffer ` +
+          `${mb(extra)} MB (${(extra / buffer.byteLength).toFixed(1)}× o arquivo), RSS ${mb(rssBase)} → ` +
+          `${mb(rssDepois)} MB, arquivo de ${mb(buffer.byteLength)} MB (${texto.length} caracteres, ` +
           `${copiaProfunda.messages_completas?.length} linhas na cópia)`,
       );
       // Mais que UM arquivo inteiro de acréscimo, por cima do payload.
