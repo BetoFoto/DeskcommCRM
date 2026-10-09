@@ -14641,6 +14641,14 @@ export const DICIONARIO: Traducoes = {
   "A IA monta a proposta pelos modelos da empresa e o PDF sai pelo WhatsApp.": { es: "La IA arma la propuesta con las plantillas de la empresa y el PDF sale por WhatsApp." },
   "Cadastro de empresas por CNPJ, das pessoas que decidem nelas e importação de planilha.": { es: "Registro de empresas por CNPJ, de las personas que deciden en ellas e importación de planillas." },
   "Contratos de honorários com parcelas e o controle do que já foi pago.": { es: "Contratos de honorarios con cuotas y el control de lo que ya se pagó." },
+  // #1907 item 4 — a linha do módulo `financeiro` em `MODULOS_OPCIONAIS`
+  // (`lib/recursos-opcionais/catalogo.ts:124`). Enquanto faltava, o módulo
+  // entrava na lista nova pelo TEXTO_DO_MODULO sem nenhuma linha aqui.
+  // ("Comandas", o nome, já tem chave própria neste dicionário.)
+  "A comanda do atendimento: itens, forma de pagamento, comissões e fidelidade.": { es: "La orden de servicio de la atención: ítems, forma de pago, comisiones y fidelidad." },
+  "A comanda do atendimento: itens, forma de pagamento, comissões e fidelidade. O caixa continua no sistema mesmo sem este módulo. Toda instalação anterior a esta versão continua com Comandas ligada.": {
+    es: "La orden de servicio de la atención: ítems, forma de pago, comisiones y fidelidad. La caja sigue en el sistema aun sin este módulo. Toda instalación anterior a esta versión sigue con Órdenes de servicio activado.",
+  },
   "Decide o que acontece quando uma empresa passa do teto de gasto de IA.": { es: "Decide qué pasa cuando una empresa supera el tope de gasto de IA." },
   "Recusa a entrega de mensagem do WhatsApp que não vier assinada.": { es: "Rechaza la entrega de mensajes de WhatsApp que no lleguen firmados." },
   "Acrescenta o texto de divulgação à primeira mensagem, ou bloqueia o envio sem ele.": { es: "Agrega el texto de divulgación al primer mensaje, o bloquea el envío sin él." },
