@@ -240,18 +240,24 @@ export function CatalogoFinanceiro({
               className="min-h-11"
               disabled={nomeForma.trim().length < 2 || criar.isPending || editar.isPending}
               onClick={() => {
-                const corpo = {
-                  name: nomeForma.trim(),
-                  ...(contaDaForma ? { account_id: contaDaForma } : {}),
-                };
+                const nome = nomeForma.trim();
                 if (editandoForma) {
+                  // Na edição a conta vai SEMPRE: omiti-la quando a pessoa
+                  // escolhe "Decidir depois" deixaria a conta antiga no lugar.
                   editar.mutate(
-                    { tipo: "formas_de_pagamento", id: editandoForma, corpo },
+                    {
+                      tipo: "formas_de_pagamento",
+                      id: editandoForma,
+                      corpo: { name: nome, account_id: contaDaForma || null },
+                    },
                     { onSuccess: limparForma },
                   );
                 } else {
                   criar.mutate(
-                    { tipo: "formas_de_pagamento", corpo },
+                    {
+                      tipo: "formas_de_pagamento",
+                      corpo: { name: nome, ...(contaDaForma ? { account_id: contaDaForma } : {}) },
+                    },
                     { onSuccess: () => setNomeForma("") },
                   );
                 }
@@ -373,7 +379,9 @@ export function CatalogoFinanceiro({
           podeEditar={podeEditar}
           carregando={regras.isLoading}
           onCriar={(corpo) => criar.mutate({ tipo: "regras_de_comissao", corpo })}
-          onEditar={(id, corpo) => editar.mutate({ tipo: "regras_de_comissao", id, corpo })}
+          onEditar={(id, corpo, aoSalvar) =>
+            editar.mutate({ tipo: "regras_de_comissao", id, corpo }, { onSuccess: aoSalvar })
+          }
           onInativar={(id) => inativar.mutate({ tipo: "regras_de_comissao", id })}
         />
       )}
@@ -384,7 +392,9 @@ export function CatalogoFinanceiro({
         podeEditar={podeEditar}
         carregando={recorrencias.isLoading}
         onCriar={(corpo) => criar.mutate({ tipo: "recorrencias", corpo })}
-        onEditar={(id, corpo) => editar.mutate({ tipo: "recorrencias", id, corpo })}
+        onEditar={(id, corpo, aoSalvar) =>
+          editar.mutate({ tipo: "recorrencias", id, corpo }, { onSuccess: aoSalvar })
+        }
         onInativar={(id) => inativar.mutate({ tipo: "recorrencias", id })}
       />
     </div>

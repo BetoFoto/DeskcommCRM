@@ -44,7 +44,7 @@ export function Recorrencias({
   carregando: boolean;
   onCriar: (corpo: Record<string, unknown>) => void;
   /** #2641: editar sem desativar-e-recriar — o corpo é o mesmo da criação. */
-  onEditar: (id: string, corpo: Record<string, unknown>) => void;
+  onEditar: (id: string, corpo: Record<string, unknown>, aoSalvar: () => void) => void;
   onInativar: (id: string) => void;
 }) {
   const t = useT();
@@ -145,7 +145,7 @@ export function Recorrencias({
                 amount_cents: cents,
                 day_of_month: diaNumero,
               };
-              if (editandoId) onEditar(editandoId, corpo);
+              if (editandoId) onEditar(editandoId, corpo, limpar);
               else onCriar(corpo);
             }}
           >

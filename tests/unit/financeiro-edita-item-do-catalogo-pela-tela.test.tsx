@@ -252,6 +252,41 @@ describe("editar item do catálogo financeiro pela tela (#2641)", () => {
     expect(apiClient.delete).not.toHaveBeenCalled();
   });
 
+  it("na edição, 'Decidir depois' TIRA a conta da forma de pagamento", async () => {
+    // Omitir `account_id` (como a criação faz) deixaria a conta antiga no lugar:
+    // o PATCH só grava o que vem no corpo.
+    await montar();
+    const bloco = await secao("Formas de pagamento");
+    await editarItem(bloco, "Pix →");
+    fireEvent.change(valorDe(bloco, "Conta de destino"), { target: { value: "" } });
+    fireEvent.click(salvarDe(bloco));
+
+    await waitFor(() =>
+      expect(apiClient.patch).toHaveBeenCalledWith(
+        "/api/v1/financeiro/catalogo/formas_de_pagamento",
+        { name: "Pix", account_id: null, id: FORMA_PIX },
+      ),
+    );
+  });
+
+  it("depois de salvar, Comissão e Recorrências saem do modo edição", async () => {
+    await montar();
+    const comissao = await secao("Comissão");
+    await editarItem(comissao, "Ana Souza · 30%");
+    fireEvent.click(salvarDe(comissao));
+    expect(
+      await within(comissao).findByRole("button", { name: "Adicionar regra" }),
+    ).toBeInTheDocument();
+
+    const recorrencias = await secao("Todo mês");
+    await editarItem(recorrencias, "Aluguel ·");
+    fireEvent.click(salvarDe(recorrencias));
+    expect(
+      await within(recorrencias).findByRole("button", { name: "Adicionar" }),
+    ).toBeInTheDocument();
+    expect(apiClient.patch).toHaveBeenCalledTimes(2);
+  });
+
   it("a validação da edição é a da criação: nome de 1 letra não salva", async () => {
     await montar();
     const bloco = await secao("Contas");
