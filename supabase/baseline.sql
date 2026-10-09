@@ -52374,6 +52374,7 @@ update public.orders
  where external_provider not in ('nuvemshop', 'vtex', 'shopify', 'external');
 
 alter table public.orders
+  drop constraint if exists orders_external_provider_check,
   add constraint orders_external_provider_check check (external_provider in (
     'nuvemshop', 'vtex', 'shopify', 'external'
   ));
