@@ -29,4 +29,12 @@ import { moldeDeProvisionadora } from "./molde-de-provisionadora";
 moldeDeProvisionadora({
   modulo: "financeiro",
   tabelas: ["sales", "sale_items", "commission_rules", "commissions", "loyalty_ledger"],
+  // 0533 (#2115): a RLS das cinco é o PAR `_read`/`_write` — leitura com a
+  // função pura (o `support_readonly` segue lendo a comanda), escrita com
+  // `scope='full'` e papel `agent+` —, declarado DENTRO da provisionadora,
+  // porque nasce junto com a tabela (D5) e a rotina 0325 só enxerga tabela
+  // com RLS DESLIGADA. Sem isto a policy ampla `tenant_isolation_<t>_all`
+  // não nasce — e não deveria: era ela que deixava quem só lê escrever a
+  // comanda inteira. Mesmo motivo do `protecaoPropria` de honorários.
+  protecaoPropria: ["sales", "sale_items", "commission_rules", "commissions", "loyalty_ledger"],
 });
