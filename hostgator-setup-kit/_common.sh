@@ -700,13 +700,16 @@ REGRAS_FALTANDO="${REGRAS_FALTANDO:-}"
 # antes do banco e a volta usa o endereço da imagem NOVA — gravado antes de
 # tentar baixá-la. Sem imagem, ele não volta. O susto virou queda.
 #
-# ⚠️ SÓ A IMAGEM DO APP, de propósito. Worker, scheduler, voice-agent e o app
-# têm `build:` ao lado do `image:` (#1060): quando falta imagem, o `up -d` — e,
-# se ele falhar, a guarda do update.sh — a constrói aqui, mais lento, mesmo
-# resultado. O que não dá para construir é a decisão de OFERECER a atualização,
-# e é isso que este veredito pergunta. As duas mensagens do update.sh sobre pull
-# que falhou continuam diferentes de propósito: a saída (construir aqui) é a
-# mesma, mas o diagnóstico — versão ainda publicando × peça faltando — não é.
+# ⚠️ SÓ A IMAGEM DO APP, de propósito. Worker, scheduler e voice-agent têm
+# `build:` ao lado do `image:` e o Compose os constrói sozinho em QUALQUER falha
+# de pull (medido); o `app` não tem (#1060), então quando falta a imagem dele o
+# `up -d` FALHA e quem responde é a guarda do update.sh — com o registro
+# respondendo ela constrói aqui (mais lento, mesmo resultado), sem resposta do
+# registro ela recusa. O que não dá para construir é a decisão de OFERECER a
+# atualização, e é isso que este veredito pergunta. As duas mensagens do
+# update.sh sobre pull que falhou continuam diferentes de propósito: a saída é
+# a mesma quando o registro responde, mas o diagnóstico — versão ainda
+# publicando × peça faltando — não é.
 #
 # Ecoa: publicada | ausente | indisponivel
 veredito_da_imagem_do_app() {  # veredito_da_imagem_do_app <versão alvo> <versão instalada>
@@ -850,15 +853,17 @@ restaurar_servicos() {
 # ── Imagem pronta que não serve para esta VPS: constrói a versão aqui ────────
 # Uma VPS cuja arquitetura não é a das imagens publicadas (Oracle Ampere, por
 # exemplo) recebe "no matching manifest for linux/arm64/v8" ao puxá-las. O
-# `up -d` seguinte morre junto: sem imagem no disco, o Compose só tem o que
-# subir se o `build:` ao lado do `image:` entrar em cena — e o fallback
-# automático dele NÃO se confirmou nos relatos que originaram a issue (#1060):
-# o `up -d` morreu com erro também nos serviços que já tinham `build:`. É esta
-# função que responde, e é por isso que ela não pode ser removida "porque o
-# compose agora constrói sozinho". O desfecho visível antes era o pior possível
-# — a atualização não acontecia, o script terminava como se tivesse dado certo
-# e o dono só descobria pelo CRM velho. Pelo botão "Atualizar" do site, nem
-# isso: o agente roda sozinho no cron e não há ninguém lendo a tela.
+# `up -d` seguinte morre junto: o `app` não tem `build:` ao lado do `image:` no
+# compose de produção, de propósito (#1060) — é a falta da imagem dele que faz
+# o `up -d` falhar e entrega a decisão a esta função, que é o portão da #1955.
+# Worker, scheduler e voz, que têm `build:`, o Compose reconstrói sozinho
+# (medido, em qualquer falha de pull) — e é construção barata; o pesado é este.
+# Por isso ela não pode ser removida "porque o compose agora constrói sozinho":
+# é ela quem decide se pode construir, conforme o registro responde ou não. O
+# desfecho visível antes era o pior possível — a atualização não acontecia, o
+# script terminava como se tivesse dado certo e o dono só descobria pelo CRM
+# velho. Pelo botão "Atualizar" do site, nem isso: o agente roda sozinho no
+# cron e não há ninguém lendo a tela.
 #
 # A saída já existe no repo e é o docker-compose.build.yml: `pull_policy: never`
 # nas três imagens e o build saindo do MESMO commit que o `git checkout` deixou

@@ -677,25 +677,36 @@ VOZ_CRIADA="$(completar_segredos_da_voz .env)" || VOZ_CRIADA=""
 
 # `dc pull` falha se alguma das quatro imagens ainda não existir no registro — o
 # que acontece numa instalação atualizando para a primeira versão publicada
-# depois desta mudança, ou se um run de publicação quebrou. Nesse caso o compose
-# ainda tem `build:` ao lado do `image:` das quatro (#1060, app incluído), então
-# o `up -d` as constrói localmente: pior que puxar, melhor que não atualizar.
+# depois desta mudança, ou se um run de publicação quebrou. Worker, scheduler e
+# voz têm `build:` ao lado do `image:`, e o Compose os constrói sozinho em
+# QUALQUER falha de pull (medido — não só na de arquitetura): pior que puxar,
+# melhor que não atualizar. O `app` fica SEM `build:` de propósito (#1060): se a
+# imagem dele não veio, o `up -d` logo abaixo FALHA e quem decide é o portão
+# `build_local_permitido` — construir aqui ou recusar, conforme o registro
+# responde ou não.
 if ! dc pull; then
   # A mensagem distingue os dois casos porque a CAUSA é diferente, e uma frase
-  # tranquilizadora sobre o caso errado é o pior desfecho possível. As quatro
-  # imagens nossas têm `build:` ao lado do `image:` (#1060), então o `up -d`
-  # abaixo constrói aqui o que o registro não trouxe — mas "o app veio e o que
-  # falta é outra peça" e "o app não veio" são diagnósticos distintos para
-  # quem lê a saída depois, e só o segundo aponta para a versão ainda não
-  # publicada (ou para o pacote ainda privado).
+  # tranquilizadora sobre o caso errado é o pior desfecho possível. Se a do app
+  # veio, o que faltar em worker, scheduler ou voz o Compose constrói sozinho no
+  # `up -d` (medido: qualquer falha de pull, não só a de arquitetura). Se a do
+  # app NÃO veio, ele não tem `build:` no compose de produção de propósito: o
+  # `up -d` falha e quem decide é o portão `build_local_permitido` — com o
+  # registro respondendo ele constrói a versão aqui; sem resposta do registro ele
+  # RECUSA, de propósito (guarda da #1955). "Construído aqui" sem essa ressalva
+  # prometeria justamente o que o portão nega no pior caso. Os dois diagnósticos
+  # também contam coisas distintas: "o app veio e falta outra peça" × "o app não
+  # veio", que aponta para a versão ainda não publicada (ou o pacote privado).
   if dc pull app >/dev/null 2>&1; then
     c_ylw "⚠ Não consegui puxar todas as imagens da versão ${VERSAO_ALVO}."
     c_ylw "  A do app veio; o que faltar é construído aqui (mais lento, mesmo resultado)."
   else
     c_ylw "⚠ Não consegui puxar a imagem do APP na versão ${VERSAO_ALVO}."
     c_ylw "  Causas comuns: a versão ainda está publicando, ou o pacote está privado no GHCR."
-    c_ylw "  Sigo assim mesmo: o que não vier do registro é construído aqui no passo seguinte."
-    c_ylw "  Se a construção também falhar, rode de novo em alguns minutos."
+    c_ylw "  Vou tentar subir mesmo assim — se o up -d falhar, quem decide o passo"
+    c_ylw "  seguinte é a recuperação: com o registro respondendo ela constrói as"
+    c_ylw "  imagens desta versão aqui (15 a 25 min); sem resposta do registro ela"
+    c_ylw "  recusa, de propósito, para não gastar a memória desta VPS."
+    c_ylw "  Se não subir, rode de novo em alguns minutos."
   fi
 fi
 # A rede do proxy externo é declarada como EXTERNA no compose: se ela sumiu
@@ -706,14 +717,14 @@ fi
 garantir_rede_do_proxy
 # O `up -d` falha por imagem ausente no disco e, com ele, a atualização inteira:
 # numa VPS de arquitetura diferente da das imagens publicadas o `pull` acima não
-# traz nada. O `build:` ao lado do `image:` — agora nas quatro imagens nossas,
-# app incluído (#1060) — dá ao Compose o que construir, mas isso NÃO é garantia:
-# nos três relatos reais que originaram esta guarda o `up -d` morreu com erro
-# também nos serviços que já tinham `build:`, e o fallback automático do Compose
-# para "no matching manifest" não se confirmou. Quem responde é esta guarda.
-# Sem ela o script terminava como se tivesse dado certo e o dono ficava na
-# versão velha sem saber; pelo botão "Atualizar" do site, pior: o agente roda
-# sozinho no cron e não há ninguém lendo a tela para desconfiar.
+# traz nada. Worker, scheduler e voz têm `build:` ao lado do `image:` e o
+# Compose os constrói sozinho em QUALQUER falha de pull (medido — tag
+# inexistente, registro fora por DNS, "no matching manifest"); o `app` NÃO tem,
+# de propósito (#1060) — é a falta da imagem dele que faz o `up -d` falhar e
+# entrega a decisão a esta guarda, única que julga quando o registro não
+# responde. Sem ela o script terminava como se tivesse dado certo e o dono
+# ficava na versão velha sem saber; pelo botão "Atualizar" do site, pior: o
+# agente roda sozinho no cron e não há ninguém lendo a tela para desconfiar.
 #
 # O gatilho é o CÓDIGO DE SAÍDA, nunca o texto do erro — arquitetura da VPS, tag
 # ainda publicando, pacote privado no registro e registro fora do ar caem no
