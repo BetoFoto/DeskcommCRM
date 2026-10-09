@@ -124,8 +124,10 @@ ressalvas de instruções maliciosas e de garantias individuais inventadas.
 
 No detector determinístico de humano, uma pergunta explícita de consentimento
 para transferir/consultar, sem alegar operação ou compromisso, não é promessa
-de caso. A análise mantém as outras frases: pedir consentimento junto de “já
-encaminhei” ou “a equipe vai retornar” continua sujeito ao gate. Isso não
+de caso. A isenção vale para a mensagem inteira, nunca frase a frase: basta uma
+frase com operação alegada, prazo ou retorno anunciado para a análise voltar ao
+texto todo. Pedir consentimento junto de “já encaminhei”, “a equipe vai
+retornar” ou “retorna em 10 minutos” continua sujeito ao gate. Isso não
 executa nem autoriza transferência; a operação permanece em seu caminho próprio.
 
 Entrada: `effectiveContext.messages` e resumo do fechamento anterior em
