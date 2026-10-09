@@ -1921,6 +1921,12 @@ export const DICIONARIO: Traducoes = {
   "Deixar o agente chamar uma pessoa quando perceber que não é caso dele": {
     es: "Dejar que el agente llame a una persona cuando note que no le corresponde atender el caso",
   },
+  "Passar para uma pessoa quando o cliente falar de assunto jurídico (Procon, advogado, processo)": {
+    es: "Pasar a una persona cuando el cliente hable de asunto jurídico (Procon, abogado, proceso)",
+  },
+  "Desligue se assunto jurídico é o trabalho normal deste agente. Quem pede para falar com uma pessoa continua sendo passado.": {
+    es: "Apágalo si el asunto jurídico es el trabajo normal de este agente. Quien pide hablar con una persona sigue siendo derivado.",
+  },
   "Pedir ajuda sem sair da conversa": { es: "Pedir ayuda sin salir de la conversación" },
   "Deixar o agente pedir uma tarefa a alguém e seguir conversando": {
     es: "Dejar que el agente pida una tarea a alguien y siga conversando",
