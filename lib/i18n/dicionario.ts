@@ -14644,9 +14644,10 @@ export const DICIONARIO: Traducoes = {
   // #1907 item 4 — a linha do módulo `financeiro` em `MODULOS_OPCIONAIS`
   // (`lib/recursos-opcionais/catalogo.ts:124`). Enquanto faltava, o módulo
   // entrava na lista nova pelo TEXTO_DO_MODULO sem nenhuma linha aqui.
-  "Comanda e caixa (financeiro)": { es: "Comanda y caja (financiero)" },
-  "Abre a comanda do atendimento, lança itens e formas de pagamento, fatura no caixa e fecha comissões e fidelidade de cada atendimento.": {
-    es: "Abre la comanda de la atención, registra ítems y formas de pago, factura en la caja y cierra comisiones y fidelidad de cada atención.",
+  // ("Comandas", o nome, já tem chave própria neste dicionário.)
+  "A comanda do atendimento: itens, forma de pagamento, comissões e fidelidade.": { es: "La orden de servicio de la atención: ítems, forma de pago, comisiones y fidelidad." },
+  "A comanda do atendimento: itens, forma de pagamento, comissões e fidelidade. O caixa continua no sistema mesmo sem este módulo. Toda instalação anterior a esta versão continua com Comandas ligada.": {
+    es: "La orden de servicio de la atención: ítems, forma de pago, comisiones y fidelidad. La caja sigue en el sistema aun sin este módulo. Toda instalación anterior a esta versión sigue con Órdenes de servicio activado.",
   },
   "Decide o que acontece quando uma empresa passa do teto de gasto de IA.": { es: "Decide qué pasa cuando una empresa supera el tope de gasto de IA." },
   "Recusa a entrega de mensagem do WhatsApp que não vier assinada.": { es: "Rechaza la entrega de mensajes de WhatsApp que no lleguen firmados." },

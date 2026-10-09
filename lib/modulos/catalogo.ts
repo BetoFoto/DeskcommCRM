@@ -27,12 +27,13 @@ export const CATALOGO_DE_MODULOS: readonly ModuloCatalogo[] = [
     // comanda em lugar nenhum: as telas e as rotas ficariam mortas para
     // sempre, mesmo com a provisionadora pronta.
     slug: "financeiro",
-    nome: "Comanda e caixa (financeiro)",
+    // As cinco tabelas da comanda nascem SÓ onde o módulo é instalado (ADR-0002
+    // D2/D3). O texto abaixo é o que quem administra lê em `/admin/modulos`.
+    nome: "Comandas",
     descricao:
-      "A comanda do atendimento — itens, formas de pagamento, faturamento no caixa, comissões " +
-      "e fidelidade —, com as cinco tabelas da comanda nascendo SÓ onde o módulo é instalado " +
-      "(ADR-0002 D2/D3): instalação nova sem ele não tem `sales`, e sem esta linha no catálogo " +
-      "não há como instalá-lo.",
+      "A comanda do atendimento: itens, forma de pagamento, comissões e fidelidade. O caixa " +
+      "continua no sistema mesmo sem este módulo. Toda instalação anterior a esta versão " +
+      "continua com Comandas ligada.",
   },
 ];
 

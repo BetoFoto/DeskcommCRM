@@ -122,9 +122,8 @@ const TEXTO_DO_MODULO: Record<ModuloOpcional, { nome: string; oQueFaz: string }>
   // comanda, o caixa e as comissões. Módulo de tabela, então o `href` do mapa
   // (`MODULOS_OPCIONAIS_POR_FLAG`) já aponta para `/admin/modulos`.
   financeiro: {
-    nome: "Comanda e caixa (financeiro)",
-    oQueFaz:
-      "Abre a comanda do atendimento, lança itens e formas de pagamento, fatura no caixa e fecha comissões e fidelidade de cada atendimento.",
+    nome: "Comandas",
+    oQueFaz: "A comanda do atendimento: itens, forma de pagamento, comissões e fidelidade.",
   },
   cobranca: {
     nome: "Cobrança dos seus clientes",
