@@ -264,6 +264,11 @@ export async function ingestMetaInbound(
       sent_at: e.sentAt.toISOString(),
       metadata: {
         ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}),
+        // Nome original do anexo (#2613) — o cartão do Inbox lê esta chave.
+        // Só quando há nome (a Cloud API manda `filename` só em `document`):
+        // chave vazia não nasce, e o INSERT é o único caminho que escreve
+        // `metadata` aqui, então nada já gravado é sobrescrito.
+        ...(e.media?.filename ? { media_filename: e.media.filename } : {}),
         ...(e.sharedContact ? { shared_contact: e.sharedContact } : {}),
       },
     })
@@ -436,6 +441,8 @@ export async function ingestMetaEcho(
       metadata: {
         from_business_app: true,
         ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}),
+        // Mesma regra da recebida (#2613): nome só quando há nome.
+        ...(e.media?.filename ? { media_filename: e.media.filename } : {}),
         ...(e.sharedContact ? { shared_contact: e.sharedContact } : {}),
       },
     })
