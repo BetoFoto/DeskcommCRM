@@ -1,5 +1,5 @@
 -- manifest: A cascata de LGPD deixa de nomear a comanda — o passo fixo `update sales set` sai de `fn_lgpd_cascade_redact_contact` e a redação de `sales` passa a acontecer pela seção declarada `financeiro/sales` em `modulo_secoes_lgpd` (D8/0485, forward-fix da 0497, PR #1907 item 1). Sem o módulo a tabela não existe e a cascata inteira abortava com `relation "sales" does not exist` (68 ocorrências no CI do #1907).
--- 0615 — a cascata de LGPD deixa de nomear a comanda (forward-fix da 0497).
+-- 0620 — a cascata de LGPD deixa de nomear a comanda (forward-fix da 0497).
 --
 -- POR QUE ESTE ARQUIVO EXISTE E NÃO UMA EDIÇÃO NA 0497
 -- `fn_lgpd_cascade_redact_contact` ainda fazia `update sales set` pelo nome, e
@@ -10,7 +10,7 @@
 -- primeiro teste a cair é o da própria D8. Nunca se edita uma migration já
 -- aplicada (doutrina de migrations): o conserto sai como forward-fix nova, com o
 -- apêndice idempotente no `baseline.sql`, e por isso ele tem de vir DEPOIS da
--- 0497 na cadeia (0615 > 0497) — `create or replace` troca o corpo inteiro.
+-- 0497 na cadeia (0620 > 0497) — `create or replace` troca o corpo inteiro.
 --
 -- O QUE FAZ
 -- O passo 6c (comentar a comanda) sai do corpo da função. A redação não some:

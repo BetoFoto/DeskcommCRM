@@ -33732,14 +33732,14 @@ comment on table public.account_plans is
   'Classificação do lançamento, com direção (in/out) que o sistema de origem tinha e não usava.';
 
 
--- ---- comanda, financeiro, comissão e fidelidade (migration 0351, reestruturada na 0487) ----
+-- ---- comanda, financeiro, comissão e fidelidade (migration 0351, reestruturada na 0619) ----
 -- O bloco do módulo financeiro/comanda. As CINCO TABELAS (`sales`, `sale_items`,
 -- `commission_rules`, `commissions`, `loyalty_ledger`) deixaram este arquivo e
--- nascem em `fn_financeiro_provisionar()` (0487, ADR-0002 D2); o que fica aqui são
+-- nascem em `fn_financeiro_provisionar()` (0619, ADR-0002 D2); o que fica aqui são
 -- `financial_entries` (do caixa, núcleo) e as funções de negócio reescritas para
 -- compilar sem as tabelas (ADR-0002 D7).
 --
--- ⚠️ AS CINCO TABELAS DA COMANDA SAÍRAM DAQUI (migration 0487, ADR-0002 D2).
+-- ⚠️ AS CINCO TABELAS DA COMANDA SAÍRAM DAQUI (migration 0619, ADR-0002 D2).
 --
 -- `sales`, `sale_items`, `commission_rules`, `commissions` e `loyalty_ledger`
 -- não nascem mais por este arquivo: passaram a ser criadas por
@@ -33765,7 +33765,7 @@ create table if not exists public.financial_entries (
   account_id uuid not null references public.financial_accounts(id) on delete restrict,
   account_plan_id uuid references public.account_plans(id) on delete restrict,
   -- ⚠️ SEM FK para `public.sales`, e a linha passa a ser `uuid` puro: a tabela da
-  -- comanda saiu do baseline (migration 0487, ADR-0002 D2) e uma FK para uma
+  -- comanda saiu do baseline (migration 0619, ADR-0002 D2) e uma FK para uma
   -- relação que só existe depois da instalação do módulo quebraria o
   -- `create table` do caixa em TODO banco onde o módulo não está instalado.
   -- A FK é devolvida por `fn_financeiro_provisionar()`, que a cria no lugar
@@ -34077,7 +34077,7 @@ grant execute on function public.fn_estornar_comanda(uuid, uuid, text) to authen
 
 -- ─── RLS da que ficou: o lançamento financeiro ───────────────────────────────
 --
--- ⚠️ A lista encolheu de seis para uma (migration 0487, ADR-0002 D2). As cinco
+-- ⚠️ A lista encolheu de seis para uma (migration 0619, ADR-0002 D2). As cinco
 -- tabelas da comanda saíram do baseline, e a RLS delas passa a ser aplicada pela
 -- `fn_financeiro_provisionar()`, que termina em `fn_proteger_modulo_provisionado()`
 -- (migration 0325) na mesma transação em que as cria. Aqui sobra só
@@ -34113,13 +34113,13 @@ end $$;
 
 -- Os comentários das tabelas da comanda foram para o corpo da provisionadora,
 -- onde as tabelas nascem — `comment on table` aqui as recriaria num banco sem o
--- módulo, e a 0487 explica por que.
+-- módulo, e a 0619 explica por que.
 comment on function public.fn_finalizar_comanda(uuid, uuid, uuid, integer) is
   'As seis coisas numa transação: venda, comissão por item, entrada na conta da forma de pagamento, ponto de fidelidade e conclusão do agendamento. Idempotente sob FOR UPDATE.';
 
 
 -- ---- uma comanda por agendamento (migration 0352) ----
--- ⚠️ Este bloco ficou VAZIO de propósito (migration 0487, ADR-0002 D2).
+-- ⚠️ Este bloco ficou VAZIO de propósito (migration 0619, ADR-0002 D2).
 --
 -- A rota consulta antes de abrir, e isso resolve o toque repetido, não a
 -- corrida: duas requisições simultâneas passam pelas duas consultas antes de
@@ -34385,7 +34385,7 @@ revoke execute on function public.fn_relatorio_financeiro(uuid, date, date) from
 grant  execute on function public.fn_relatorio_financeiro(uuid, date, date) to authenticated, service_role;
 
 -- ---- regra de comissao inativa (migration 0354) ----
--- ⚠️ Este bloco ficou VAZIO de propósito (migration 0487, ADR-0002 D2).
+-- ⚠️ Este bloco ficou VAZIO de propósito (migration 0619, ADR-0002 D2).
 --
 -- A regra entra no catálogo financeiro genérico, que espera `is_active`. Antes
 -- disto não havia porta nenhuma para cadastrar uma regra, e toda comissão nascia
@@ -43152,9 +43152,9 @@ create trigger trg_lgpd_secoes_de_modulo
   for each row
   when (new.is_anonymized and not old.is_anonymized)
   execute function public.fn_lgpd_redigir_secoes_de_modulo();
--- ---- a provisionadora do financeiro entra no schema (migration 0487) ----
+-- ---- a provisionadora do financeiro entra no schema (migration 0619) ----
 --
--- CÓPIA LITERAL do bloco da migration 0487 que cria
+-- CÓPIA LITERAL do bloco da migration 0619 que cria
 -- `public.fn_financeiro_provisionar()` — e é cópia por geração, não por mão:
 -- `tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts` compara o
 -- corpo das funções escritas à mão no apêndice com a última definição da cadeia,
@@ -49241,7 +49241,7 @@ $f$;
 revoke execute on function public.fn_arquivos_da_organizacao(uuid, text, text, integer) from public, anon, authenticated;
 grant execute on function public.fn_arquivos_da_organizacao(uuid, text, text, integer) to service_role;
 
--- ---- a cascata de LGPD deixa de nomear a comanda (migration 0615) ----
+-- ---- a cascata de LGPD deixa de nomear a comanda (migration 0620) ----
 create or replace function public.fn_lgpd_cascade_redact_contact(p_organization_id uuid, p_contact_id uuid, p_request_id uuid) returns jsonb
     language plpgsql security definer
     set search_path to 'public', 'extensions', 'pg_temp'

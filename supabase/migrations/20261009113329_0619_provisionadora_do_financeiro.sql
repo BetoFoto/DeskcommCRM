@@ -1,3 +1,4 @@
+-- manifest: As cinco tabelas da comanda (`sales`, `sale_items`, `commission_rules`, `commissions`, `loyalty_ledger`) saem do `baseline.sql` e passam a nascer em `fn_financeiro_provisionar()`, na instalação do módulo `financeiro` (ADR-0002 D2/D3/D4/D5) — quem não instala o módulo não carrega as tabelas dele; `financial_entries.sale_id` fica sem FK onde o módulo não está e a provisionadora a devolve (`financeiro_sale_id_fkey`); quem já tinha `sales` é marcado como instalado; as funções de negócio da comanda passam a compilar sem as tabelas (plpgsql + `to_regclass`), e a seção `financeiro/sales` é declarada em `modulo_secoes_lgpd` (notes, cancel_reason e reverse_reason viram nulo na anonimização).
 -- A PROVISIONADORA DO FINANCEIRO — o schema da comanda deixa o baseline e
 -- passa a nascer na instalação do módulo (ADR-0002, D2/D3/D4/D5).
 --
@@ -461,7 +462,7 @@ comment on function public.fn_financeiro_provisionar() is
 -- AS FUNÇÕES DE NEGÓCIO REESCRITAS PARA COMPILAR SEM AS TABELAS (D7).
 --
 -- As migrations 0351-0355 as definiram quando `sales`/`commissions`/`loyalty_ledger`
--- viviam no `baseline.sql`. A 0487 as tira de lá (D2) e as faz nascer só onde o módulo
+-- viviam no `baseline.sql`. A 0619 as tira de lá (D2) e as faz nascer só onde o módulo
 -- está instalado — e `language sql`/`%rowtype` são validados na CRIAÇÃO e recusam com
 -- `relation does not exist` (medido em Postgres 15). Estes `create or replace` as passam
 -- a `plpgsql` com `record` e guarda `to_regclass`, e o apêndice do baseline é ESPELHO

@@ -89,7 +89,7 @@ const TABELAS_NA_CASCATA = [
   // `body` é `not null` e recebe o RÓTULO, não `null`.
   "passagens_de_atendimento",
   // 0359 — texto livre da comanda. `sales` SAIU da cascata por decisão
-  // deliberada (PR #1907, migration 0615): o passo 6c alterava a comanda pelo
+  // deliberada (PR #1907, migration 0620): o passo 6c alterava a comanda pelo
   // NOME, e as cinco tabelas da comanda saíram do `baseline.sql` para nascerem
   // só na instalação do módulo (ADR-0002 D2/D3) — sem o módulo a alteração
   // abortava a ANONIMIZAÇÃO INTEIRA com `relation "sales" does not exist` (68

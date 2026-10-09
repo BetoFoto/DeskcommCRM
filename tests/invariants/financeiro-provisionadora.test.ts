@@ -19,7 +19,7 @@
  *
  * `tests/db/banco-limpo-por-arquivo.ts` dá a cada arquivo um banco recién
  * clonado do MOLDE, que é o `baseline.sql` aplicado. Como as cinco tabelas da
- * comanda saíram do baseline (migration 0487), o molde nasce com elas AUSENTES
+ * comanda saíram do baseline (migration 0619), o molde nasce com elas AUSENTES
  * — que é a pré-condição do terceiro caso. Se alguém as puser de volta no
  * baseline, este arquivo reprova com a mensagem "as tabelas já existem antes de
  * provisionar", e a mensagem diz exatamente o conserto.

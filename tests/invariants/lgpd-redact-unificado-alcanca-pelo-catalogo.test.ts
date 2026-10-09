@@ -40,7 +40,7 @@ import { sql } from "./gov-helpers";
  *                        gatilho `trg_lgpd_secoes_de_modulo` de pé: SQL DINÂMICO
  *                        que alcança onde o módulo está instalado e PULA, sem
  *                        erro, onde não está — o que uma cascata nomeada não
- *                        dá. É o caminho da comanda desde o #1907/0615: `sales`
+ *                        dá. É o caminho da comanda desde o #1907/0620: `sales`
  *                        saiu do corpo da função única porque, sem o módulo, o
  *                        passo nomeado abortava a ANONIMIZAÇÃO INTEIRA
  *                        (`relation "sales" does not exist`, CI do #1907).
@@ -91,7 +91,7 @@ function tabelasNaCascata(): string[] {
  * Tabelas declaradas em `modulo_secoes_lgpd` — o mecanismo da D8 (migration
  * 0485): o registro que o módulo escreve na sua provisionadora/migration e que
  * `trg_lgpd_secoes_de_modulo` consome com SQL dinâmico protegido por
- * `to_regclass`. `sales` está aqui desde o #1907/0615.
+ * `to_regclass`. `sales` está aqui desde o #1907/0620.
  */
 function tabelasDeclaradasEmSeccao(): string[] {
   return lista(`
@@ -181,7 +181,7 @@ const DECISOES: Record<string, Decisao> = {
     decidida: "redigir",
     caminho: "secao",
     razao:
-      "PR #1907 (migration 0615): a comanda saiu do corpo da função única e passou para a " +
+      "PR #1907 (migration 0620): a comanda saiu do corpo da função única e passou para a " +
       "SEÇÃO declarada `financeiro/sales` em `modulo_secoes_lgpd` (D8/0485) — o passo nomeado " +
       "abortava a anonimização INTEIRA em instalação sem o módulo (`relation \"sales\" " +
       "does not exist`, 68 ocorrências no CI). O corte é o mesmo de sempre: `notes` some, " +
