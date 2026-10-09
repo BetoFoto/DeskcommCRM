@@ -55,7 +55,11 @@ import { lerAtribuicao } from "./leitura-da-atribuicao";
 import { lerValorDaConversa } from "./valor-da-conversa";
 import { lerVendaPeloCanal } from "./venda-pelo-canal";
 import { ehEventoDeEtapa } from "./regras-google";
-import { ehEventoDeEtapaMeta } from "./regras-meta";
+import {
+  EVENTOS_DE_ETAPA_NO_CANAL,
+  ehEventoDeEtapaMeta,
+  rotuloDoEventoDaMeta,
+} from "./regras-meta";
 import { lerRegistro, registraEnvio } from "./registro-de-envio";
 
 const CONSUMER_KEY = "conversoes.venda";
@@ -361,7 +365,7 @@ export async function processarConversao(
       "skipped",
       motivoDaPendencia,
       foraDoVocabularioDoCanal
-        ? `Evento de etapa "${registro?.meta_event_name ?? qualificacao?.eventoMeta}" fora do vocabulário do canal.`
+        ? eventoForaDoCanal(registro?.meta_event_name ?? qualificacao?.eventoMeta ?? "")
         : undefined,
     );
     return ok("skipped", motivoDaPendencia);
@@ -518,12 +522,10 @@ export async function processarConversao(
  */
 const EVENTO_FORA_DO_CANAL = "evento_fora_do_canal";
 
-/** Os eventos de etapa que o canal sabe repassar (`ChannelConversionInput`). */
-const EVENTOS_DE_ETAPA_NO_CANAL: readonly ChannelConversionInput["event"][] = [
-  "InitiateCheckout",
-  "LeadSubmitted",
-  "AddToCart",
-];
+/** O detalhe da pendência: o evento escolhido, pelo rótulo da tela e pelo nome da Meta. */
+function eventoForaDoCanal(nome: string): string {
+  return `Evento escolhido: ${rotuloDoEventoDaMeta(nome)} (${nome}).`;
+}
 
 /**
  * O nome que sai pelo canal: a compra, ou o evento padrão da Meta da etapa — o

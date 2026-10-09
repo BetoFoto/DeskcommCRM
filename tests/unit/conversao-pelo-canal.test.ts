@@ -22,6 +22,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
 import { conversaoDeEtapaMetaHandler } from "@/lib/conversoes/etapa-meta.handler";
 import { vendaPeloCanalLigada } from "@/lib/conversoes/venda-pelo-canal";
+import { MOTIVO_LEGIVEL } from "@/lib/conversoes/estado-da-conexao";
+import { EVENTOS_DE_ETAPA_NO_CANAL, rotuloDoEventoDaMeta } from "@/lib/conversoes/regras-meta";
 import { zernioReportConversion } from "@/lib/channels/zernio/conversoes";
 import { resolveZernioCreds } from "@/lib/channels/zernio/credentials";
 import type { EventRow } from "@/lib/event-log/dispatcher";
@@ -524,5 +526,16 @@ describe("o evento de ETAPA da Meta também sai pelo canal", () => {
       detail: expect.stringContaining("QualifiedLead"),
     });
     expect(f).not.toHaveBeenCalled();
+  });
+});
+
+// #2457: o texto da pendência lista o que o ENVIO aceita, pelo nome da tela.
+// Escrito à mão, ele já ofereceu `Purchase` — que não é opção de etapa — e os
+// nomes da Meta em inglês, que a tela não mostra.
+describe("o texto de `evento_fora_do_canal` sai da mesma lista que o envio usa", () => {
+  it("nomeia cada evento que o canal repassa pelo rótulo da tela, e não oferece a compra", () => {
+    const texto = MOTIVO_LEGIVEL.evento_fora_do_canal;
+    for (const e of EVENTOS_DE_ETAPA_NO_CANAL) expect(texto).toContain(rotuloDoEventoDaMeta(e));
+    expect(texto).not.toContain("Purchase");
   });
 });
