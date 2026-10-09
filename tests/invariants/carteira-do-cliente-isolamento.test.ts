@@ -12,8 +12,8 @@ const C2 = "eeeeeeee-7333-4000-8000-000000000002";
 
 function rpc(user: string, org: string, contato: string, dono: string): string {
   try {
-    sql(`set role authenticated; select set_config('request.jwt.claims', '{"sub":"${user}"}', false);
-         select public.fn_definir_carteira_do_cliente('${org}', '${contato}', '${dono}', 'manual');`);
+    sql(`set role service_role;
+         select public.fn_definir_carteira_do_cliente('${org}', '${user}', '${contato}', '${dono}', 'manual');`);
     return "";
   } catch (err) {
     return ((err as { stderr?: string }).stderr ?? "").replace(/\s+/g, " ");
@@ -43,6 +43,18 @@ describe("carteira do cliente (#2591) — isolamento e exclusão do dono", () =>
     expect(rpc(GESTOR2, ORG1, C1, DONO)).toContain("carteira_permissao_negada");
     expect(rpc(GESTOR2, ORG2, C1, DONO)).toContain("carteira_contato_de_outra_organizacao");
     expect(rpc(GESTOR2, ORG2, C2, DONO)).toContain("carteira_dono_invalido"); // dono de outra org
+    expect(lastLine(sql(`select coalesce(carteira_user_id::text,'NULL') from public.contacts where id='${C1}';`))).toBe("NULL");
+  });
+
+  it("a sessão não chama a porta direto: só o servidor, depois do requireRole da rota", () => {
+    let erro = "";
+    try {
+      sql(`set role authenticated; select set_config('request.jwt.claims', '{"sub":"${GESTOR1}"}', false);
+           select public.fn_definir_carteira_do_cliente('${ORG1}', '${GESTOR1}', '${C1}', '${DONO}', 'manual');`);
+    } catch (err) {
+      erro = ((err as { stderr?: string }).stderr ?? "").replace(/\s+/g, " ");
+    }
+    expect(erro).toContain("permission denied for function fn_definir_carteira_do_cliente");
     expect(lastLine(sql(`select coalesce(carteira_user_id::text,'NULL') from public.contacts where id='${C1}';`))).toBe("NULL");
   });
 

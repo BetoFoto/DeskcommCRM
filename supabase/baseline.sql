@@ -50050,8 +50050,10 @@ grant execute on function public.fn_ligar_funil_pulado() to service_role;
 --     um Atendente se põe como dono pela REST e leva o negócio seguinte. O
 --     gatilho INVOKER recusa a sessão (`authenticated`/`anon`) com 42501 —
 --     mesmo desenho do `trg_membro_provisorio_so_pelo_servidor` da 0583 — e a
---     função DEFINER valida papel do CHAMADOR e do dono candidato, grava e
---     adota os negócios abertos sem dono na MESMA transação.
+--     função DEFINER valida papel do ator e do dono candidato, grava e
+--     adota os negócios abertos sem dono na MESMA transação. Ela é só do
+--     service_role: a rota chama depois do `requireRole("manager")` e passa o
+--     ator (`p_actor`), como a `fn_definir_marca_da_organizacao`.
 --
 -- (C) O negócio novo nasce com o dono, e isto é gatilho de propósito: a criação
 --     tem cinco caminhos (rota, automação, roteador, ingestão, MCP) e guardar
@@ -50096,6 +50098,7 @@ alter table public.contacts
 create or replace function public.fn_contacts_carteira_so_pelo_servidor()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   -- SECURITY DEFINER e service_role passam (current_user é o dono/papel de
@@ -50133,8 +50136,11 @@ create trigger trg_contacts_carteira_so_pelo_servidor
 
 -- ─── (B) a única porta de escrita ───────────────────────────────────────────
 
+drop function if exists public.fn_definir_carteira_do_cliente(uuid, uuid, uuid, text);
+
 create or replace function public.fn_definir_carteira_do_cliente(
   p_org uuid,
+  p_actor uuid,
   p_contact uuid,
   p_dono uuid,
   p_origem text default 'manual'
@@ -50145,14 +50151,14 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_ator uuid := auth.uid();
+  v_ator uuid := p_actor;
   v_papel text;
   v_dono_papel text;
   v_contato_org uuid;
   v_origem text := coalesce(p_origem, 'manual');
 begin
   if v_ator is null then
-    raise exception 'carteira_sem_sessao' using errcode = '42501';
+    raise exception 'carteira_sem_ator' using errcode = '42501';
   end if;
   if p_org is null or p_contact is null then
     raise exception 'carteira_parametro_invalido' using errcode = '22023';
@@ -50226,10 +50232,10 @@ begin
 end;
 $$;
 
-revoke execute on function public.fn_definir_carteira_do_cliente(uuid, uuid, uuid, text)
-  from public, anon;
-grant execute on function public.fn_definir_carteira_do_cliente(uuid, uuid, uuid, text)
-  to authenticated, service_role;
+revoke execute on function public.fn_definir_carteira_do_cliente(uuid, uuid, uuid, uuid, text)
+  from public, anon, authenticated;
+grant execute on function public.fn_definir_carteira_do_cliente(uuid, uuid, uuid, uuid, text)
+  to service_role;
 
 -- ─── (C) o negócio novo nasce com o dono ────────────────────────────────────
 

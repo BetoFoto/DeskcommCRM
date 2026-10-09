@@ -53,13 +53,15 @@ function recusaGravacao(userId: string, dml: string): string {
   }
 }
 
-/** Chama a RPC como `authenticated` e devolve o stderr quando a função recusa. */
+/**
+ * Chama a RPC como a rota chama: `service_role` (o único com EXECUTE), com o
+ * ator explícito; devolve o stderr quando a função recusa.
+ */
 function chamaRpc(userId: string, dono: string, contato: string): string {
   try {
     sql(`
-      set role authenticated;
-      select set_config('request.jwt.claims', '{"sub":"${userId}"}', false);
-      select public.fn_definir_carteira_do_cliente('${ORG}', '${contato}', '${dono}', 'manual');
+      set role service_role;
+      select public.fn_definir_carteira_do_cliente('${ORG}', '${userId}', '${contato}', '${dono}', 'manual');
     `);
     return "";
   } catch (err) {

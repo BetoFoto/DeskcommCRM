@@ -9,7 +9,8 @@
  * qualquer autenticado se põe como dono pela REST e leva o negócio seguinte.
  * O gatilho `trg_contacts_carteira_so_pelo_servidor` recusa a SESSÃO (42501),
  * e esta porta é a única que passa — e ela só passa para `manager`+ chamando a
- * `fn_definir_carteira_do_cliente`, que valida o chamador, valida o dono
+ * `fn_definir_carteira_do_cliente` (só do service_role, com o ator passado
+ * depois do `requireRole`), que revalida o ator, valida o dono
  * candidato (membro ativo da MESMA org, papel que conta) e adota os negócios
  * abertos sem dono na mesma transação.
  *
@@ -27,6 +28,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -120,8 +122,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
   }
   const antes = (contato as { carteira_user_id?: string | null } | null)?.carteira_user_id ?? null;
 
-  const { error } = await supabase.rpc("fn_definir_carteira_do_cliente", {
+  const { error } = await createAdminClient().rpc("fn_definir_carteira_do_cliente", {
     p_org: orgId,
+    p_actor: authz.user.id,
     p_contact: contactId,
     p_dono: dono,
     p_origem: origem,
