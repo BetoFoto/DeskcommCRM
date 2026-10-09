@@ -50026,7 +50026,7 @@ grant execute on function public.fn_ligar_funil_pulado() to service_role;
 
 -- ---- Carteira do cliente: o contato ganha um vendedor dono (migration 0622) ----
 
--- manifest: **Carteira do cliente (#2591): o contato ganha um vendedor dono, que é avisado quando o cliente fala com outro e fica com o negócio novo.** Hoje o dono só existe em `crm_leads.owner_user_id` e em `conversations.assigned_to_user_id` — nascem de quem atendeu primeiro ou do rodízio. Aqui: (A) `contacts.carteira_user_id`/`carteira_origem`/`carteira_definida_em` com vocabulário fechado e coerência do trio; (B) a coluna fica FORA do que `authenticated` grava (gatilho 42501, mesma forma da 0583) e só o servidor escreve pela `fn_definir_carteira_do_cliente` (SECURITY DEFINER, manager+ chamando, dono tem de ser membro ativo `agent`/`manager`/`admin` da MESMA organização — `viewer` e revogado não contam), que na mesma transação adota os negócios abertos SEM dono do contato; (C) `trg_crm_lead_nasce_na_carteira` (BEFORE INSERT) preenche dono/kind/assigned_at quando o negócio chega SEM dono e o contato tem carteira qualificada — negócio que já tem dono não muda, e sem carteira nada muda (o rodízio continua decidindo). Sem backfill: contato sem carteira é o comportamento de hoje.
+-- manifest: **Carteira do cliente (#2591): o contato ganha um vendedor dono, que é avisado quando o cliente fala com outro e fica com o negócio novo.** Hoje o dono só existe em `crm_leads.owner_user_id` e em `conversations.assigned_to_user_id` — nascem de quem atendeu primeiro ou do rodízio. Aqui: (A) `contacts.carteira_user_id`/`carteira_origem`/`carteira_definida_em` com vocabulário fechado e coerência de uma via só (dono gravado exige origem e data, para o `on delete set null` do FK não recusar a exclusão do login do dono); (B) a coluna fica FORA do que `authenticated` grava (gatilho 42501, mesma forma da 0583) e só o servidor escreve pela `fn_definir_carteira_do_cliente` (SECURITY DEFINER, manager+ chamando, dono tem de ser membro ativo `agent`/`manager`/`admin` da MESMA organização — `viewer` e revogado não contam), que na mesma transação adota os negócios abertos SEM dono do contato; (C) `trg_crm_lead_nasce_na_carteira` (BEFORE INSERT) preenche dono/kind/assigned_at quando o negócio chega SEM dono e o contato tem carteira qualificada — negócio que já tem dono não muda, e sem carteira nada muda (o rodízio continua decidindo). Sem backfill: contato sem carteira é o comportamento de hoje.
 -- 0622: dono por contato (contacts.carteira_*), escrita só pelo servidor e negócio novo que nasce com o dono
 --
 -- ─── O defeito ───────────────────────────────────────────────────────────────
@@ -50042,8 +50042,8 @@ grant execute on function public.fn_ligar_funil_pulado() to service_role;
 --
 -- (A) O dono é do CONTATO, não do negócio: três colunas em `contacts`, com
 --     `on delete set null` (o dono sai do Supabase, o cliente volta ao fluxo
---     normal) e um CHECK de vocabulário fechado + um CHECK de coerência (trio
---     nulo ou trio preenchido — meio preenchido é drift que ninguém lê).
+--     normal) e um CHECK de vocabulário fechado + um CHECK de coerência de uma
+--     via só (dono gravado exige origem e data; ver o comentário no CHECK).
 --
 -- (B) A escrita é do servidor, e isto não é preferência: a policy de UPDATE de
 --     `contacts` não olha papel (medido pelo autor da issue numa cópia), então
@@ -50084,9 +50084,11 @@ alter table public.contacts
 alter table public.contacts
   add constraint contacts_carteira_trio_coerente
   check (
-    (carteira_user_id is null and carteira_origem is null and carteira_definida_em is null)
-    or
-    (carteira_user_id is not null and carteira_origem is not null and carteira_definida_em is not null)
+    -- Uma via só: dono gravado exige origem e data. O inverso não, porque o
+    -- `on delete set null` do FK zera SÓ `carteira_user_id` — com o trio
+    -- bicondicional, excluir o login do dono era recusado pelo CHECK.
+    carteira_user_id is null
+    or (carteira_origem is not null and carteira_definida_em is not null)
   );
 
 -- ─── (B) a coluna fica fora do que a sessão grava ───────────────────────────
