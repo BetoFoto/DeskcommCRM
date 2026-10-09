@@ -855,11 +855,12 @@ restaurar_servicos() {
 # exemplo) recebe "no matching manifest for linux/arm64/v8" ao puxá-las. O
 # `up -d` seguinte morre junto: o `app` não tem `build:` ao lado do `image:` no
 # compose de produção, de propósito (#1060) — é a falta da imagem dele que faz
-# o `up -d` falhar e entrega a decisão a esta função, que é o portão da #1955.
-# Worker, scheduler e voz, que têm `build:`, o Compose reconstrói sozinho
-# (medido, em qualquer falha de pull) — e é construção barata; o pesado é este.
-# Por isso ela não pode ser removida "porque o compose agora constrói sozinho":
-# é ela quem decide se pode construir, conforme o registro responde ou não. O
+# o `up -d` falhar e leva quem chamou até esta função. Worker, scheduler e voz,
+# que têm `build:`, o Compose reconstrói sozinho (medido, em qualquer falha de
+# pull) — e é construção barata; o pesado é este. Esta função NÃO decide se
+# pode construir: ela constrói. Quem decide é `build_local_permitido` (o portão
+# da #1955, mais abaixo), e só o update.sh o consulta antes de chamar esta
+# função; o install.sh a chama direto. O
 # desfecho visível antes era o pior possível — a atualização não acontecia, o
 # script terminava como se tivesse dado certo e o dono só descobria pelo CRM
 # velho. Pelo botão "Atualizar" do site, nem isso: o agente roda sozinho no
