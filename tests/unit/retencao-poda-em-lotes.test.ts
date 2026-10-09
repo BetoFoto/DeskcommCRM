@@ -138,6 +138,11 @@ function bancoQueDevolve(sequencias: {
    * erro do PostgREST, e é ele que a poda tem de NOMEAR sem derrubar as irmãs.
    */
   erroEm?: string[];
+  /**
+   * O dreno que falha DEPOIS de N lotes bons (sugestão 1 do #2645): o parcial
+   * dos lotes já apagados tem de voltar no relatório.
+   */
+  falhaDepoisDe?: { nome: string; lotes: number };
   /** A décima poda falha nesta rodada (erro do DELETE, não do rpc). */
   erroRascunhos?: boolean;
   /** A poda de mídia falha nesta rodada (JSONB com erro). */
@@ -151,6 +156,7 @@ function bancoQueDevolve(sequencias: {
   lotesDeMidia: number[];
 } {
   const chamadas: { nome: string; dias: number; limite: number }[] = [];
+  const chamadasPorNome = new Map<string, number>();
   const cortes: string[] = [];
   const lotesDeMidia: number[] = [];
   const restante = {
@@ -161,9 +167,16 @@ function bancoQueDevolve(sequencias: {
   };
   const db: PodaDb = {
     async rpc(nome, args) {
+      const numero = (chamadasPorNome.get(nome) ?? 0) + 1;
+      chamadasPorNome.set(nome, numero);
       chamadas.push({ nome, dias: args.p_retencao_dias, limite: args.p_limite });
       if (sequencias.erroEm?.includes(nome)) {
-        return { data: null, error: { message: `permission denied for function ${nome}` } };
+        // A mensagem do banco NÃO nomeia a função (o nome é do prefixo da poda):
+        // é o que permite medir o prefixo duplicado (#2645).
+        return { data: null, error: { message: "permission denied (dublê)" } };
+      }
+      if (sequencias.falhaDepoisDe?.nome === nome && numero > sequencias.falhaDepoisDe.lotes) {
+        return { data: null, error: { message: `timeout ao drenar ${nome}` } };
       }
       const balde = nome === "fn_podar_fila_de_jobs" ? restante.fila : restante.auditoria;
       return { data: balde.shift() ?? 0, error: null };
@@ -367,6 +380,59 @@ describe("podarHistorico — o laço de lotes", () => {
     expect(r.falhas.some((f) => f.includes("conversation_drafts"))).toBe(true);
     expect(r.falhas.some((f) => f.includes("fn_enfileirar_midia_vencida"))).toBe(true);
     expect(r.jobs_apagados).toBe(0);
+  });
+
+  it("⭐ dreno interrompido no meio: os lotes que JÁ passaram ficam no relatório (#2645)", async () => {
+    // O banco falha no TERCEIRO lote da auditoria, com dois lotes cheios já
+    // apagados. Antes, o parcial sumia e o relatório registrava 0 — no expurgo
+    // da auditoria isso é apagar linhas e contá-las como zero NA PRÓPRIA TRILHA.
+    const { db } = bancoQueDevolve({
+      fila: [3],
+      auditoria: [TAMANHO_DO_LOTE, TAMANHO_DO_LOTE, TAMANHO_DO_LOTE],
+      falhaDepoisDe: { nome: "fn_expurgar_auditoria_vencida", lotes: 2 },
+    });
+    const r = await podarHistorico(db, {});
+
+    expect(r.auditoria_apagada, "o parcial dos lotes que passaram sumiu do relatório").toBe(
+      TAMANHO_DO_LOTE * 2,
+    );
+    expect(r.lotes_auditoria).toBe(2);
+    expect(r.falhas).toEqual([expect.stringContaining("fn_expurgar_auditoria_vencida")]);
+    // As irmãs seguem — inclusive as que vêm depois da que falhou.
+    expect(r.jobs_apagados).toBe(3);
+    expect(r.lotes_checkpoints).toBe(1);
+  });
+
+  it("o nome do dreno sai UMA vez em `falhas` — sem o prefixo duplicado (#2645)", async () => {
+    const { db } = bancoQueDevolve({
+      fila: [0],
+      auditoria: [0],
+      erroEm: ["fn_expurgar_auditoria_vencida"],
+    });
+    const r = await podarHistorico(db, {});
+
+    const linha = r.falhas.find((f) => f.includes("fn_expurgar_auditoria_vencida"))!;
+    expect(linha.startsWith("fn_expurgar_auditoria_vencida: ")).toBe(true);
+    expect(linha.match(/fn_expurgar_auditoria_vencida/g), "o nome saiu duplicado").toHaveLength(1);
+  });
+
+  it("mensagem de erro comprida é cortada em 300, como no caminho antigo (#2645)", async () => {
+    const db: PodaDb = {
+      async rpc() {
+        return { data: null, error: { message: "x".repeat(2000) } };
+      },
+      async apagarRascunhos() {
+        return { data: 0, error: null };
+      },
+      async enfileirarMidia() {
+        return { data: { vencidas: 0, orfas: 0 }, error: null };
+      },
+    };
+    const r = await podarHistorico(db, {});
+
+    // Só os 14 drenos do rpc falham nesta rodada (mídia e rascunhos vão bem).
+    expect(r.falhas).toHaveLength(14);
+    for (const f of r.falhas) expect(f.length).toBeLessThanOrEqual(300);
   });
 });
 
@@ -766,5 +832,15 @@ describe("o handler HTTP — a falha entra na trilha, o vazio não", () => {
     expect(metadata).toMatchObject({ falhou: true, rascunhos_apagados: 1 });
     expect(Array.isArray(metadata.falhas), "as falhas têm de ir NOMEADAS na trilha").toBe(true);
     expect((metadata.falhas as string[]).length).toBeGreaterThan(0);
+
+    // O 500 leva o RELATÓRIO no detalhe (#2645, sugestão 3): a resposta não pode
+    // perder o que a rodada conseguiu fazer — inclusive as contagens da
+    // varredura de anonimização, que só existiam no corpo do 200.
+    const corpo = (await resposta.json()) as { error: { details: Record<string, unknown> } };
+    expect(corpo.error.details, "o 500 perdeu o relatório da rodada").toMatchObject({
+      rascunhos_apagados: 1,
+      anonimizacoes_examinadas: 0,
+    });
+    expect(Array.isArray(corpo.error.details.falhas)).toBe(true);
   });
 });
