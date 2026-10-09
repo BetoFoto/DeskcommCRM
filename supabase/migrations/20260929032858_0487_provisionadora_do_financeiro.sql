@@ -309,45 +309,109 @@ comment on table public.loyalty_ledger is
   -- nome da policy e o `on public.` na MESMA linha e abortava a atualização
   -- de quem tem o módulo instalado. É a quebra entre as duas linhas que tira
   -- a regra do olhar daquela varredura sem tirar a regra da tabela.
+  --
+  -- 0533 (#2115): o `tenant_isolation_<t>_all` virou o PAR `_read`/`_write`,
+  -- o mesmo desenho que o baseline dá a `financial_entries` no núcleo. Leitura
+  -- com a função pura (o `support_readonly` continua LENDO a comanda); escrita
+  -- com `scope='full'` e papel `agent+` — era isso que a política larga escondia:
+  -- sem o par, quem só lê escrevia a comanda inteira. O `drop ... _all` fica em
+  -- cada bloco para o reaplicar (D6) converter banco provisionado pela versão
+  -- antiga do corpo, e o par nasce AQUI porque a rotina 0325 só enxerga tabela
+  -- com RLS DESLIGADA — estas já nascem ligadas.
   alter table public.sales enable row level security;
   revoke all on public.sales from anon;
   drop policy if exists tenant_isolation_sales_all on public.sales;
-  create policy tenant_isolation_sales_all
+  drop policy if exists tenant_isolation_sales_read on public.sales;
+  create policy tenant_isolation_sales_read
+    on public.sales for select
+    using (organization_id in (select public.fn_user_org_ids())
+           or public.fn_is_platform_admin());
+  drop policy if exists tenant_isolation_sales_write on public.sales;
+  create policy tenant_isolation_sales_write
     on public.sales for all
-    using (organization_id in (select * from public.fn_user_org_ids()))
-    with check (organization_id in (select * from public.fn_user_org_ids()));
+    using (organization_id in (select public.fn_user_org_ids())
+           or public.fn_is_platform_admin_full())
+    with check (
+      public.fn_is_platform_admin_full()
+      or (organization_id in (select public.fn_user_org_ids())
+          and public.fn_role_at_least(organization_id, 'agent'))
+    );
 
   alter table public.sale_items enable row level security;
   revoke all on public.sale_items from anon;
   drop policy if exists tenant_isolation_sale_items_all on public.sale_items;
-  create policy tenant_isolation_sale_items_all
+  drop policy if exists tenant_isolation_sale_items_read on public.sale_items;
+  create policy tenant_isolation_sale_items_read
+    on public.sale_items for select
+    using (organization_id in (select public.fn_user_org_ids())
+           or public.fn_is_platform_admin());
+  drop policy if exists tenant_isolation_sale_items_write on public.sale_items;
+  create policy tenant_isolation_sale_items_write
     on public.sale_items for all
-    using (organization_id in (select * from public.fn_user_org_ids()))
-    with check (organization_id in (select * from public.fn_user_org_ids()));
+    using (organization_id in (select public.fn_user_org_ids())
+           or public.fn_is_platform_admin_full())
+    with check (
+      public.fn_is_platform_admin_full()
+      or (organization_id in (select public.fn_user_org_ids())
+          and public.fn_role_at_least(organization_id, 'agent'))
+    );
 
   alter table public.commission_rules enable row level security;
   revoke all on public.commission_rules from anon;
   drop policy if exists tenant_isolation_commission_rules_all on public.commission_rules;
-  create policy tenant_isolation_commission_rules_all
+  drop policy if exists tenant_isolation_commission_rules_read on public.commission_rules;
+  create policy tenant_isolation_commission_rules_read
+    on public.commission_rules for select
+    using (organization_id in (select public.fn_user_org_ids())
+           or public.fn_is_platform_admin());
+  drop policy if exists tenant_isolation_commission_rules_write on public.commission_rules;
+  create policy tenant_isolation_commission_rules_write
     on public.commission_rules for all
-    using (organization_id in (select * from public.fn_user_org_ids()))
-    with check (organization_id in (select * from public.fn_user_org_ids()));
+    using (organization_id in (select public.fn_user_org_ids())
+           or public.fn_is_platform_admin_full())
+    with check (
+      public.fn_is_platform_admin_full()
+      or (organization_id in (select public.fn_user_org_ids())
+          and public.fn_role_at_least(organization_id, 'agent'))
+    );
 
   alter table public.commissions enable row level security;
   revoke all on public.commissions from anon;
   drop policy if exists tenant_isolation_commissions_all on public.commissions;
-  create policy tenant_isolation_commissions_all
+  drop policy if exists tenant_isolation_commissions_read on public.commissions;
+  create policy tenant_isolation_commissions_read
+    on public.commissions for select
+    using (organization_id in (select public.fn_user_org_ids())
+           or public.fn_is_platform_admin());
+  drop policy if exists tenant_isolation_commissions_write on public.commissions;
+  create policy tenant_isolation_commissions_write
     on public.commissions for all
-    using (organization_id in (select * from public.fn_user_org_ids()))
-    with check (organization_id in (select * from public.fn_user_org_ids()));
+    using (organization_id in (select public.fn_user_org_ids())
+           or public.fn_is_platform_admin_full())
+    with check (
+      public.fn_is_platform_admin_full()
+      or (organization_id in (select public.fn_user_org_ids())
+          and public.fn_role_at_least(organization_id, 'agent'))
+    );
 
   alter table public.loyalty_ledger enable row level security;
   revoke all on public.loyalty_ledger from anon;
   drop policy if exists tenant_isolation_loyalty_ledger_all on public.loyalty_ledger;
-  create policy tenant_isolation_loyalty_ledger_all
+  drop policy if exists tenant_isolation_loyalty_ledger_read on public.loyalty_ledger;
+  create policy tenant_isolation_loyalty_ledger_read
+    on public.loyalty_ledger for select
+    using (organization_id in (select public.fn_user_org_ids())
+           or public.fn_is_platform_admin());
+  drop policy if exists tenant_isolation_loyalty_ledger_write on public.loyalty_ledger;
+  create policy tenant_isolation_loyalty_ledger_write
     on public.loyalty_ledger for all
-    using (organization_id in (select * from public.fn_user_org_ids()))
-    with check (organization_id in (select * from public.fn_user_org_ids()));
+    using (organization_id in (select public.fn_user_org_ids())
+           or public.fn_is_platform_admin_full())
+    with check (
+      public.fn_is_platform_admin_full()
+      or (organization_id in (select public.fn_user_org_ids())
+          and public.fn_role_at_least(organization_id, 'agent'))
+    );
 
   -- D5: a proteção na MESMA transação. Sem esta linha a tabela nasce com a anon
   -- key podendo ler tudo — `baseline.sql:4748` dá, por
@@ -682,20 +746,26 @@ begin
     );
   end if;
 
+  -- Os parâmetros plpgsql NÃO são visíveis dentro de EXECUTE (SQL dinâmico): sem o
+  -- USING, a primeira chamada em banco COM o módulo morria com
+  -- `column "p_org" does not exist` na linha 43 do corpo (medido no #1907, no teste
+  -- relatorio-financeiro-por-moeda). O USING resolve os três por posição e mantém o
+  -- D7: nada é validado na criação, e a query da comanda só existe para quem tem a
+  -- comanda — instalação sem módulo nem chega aqui (o `if to_regclass` de cima volta).
   execute $q$
   with lancamentos as (
     select direction, amount_cents, currency
       from public.financial_entries
-     where organization_id = p_org
+     where organization_id = $1
        and status = 'paid'
-       and entry_date between p_de and p_ate
+       and entry_date between $2 and $3
   ),
   comandas as (
     select id, status, total_cents, currency, reversed_at, payment_method_id, contact_id
       from public.sales
-     where organization_id = p_org
+     where organization_id = $1
        and finalized_at is not null
-       and finalized_at::date between p_de and p_ate
+       and finalized_at::date between $2 and $3
   ),
   por_forma as (
     select coalesce(pm.name, 'Sem forma') as nome,
@@ -703,7 +773,7 @@ begin
            sum(c.total_cents)             as total_cents
       from comandas c
       left join public.payment_methods pm
-        on pm.id = c.payment_method_id and pm.organization_id = p_org
+        on pm.id = c.payment_method_id and pm.organization_id = $1
      group by 1
   ),
   por_profissional as (
@@ -712,9 +782,9 @@ begin
            sum(co.amount_cents)  as comissao_cents
       from public.commissions co
       join public.sale_items si
-        on si.id = co.sale_item_id and si.organization_id = p_org
+        on si.id = co.sale_item_id and si.organization_id = $1
       join comandas s on s.id = si.sale_id
-     where co.organization_id = p_org
+     where co.organization_id = $1
        and co.status <> 'reversed'
      group by 1
   ),
@@ -729,7 +799,7 @@ begin
            sum(si.total_cents)  as total_cents
       from public.sale_items si
       join comandas s on s.id = si.sale_id
-     where si.organization_id = p_org
+     where si.organization_id = $1
      group by 1
   ),
   por_cliente as (
@@ -755,7 +825,7 @@ begin
            sum(c.total_cents)             as total_cents
       from comandas c
       left join public.payment_methods pm
-        on pm.id = c.payment_method_id and pm.organization_id = p_org
+        on pm.id = c.payment_method_id and pm.organization_id = $1
      group by 1, 2
   ),
   profissional_por_moeda as (
@@ -765,9 +835,9 @@ begin
            sum(co.amount_cents)  as comissao_cents
       from public.commissions co
       join public.sale_items si
-        on si.id = co.sale_item_id and si.organization_id = p_org
+        on si.id = co.sale_item_id and si.organization_id = $1
       join comandas s on s.id = si.sale_id
-     where co.organization_id = p_org
+     where co.organization_id = $1
        and co.status <> 'reversed'
      group by 1, 2
   ),
@@ -778,7 +848,7 @@ begin
            sum(si.total_cents)  as total_cents
       from public.sale_items si
       join comandas s on s.id = si.sale_id
-     where si.organization_id = p_org
+     where si.organization_id = $1
      group by 1, 2
   ),
   cliente_por_moeda as (
@@ -791,8 +861,8 @@ begin
      group by 1, 2
   )
   select jsonb_build_object(
-    'de', p_de,
-    'ate', p_ate,
+    'de', $2,
+    'ate', $3,
     'entradas_cents', coalesce((select sum(amount_cents) from lancamentos where direction = 'in'), 0),
     'saidas_cents',   coalesce((select sum(amount_cents) from lancamentos where direction = 'out'), 0),
     'saldo_cents',    coalesce((select sum(case when direction = 'in' then amount_cents else -amount_cents end) from lancamentos), 0),
@@ -857,7 +927,7 @@ begin
         from moedas m
     ), '{}'::jsonb)
   );
-  $q$ into v;
+  $q$ into v using p_org, p_de, p_ate;
   return v;
 end $fn$;
 
