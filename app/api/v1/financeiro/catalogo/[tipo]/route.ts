@@ -24,6 +24,7 @@ import {
   ROTULO_DA_ENTIDADE,
   SCHEMA_POR_ENTIDADE,
   ehEntidadeDoCatalogo,
+  lerAlteracao,
 } from "@/lib/financeiro/catalogo";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -160,23 +161,20 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
   const base = alterarSchema.safeParse(corpo);
   if (!base.success) return fail("validation_failed", t("id inválido."), 422, { requestId });
 
-  // `.partial()` sobre o schema da entidade: alterar um campo não obriga a
-  // reenviar os outros, e um campo desconhecido é recusado em vez de ignorado.
+  // Cada campo opcional: alterar um não obriga a reenviar os outros. E só o que
+  // veio no corpo é gravado — ver `lerAlteracao`.
   const { id: _id, ...resto } = corpo as Record<string, unknown>;
-  const campos = SCHEMA_POR_ENTIDADE[e.tipo].partial().safeParse(resto);
-  if (!campos.success) {
-    return fail("validation_failed", t(campos.error.issues[0]?.message ?? "corpo inválido"), 422, {
-      requestId,
-    });
-  }
-  if (Object.keys(campos.data).length === 0) {
+  const lido = lerAlteracao(e.tipo, resto);
+  if (!lido.ok) return fail("validation_failed", t(lido.mensagem), 422, { requestId });
+  const campos = lido.campos;
+  if (Object.keys(campos).length === 0) {
     return fail("validation_failed", t("Nenhum campo para alterar."), 422, { requestId });
   }
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from(e.tabela)
-    .update(campos.data)
+    .update(campos)
     .eq("id", base.data.id)
     .eq("organization_id", authz.org.orgId)
     .select(COLUNAS_POR_ENTIDADE[e.tipo])
@@ -185,6 +183,18 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
   if (error) {
     if (error.code === "23505") {
       return fail("conflict", `${t(ROTULO_DA_ENTIDADE[e.tipo])}: ${t("esse nome já existe.")}`, 409, {
+        requestId,
+      });
+    }
+    // Os mesmos da criação: 23503 é conta de outra organização (ou inexistente),
+    // 23514 é a regra de comissão que ficaria sem alvo. Recusa, não erro.
+    if (error.code === "23503") {
+      return fail("validation_failed", t("A conta informada não existe nesta organização."), 422, {
+        requestId,
+      });
+    }
+    if (error.code === "23514") {
+      return fail("validation_failed", t("Escolha ao menos uma pessoa ou um serviço."), 422, {
         requestId,
       });
     }
@@ -199,7 +209,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
     resourceType: e.tabela,
     resourceId: base.data.id,
     requestId,
-    metadata: { tipo: e.tipo, campos: Object.keys(campos.data) },
+    metadata: { tipo: e.tipo, campos: Object.keys(campos) },
   });
 
   return ok(data, { requestId });
