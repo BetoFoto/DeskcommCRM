@@ -109,7 +109,7 @@ describe("#2591 — fatia 2: aviso ao vendedor dono", () => {
     const criarTarefaInterna = vi.fn(
       async (
         _db: unknown,
-        pedido: { organizationId: string; atribuirA: unknown; contactId: string | null; origem: string },
+        _pedido: { organizationId: string; atribuirA: unknown; contactId: string | null; origem: string },
       ) => ({ ok: true as const, tarefa_id: "tarefa-1", assigned_to: "u-a" }),
     );
     vi.doMock("@/lib/tarefas/criar-tarefa", () => ({ criarTarefaInterna }));

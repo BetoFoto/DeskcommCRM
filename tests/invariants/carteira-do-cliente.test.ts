@@ -39,9 +39,6 @@ const ETAPA = "eeeeeeee-5555-4000-8000-000000000002";
 const CONTATO_SEM_CARTEIRA = "eeeeeeee-3333-4000-8000-000000000001";
 const CONTATO_DA_CARTEIRA = "eeeeeeee-3333-4000-8000-000000000002";
 
-/** Chaves de erro que a `fn_definir_carteira_do_cliente` levanta. */
-type Chave = "carteira_permissao_negada" | "carteira_dono_invalido" | "";
-
 /** Roda um DML como `authenticated` (claims do usuário) e devolve o stderr quando recusado. */
 function recusaGravacao(userId: string, dml: string): string {
   try {
