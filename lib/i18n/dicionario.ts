@@ -7158,8 +7158,8 @@ export const DICIONARIO: Traducoes = {
   Ganho: { es: "Ganado" },
   Perdido: { es: "Perdido" },
   // ─── Achados: chamadas com aspas simples (ponto cego do checker por regex) ───
-  "O relatório de LGPD entregue ao cliente traz a RAZÃO SOCIAL da sua empresa, e não o nome aqui de cima — é ela que responde legalmente pelos dados. Confira o campo \"Razão social\" em Configurações → Organização.": {
-    es: "El informe de LGPD que se entrega al cliente incluye la RAZÓN SOCIAL de tu empresa, no el nombre de arriba, porque es ella quien responde legalmente por los datos. Revisa el campo \"Razón social\" en Configuración → Organización.",
+  "O relatório de {lei} entregue ao cliente traz a {campo_alto} da sua empresa, e não o nome aqui de cima — é ela que responde legalmente pelos dados. Confira o campo \"{campo}\" em Configurações → Organização.": {
+    es: "El informe de {lei} que se entrega al cliente incluye la {campo_alto} de tu empresa, no el nombre de arriba, porque es ella quien responde legalmente por los datos. Revisa el campo \"{campo}\" en Configuración → Organización.",
   },
   "Use a ação \"Webhooks\" → POST, apontando para o endereço acima.": {
     es: "Usa la acción \"Webhooks\" → POST y apunta a la dirección de arriba.",
