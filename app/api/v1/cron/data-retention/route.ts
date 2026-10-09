@@ -266,6 +266,25 @@ export interface PodaDb {
   ): Promise<{ data: number | null; error: { message: string } | null }>;
 }
 
+/**
+ * Um dreno interrompido NO MEIO carrega o parcial (sugestão 1 do #2645).
+ *
+ * As três podas apagam em lotes de 1000; quando o banco falha no lote 4 de 20,
+ * os 3 lotes anteriores JÁ foram apagados — e o relatório registrava 0. No caso
+ * do expurgo da auditoria isso é pior que um número feio: linhas de auditoria
+ * apagadas ficavam contadas como zero NA PRÓPRIA TRILHA. A classe carrega as
+ * contagens até a falha para o `executarDreno` devolvê-las ao relatório.
+ */
+class DrenoInterrompido<T> extends Error {
+  constructor(
+    mensagem: string,
+    readonly parcial: T,
+  ) {
+    super(mensagem);
+    this.name = "DrenoInterrompido";
+  }
+}
+
 async function drenar(
   db: PodaDb,
   nome:
@@ -292,7 +311,9 @@ async function drenar(
       p_retencao_dias: dias,
       p_limite: TAMANHO_DO_LOTE,
     });
-    if (error) throw new Error(`${nome}: ${error.message}`);
+    if (error) {
+      throw new DrenoInterrompido(`${nome}: ${error.message}`, { apagadas, lotes, temResto: false });
+    }
     const n = data ?? 0;
     lotes += 1;
     apagadas += n;
@@ -326,7 +347,13 @@ async function drenarRascunhos(
   let lotes = 0;
   for (let i = 0; i < MAX_LOTES; i += 1) {
     const { data, error } = await db.apagarRascunhos(corte, TAMANHO_DO_LOTE);
-    if (error) throw new Error(`conversation_drafts: ${error.message}`);
+    if (error) {
+      throw new DrenoInterrompido(`conversation_drafts: ${error.message}`, {
+        apagadas,
+        lotes,
+        temResto: false,
+      });
+    }
     const n = data ?? 0;
     lotes += 1;
     apagadas += n;
@@ -371,7 +398,14 @@ async function drenarMidia(
   let lotes = 0;
   for (let i = 0; i < MAX_LOTES; i += 1) {
     const { data, error } = await db.enfileirarMidia(TAMANHO_DO_LOTE);
-    if (error) throw new Error(`fn_enfileirar_midia_vencida: ${error.message}`);
+    if (error) {
+      throw new DrenoInterrompido(`fn_enfileirar_midia_vencida: ${error.message}`, {
+        enfileirada,
+        expurgada,
+        lotes,
+        temResto: false,
+      });
+    }
     const r = (typeof data === "object" && data !== null ? data : {}) as RetornoDaFilaDeMidia;
     const vencidas = r.vencidas ?? 0;
     const orfas = r.orfas ?? 0;
@@ -411,7 +445,17 @@ async function executarDreno<T>(
     return await tarefa();
   } catch (err) {
     const detalhe = err instanceof Error ? err.message : String(err);
-    falhas.push(`${nome}: ${detalhe}`);
+    // O nome sai UMA vez: as três tarefas já prefixam a própria mensagem
+    // (`fn_x: motivo`), e o prefixo daqui a duplicava (`fn_x: fn_x: motivo`).
+    const nomeado = detalhe.startsWith(nome) ? detalhe : `${nome}: ${detalhe}`;
+    // Mesmo teto do caminho antigo de falha total (300 caracteres): falha de
+    // banco cabe num aviso, e mensagem de provider pode vir enorme.
+    falhas.push(nomeado.slice(0, 300));
+    // O parcial dos lotes que JÁ passaram volta ao relatório (sugestão 1 do
+    // #2645): sem isto, o expurgo da auditoria registraria 0 na própria trilha
+    // para linhas que ele apagou de verdade. Erro sem parcial (inesperado) cai
+    // no zerado de sempre.
+    if (err instanceof DrenoInterrompido) return err.parcial as T;
     return emFalha;
   }
 }
@@ -799,12 +843,11 @@ async function handle(req: NextRequest): Promise<Response> {
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     logger.error("[data-retention] poda falhou", { error: detail, requestId });
-    // A falha ENTRA na trilha, e é o único caso em que uma rodada que não apagou
-    // nada audita. É o laço de retorno desta peça: sem esta linha, uma poda que
-    // parou de funcionar — grants que não vieram no `update.sh` de um clone,
-    // função ausente — seria indistinguível de uma poda que não tinha nada a
-    // fazer, e o único sinal viveria num `logger.error` dentro do contêiner,
-    // atrás de um `curl` que manda tudo para /dev/null. Teto de 1 linha/dia.
+    // A falha ENTRA na trilha. Este catch só alcança falha de CRIAÇÃO do client
+    // (as podas isolam seus drenos desde o #2508): rodada que morre aqui não
+    // apagou nada por definição, e é o laço de retorno desta peça — sem esta
+    // linha, um clone sem env/credencial seria indistinguível de um dia sem
+    // nada a fazer. A falha PARCIAL também audita sem efeito (ver abaixo).
     void audit({
       action: "retention.sweep_run",
       organizationId: null,
@@ -913,13 +956,14 @@ async function handle(req: NextRequest): Promise<Response> {
     anonimizacoes_tem_resto: varredura.temResto,
   };
   // Poda parcial é 500: a rodada NÃO está completa, e o operador precisa poder
-  // distinguir isso de um dia em que nada havia a fazer. O detalhe nomeia as
-  // falhas; o relatório completo, com as contagens do que foi apagado, segue na
-  // trilha (`retention.sweep_run` acima).
+  // distinguir isso de um dia em que nada havia a fazer. O detalhe leva o
+  // RELATÓRIO inteiro — contagens das podas que funcionaram, as de anonimização
+  // e as falhas nomeadas: a resposta 500 não pode perder o que a rodada
+  // conseguiu fazer (sugestão 3 do #2645).
   if (houveFalhaParcial) {
     return fail("internal_error", "Failed to prune history.", 500, {
       requestId,
-      details: { falhas: resultado.falhas },
+      details: corpo,
     });
   }
   return ok(corpo, { requestId });
