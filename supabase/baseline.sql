@@ -48799,7 +48799,7 @@ grant execute on function public.fn_arquivos_da_organizacao(uuid, text, text, in
 -- mudam: esta chave age só na descrição da ferramenta `request_human_handoff`.
 -- O efeito no turno mora em `lib/agent-engine/agent/inbound-turn.ts`.
 --
--- O bloco de baixo é IDÊMPENTE (mesmo do .sql da 0616, byte a byte): o kit
+-- O bloco de baixo é IDEMPOTENTE (mesmo do .sql da 0616, byte a byte): o kit
 -- self-host aplica SÓ o baseline, e quem usa o Supabase CLI aplica a cadeia —
 -- os dois têm de sair com a mesma trava. A trava passa a cobrir a coluna nova
 -- porque a lista dela é escrita à mão: sem esta linha, uma versão publicada
