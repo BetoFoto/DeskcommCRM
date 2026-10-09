@@ -26,9 +26,10 @@ import { sql, lastLine } from "./gov-helpers";
  * funil do agente. Forçar um deles seria inventar semântica que o tenant não
  * declarou; `null` é estado legítimo (0084).
  *
- * ⚠️ CADA CASO MONTA E DESMONTA O PRÓPRIO TENANT — mesma razão da 0156: um
- * caso que herdasse o quadro já ligado pelo anterior mediria a precondição
- * errada e passaria por sorte.
+ * ⚠️ CADA CASO MONTA O PRÓPRIO TENANT, com slug próprio — mesma razão da 0156:
+ * um caso que herdasse o quadro já ligado pelo anterior mediria a precondição
+ * errada e passaria por sorte. Não há desmontagem: entre arquivos, quem isola é
+ * o banco novo que o `scripts/test-db.sh` dá a cada arquivo.
  */
 
 /** Um tenant com o funil que `trg_seed_default_pipeline_for_org` semeia. */
@@ -146,5 +147,40 @@ describe("2451 · quem pula o passo do funil não fica com o agente mudo", () =>
               where pipeline_id = '${pipeline}'::uuid;`),
       ),
     ).toBe("8");
+  });
+});
+
+describe("2451 · o pulo não reescreve o que alguém já mapeou", () => {
+  it("hint manual na própria etapa é preservado", () => {
+    const { org, pipeline } = criarTenant("tri-2663-manual");
+    sql(`update public.crm_stages set agent_stage_hint = 'qualified'
+          where pipeline_id = '${pipeline}'::uuid and slug = 'aguardando_pagamento';`);
+    pularOPassoDoFunil(org);
+    expect(
+      lastLine(sql(`select string_agg(slug || '/' || coalesce(agent_stage_hint,'-'), ',' order by position)
+                     from public.crm_stages where pipeline_id = '${pipeline}'::uuid;`)),
+    ).toBe("carrinho_abandonado/-,aguardando_pagamento/qualified,pago/won,em_separacao/-,enviado/-,entregue/-,pos_venda/-,cancelado/lost");
+  });
+
+  it("passo já ocupado por outra etapa: o pulo não levanta erro e não duplica", () => {
+    const { org, pipeline } = criarTenant("tri-2663-colisao");
+    sql(`update public.crm_stages set agent_stage_hint = 'negotiating'
+          where pipeline_id = '${pipeline}'::uuid and slug = 'enviado';`);
+    pularOPassoDoFunil(org);
+    expect(
+      lastLine(sql(`select coalesce(onboarding_state->'funil'->>'skipped','(ausente)') from public.organizations where id='${org}'::uuid;`)),
+    ).toBe("true");
+    expect(
+      lastLine(sql(`select string_agg(slug || '/' || coalesce(agent_stage_hint,'-'), ',' order by position)
+                     from public.crm_stages where pipeline_id = '${pipeline}'::uuid;`)),
+    ).toBe("carrinho_abandonado/-,aguardando_pagamento/-,pago/won,em_separacao/-,enviado/negotiating,entregue/-,pos_venda/-,cancelado/lost");
+  });
+
+  it("Pago que deixou de ser etapa de ganho não recebe won", () => {
+    const { org, pipeline } = criarTenant("tri-2663-semganho");
+    sql(`update public.crm_stages set is_won = false
+          where pipeline_id = '${pipeline}'::uuid and slug = 'pago';`);
+    pularOPassoDoFunil(org);
+    expect(quadro(pipeline)).toBe("8|2");
   });
 });
