@@ -243,10 +243,11 @@ import {
  *
  * A chave NÃO remove a ferramenta nem cria caminho novo: ela troca só o trecho
  * que manda o modelo passar a conversa em "questão jurídica/financeira
- * sensível". Com a chave desligada, a ferramenta existe com uma frase dizendo
- * que assunto jurídico é o trabalho normal deste atendimento e não é, sozinho,
- * motivo para passar a conversa — o modelo continua livre para passar por
- * reclamação séria, por pedido da pessoa ou por limite do que pode resolver.
+ * sensível". Com a chave desligada, sai SÓ o jurídico: a ferramenta existe com
+ * uma frase dizendo que assunto jurídico é o trabalho normal deste atendimento e
+ * não é, sozinho, motivo para passar a conversa — o modelo continua livre para
+ * passar por reclamação séria, questão financeira sensível, pedido da pessoa ou
+ * limite do que pode resolver.
  *
  * O que a chave NÃO toca, por decisão do mantenedor (condições 4 do desenho):
  * `detectHumanHandoffRequest` (o pedido explícito de "quero falar com alguém")
@@ -263,8 +264,8 @@ export function descricaoDaFerramentaDePassagem(handoffLegalEnabled: boolean): s
     'uma pessoa, quando a situação exigir alguém humano ' +
     (handoffLegalEnabled
       ? '(reclamação séria, questão jurídica/financeira sensível) '
-      : '(reclamação séria; assunto jurídico é o trabalho normal deste atendimento e não é, ' +
-        'sozinho, motivo para passar a conversa) ') +
+      : '(reclamação séria, questão financeira sensível; assunto jurídico é o trabalho normal ' +
+        'deste atendimento e não é, sozinho, motivo para passar a conversa) ') +
     'ou quando você atingir o limite do que pode resolver. ' +
     'AVISE O LEAD ANTES: mande uma mensagem dizendo que você vai chamar alguém da equipe e SÓ ENTÃO ' +
     'chame esta ferramenta — depois dela você não consegue mais falar com ele. Se você não avisar, ' +

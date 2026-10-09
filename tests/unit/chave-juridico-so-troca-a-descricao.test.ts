@@ -12,8 +12,9 @@
  *
  * 1. chave LIGADA: a descrição é byte a byte a de antes — quem não mexer em
  *    nada não muda nada;
- * 2. chave DESLIGADA: a descrição sai sem "jurídica" e com a frase nova dizendo
- *    que assunto jurídico é o trabalho normal deste atendimento;
+ * 2. chave DESLIGADA: a descrição sai sem "jurídica", mantém "questão financeira
+ *    sensível" e ganha a frase nova dizendo que assunto jurídico é o trabalho
+ *    normal deste atendimento;
  * 3. `handoff_tool_enabled` DESLIGADO: a ferramenta continua AUSENTE (a chave
  *    nova não ressuscita o que a irmã removeu);
  * 4. chave DESLIGADA + "quero falar com uma pessoa": a conversa ainda vai para
@@ -78,8 +79,12 @@ describe("caso 2 — chave desligada: sem 'jurídica' e com a frase nova", () =>
     expect(depois).toContain(
       "assunto jurídico é o trabalho normal deste atendimento e não é, sozinho, motivo para passar a conversa",
     );
-    // O resto da instrução continua: reclamação séria, pedido da pessoa e limite.
+    // O resto da instrução continua: reclamação séria, financeira sensível,
+    // pedido da pessoa e limite. O desenho tira SÓ o jurídico.
     expect(depois).toContain("reclamação séria");
+    expect(depois, "a descrição desligada perdeu a passagem por questão financeira").toContain(
+      "questão financeira sensível",
+    );
     expect(depois).toContain("o limite do que pode resolver");
   });
 
