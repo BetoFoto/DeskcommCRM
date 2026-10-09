@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { GOV_ORG, seedGov, sql } from "./gov-helpers";
@@ -29,7 +32,12 @@ import { GOV_ORG, seedGov, sql } from "./gov-helpers";
  *    deixaria o caso 1 verde, e o teste não provaria alargamento, só ausência de
  *    guarda;
  * 4. **a lista vigente tem os quatro valores** — a régua de escopo declarada,
- *    lida do próprio banco (`pg_get_constraintdef`), não de memória.
+ *    lida do próprio banco (`pg_get_constraintdef`), não de memória;
+ * 5. **o clone da própria issue atualiza** — a instalação que alargou a lista à
+ *    mão e gravou pedidos 'tray' re-aplica o bloco do `baseline.sql` (o que o
+ *    update.sh faz) e termina COM a guarda e com a linha convertida. Sem o
+ *    backfill, o `drop` vale, o `add` recebe 23514 e o update.sh — que roda sem
+ *    ON_ERROR_STOP — deixa a tabela sem restrição nenhuma, a cada atualização.
  *
  * A plataforma fica no `payload` e NÃO no `external_provider`: o único que
  * precisava de nome era quem lê o pedido (o agente, pela ferramenta
@@ -133,6 +141,45 @@ describe("pedido de plataforma sem integração nativa: origem genérica", () =>
 
     for (const valor of ["nuvemshop", "vtex", "shopify", "external"]) {
       expect(definicao, `lista sem ${valor}: ${definicao}`).toContain(`'${valor}'`);
+    }
+  });
+
+  it("o clone da issue (restrição alargada à mão, pedido 'tray') re-aplica o bloco e fica com a guarda", () => {
+    seedGov();
+    const id = "eeeeeeee-0000-4000-8000-000000002670";
+    const baseline = readFileSync(join(process.cwd(), "supabase", "baseline.sql"), "utf8");
+    const marcador = "-- ---- pedidos de plataforma sem conector próprio entram por origem genérica";
+    const inicio = baseline.indexOf(marcador);
+    expect(inicio, `marcador não encontrado no baseline.sql: ${marcador}`).toBeGreaterThan(-1);
+    const fim = baseline.indexOf("\n-- ---- ", inicio + marcador.length);
+    const bloco = fim < 0 ? baseline.slice(inicio) : baseline.slice(inicio, fim);
+
+    sql(`
+      alter table public.orders drop constraint orders_external_provider_check;
+      alter table public.orders add constraint orders_external_provider_check
+        check (external_provider in ('nuvemshop', 'vtex', 'shopify', 'tray')) not valid;
+    `); // not valid: as pernas anteriores deste arquivo já gravaram 'external'
+    try {
+      // id diferente do da perna 1, que já gravou (external, tray:10231) neste banco
+      gravaPedido({ id, externalId: "20462", provedor: "tray" });
+      sql(bloco);
+
+      expect(
+        sql(
+          `select external_provider || '|' || external_id || '|' || (payload ->> 'platform')
+             from public.orders where id = '${id}';`,
+        ),
+      ).toBe("external|tray:20462|tray");
+      expect(
+        sql(
+          `select pg_get_constraintdef(oid) from pg_constraint
+            where conname = 'orders_external_provider_check';`,
+        ),
+        "o update deixou a tabela sem a restrição",
+      ).toContain("'external'");
+    } finally {
+      sql(`delete from public.orders where id = '${id}';`);
+      sql(bloco);
     }
   });
 });

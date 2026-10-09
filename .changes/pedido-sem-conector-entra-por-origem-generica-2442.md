@@ -10,4 +10,6 @@ Agora existe uma origem genérica, `external`, para quem chega por integração 
 
 Para usar: grave o pedido com `external_provider = 'external'` e a plataforma em `payload` (por exemplo `{"platform": "tray"}`). Como a chave única do pedido é organização + origem + `external_id`, namespaceie o id vindo da plataforma (por exemplo `tray:10231`) para dois pedidos de plataformas diferentes não disputarem a mesma linha.
 
+Se a sua instalação já tinha alargado a restrição à mão para gravar outra origem (por exemplo `tray`), a atualização converte esses pedidos sozinha: viram `external`, com a plataforma no `payload` e o id prefixado (`tray:10231`), que é o mesmo formato acima. A ponte passa a gravar nesse formato e encontra os pedidos antigos no lugar.
+
 Contribuição de @webtecnica (#2670).

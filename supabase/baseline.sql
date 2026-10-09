@@ -52333,8 +52333,9 @@ create index if not exists ai_chunks_content_pt_gin
 -- WooCommerce e o que vier, sem a lista crescer a cada caso — e sem fingir ser
 -- um conector que o produto não tem. Os três conectores nativos ficam intactos.
 --
--- Alargamento puro: um CHECK que aceita MAIS valores não pode ser violado por
--- linha que já passava, então não há backfill nem tratamento de dado. A guarda
+-- Alargamento, com uma ressalva: um CHECK que aceita MAIS valores não é violado
+-- por linha que passava na lista do produto — mas é por linha de instalação que
+-- alargou a lista à mão (o caso da issue), e essa é convertida logo abaixo. A guarda
 -- continua de pé — valor fora da lista ainda recebe 23514, o que é o trabalho
 -- dela: barrar typo e vocabulário que ninguém decidiu.
 --
@@ -52350,6 +52351,23 @@ create index if not exists ai_chunks_content_pt_gin
 -- e pedido 10231 da Loja Integrada não podem disputar a mesma linha.
 alter table public.orders
   drop constraint if exists orders_external_provider_check;
+
+-- Entre o `drop` e o `add` (a restrição alargada à mão ainda recusaria
+-- 'external'), a linha que a instalação gravou com uma origem fora da lista
+-- (o caso da própria #2442, 'tray'). Sem isto o
+-- `drop` vale, o `add` recebe 23514 e — como o update.sh aplica o baseline sem
+-- ON_ERROR_STOP — a instalação fica SEM guarda nenhuma, com o erro repetido a
+-- cada atualização. A linha vira a origem genérica no formato que a ponte deve
+-- usar daqui em diante: a plataforma vai para `payload->>'platform'` (sem
+-- sobrescrever uma que já esteja lá) e o `external_id` ganha o prefixo dela
+-- ('tray:10231'), que é o que mantém a chave única — o par (origem, id) já era
+-- único, então (external, origem:id) também é. Idempotente: na segunda passada
+-- não sobra linha fora da lista.
+update public.orders
+   set payload = jsonb_build_object('platform', external_provider) || payload,
+       external_id = external_provider || ':' || external_id,
+       external_provider = 'external'
+ where external_provider not in ('nuvemshop', 'vtex', 'shopify', 'external');
 
 alter table public.orders
   add constraint orders_external_provider_check check (external_provider in (
