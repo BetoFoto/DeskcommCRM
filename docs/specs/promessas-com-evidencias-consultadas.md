@@ -140,3 +140,28 @@ autorizações a partir do diálogo. O mapa inclui duas arestas do contexto.
 Precisão depende do modelo: transmitir o contexto não prova ausência de falsos
 positivos/negativos. Não há bypass de ofertas, garantia de recuperação de um
 contexto omitido pelo servidor nem prova de execução de casos pela prévia.
+
+
+## Linguagem comercial e falhas do provedor
+
+O revisor interpreta acolhimento, entusiasmo e benefícios aprovados no contexto
+comercial. Não exige ressalvas jurídicas nem cópia literal da base. A revisão
+procura compromisso concreto sem suporte, como gratuidade ampliada, vaga
+confirmada inventada ou dispensa de condição essencial. O tratamento de diálogo
+como dado e os limites das fontes continuam preservados. A intensidade da
+persuasão, isoladamente, não caracteriza promessa não autorizada.
+
+Uma falha estruturada do provedor com `promptFeedback.blockReason` conhecido
+chega a `identificarConteudoBloqueado`, dentro do seam `runModelCall`. O seam
+registra em `llm_calls` o código `conteudo_bloqueado` e mensagem sanitizada; a
+rota de Teste do agente devolve a explicação no erro 422. Execuções e prévia
+continuam acessíveis pelas portas existentes, sem tela/configuração novas.
+Não transfere o corpo do fornecedor para a mensagem, não desliga sua proteção,
+não transforma bloqueio em falta de saldo e não inventa a causa específica.
+
+O operador pode revisar a execução e seu contexto antes de decidir outra
+tentativa. Não há retentativa, modelo substituto ou autorização aprendida
+introduzidos por esta classificação. As políticas existentes de orçamento e
+fila permanecem. Destino: núcleo; diagnóstico e revisão já são capacidades
+comuns, sem depender de extensão. Mapa: turno → diagnóstico → Execuções/prévia.
+Sem schema novo, consulta a outra organização ou credencial adicional.

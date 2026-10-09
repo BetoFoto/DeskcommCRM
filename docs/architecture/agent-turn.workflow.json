@@ -352,6 +352,23 @@
       "label": "Contexto da revisão",
       "sublabel": "pedido/perfil curado, separado de evidências comerciais",
       "tag": "montarContextoDaRevisao"
+    },
+    {
+      "id": "bloqueioProvedor",
+      "lane": "guardrails",
+      "col": 6,
+      "type": "backend",
+      "label": "Bloqueio do provedor",
+      "sublabel": "metadado conhecido, sem expor o corpo",
+      "tag": "identificarConteudoBloqueado"
+    },
+    {
+      "id": "execucoesFalhas",
+      "lane": "app",
+      "col": 7,
+      "type": "screen",
+      "label": "Execuções e prévia",
+      "sublabel": "conteudo_bloqueado; revisão pelo operador"
     }
   ],
   "edges": [
@@ -829,6 +846,18 @@
       "from": "contextoRevisor",
       "to": "gates",
       "label": "contexto de elegibilidade → classificador; conversa não autoriza oferta"
+    },
+    {
+      "id": "turn-bloqueio-provedor",
+      "from": "turn",
+      "to": "bloqueioProvedor",
+      "label": "falha estruturada pelo seam de modelo"
+    },
+    {
+      "id": "bloqueio-execucoes",
+      "from": "bloqueioProvedor",
+      "to": "execucoesFalhas",
+      "label": "llm_calls e mensagem sanitizada no teste"
     }
   ],
   "cards": [
