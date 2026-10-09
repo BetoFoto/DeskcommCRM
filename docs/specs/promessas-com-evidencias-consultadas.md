@@ -101,3 +101,42 @@ este caminho. O mantenedor escolheu seguir com as evidências consultadas, sem
 lista cadastrada, e o #1981 foi fechado com crédito. Esta contribuição resolve o
 caminho de evidências que já estão no catálogo/acervo; ofertas que existem só
 nas instruções do agente continuam fora dele.
+
+
+## Contexto do pedido e consentimento
+
+O turno entrega ao classificador também `contexto_conversa`: mensagens já
+curadas pelo servidor, resumo anterior, momento e fuso da organização. Esse
+campo informa perfil, requisito declarado e referência de pronomes; não é
+fonte comercial. Falas do cliente, respostas anteriores do atendente e resumo
+nunca autorizam oferta, mesmo quando contêm instruções para aprovar. Os dados
+ficam separados de `evidencias`, em JSON, sem interpolação no sistema.
+
+O transporte preserva a janela curada comum. Limites extraordinários: até cem
+mensagens/48.000 caracteres e 4.000 de resumo, com `limitado=true` quando há
+recorte. Não consulta outra conversa, identificador pessoal ou organização.
+Chamadores sem contexto continuam compatíveis; modelo, orçamento e auditoria
+continuam no seam `runModelCall`.
+
+Condições comerciais aprovadas escritas no imperativo são limites da oferta,
+não comandos para mudar o papel do classificador. A instrução distingue essas
+ressalvas de instruções maliciosas e de garantias individuais inventadas.
+
+No detector determinístico de humano, uma pergunta explícita de consentimento
+para transferir/consultar, sem alegar operação ou compromisso, não é promessa
+de caso. A análise mantém as outras frases: pedir consentimento junto de “já
+encaminhei” ou “a equipe vai retornar” continua sujeito ao gate. Isso não
+executa nem autoriza transferência; a operação permanece em seu caminho próprio.
+
+Entrada: `effectiveContext.messages` e resumo do fechamento anterior em
+`inbound-turn.ts` → `montarContextoDaRevisao`. Saída: `classifyPromise` → cadeia
+before-send → candidato aceito ou impedimento instrutivo. A revisão permanece
+registrada em `llm_calls` e no resultado da prévia; a pergunta não acrescenta
+evento de operação. Porta e configuração: Agentes → Teste, fontes do agente e
+Provedores de IA. Não há nova tela/configuração. O laço de retorno continua
+reformulação instruída pelo veto e ajuste da fonte pela pessoa, sem aprender
+autorizações a partir do diálogo. O mapa inclui duas arestas do contexto.
+
+Precisão depende do modelo: transmitir o contexto não prova ausência de falsos
+positivos/negativos. Não há bypass de ofertas, garantia de recuperação de um
+contexto omitido pelo servidor nem prova de execução de casos pela prévia.

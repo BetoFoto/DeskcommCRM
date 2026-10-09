@@ -202,6 +202,7 @@ import {
 } from '../guardrails/promise/evidencias-comerciais';
 import { criarRecuperadorDeEvidencias } from '../guardrails/promise/recuperar-evidencias';
 import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/semantic';
+import { montarContextoDaRevisao } from '../guardrails/promise/contexto-da-revisao';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import {
   montarBriefingDaPassagem,
@@ -2769,6 +2770,10 @@ async function executarTurnoDoAgente(
           {
             candidate,
             commercialEvidence: evidenciasComerciais.ler(candidate),
+            conversationContext: montarContextoDaRevisao(
+              effectiveContext.messages, effectivePrevious?.rolling_summary,
+              (deps.clock?.() ?? new Date()).toISOString(), fusoDaOrg,
+            ),
             ...argsAux(deps.knobs.promiseSemantic?.model),
           },
           { ...(deps.registry !== undefined ? { registry: deps.registry } : {}), log: runLog },

@@ -134,7 +134,17 @@ function escapeRegex(word: string): string {
  */
 export function detectHumanPromise(body: string, extraHumanNames?: readonly string[]): boolean {
   if (body.trim() === "") return false;
-  const text = normalize(body);
+  const text = normalize(body)
+    .split(/(?<=[.!?\n])/)
+    .filter((frase) => {
+      const f = frase.trim();
+      const perguntaDeConsentimento = f.endsWith("?") &&
+        /^(?:(?:voce|vc)\s+)?(?:quer|gostaria|prefere|deseja|autoriza|posso|podemos)\b/.test(f) &&
+        /\b(?:encaminh|transfer|pass|fal|consult|verific|cham)\w*/.test(f);
+      const alegaOperacao = /\b(?:ja|vou|vamos|transferi|encaminhei|registrei|acabei)\b/.test(f);
+      return !perguntaDeConsentimento || alegaOperacao;
+    })
+    .join(" ");
   if (extraHumanNames === undefined || extraHumanNames.length === 0) {
     return PATTERNS.some((re) => re.test(text));
   }

@@ -343,6 +343,15 @@
       "type": "frontend",
       "label": "IA › Execuções › Roteamento",
       "sublabel": "até 500 casos; custo e latência por modo, concordância separada de acurácia revisada; administrador marca acerto"
+    },
+    {
+      "id": "contextoRevisor",
+      "lane": "guardrails",
+      "col": 5,
+      "type": "backend",
+      "label": "Contexto da revisão",
+      "sublabel": "pedido/perfil curado, separado de evidências comerciais",
+      "tag": "montarContextoDaRevisao"
     }
   ],
   "edges": [
@@ -808,6 +817,18 @@
       "from": "turn",
       "to": "gates",
       "label": "Catálogo/acervo + busca textual na base ativa → seleção pertinente à candidata → promessa semântica; sem bypass"
+    },
+    {
+      "id": "turn-contexto-revisor",
+      "from": "turn",
+      "to": "contextoRevisor",
+      "label": "mensagens/resumo curados, momento e fuso da organização"
+    },
+    {
+      "id": "contexto-revisor-gates",
+      "from": "contextoRevisor",
+      "to": "gates",
+      "label": "contexto de elegibilidade → classificador; conversa não autoriza oferta"
     }
   ],
   "cards": [
