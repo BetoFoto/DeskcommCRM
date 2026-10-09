@@ -184,9 +184,9 @@ const DECISOES: Record<string, Decisao> = {
       "PR #1907 (migration 0620): a comanda saiu do corpo da função única e passou para a " +
       "SEÇÃO declarada `financeiro/sales` em `modulo_secoes_lgpd` (D8/0485) — o passo nomeado " +
       "abortava a anonimização INTEIRA em instalação sem o módulo (`relation \"sales\" " +
-      "does not exist`, 68 ocorrências no CI). Na seção, `notes`, `cancel_reason` e " +
-      "`reverse_reason` somem (NULO) — mais conservador que a cascata antiga: o motivo some " +
-      "inteiro —, e valor/status/datas e o vínculo com o " +
+      "does not exist`, 68 ocorrências no CI). Na seção o efeito é o MESMO do passo 6c " +
+      "antigo: `notes` some (NULO), `cancel_reason` e `reverse_reason` viram '[redigido]' só " +
+      "onde havia texto (`colunas_redigidas`), `updated_at` = now(), e valor/status/datas e o vínculo com o " +
       "contato FICAM (obrigação fiscal da venda); quem aplica é " +
       "`trg_lgpd_secoes_de_modulo`, nos dois caminhos, com `to_regclass` pulando sem erro " +
       "onde o módulo não existe.",

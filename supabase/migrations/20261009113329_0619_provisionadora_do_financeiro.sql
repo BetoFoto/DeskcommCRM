@@ -1,4 +1,4 @@
--- manifest: As cinco tabelas da comanda (`sales`, `sale_items`, `commission_rules`, `commissions`, `loyalty_ledger`) saem do `baseline.sql` e passam a nascer em `fn_financeiro_provisionar()`, na instalação do módulo `financeiro` (ADR-0002 D2/D3/D4/D5) — quem não instala o módulo não carrega as tabelas dele; `financial_entries.sale_id` fica sem FK onde o módulo não está e a provisionadora a devolve (`financeiro_sale_id_fkey`); quem já tinha `sales` é marcado como instalado; as funções de negócio da comanda passam a compilar sem as tabelas (plpgsql + `to_regclass`), e a seção `financeiro/sales` é declarada em `modulo_secoes_lgpd` (notes, cancel_reason e reverse_reason viram nulo na anonimização).
+-- manifest: As cinco tabelas da comanda (`sales`, `sale_items`, `commission_rules`, `commissions`, `loyalty_ledger`) saem do `baseline.sql` e passam a nascer em `fn_financeiro_provisionar()`, na instalação do módulo `financeiro` (ADR-0002 D2/D3/D4/D5) — quem não instala o módulo não carrega as tabelas dele; `financial_entries.sale_id` fica sem FK onde o módulo não está e a provisionadora a devolve (`financeiro_sale_id_fkey`); quem já tinha `sales` é marcado como instalado; as funções de negócio da comanda passam a compilar sem as tabelas (plpgsql + `to_regclass`), e a seção `financeiro/sales` é declarada em `modulo_secoes_lgpd` com o mesmo efeito do passo 6c da main na anonimização (notes vira nulo; cancel_reason e reverse_reason viram `[redigido]` só onde havia texto; updated_at = now()), por dois modos novos e opt-in da seção — `colunas_redigidas` e `colunas_agora` — sem mudar o efeito de seção já declarada.
 -- A PROVISIONADORA DO FINANCEIRO — o schema da comanda deixa o baseline e
 -- passa a nascer na instalação do módulo (ADR-0002, D2/D3/D4/D5).
 --
@@ -974,6 +974,100 @@ begin
 end
 $dedupe$;
 
+-- ═══ DOIS MODOS NOVOS NA SEÇÃO DE LGPD — o que a comanda já fazia na main ══════
+--
+-- A seção da 0485 sabe dois efeitos: `colunas` (vira NULO) e `colunas_rotulo`
+-- (vira 'Cliente Anonimizado #N' em TODA linha alcançada, inclusive onde a
+-- coluna era nula). A comanda, enquanto era o passo 6c da cascata, fazia um
+-- terceiro e um quarto, e a saída de LGPD dela não pode mudar só porque o passo
+-- mudou de lugar:
+--   cancel_reason = case when cancel_reason is null then null else '[redigido]' end
+--   updated_at    = now()
+-- Daí as duas colunas abaixo, ambas com default vazio — seção já declarada
+-- (por módulo ou por teste) continua com o mesmo efeito, byte a byte:
+--   `colunas_redigidas` — texto preenchido vira '[redigido]'; nulo fica nulo;
+--   `colunas_agora`     — recebem now() (o carimbo de alteração da linha).
+-- `colunas_agora` sozinha não conta como redação: a seção sem nenhuma coluna
+-- que REDIGE continua `modulo_secao_invalida`.
+-- O comportamento de `colunas_rotulo` (rótulo também sobre nulo, issue #2656)
+-- NÃO muda aqui: é decisão separada.
+alter table public.modulo_secoes_lgpd
+  add column if not exists colunas_redigidas text[] not null default '{}'::text[];
+alter table public.modulo_secoes_lgpd
+  add column if not exists colunas_agora text[] not null default '{}'::text[];
+
+create or replace function public.fn_lgpd_redigir_secoes_de_modulo()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+declare
+  s record;
+  v_rel oid;
+  v_sets text;
+  v_nulos text;
+  v_rotulos text;
+  v_redigidas text;
+  v_agora text;
+  v_rotulo text := 'Cliente Anonimizado #' || substring(new.id::text from 1 for 8);
+begin
+  if not (new.is_anonymized and not old.is_anonymized) then
+    return null;
+  end if;
+
+  for s in
+    select modulo, tabela, ligacao, colunas, colunas_rotulo, colunas_redigidas, colunas_agora
+      from public.modulo_secoes_lgpd
+     order by modulo, tabela
+  loop
+    v_rel := to_regclass(format('public.%I', s.tabela));
+
+    if v_rel is null then
+      continue;
+    end if;
+
+    if btrim(s.ligacao) = ''
+       or (cardinality(s.colunas) = 0 and cardinality(s.colunas_rotulo) = 0
+           and cardinality(s.colunas_redigidas) = 0) then
+      raise exception 'modulo_secao_invalida: %/% declara ligação vazia ou sem coluna', s.modulo, s.tabela;
+    end if;
+
+    if exists (
+      select 1
+        from unnest(s.colunas || s.colunas_rotulo || s.colunas_redigidas || s.colunas_agora) as c(coluna)
+       where not exists (
+         select 1
+           from pg_attribute a
+          where a.attrelid = v_rel
+            and a.attname = c.coluna
+            and a.attnum > 0
+            and not a.attisdropped
+       )
+    ) then
+      raise exception 'modulo_secao_invalida: %/% tem coluna declarada que não existe', s.modulo, s.tabela;
+    end if;
+
+    select string_agg(format('%I = null', c), ', ' order by c) into v_nulos
+      from unnest(s.colunas) as c;
+    select string_agg(format('%I = %L', c, v_rotulo), ', ' order by c) into v_rotulos
+      from unnest(s.colunas_rotulo) as c;
+    select string_agg(format('%1$I = case when %1$I is null then null else %2$L end', c, '[redigido]'), ', ' order by c)
+      into v_redigidas
+      from unnest(s.colunas_redigidas) as c;
+    select string_agg(format('%I = now()', c), ', ' order by c) into v_agora
+      from unnest(s.colunas_agora) as c;
+    v_sets := concat_ws(', ', v_nulos, v_rotulos, v_redigidas, v_agora);
+
+    execute format('update public.%I set %s where (%s)', s.tabela, v_sets, s.ligacao)
+      using new.organization_id, new.id;
+  end loop;
+
+  return null;
+end $f$;
+
+revoke execute on function public.fn_lgpd_redigir_secoes_de_modulo() from public, anon, authenticated;
+
 -- ═══ A SEÇÃO DE LGPD DA COMANDA (D8) — declarada, e não escrita na cascata ════
 --
 -- A comanda tem texto da pessoa (`notes`, `cancel_reason`, `reverse_reason`) e é
@@ -999,29 +1093,39 @@ begin
   if to_regclass('public.sales') is null then
     return;
   end if;
-  -- As três colunas são texto livre da pessoa e somem (NULO): `notes`,
-  -- `cancel_reason` e `reverse_reason`. Os motivos NÃO vão para `colunas_rotulo`:
-  -- o mecanismo da 0485 grava o rótulo em toda linha alcançada, inclusive onde a
-  -- coluna era nula, e uma comanda finalizada sem cancelamento sairia com
-  -- `cancel_reason = 'Cliente Anonimizado #N'` — um motivo inventado (medido no
-  -- teste de efeito `tests/invariants/comanda-anonimizada-pela-secao.test.ts`).
-  -- Valor, status, datas e o vínculo com o contato ficam.
-  insert into public.modulo_secoes_lgpd (modulo, tabela, ligacao, colunas, colunas_rotulo)
+  -- O MESMO efeito do passo 6c que a cascata tinha na main, coluna a coluna:
+  -- `notes` some (NULO); `cancel_reason` e `reverse_reason` viram '[redigido]'
+  -- só onde havia texto, e nulo continua nulo (`colunas_redigidas` — NÃO
+  -- `colunas_rotulo`, que grava o rótulo também sobre nulo e inventaria um
+  -- motivo numa comanda nunca cancelada); `updated_at` recebe now(). Valor,
+  -- status, datas e o vínculo com o contato ficam. Medido em
+  -- `tests/invariants/comanda-anonimizada-pela-secao.test.ts`.
+  -- `do update`, e não `do nothing`: a declaração é desta função, e reaplicar o
+  -- kit sobre um banco com a linha antiga a faz convergir.
+  insert into public.modulo_secoes_lgpd
+      (modulo, tabela, ligacao, colunas, colunas_rotulo, colunas_redigidas, colunas_agora)
     values (
       'financeiro',
       'sales',
       'organization_id = $1 and contact_id = $2',
-      array['notes', 'cancel_reason', 'reverse_reason'],
-      '{}'::text[]
+      array['notes'],
+      '{}'::text[],
+      array['cancel_reason', 'reverse_reason'],
+      array['updated_at']
     )
-    on conflict (modulo, tabela) do nothing;
+    on conflict (modulo, tabela) do update
+      set ligacao = excluded.ligacao,
+          colunas = excluded.colunas,
+          colunas_rotulo = excluded.colunas_rotulo,
+          colunas_redigidas = excluded.colunas_redigidas,
+          colunas_agora = excluded.colunas_agora;
 end $f$;
 
 revoke execute on function public.fn_financeiro_declarar_secoes_lgpd() from public, anon, authenticated;
 grant execute on function public.fn_financeiro_declarar_secoes_lgpd() to service_role;
 
 comment on function public.fn_financeiro_declarar_secoes_lgpd() is
-  'Declara a seção de LGPD da comanda (`sales`) em modulo_secoes_lgpd (D8, migration 0485). Chamada pela provisionadora (comanda que nasce com o módulo) e pelo topo desta migration (comanda que já existe): uma linha só, escrita por um lado não apaga a do outro.';
+  'Declara a seção de LGPD da comanda (`sales`) em modulo_secoes_lgpd (D8, migration 0485). Chamada pela provisionadora (comanda que nasce com o módulo) e pelo topo desta migration (comanda que já existe): uma linha só, e as duas escrevem o mesmo conteúdo.';
 
 -- ═══ A FK QUE O CAIXA PERDEU — núcleo alterando núcleo, fora do corpo ═════════
 --
