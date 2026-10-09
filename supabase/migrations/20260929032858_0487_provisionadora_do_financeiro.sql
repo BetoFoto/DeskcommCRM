@@ -1053,7 +1053,14 @@ begin
   ) then
     return;
   end if;
+  -- `drop constraint if exists` + `add` é a forma canônica do apêndice
+  -- (`tests/unit/baseline-reaplicavel.test.ts:102`): o Postgres não tem
+  -- `add constraint if not exists`, e sem o drop a reaplicação erra
+  -- `already exists` quando o nome já nasceu de uma passada anterior. Aqui o
+  -- drop só executa quando NENHUMA FK da relação existe (a guarda acima), então
+  -- ele não desfaz `financial_entries_sale_id_fkey` da main.
   alter table public.financial_entries
+    drop constraint if exists financeiro_sale_id_fkey,
     add constraint financeiro_sale_id_fkey
     foreign key (sale_id) references public.sales(id) on delete set null;
 end $f$;
