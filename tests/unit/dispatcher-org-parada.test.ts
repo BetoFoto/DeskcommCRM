@@ -24,10 +24,13 @@ import {
 } from "@/lib/event-log/dispatcher";
 import { drainEventLog } from "@/lib/event-log/drain";
 import { ensureHandlersRegistered } from "@/lib/event-log/register-handlers";
+import { pinoReintentoHandler } from "@/lib/channels/zernio/pino-reintento.handler";
 import { automationRulesHandler } from "@/lib/automation/engine.handler";
 import { campanhaRespostaHandler } from "@/lib/campanhas/resposta.handler";
+import { cobrancaSinalHandler } from "@/lib/cobranca/sinal.handler";
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
 import { conversaoDeQualificacaoHandler } from "@/lib/conversoes/qualificacao.handler";
+import { conversaoDeEtapaMetaHandler } from "@/lib/conversoes/etapa-meta.handler";
 import { avisoDeCasoAoSuporteHandler } from "@/lib/escalacao/aviso-ao-suporte.handler";
 import { casoNaCentralHandler } from "@/lib/escalacao/caso-na-central.handler";
 import { followupGatilhoCasoHandler } from "@/lib/followup/gatilho-caso.handler";
@@ -37,6 +40,7 @@ import { followupGatilhoPresencaHandler } from "@/lib/followup/gatilho-presenca.
 import { followupGatilhoRetornoHandler } from "@/lib/followup/gatilho-retorno.handler";
 import { followupReactivityHandler } from "@/lib/followup/reactivity.handler";
 import { avisoDeEtapaHandler } from "@/lib/leads/aviso-de-etapa.handler";
+import { comandaDoGanhoHandler } from "@/lib/financeiro/comanda-do-ganho.handler";
 import { webPushInboundHandler } from "@/lib/notifications/push.handler";
 import { avisoDePropostaNoWhatsAppHandler } from "@/lib/propostas/aviso-no-whatsapp.handler";
 import { aiHandoffFromSentimentHandler } from "@/workers/ai-handoff-from-sentiment.handler";
@@ -53,9 +57,11 @@ const RODA: EventHandler[] = [
   campanhaRespostaHandler,
   avisoDeEtapaHandler,
   casoNaCentralHandler,
+  comandaDoGanhoHandler,
   mediaPersistHandler,
   lgpdExportHandler,
   lgpdRedactHandler,
+  cobrancaSinalHandler,
 ];
 
 const PULA: EventHandler[] = [
@@ -75,6 +81,8 @@ const PULA: EventHandler[] = [
   avisoDePropostaNoWhatsAppHandler,
   conversaoDeVendaHandler,
   conversaoDeQualificacaoHandler,
+  conversaoDeEtapaMetaHandler,
+  pinoReintentoHandler,
 ];
 
 const PREFIXO_DE_TESTE = "teste-org-parada";

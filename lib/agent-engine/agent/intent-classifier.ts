@@ -14,7 +14,8 @@
  */
 import type pg from 'pg';
 
-import { extrairJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-do-texto';
+import { extrairObjetoJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-do-texto';
+import { contextoDoClassificador, type ClassifierContextMessage } from '@/lib/ai/classifier-context';
 
 import type { Logger } from '../obs/logger';
 import { runModelCall, type LlmEdgeConfig } from '../edge/llm/run-model-call';
@@ -33,11 +34,7 @@ export interface IntentVerdict {
   falhou?: true;
 }
 
-/** Mensagem de contexto anterior à atual — só pra desambiguar, nunca o alvo da classificação. */
-export interface ClassifierContextMessage {
-  direction: 'inbound' | 'outbound';
-  body: string;
-}
+export type { ClassifierContextMessage } from '@/lib/ai/classifier-context';
 
 /** Instrução final fixa — pede JSON estrito, marcador estável pros testes/prompt. */
 const JSON_INSTRUCTION =
@@ -69,7 +66,7 @@ export function buildClassifierPrompt(
       ? [
           '',
           'Contexto recente da conversa (mais antiga primeiro — só pra desambiguar, NÃO é o que classificar):',
-          ...recentMessages.map((m) => `${m.direction === 'inbound' ? 'Lead' : 'Agente'}: ${m.body}`),
+          ...contextoDoClassificador(recentMessages, 16).map((m) => `${m.direction === 'inbound' ? 'Lead' : 'Agente'}: ${m.body}`),
         ]
       : [];
   return [
@@ -96,7 +93,7 @@ export function buildClassifierPrompt(
 export function parseIntentVerdict(text: string, members: RouterMember[]): IntentVerdict {
   const nullVerdict: IntentVerdict = { intentName: null, confidence: 0, falhou: true };
 
-  const parsed = extrairJsonDoTexto(text);
+  const parsed = extrairObjetoJsonDoTexto(text);
   if (parsed === null || typeof parsed !== 'object') {
     return nullVerdict;
   }

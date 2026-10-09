@@ -41,7 +41,7 @@
  * (invariante 4 — não-aplicação é auditável, não invisível).
  */
 import { canalQueReportaConversao } from "@/lib/channels/conversao-pelo-canal";
-import type { ChannelConversionResult } from "@/lib/channels/types";
+import type { ChannelConversionInput, ChannelConversionResult } from "@/lib/channels/types";
 import type { EventHandler, EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { lerCredencial } from "@/lib/plataformas-de-anuncio/credenciais";
 import { transporteDe, ehPlataformaConhecida } from "@/lib/plataformas-de-anuncio/registry";
@@ -55,6 +55,7 @@ import { lerAtribuicao } from "./leitura-da-atribuicao";
 import { lerValorDaConversa } from "./valor-da-conversa";
 import { lerVendaPeloCanal } from "./venda-pelo-canal";
 import { ehEventoDeEtapa } from "./regras-google";
+import { ehEventoDeEtapaMeta } from "./regras-meta";
 import { lerRegistro, registraEnvio } from "./registro-de-envio";
 
 const CONSUMER_KEY = "conversoes.venda";
@@ -68,15 +69,27 @@ const ok = (status: HandlerResult["status"], detail?: string): HandlerResult => 
   detail,
 });
 
+/**
+ * O evento de ETAPA que acompanha o envio, quando não é a compra. Do Google
+ * vem a ação de conversão (`googleActionId`); da Meta, o nome padrão do evento
+ * (`eventoMeta`, 0524). Um dos dois — é ele que diz a plataforma da regra.
+ */
+export interface EventoDeEtapa {
+  ocorridoEm: string;
+  evento?: NomeDoEvento;
+  googleActionId?: string;
+  eventoMeta?: string;
+}
+
 export async function processarConversao(
   row: EventRow,
-  qualificacao?: { ocorridoEm: string; googleActionId: string; evento?: NomeDoEvento },
+  qualificacao?: EventoDeEtapa,
 ): Promise<HandlerResult> {
   const EVENTO: NomeDoEvento = qualificacao ? (qualificacao.evento ?? "QualifiedLead") : "Purchase";
   if (
     !qualificacao &&
     row.event_type === "ad_conversion.retry_requested" &&
-    ehEventoDeEtapa(row.payload.event_name)
+    (ehEventoDeEtapa(row.payload.event_name) || ehEventoDeEtapaMeta(row.payload.event_name))
   )
     return ok("skipped", "outro_evento");
   if (!row.entity_id) return ok("skipped", "sem_entidade");
@@ -136,8 +149,12 @@ export async function processarConversao(
     "identificadoresGoogle" in leitura.atribuicao
       ? leitura.atribuicao.identificadoresGoogle
       : undefined;
-  if (qualificacao && plataforma !== "google_ads")
+  // A regra de etapa é de UMA plataforma: o lead que veio da outra não é dela.
+  // Sai sem linha no livro-razão — não há pendência, havia nada a reportar.
+  if (qualificacao && !qualificacao.eventoMeta && plataforma !== "google_ads")
     return ok("skipped", "qualificacao_sem_origem_google");
+  if (qualificacao?.eventoMeta && plataforma !== "meta_ads")
+    return ok("skipped", "etapa_sem_origem_meta");
 
   /** O valor que a compra leva — `null` quando sai sem valor (0436). */
   let valorDaVenda: number | null =
@@ -170,6 +187,7 @@ export async function processarConversao(
         ? {
             ocorridoEm: registro?.event_occurred_at ?? qualificacao.ocorridoEm,
             googleActionId: registro?.google_action_id ?? qualificacao.googleActionId,
+            metaEventName: registro?.meta_event_name ?? qualificacao.eventoMeta,
           }
         : {}),
       moeda: registro?.remote_request_id ? registro.currency : moedaDaVenda,
@@ -264,12 +282,18 @@ export async function processarConversao(
     // Protocolo pendente (`remote_request_id`) é do transporte direto, e só ele
     // sabe consultá-lo: fica fora. Sem valor no negócio, a conversa só é lida
     // depois que a chave está ligada E o canal existe — antes, não há destino.
+    //
+    // O evento de ETAPA da Meta (0524) vai pelo mesmo caminho e com o mesmo
+    // retrato do transporte direto: o nome padrão da Meta, o instante da
+    // entrada na etapa e nenhum valor. Sem isto, quem só tem o canal via toda
+    // etapa virar `sem_conexao` — uma conexão direta que ali nunca vai existir.
+    const eventoNoCanal = eventoParaOCanal(qualificacao, registro?.meta_event_name);
     if (
       credencial.motivo === "sem_conexao" &&
       plataforma === "meta_ads" &&
-      EVENTO === "Purchase" &&
+      eventoNoCanal !== null &&
       !registro?.remote_request_id &&
-      (valorDaVenda !== null || valorPodeVirDaConversa)
+      (qualificacao !== undefined || valorDaVenda !== null || valorPodeVirDaConversa)
     ) {
       // A chave vem ANTES de tudo (doc 76): desligada — o padrão —, nem as
       // conversas são lidas, e nada sai para o provedor.
@@ -288,13 +312,17 @@ export async function processarConversao(
         };
       }
       if (canal && valorPodeVirDaConversa) await lerOValorNaConversa();
-      if (canal && valorDaVenda !== null) {
+      if (canal && (qualificacao !== undefined || valorDaVenda !== null)) {
         const pelo = await canal.reportar({
-          event: EVENTO,
+          event: eventoNoCanal,
           eventId: `${lead.id}:${EVENTO}`,
-          occurredAt: new Date(lead.closed_at ?? row.created_at ?? Date.now()),
+          occurredAt: new Date(
+            qualificacao
+              ? (registro?.event_occurred_at ?? qualificacao.ocorridoEm)
+              : (lead.closed_at ?? row.created_at ?? Date.now()),
+          ),
           phone: telefone,
-          valueCents: valorDaVenda,
+          valueCents: qualificacao ? null : valorDaVenda,
           currency: moedaDaVenda ?? "BRL",
         });
         return desfecho(doCanal(pelo), false);
@@ -318,19 +346,28 @@ export async function processarConversao(
   }
   if (!qualificacao && modoDeValor === "nunca") valorDaVenda = null;
 
-  if (qualificacao && credencial.credencial.google) {
-    credencial.credencial.google.conversionActionId =
-      registro?.google_action_id ?? qualificacao.googleActionId;
+  const acaoDoGoogle = registro?.google_action_id ?? qualificacao?.googleActionId;
+  if (qualificacao && acaoDoGoogle && credencial.credencial.google) {
+    credencial.credencial.google.conversionActionId = acaoDoGoogle;
   }
   if (qualificacao && !registro?.event_occurred_at) {
     await registra("skipped", "nova_tentativa_agendada");
     // O primeiro snapshot vence também quando dois movimentos concorrem.
     const salvo = await lerRegistro(admin, row.organization_id, lead.id, EVENTO);
-    if (!salvo?.event_occurred_at || !salvo.google_action_id)
-      throw new Error("Snapshot da qualificação ausente.");
-    qualificacao = { ocorridoEm: salvo.event_occurred_at, googleActionId: salvo.google_action_id };
-    if (credencial.credencial.google)
-      credencial.credencial.google.conversionActionId = salvo.google_action_id;
+    if (qualificacao.eventoMeta) {
+      if (!salvo?.event_occurred_at || !salvo.meta_event_name)
+        throw new Error("Snapshot do evento de etapa ausente.");
+      qualificacao = { ocorridoEm: salvo.event_occurred_at, eventoMeta: salvo.meta_event_name };
+    } else {
+      if (!salvo?.event_occurred_at || !salvo.google_action_id)
+        throw new Error("Snapshot da qualificação ausente.");
+      qualificacao = {
+        ocorridoEm: salvo.event_occurred_at,
+        googleActionId: salvo.google_action_id,
+      };
+      if (credencial.credencial.google)
+        credencial.credencial.google.conversionActionId = salvo.google_action_id;
+    }
   }
 
   const conversao: ConversaoOffline = {
@@ -354,6 +391,11 @@ export async function processarConversao(
     // linha que teve a moeda apagada à mão.
     moeda: moedaDaVenda ?? "BRL",
     valorCentavos: qualificacao ? null : valorDaVenda,
+    // O nome no fio do evento de etapa da Meta: o retrato, e só na falta dele a
+    // regra — mudar a regra depois não rebatiza uma conversão já registrada.
+    eventoNaPlataforma: qualificacao?.eventoMeta
+      ? (registro?.meta_event_name ?? qualificacao.eventoMeta)
+      : null,
   };
 
   // Protocolo já recebido: consultar é a única operação permitida até concluir.
@@ -433,6 +475,29 @@ export async function processarConversao(
     );
     return ok("skipped", "recusado_pela_plataforma");
   }
+}
+
+/** Os eventos de etapa que o canal sabe repassar (`ChannelConversionInput`). */
+const EVENTOS_DE_ETAPA_NO_CANAL: readonly ChannelConversionInput["event"][] = [
+  "InitiateCheckout",
+  "LeadSubmitted",
+  "AddToCart",
+];
+
+/**
+ * O nome que sai pelo canal: a compra, ou o evento padrão da Meta da etapa — o
+ * do retrato gravado no primeiro envio e, só na falta dele, o da regra (a mesma
+ * precedência do transporte direto). Etapa do Google, ou evento da Meta fora do
+ * vocabulário do canal, não tem caminho por ele.
+ */
+function eventoParaOCanal(
+  qualificacao: EventoDeEtapa | undefined,
+  retrato: string | null | undefined,
+): ChannelConversionInput["event"] | null {
+  if (!qualificacao) return "Purchase";
+  if (!qualificacao.eventoMeta) return null;
+  const nome = retrato ?? qualificacao.eventoMeta;
+  return EVENTOS_DE_ETAPA_NO_CANAL.find((e) => e === nome) ?? null;
 }
 
 /** O desfecho do canal, no vocabulário do transporte — um só caminho de registro. */
