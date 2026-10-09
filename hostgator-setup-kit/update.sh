@@ -675,7 +675,8 @@ gravar_imagens .env "$VERSAO_ALVO"
 VOZ_CRIADA="$(completar_segredos_da_voz .env)" || VOZ_CRIADA=""
 [ -n "$VOZ_CRIADA" ] && c_ylw "  (preparei as credenciais da chamada de voz no .env — ela segue DESLIGADA)"
 
-# `dc pull` falha se alguma das quatro imagens ainda não existir no registro — o
+# `dc pull` falha se alguma das três imagens ainda não existir no registro
+# (quatro com o profile `telefonia`, que liga o voice-agent) — o
 # que acontece numa instalação atualizando para a primeira versão publicada
 # depois desta mudança, ou se um run de publicação quebrou. Worker, scheduler e
 # voz têm `build:` ao lado do `image:`, e o Compose os constrói sozinho em
