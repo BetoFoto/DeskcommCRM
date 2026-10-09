@@ -16,9 +16,11 @@
  *      `sincronizar`, o único lugar que grava a releitura; com a empresa
  *      suspensa pelo administrador (a pré-condição abaixo) a régua devolve
  *      `nada`, então o efeito desta chamada é a releitura fresca na linha.
- *      Leitura que FALHA não muda o comportamento de hoje: `ultimo_erro` fica
- *      gravado, o aviso vai para o log, e a trava decide pelo último estado que
- *      deu certo — o mesmo "provedor fora, nada muda" do resto da cobrança.
+ *      Leitura que FALHA recusa a exclusão (503 `provedor_indisponivel`), como a
+ *      isenção recusa (`app/api/v1/admin/tenants/[id]/assinatura/route.ts`): a
+ *      exclusão é irreversível e a cascata leva junto o `provedor_cliente_id`,
+ *      então excluir pelo último estado gravado deixaria o provedor cobrando
+ *      sem ninguém aqui para cancelar.
  *   1. ANTES do banco, só LER o que o desligamento vai precisar — as linhas dos
  *      canais (`inventariarCanaisDaOrganizacao`, em
  *      `lib/channels/desligar-da-organizacao.ts`), a sessão de voz e a conexão
@@ -99,6 +101,7 @@ export class ExclusaoRecusada extends Error {
       | "state_conflict"
       | "exclusao_com_cobranca_pendente"
       | "exclusao_com_assinatura_viva"
+      | "provedor_indisponivel"
       | "confirmacao_divergente"
       | "motivo_curto",
     message: string,
@@ -153,6 +156,10 @@ function mensagemDe(err: unknown): string {
 
 const MENSAGEM_DE_COBRANCA =
   "Esta empresa está suspensa por falta de pagamento. Excluí-la deixaria a assinatura cobrando no provedor: resolva a cobrança antes.";
+
+/** A releitura do provedor falhou: a exclusão recusa em vez de decidir pelo estado gravado. */
+const MENSAGEM_DE_PROVEDOR_INDISPONIVEL =
+  "Não foi possível confirmar com o provedor de cobrança se esta empresa ainda tem assinatura ativa. Nada foi apagado. Tente de novo; se persistir, confira a conexão do provedor em Cobrança.";
 
 /**
  * A recusa do gatilho da migration 0601 (`organizacao_com_assinatura_viva`).
@@ -354,10 +361,13 @@ export async function excluirOrganizacao(
   //    passaria, e a cancelada continuaria bloqueando (#2626). `sincronizar` é
   //    quem grava (compare-and-set em `relida_em`); a régua, aqui, é `nada`,
   //    porque a pré-condição acima só deixa seguir com suspensão
-  //    administrativa. Leitura que falha grava só `ultimo_erro` e loga
-  //    `cobranca.leitura_falhou` — a trava passa a decidir pelo último estado
-  //    que deu certo, o mesmo "provedor fora, nada muda" do resto da cobrança.
-  await sincronizar(admin, entrada.orgId);
+  //    administrativa. Leitura que falha (`ultimo_erro` gravado,
+  //    `cobranca.leitura_falhou` no log) RECUSA: a exclusão é irreversível e o
+  //    último estado gravado pode ser justamente o que mudou.
+  const releitura = await sincronizar(admin, entrada.orgId);
+  if (releitura.tipo === "falhou") {
+    throw new ExclusaoRecusada("provedor_indisponivel", MENSAGEM_DE_PROVEDOR_INDISPONIVEL);
+  }
 
   // 1. Só leitura: o que o desligamento vai precisar, antes que a cascata
   // apague as linhas. Nada externo é tocado aqui.

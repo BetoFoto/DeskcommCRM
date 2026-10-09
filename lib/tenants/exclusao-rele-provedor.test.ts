@@ -256,21 +256,24 @@ describe("excluir tenant pelo painel: o provedor é relido antes da trava de ass
     expect(h.ordem.at(-1)).toBe("audit");
   });
 
-  it("provedor fora: a falha vira log e `ultimo_erro`, e a trava decide pelo último estado GRAVADO (viva: segue recusando)", async () => {
-    m.linha = { ...GRAVADA, assinaturas_vivas: 1, cancela_no_fim: false };
+  it.each([
+    ["viva", 1],
+    ["sem assinatura viva", 0],
+  ])("provedor fora com a última gravação %s: a exclusão RECUSA (503) sem chegar à trava — nada é apagado pelo estado velho", async (_n, vivas) => {
+    m.linha = { ...GRAVADA, assinaturas_vivas: vivas, cancela_no_fim: false };
     h.ler.mockRejectedValue(new ErroDoProvedor(503, "stripe_5xx", true));
 
     await expect(excluirOrganizacao(admin() as never, entrada)).rejects.toMatchObject({
-      codigo: "exclusao_com_assinatura_viva",
+      codigo: "provedor_indisponivel",
     });
 
     expect(h.ler).toHaveBeenCalledTimes(1);
-    // A falha não apaga o estado gravado — e não solta uma assinatura viva conhecida.
-    expect(m.linha).toMatchObject({ assinaturas_vivas: 1, ultimo_erro: "provedor_fora" });
-    expect(h.viuNaTrava).toMatchObject({ assinaturas_vivas: 1 });
+    // A falha não apaga o estado gravado, e a exclusão nem chega à rpc.
+    expect(m.linha).toMatchObject({ assinaturas_vivas: vivas, ultimo_erro: "provedor_fora" });
+    expect(h.ordem).not.toContain("trava");
+    expect(h.ordem).not.toContain("canais.inventario");
     const avisos = vi.mocked(logger.warn).mock.calls.map((c) => String(c[0]));
     expect(avisos.some((a) => a.includes("cobranca.leitura_falhou"))).toBe(true);
-    expect(h.ordem).not.toContain("canais.desligar");
   });
 
   it("empresa sem linha de cobrança: nenhum chamado ao provedor, e a exclusão segue a mesma ordem de sempre", async () => {
