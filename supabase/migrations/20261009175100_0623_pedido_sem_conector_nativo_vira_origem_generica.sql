@@ -10,9 +10,13 @@ alter table public.orders
 -- cada atualização. A linha vira a origem genérica no formato que a ponte deve
 -- usar daqui em diante: a plataforma vai para `payload->>'platform'` (sem
 -- sobrescrever uma que já esteja lá) e o `external_id` ganha o prefixo dela
--- ('tray:10231'), que é o que mantém a chave única — o par (origem, id) já era
--- único, então (external, origem:id) também é. Idempotente: na segunda passada
--- não sobra linha fora da lista.
+-- ('tray:10231'), que é o que mantém a chave única NA PRÁTICA: o par (origem,
+-- id) já era único, e (external, origem:id) só colide em caso forjado — uma
+-- linha 'external' prévia com o mesmo id prefixado, ou ':' dentro da origem ou
+-- do id ('tray','a:b' e 'tray:a','b' viram ambos 'tray:a:b'). Nesses casos o
+-- UPDATE recebe 23505, a linha fica fora da lista e o `add` volta a falhar
+-- (caso não coberto pelo invariante).
+-- Idempotente: na segunda passada não sobra linha fora da lista.
 update public.orders
    set payload = jsonb_build_object('platform', external_provider) || payload,
        external_id = external_provider || ':' || external_id,
