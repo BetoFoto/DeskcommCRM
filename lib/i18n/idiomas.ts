@@ -104,7 +104,7 @@ export function parseAcceptLanguage(header: string | null | undefined): Idioma |
 }
 
 /**
- * `navigator.languages` (`["es-MX", "es", "en"]`) para um idioma servido.
+ * A lista de idiomas do navegador (`["es-MX", "es", "en"]`) para um idioma servido.
  * Reusa `parseAcceptLanguage` para que `es-MX` ou `es-419` caiam em `es` e não
  * no padrão, que é o que `normalizarIdioma` faria com o código regional.
  */
