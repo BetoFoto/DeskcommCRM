@@ -2319,8 +2319,11 @@ fi
 # de propósito (#1060). Se a imagem dele não veio do registro (arquitetura da
 # VPS diferente da das imagens publicadas, tag ainda publicando, pacote
 # privado, registro fora), o `up -d` morre e a instalação acabava sem CRM no
-# ar — esta guarda responde, e é ela quem recusa construir quando o registro
-# não responde.
+# ar. Aqui a resposta é construir: o install.sh chama `construir_aqui_e_subir`
+# direto, SEM consultar `build_local_permitido` — então uma instalação nova
+# constrói o app nesta VPS em qualquer falha do `up -d`, inclusive com o
+# registro fora do ar. O portão de memória da #1955, que recusa construir
+# quando o registro não responde, hoje só existe no update.sh.
 CONSTRUIU_AQUI=""
 if ! dc up -d; then
   if construir_aqui_e_subir "$VERSAO_ALVO"; then
