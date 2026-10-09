@@ -124,6 +124,9 @@ describe("#2591 — fatia 2: aviso ao vendedor dono", () => {
         from: (tabela: string) => cadeia(tabela, linhas[tabela] ?? []),
       }),
     }));
+    // Os casos de cima já importaram o módulo de verdade: sem isto o cache
+    // devolve o módulo antigo e o `doMock` não muda nada.
+    vi.resetModules();
 
     const { avisoAoDonoDaCarteira } = await import(/* @vite-ignore */ MODULO_AVISO);
     const r = await avisoAoDonoDaCarteira.handle(evento());
@@ -134,6 +137,7 @@ describe("#2591 — fatia 2: aviso ao vendedor dono", () => {
     expect(pedido.contactId).toBe("contato-1");
     vi.doUnmock("@/lib/tarefas/criar-tarefa");
     vi.doUnmock("@/lib/supabase/admin");
+    vi.resetModules();
   });
 });
 
@@ -141,15 +145,19 @@ describe("#2591 — fatia 3: o negócio novo nasce com o dono", () => {
   it("o gatilho de inserção do negócio existe e só age quando o negócio chega sem dono", () => {
     const baseline = arquivo("supabase/baseline.sql");
     expect(baseline, "sem gatilho, o negócio novo continua nascendo no rodízio").toContain(
-      "trg_crm_lead_nasce_na_carteira",
+      "trg_crm_lead_nasce_na_carteira on public.crm_leads",
     );
-    const gatilho = baseline.slice(
-      Math.max(0, baseline.indexOf("trg_crm_lead_nasce_na_carteira") - 4000),
-      baseline.indexOf("trg_crm_lead_nasce_na_carteira") + 4000,
-    );
+    // O corpo da função é o que tem de estar certo (o nome aparece também no
+    // cabeçalho `-- manifest:`, então procurar só o nome mediria comentário).
+    const criacao = baseline.indexOf("create or replace function public.fn_crm_lead_nasce_na_carteira");
+    expect(criacao, "a função do gatilho não está no schema").toBeGreaterThan(-1);
+    const corpo = baseline.slice(criacao, criacao + 3500);
     // A guarda de "já tem dono não muda" é regra da issue: ninguém perde
     // carteira por um gatilho.
-    expect(gatilho).toMatch(/owner_user_id is not null/);
+    expect(corpo).toMatch(/if new\.owner_user_id is not null or new\.owner_agent_id is not null then/);
+    // E sem carteira a função devolve a linha intacta — é isto que mantém o
+    // rodízio atual de pé.
+    expect(corpo).toMatch(/if v_dono is null then\s*return new;/);
   });
 
   it("no modo 'Só os seus', criar negócio para cliente de outro vendedor é recusado com motivo", async () => {
