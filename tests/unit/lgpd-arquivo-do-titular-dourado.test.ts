@@ -1,6 +1,16 @@
 /**
- * GUARDA DOURADA DO `data.json` DO TITULAR — o arquivo que o worker sobe não
- * pode mudar um byte sem decisão do dono.
+ * GUARDA DOURADA DO `data.json` DO TITULAR — a saída de
+ * `partesDoArquivoDoTitular` não pode mudar um byte sem decisão do dono.
+ *
+ * Alcance, dito sem inflar: o que se executa aqui é a função de produção
+ * `partesDoArquivoDoTitular`. O embrulho em `Buffer` que o worker faz
+ * (`workers/lgpd-export-worker.ts`, o `Readable.from` do upload) NÃO é
+ * executado — `arquivoComoOWorkerSobe` é um espelho dele. Para o espelho não
+ * envelhecer calado, o último caso confere no TEXTO do worker que o laço ainda
+ * é o mesmo (`yield Buffer.from(pedaco, "utf-8")` sobre
+ * `partesDoArquivoDoTitular(data, perfil.codigo)`). É conferência de fonte, não
+ * de execução: um worker que embrulhe igual com outra grafia reprova aqui e
+ * pede que se atualize o espelho junto.
  *
  * Por que existe: o #2651 trocou a montagem do arquivo (cópia profunda +
  * `JSON.stringify(copia, null, 2)`) pela escrita em partes
@@ -21,11 +31,17 @@
  * teste ficou vermelho num refactor, o defeito é do refactor.
  */
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { partesDoArquivoDoTitular } from "@/lib/lgpd/copia-do-titular";
 import type { ExportPayload } from "@/lib/lgpd/export-collector";
 
-/** Como o worker monta (`workers/lgpd-export-worker.ts`): cada parte vira um Buffer UTF-8. */
+/**
+ * ESPELHO do embrulho do worker (`workers/lgpd-export-worker.ts`, upload do
+ * `data.json`): cada parte vira um Buffer UTF-8. Não é o worker — o último caso
+ * deste arquivo confere que o worker ainda faz exatamente isto.
+ */
 async function arquivoComoOWorkerSobe(data: ExportPayload, pais: string): Promise<Buffer> {
   const pedacos: Buffer[] = [];
   for await (const pedaco of partesDoArquivoDoTitular(data, pais)) pedacos.push(Buffer.from(pedaco, "utf-8"));
@@ -244,5 +260,12 @@ describe("data.json do titular: preso, byte a byte, à saída anterior ao #2651"
       expect({ bytes: arquivo.length, sha256: sha256(arquivo) }).toEqual(DOURADO_RICO[nome]);
     });
   }
+
+  it("o espelho acima ainda é o embrulho do worker (conferência de fonte)", () => {
+    const worker = readFileSync(join(__dirname, "..", "..", "workers/lgpd-export-worker.ts"), "utf8");
+    expect(worker).toMatch(
+      /for await \(const pedaco of partesDoArquivoDoTitular\(data, perfil\.codigo\)\) \{\s*yield Buffer\.from\(pedaco, "utf-8"\);\s*\}/,
+    );
+  });
 });
 
