@@ -4148,7 +4148,7 @@
   "Em negociação": "In negotiation",
   "Ganho": "Won",
   "Perdido": "Lost",
-  "O relatório de LGPD entregue ao cliente traz a RAZÃO SOCIAL da sua empresa, e não o nome aqui de cima — é ela que responde legalmente pelos dados. Confira o campo \"Razão social\" em Configurações → Organização.": "The LGPD report delivered to the client shows your company's LEGAL NAME, not the name above — it's the legal name that's liable for the data. Check the \"Legal name\" field in Settings → Organization.",
+  "O relatório de {lei} entregue ao cliente traz a {campo_alto} da sua empresa, e não o nome aqui de cima — é ela que responde legalmente pelos dados. Confira o campo \"{campo}\" em Configurações → Organização.": "The {lei} report delivered to the client shows your company's {campo_alto}, not the name above — it's the legal name that's liable for the data. Check the \"{campo}\" field in Settings → Organization.",
   "Use a ação \"Webhooks\" → POST, apontando para o endereço acima.": "Use the \"Webhooks\" action → POST, pointing to the address above.",
   "Incidentes": "Incidents",
   "Último acesso": "Last access",
