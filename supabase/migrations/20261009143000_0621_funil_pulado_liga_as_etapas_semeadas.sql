@@ -26,7 +26,7 @@
 -- registra E liga, ou nada muda; o cliente JS não tem transação, e um pular que
 -- falhasse pela metade deixaria a organização com estado sem efeito.
 --
--- ═══ O MAPEAMENTO — O MESMO QUE A 0084 JÁ DECLAROU ═══
+-- ═══ O MAPEAMENTO — E O QUE É DECISÃO DESTA MIGRATION ═══
 --
 -- Três das oito etapas têm passo equivalente e são exatamente as que a issue
 -- apontou:
@@ -34,10 +34,14 @@
 --   Aguardando pagamento -> negotiating   Pago -> won (is_won)
 --   Cancelado            -> lost         (is_lost)
 --
+-- A 0084 só derivou won/lost de is_won/is_lost; negotiating em 'Aguardando
+-- pagamento' é decisão desta migration, possível porque a etapa foi semeada
+-- pelo próprio sistema, não nomeada pelo tenant.
+--
 -- As outras cinco — Carrinho abandonado, Em separação, Enviado, Entregue,
--- Pós-venda — não têm equivalente no funil do agente, e a 0084 já diz isso com
--- as palavras dela: `null` é estado legítimo, e forçar um deles seria inventar
--- semântica que o tenant não declarou. Com `negotiating` apontado,
+-- Pós-venda — não têm equivalente no funil do agente. A 0084 diz, com as
+-- palavras dela e citando três delas, que `null` é estado legítimo e que
+-- forçar um mapeamento seria inventar semântica que o tenant não declarou. Com `negotiating` apontado,
 -- `coberturaDoFunil()` sai de `mudo: true` — é o alarme que tinha de sumir.
 --
 -- As três guardas no UPDATE não são defeito, são o schema falando: o CHECK

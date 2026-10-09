@@ -18,11 +18,13 @@ import { sql, lastLine } from "./gov-helpers";
  * helper: conserto que só existe numa função que ninguém chama deixa este
  * arquivo vermelho, que é onde ele tem de ficar.
  *
- * O mapeamento é o único honesto para este funil, e a própria 0084 já o
- * declarou: `Aguardando pagamento` negocia, `Pago` ganha, `Cancelado` perde — e
- * `Carrinho abandonado`, `Em separação`, `Enviado`, `Entregue` e `Pós-venda`
- * não têm equivalente no funil do agente. Forçar um deles seria inventar
- * semântica que o tenant não declarou; `null` é estado legítimo (0084).
+ * O mapeamento: `Aguardando pagamento` negocia, `Pago` ganha, `Cancelado`
+ * perde. A 0084 só derivou won/lost de is_won/is_lost; negotiating em
+ * 'Aguardando pagamento' é decisão da 0621, possível porque a etapa foi
+ * semeada pelo próprio sistema, não nomeada pelo tenant. `Carrinho abandonado`,
+ * `Em separação`, `Enviado`, `Entregue` e `Pós-venda` não têm equivalente no
+ * funil do agente. Forçar um deles seria inventar semântica que o tenant não
+ * declarou; `null` é estado legítimo (0084).
  *
  * ⚠️ CADA CASO MONTA E DESMONTA O PRÓPRIO TENANT — mesma razão da 0156: um
  * caso que herdasse o quadro já ligado pelo anterior mediria a precondição
