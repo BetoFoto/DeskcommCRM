@@ -294,3 +294,60 @@ describe("Meta: o parser de mídia e a ingestão gravam metadata.media_filename"
     expect(nomeOriginalDoDocumento(linha.metadata)).toBe("Contrato assinado.pdf");
   });
 });
+
+describe("o nome é limpo de caracteres invisíveis e limitado em tamanho, na entrada e na leitura", () => {
+  // Construídos por código para o arquivo não carregar o caractere cru.
+  const DIRECAO = String.fromCharCode(0x202e);
+  const ISOLAMENTO = String.fromCharCode(0x2066);
+  const MARCA = String.fromCharCode(0x200f);
+  const CONTROLE = String.fromCharCode(0x07) + String.fromCharCode(0x0a) + String.fromCharCode(0x7f);
+
+  it("WAHA: direção de texto e controle saem antes de gravar", async () => {
+    const { linha } = await ingerirWaha(
+      corpoWaha({
+        url: "http://localhost:3000/api/files/default/ABC.pdf",
+        mimetype: "application/pdf",
+        filename: `Relatorio${DIRECAO}${CONTROLE}${ISOLAMENTO} Final${MARCA}.pdf`,
+      }),
+    );
+
+    expect(linha.metadata).toMatchObject({ media_filename: "Relatorio Final.pdf" });
+  });
+
+  it("Meta: direção de texto e controle saem antes de gravar", async () => {
+    const linha = await ingerirMetaInbound({
+      ...DOCUMENTO_META,
+      document: { ...DOCUMENTO_META.document, filename: `${DIRECAO}Planilha${CONTROLE}.xlsx` },
+    });
+
+    expect(linha.metadata).toMatchObject({ media_filename: "Planilha.xlsx" });
+  });
+
+  it("nome feito só de invisíveis não vira chave", async () => {
+    const { linha } = await ingerirWaha(
+      corpoWaha({
+        url: "http://localhost:3000/api/files/default/ABC.pdf",
+        mimetype: "application/pdf",
+        filename: `${DIRECAO}${CONTROLE}${MARCA}`,
+      }),
+    );
+
+    expect(linha.metadata).not.toHaveProperty("media_filename");
+  });
+
+  it("nome longo é cortado em 255 caracteres", async () => {
+    const { linha } = await ingerirWaha(
+      corpoWaha({
+        url: "http://localhost:3000/api/files/default/ABC.pdf",
+        mimetype: "application/pdf",
+        filename: `${"a".repeat(400)}.pdf`,
+      }),
+    );
+
+    expect(String((linha.metadata as Linha).media_filename)).toHaveLength(255);
+  });
+
+  it("a leitura do cartão limpa também o que já estava gravado", () => {
+    expect(nomeOriginalDoDocumento({ media_filename: `Nota${DIRECAO}${CONTROLE}.pdf` })).toBe("Nota.pdf");
+  });
+});

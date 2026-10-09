@@ -3,6 +3,7 @@
  * A mídia é SEMPRE servida por /api/v1/messages/{id}/media (Onda 0) —
  * o browser segue o 302 pra signed URL; nunca usar media_url do WAHA.
  */
+import { nomeDeArquivoLimpo } from "@/lib/messaging/media/nome-de-arquivo";
 
 export function mediaSrc(messageId: string): string {
   return `/api/v1/messages/${messageId}/media`;
@@ -18,10 +19,7 @@ export function mediaSrc(messageId: string): string {
  */
 export function nomeOriginalDoDocumento(metadata: unknown): string | null {
   if (!metadata || typeof metadata !== "object") return null;
-  const bruto = (metadata as Record<string, unknown>).media_filename;
-  if (typeof bruto !== "string") return null;
-  const nome = bruto.trim();
-  return nome ? nome : null;
+  return nomeDeArquivoLimpo((metadata as Record<string, unknown>).media_filename);
 }
 
 export function formatBytes(bytes: number | null | undefined): string {

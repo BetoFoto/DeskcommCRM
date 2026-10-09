@@ -41,6 +41,7 @@ import { ackToStatus } from "@/lib/types/messaging";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
 import { bareWaMessageId, chatIdFromWaMessageId, wahaEchoExternalIds } from "@/lib/waha/message-id";
 import { logger } from "@/lib/logger";
+import { nomeDeArquivoLimpo } from "@/lib/messaging/media/nome-de-arquivo";
 import {
   ehNumeroInternoDeAviso,
   registrarMensagemIgnorada,
@@ -340,10 +341,7 @@ export function mediaMimeOf(p: WahaPayload): string | null {
  * extensão.
  */
 export function mediaFilenameOf(p: WahaPayload): string | null {
-  const bruto = p.media?.filename;
-  if (typeof bruto !== "string") return null;
-  const nome = bruto.trim();
-  return nome ? nome : null;
+  return nomeDeArquivoLimpo(p.media?.filename);
 }
 
 /**
