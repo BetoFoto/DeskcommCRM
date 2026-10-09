@@ -118,6 +118,9 @@ describe("#2591 — fatia 2: aviso ao vendedor dono", () => {
       contacts: [{ id: "contato-1", organization_id: "org-1", carteira_user_id: "u-a", name: "Cliente" }],
       conversations: [{ id: "conv-1", organization_id: "org-1", assigned_to_user_id: "u-b" }],
       crm_tasks: [],
+      user_organizations: [
+        { user_id: "u-a", organization_id: "org-1", role: "agent", accepted_at: "2026-01-01", revoked_at: null },
+      ],
     };
     vi.doMock("@/lib/supabase/admin", () => ({
       createAdminClient: () => ({
@@ -135,6 +138,32 @@ describe("#2591 — fatia 2: aviso ao vendedor dono", () => {
     const pedido = criarTarefaInterna.mock.calls[0]![1];
     expect(pedido.atribuirA).toEqual({ usuario_id: "u-a" });
     expect(pedido.contactId).toBe("contato-1");
+    vi.doUnmock("@/lib/tarefas/criar-tarefa");
+    vi.doUnmock("@/lib/supabase/admin");
+    vi.resetModules();
+  });
+});
+
+describe("#2591 — fatia 2: dono que saiu da equipe não recebe aviso (regra 5)", () => {
+  it("com o dono revogado, o handler não cria tarefa", async () => {
+    const criarTarefaInterna = vi.fn(async () => ({ ok: true as const, tarefa_id: "t", assigned_to: "u-a" }));
+    vi.doMock("@/lib/tarefas/criar-tarefa", () => ({ criarTarefaInterna }));
+    const linhas: Record<string, Array<Record<string, unknown>>> = {
+      contacts: [{ id: "contato-1", organization_id: "org-1", carteira_user_id: "u-a", name: "Cliente" }],
+      conversations: [{ id: "conv-1", organization_id: "org-1", assigned_to_user_id: "u-b" }],
+      crm_tasks: [],
+      user_organizations: [
+        { user_id: "u-a", organization_id: "org-1", role: "agent", accepted_at: "2026-01-01", revoked_at: "2026-02-01" },
+      ],
+    };
+    vi.doMock("@/lib/supabase/admin", () => ({
+      createAdminClient: () => ({ from: (tabela: string) => cadeia(tabela, linhas[tabela] ?? []) }),
+    }));
+    vi.resetModules();
+    const { avisoAoDonoDaCarteira } = await import(/* @vite-ignore */ MODULO_AVISO);
+    const r = await avisoAoDonoDaCarteira.handle(evento());
+    expect(r.status).toBe("skipped");
+    expect(criarTarefaInterna).not.toHaveBeenCalled();
     vi.doUnmock("@/lib/tarefas/criar-tarefa");
     vi.doUnmock("@/lib/supabase/admin");
     vi.resetModules();

@@ -35,6 +35,7 @@
 import { traduzir } from "@/lib/i18n/dicionario";
 import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
 import type { EventHandler, EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
+import { donoQualificado } from "@/lib/carteira/dono";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { criarTarefaInterna } from "@/lib/tarefas/criar-tarefa";
 
@@ -124,7 +125,11 @@ async function handle(row: EventRow): Promise<HandlerResult> {
     .maybeSingle();
   if (erroDaConversa) return falhou(`leitura da conversa falhou: ${erroDaConversa.message}`);
 
-  const donoId = texto(cliente.carteira_user_id);
+  // Regra 5: dono que virou `viewer` ou saiu da equipe não conta — a mesma
+  // régua do gatilho e da rota de negócio, senão a tarefa vai para quem saiu.
+  const donoGravado = texto(cliente.carteira_user_id);
+  const donoId =
+    donoGravado && (await donoQualificado(admin, row.organization_id, donoGravado)) ? donoGravado : null;
   const atendenteId = texto((conversa as { assigned_to_user_id?: string | null } | null)?.assigned_to_user_id);
 
   let decisao = decidirAvisoDeCarteira({ donoId, atendenteId, tarefaAberta: false });

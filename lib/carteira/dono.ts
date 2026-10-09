@@ -53,7 +53,15 @@ export async function carteiraDoContato(
     .maybeSingle();
   const dono = (contato as { carteira_user_id?: string | null } | null)?.carteira_user_id ?? null;
   if (!dono) return SEM_CARTEIRA;
+  return { dono, qualificado: await donoQualificado(admin, organizationId, dono) };
+}
 
+/** O vínculo de HOJE decide: membro aceito, não revogado, papel que conta. */
+export async function donoQualificado(
+  admin: SupabaseClient,
+  organizationId: string,
+  dono: string,
+): Promise<boolean> {
   const { data: vinculo } = await admin
     .from("user_organizations")
     .select("role, accepted_at, revoked_at")
@@ -61,7 +69,5 @@ export async function carteiraDoContato(
     .eq("organization_id", organizationId)
     .maybeSingle();
   const linha = vinculo as { role?: string | null; accepted_at?: string | null; revoked_at?: string | null } | null;
-  const qualificado =
-    papelContaDeCarteira(linha?.role) && !!linha?.accepted_at && !linha?.revoked_at;
-  return { dono, qualificado };
+  return papelContaDeCarteira(linha?.role) && !!linha?.accepted_at && !linha?.revoked_at;
 }
