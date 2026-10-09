@@ -21,6 +21,19 @@ export const CATALOGO_DE_MODULOS: readonly ModuloCatalogo[] = [
       "Contrato de honorários (fixo, êxito ou misto) e o calendário de parcelas, ligado ao caixa " +
       "do núcleo. Para escritórios de advocacia que cobram por caso.",
   },
+  {
+    // #1907 item 4 — sem esta linha `service.ts:84` recusava o slug fora do
+    // catálogo (`extension_module_unknown`) e não havia como instalar a
+    // comanda em lugar nenhum: as telas e as rotas ficariam mortas para
+    // sempre, mesmo com a provisionadora pronta.
+    slug: "financeiro",
+    nome: "Comanda e caixa (financeiro)",
+    descricao:
+      "A comanda do atendimento — itens, formas de pagamento, faturamento no caixa, comissões " +
+      "e fidelidade —, com as cinco tabelas da comanda nascendo SÓ onde o módulo é instalado " +
+      "(ADR-0002 D2/D3): instalação nova sem ele não tem `sales`, e sem esta linha no catálogo " +
+      "não há como instalá-lo.",
+  },
 ];
 
 export function moduloDoCatalogo(slug: string): ModuloCatalogo | undefined {
