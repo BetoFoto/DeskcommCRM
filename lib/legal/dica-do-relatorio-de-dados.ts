@@ -37,14 +37,19 @@ export interface VocabularioDaEmpresa {
  * A frase pronta: traduz o template e preenche o vocabulário do país.
  *
  * `{campo_alto}` é a mesma palavra em CAIXA ALTA (a ênfase do texto original);
- * `{campo}` é o rótulo como o operador o lê no formulário.
+ * `{campo}` é o rótulo como o operador o lê no formulário. O rótulo passa por
+ * `t` como na tela de Organização (`app/app/settings/tenant/_form.tsx`, que
+ * mostra `t(perfil.empresa.rotuloNomeLegal)`): sem isso, a organização
+ * brasileira com a tela em espanhol leria "Razão social" onde o campo diz
+ * "Razón social".
  */
 export function dicaDoRelatorio(
   t: (texto: string) => string,
   vocabulario: VocabularioDaEmpresa,
 ): string {
+  const campo = t(vocabulario.rotuloNomeLegal);
   return t(DICA_DO_RELATORIO)
     .replace("{lei}", vocabulario.lei)
-    .replace("{campo_alto}", vocabulario.rotuloNomeLegal.toUpperCase())
-    .replace("{campo}", vocabulario.rotuloNomeLegal);
+    .replace("{campo_alto}", campo.toUpperCase())
+    .replace("{campo}", campo);
 }
