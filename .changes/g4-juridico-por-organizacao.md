@@ -1,13 +1,13 @@
 ---
 impacto: capacidade_nova
 secao: alterado
-titulo: O gate G4 de termos jurídicos passa a ser configurável por organização
+titulo: Passar a conversa para uma pessoa por assunto jurídico vira uma chave por agente
 ---
 
-O gate G4 (`G4_LEGAL_REGEX`) entregava a conversa para um humano sempre que o lead escrevia "procon", "advogado", "processar", "processo judicial", "justiça", "juiz", "reclame aqui", "denúncia", "defensoria" ou "ministério público". Para quase todo nicho isso é sinal de reclamação grave, mas para um escritório de advocacia é o vocabulário normal do cliente (#2097) — quase todo lead caía em handoff e o agente não concluía a qualificação.
+Em quase todo nicho, escrever "procon", "advogado" ou "processo judicial" é sinal de reclamação grave e o sistema entrega a conversa para uma pessoa. Para um escritório de advocacia é o vocabulário normal do cliente (#2097) — quase todo lead caía em passagem e o agente não concluía a qualificação.
 
-A preferência passou a ser por organização, guardada em `organizations.settings.handoff.g4_juridico` (booleano, sem migration). Só o `false` explícito desliga: quem não configurou nada continua com o G4 ligado e com exatamente o mesmo resultado de antes; a ordem das checagens e os textos das demais gates não mudaram, e o pedido explícito de humano (G1) segue disparando do mesmo jeito. A leitura do banco acontece só quando o regex bate, então mensagem sem termo jurídico não ganha consulta extra.
+A escolha passou a morar NA VERSÃO DO AGENTE: a coluna `ai_agent_versions.handoff_legal_enabled` (booleano, padrão ligado; `add column if not exists` + `comment on column`, e `fn_ai_agent_version_content_immutable` recriada com a coluna nova para a versão publicada continuar imutável). Desligada, só muda a descrição da ferramenta `request_human_handoff`: ela deixa de mandar passar em "questão jurídica" e passa a dizer que assunto jurídico é o trabalho normal daquele atendimento e não é, sozinho, motivo de passagem. O pedido explícito de pessoa (`detectHumanHandoffRequest`) e as palavras de passagem (`handoff_keywords`) continuam sempre ligados, e os demais caminhos para humano — irritação percebida pelo Jev, pedido de não receber mais mensagens, limite de gasto com IA e caso escalado pela equipe — não mudam.
 
-Ainda não há interruptor em tela — a chave é ligada e desligada pelo mesmo caminho de `settings.jev`.
+Na tela, o cartão "Passar para uma pessoa" ganha um segundo interruptor embaixo do "Deixar o agente chamar uma pessoa...", desabilitado quando o de cima está desligado. Só admin muda, porque toda escrita de versão já exige admin. A publicação que altera o valor emite `ai_agent.legal_handoff_changed` à parte do `ai_agent.published`, com `version_id`, `previous_version_id` e `enabled` — na primeira publicação, sem versão anterior, a referência é o padrão (ligado) e `previous_version_id` sai `null`. A chave também ganha linha em Recursos opcionais, como `passagem_por_assunto_juridico`.
 
 Contribuição de @webtecnica (#2156).
