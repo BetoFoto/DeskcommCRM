@@ -1927,6 +1927,10 @@ export const DICIONARIO: Traducoes = {
   "Desligue se assunto jurídico é o trabalho normal deste agente. Quem pede para falar com uma pessoa continua sendo passado.": {
     es: "Apágalo si el asunto jurídico es el trabajo normal de este agente. Quien pide hablar con una persona sigue siendo derivado.",
   },
+  "Passagem por assunto jurídico": { es: "Pasaje a una persona por asunto jurídico" },
+  "Por agente e decidido pelo admin: passar a conversa para uma pessoa quando o cliente falar de assunto jurídico (Procon, advogado, processo). Desligada, assunto jurídico passa a ser o trabalho normal deste agente e não é, sozinho, motivo de passagem — quem pede para falar com uma pessoa continua sendo passado. É OUTRA chave: a \"chamar uma pessoa\" de \"Ajustes de cada agente\" liga e desliga a ferramenta inteira; esta só tira a passagem por assunto jurídico.": {
+    es: "Por agente y decidido por el admin: pasar la conversación a una persona cuando el cliente hable de asunto jurídico (Procon, abogado, proceso). Apagado, el asunto jurídico pasa a ser el trabajo normal de este agente y no es, por sí solo, motivo de paso — quien pide hablar con una persona sigue siendo derivado. Es OTRA llave: la \"llamar a una persona\" de \"Ajustes de cada agente\" enciende y apaga la herramienta entera; esta solo quita el paso por asunto jurídico.",
+  },
   "Pedir ajuda sem sair da conversa": { es: "Pedir ayuda sin salir de la conversación" },
   "Deixar o agente pedir uma tarefa a alguém e seguir conversando": {
     es: "Dejar que el agente pida una tarea a alguien y siga conversando",
