@@ -283,22 +283,20 @@ comment on table public.sales is
 comment on table public.loyalty_ledger is
   'Livro-razão de fidelidade. O saldo do cliente é sum(points) — NUNCA uma coluna.';
 
--- A FK que o caixa perdeu: `financial_entries` é do NÚCLEO e fica no baseline,
--- mas apontava para `sales`, que é do módulo. Onde o módulo está instalado, o
--- vínculo volta a ser constraint, com o mesmo `on delete set null` que a 0351
--- declarava. O nome é conferido antes porque a provisionadora roda a cada
--- atualização (D6) e `add constraint` repetido seria erro.
-if to_regclass('public.financial_entries') is not null
-   and not exists (
-     select 1 from pg_constraint
-      where conname = 'financeiro_sale_id_fkey'
-        and conrelid = 'public.financial_entries'::regclass
-   )
-then
-  alter table public.financial_entries
-    add constraint financeiro_sale_id_fkey
-    foreign key (sale_id) references public.sales(id) on delete set null;
-end if;
+-- A FK que o caixa perdeu (`financial_entries.sale_id → sales.id`, `on delete set
+-- null`) SAIU do corpo desta função: `financial_entries` é tabela do NÚCLEO, e o
+-- molde da onda 10 (`tests/invariants/provisionadora-de-modulo.test.ts`) não deixa
+-- o corpo de uma provisionadora alterar tabela do núcleo — a regra é o inverso,
+-- "FK do módulo para o núcleo", e vale para a FK nascer na tabela do módulo
+-- (`sale_items.sale_id → sales.id` está aqui embaixo).
+--
+-- A criação dela agora é rotina própria, `fn_financeiro_ligar_caixa_a_comanda()`,
+-- definida no fim desta migration: a provisionadora CHAMA a rotina (a FK continua
+-- nascendo no provisionamento) e o topo também, já na passada do kit onde a
+-- comanda já existe. Em ambos, o `not exists` passou a olhar QUALQUER FK de
+-- `financial_entries.sale_id → sales` em vez de um nome fixo — a 0351 trazia
+-- `financeiro_sale_id_fkey` e a main traz `financial_entries_sale_id_fkey`, e
+-- conferir um nome só criaria a segunda FK (item 5 do PR #1907).
 
   -- ── RLS das cinco tabelas, declarada por ESTA função (#1906 + D5) ──────────
   -- A rotina 0325 (`fn_proteger_tabelas_de_organizacao`) só enxerga tabela com
@@ -355,6 +353,20 @@ end if;
   -- key podendo ler tudo — `baseline.sql:4748` dá, por
   -- `alter default privileges`, privilégio total a `anon` no que nasce depois.
   perform public.fn_proteger_modulo_provisionado();
+
+  -- ── A comanda alcançada por SEÇÃO, não por passo escrito na cascata ────────
+  -- `notes`, `cancel_reason` e `reverse_reason` são texto da pessoa, e a comanda
+  -- é alcançada por `contact_id`. O que a D8 (migration 0485) cobra é a SEÇÃO
+  -- declarada em `modulo_secoes_lgpd`: daí em diante a redação acontece no
+  -- gatilho `trg_lgpd_secoes_de_modulo`, nos DOIS caminhos de anonimização (a
+  -- cascata e a virada `is_anonymized` de `fn_lgpd_anonymize_contact`), e sem o
+  -- núcleo nomear `sales` — o `update sales set` fixo saiu da cascata por isto.
+  perform public.fn_financeiro_declarar_secoes_lgpd();
+
+  -- A FK do caixa, que o molde não deixa o corpo criar (núcleo alterando núcleo):
+  -- sai daqui para a rotina própria que a migration define no fim, com o mesmo
+  -- guarda de `to_regclass` e a conferência de qualquer FK já existente.
+  perform public.fn_financeiro_ligar_caixa_a_comanda();
 end
 $f$;
 
@@ -890,3 +902,124 @@ begin
   end if;
 end
 $dedupe$;
+
+-- ═══ A SEÇÃO DE LGPD DA COMANDA (D8) — declarada, e não escrita na cascata ════
+--
+-- A comanda tem texto da pessoa (`notes`, `cancel_reason`, `reverse_reason`) e é
+-- alcançada por `contact_id`. O que a D8 (migration 0485) exige é a SEÇÃO
+-- declarada em `modulo_secoes_lgpd`: é por ali que `trg_lgpd_secoes_de_modulo`
+-- redige, nos DOIS caminhos de anonimização (a cascata e a virada
+-- `is_anonymized` de `fn_lgpd_anonymize_contact`). Enquanto a redação da comanda
+-- era um `update sales set` fixo no corpo da cascata, instalação SEM o módulo
+-- abortava a anonimização inteira com `relation "sales" does not exist` (medido,
+-- CI do #1907); o passo saiu da cascata, e a cobertura ficou aqui.
+--
+-- DUAS portas, e as duas são necessárias:
+--   A) no TOPO desta migration, com guarda de `to_regclass`: onde a comanda já
+--      existe (instalação Supabase CLI, self-hoster atualizando) o registro nasce
+--      na mesma passada do kit, sem esperar ninguém chamar a provisionadora;
+--   B) dentro da provisionadora: onde a comanda só nasce JUNTO com o módulo, o
+--      registro nasce junto com as tabelas.
+-- As duas escrevem a MESMA linha (`on conflict do nothing`), e a tabela continua
+-- vazia em banco novo sem o módulo — `if to_regclass` antes de tudo.
+create or replace function public.fn_financeiro_declarar_secoes_lgpd()
+returns void language plpgsql security definer set search_path = public, pg_temp as $f$
+begin
+  if to_regclass('public.sales') is null then
+    return;
+  end if;
+  -- `notes` é texto livre da pessoa e some (NULO), como a cascata fazia.
+  -- `cancel_reason`/`reverse_reason` são rótulo: viram a marca de anonimizado em
+  -- vez de sumir, para o histórico continuar mostrando que houve motivo — o mesmo
+  -- corte que a cascata descrevia ("redige o texto, preserva o valor, status e
+  -- datas, e não desliga o contato").
+  insert into public.modulo_secoes_lgpd (modulo, tabela, ligacao, colunas, colunas_rotulo)
+    values (
+      'financeiro',
+      'sales',
+      'organization_id = $1 and contact_id = $2',
+      array['notes'],
+      array['cancel_reason', 'reverse_reason']
+    )
+    on conflict (modulo, tabela) do nothing;
+end $f$;
+
+revoke execute on function public.fn_financeiro_declarar_secoes_lgpd() from public, anon, authenticated;
+grant execute on function public.fn_financeiro_declarar_secoes_lgpd() to service_role;
+
+comment on function public.fn_financeiro_declarar_secoes_lgpd() is
+  'Declara a seção de LGPD da comanda (`sales`) em modulo_secoes_lgpd (D8, migration 0485). Chamada pela provisionadora (comanda que nasce com o módulo) e pelo topo desta migration (comanda que já existe): uma linha só, escrita por um lado não apaga a do outro.';
+
+-- ═══ A FK QUE O CAIXA PERDEU — núcleo alterando núcleo, fora do corpo ═════════
+--
+-- `financial_entries.sale_id → sales.id` com `on delete set null` (a 0351 a tinha;
+-- a main a traz como `financial_entries_sale_id_fkey`). Ela saiu do corpo da
+-- provisionadora porque o molde da onda 10 não deixa corpo de módulo alterar
+-- tabela do núcleo — `tests/invariants/provisionadora-de-modulo.test.ts` acusava
+-- `corpo não escreve fora do módulo: financial_entries`. Continua nascendo no
+-- provisionamento: a provisionadora CHAMA esta rotina.
+--
+-- A conferência deixou de ser por NOME FIXO (`financeiro_sale_id_fkey`) e passou a
+-- ser por EXISTÊNCIA: qualquer FK de `financial_entries.sale_id` para `sales.id`,
+-- seja qual for o nome, é a mesma relação — conferir um nome só criava a SEGUNDA
+-- FK onde a tabela já veio com `financial_entries_sale_id_fkey` (item 5 do #1907).
+create or replace function public.fn_financeiro_ligar_caixa_a_comanda()
+returns void language plpgsql security definer set search_path = public, pg_temp as $f$
+begin
+  if to_regclass('public.financial_entries') is null
+     or to_regclass('public.sales') is null then
+    return;
+  end if;
+  if exists (
+    select 1
+      from pg_constraint c
+      join pg_attribute a
+        on a.attrelid = c.conrelid
+       and a.attnum = any (c.conkey)
+     where c.contype = 'f'
+       and c.conrelid = 'public.financial_entries'::regclass
+       and c.confrelid = 'public.sales'::regclass
+       and a.attname = 'sale_id'
+  ) then
+    return;
+  end if;
+  alter table public.financial_entries
+    add constraint financeiro_sale_id_fkey
+    foreign key (sale_id) references public.sales(id) on delete set null;
+end $f$;
+
+revoke execute on function public.fn_financeiro_ligar_caixa_a_comanda() from public, anon, authenticated;
+grant execute on function public.fn_financeiro_ligar_caixa_a_comanda() to service_role;
+
+comment on function public.fn_financeiro_ligar_caixa_a_comanda() is
+  'Restaura a FK do núcleo `financial_entries.sale_id → sales.id` onde a comanda existe, conferindo a EXISTÊNCIA de qualquer FK da relação em vez de um nome (a main já traz financial_entries_sale_id_fkey). Chamada pela provisionadora e pelo topo desta migration; sem as duas tabelas, no-op.';
+
+-- Porta A das duas rotinas: banco que JÁ tem comanda recebe registro e FK nesta
+-- mesma passada do kit, antes da reaplicação de módulos que fecha o baseline.
+do $topo$
+begin
+  perform public.fn_financeiro_declarar_secoes_lgpd();
+  perform public.fn_financeiro_ligar_caixa_a_comanda();
+end
+$topo$;
+
+-- ═══ O MÓDULO QUE JÁ EXISTE VOLTA A CONSTAR COMO INSTALADO ═══════════════════
+--
+-- A comanda viveu ANTES do corte por instalação (D3): quem tem `sales` tem
+-- módulo instalado de fato, só que sem a linha em `modulos_instalados` — e sem a
+-- linha, `fn_reaplicar_modulos_instalados()` não a provisiona, a D8 não a redige
+-- e `fn_conferir_modulos_instalados()` não a acompanha. É o backfill do item 5 do
+-- #1907.
+--
+-- A guarda é `to_regclass('public.sales')`, e não "módulo instalado": em banco NOVO
+-- a comanda não existe, a linha não nasce, e os testes que medem
+-- `modulos_instalados` VAZIA no banco novo continuam medindo o que dizem medir
+-- (`tests/invariants/modulo-instalado.test.ts`). O `on conflict` deixa re-rodar a
+-- migration sem duplicar e sem religar um módulo que o dono suspendeu depois.
+insert into public.modulos_instalados (modulo, estado, instalado_por, reaplicado_em)
+  select 'financeiro', 'ativo', null, now()
+   where to_regclass('public.sales') is not null
+     and not exists (
+       select 1 from public.modulos_instalados where modulo = 'financeiro'
+     )
+  on conflict (modulo) do nothing;
