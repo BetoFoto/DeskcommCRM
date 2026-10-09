@@ -3,7 +3,7 @@
  *
  * ─── Por que isto é uma função de rota e não o gatilho ──────────────────────
  *
- * O gatilho `trg_crm_lead_nasce_na_carteira` (migration 0621) cobre todo
+ * O gatilho `trg_crm_lead_nasce_na_carteira` (migration 0622) cobre todo
  * negócio que chega SEM dono — e é ele que entrega o dono nos cinco caminhos de
  * criação. Falta UM caso, que é o único em que o negócio chega COM dono: no
  * modo "Só os seus" (`visibility_mode = 'own'`), a rota preenche

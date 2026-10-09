@@ -3,7 +3,7 @@
  * negócio novo que nasce com o dono (sem quebrar o rodízio).
  *
  * Este arquivo é a prova do lado que `tests/unit/carteira-do-cliente.test.ts`
- * não alcança: a migration 0621 (apêndice do baseline, aplicada pelo
+ * não alcança: a migration 0622 (apêndice do baseline, aplicada pelo
  * `scripts/test-db.sh`).
  *
  * ─── O que se mede, e por quê ───────────────────────────────────────────────
