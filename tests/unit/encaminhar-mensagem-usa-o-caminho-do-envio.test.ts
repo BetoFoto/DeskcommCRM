@@ -3,7 +3,8 @@
  *
  * ─── O que este teste protege ────────────────────────────────────────────────
  *
- * A issue pede um botão de "encaminhar" e diz que "a WAHA já disponibiliza".
+ * A issue pede um botão de "encaminhar" e diz que "o transporte do canal já
+ * disponibiliza".
  * O risco não é o botão: é alguém abrir um SEGUNDO caminho de envio (um
  * `sendForward` falando com o transporte) em vez de reusar o primeiro. No dia
  * em que um dos dois ganhasse um guard — janela de 24h, canal desativado,

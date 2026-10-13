@@ -3,7 +3,7 @@
  *
  * ─── Por que este arquivo existe, e o que ele NÃO faz ───────────────────────
  *
- * A issue pede "um botão no chat" e diz que "a WAHA já disponibiliza fazer
+ * A issue pede "um botão no chat" e diz que "o transporte do canal já faz
  * isso". A tentação é abrir um caminho de envio novo (um `POST /api/v1/forward`
  * falando com o transporte) — e é justamente o que NÃO se deve fazer: o envio
  * do Inbox já tem dono, e é `sendMessageHandler` (o mesmo handler de
