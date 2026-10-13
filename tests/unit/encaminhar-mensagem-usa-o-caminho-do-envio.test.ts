@@ -234,7 +234,7 @@ describe("motivoParaNaoEncaminhar — a régua da origem", () => {
       ...origemValida({ body: null }),
       media_storage_path: `${ORG}/${ORIGEM_CONV}/foto.jpg`,
     });
-    expect(motivo).toContain("mídia guardada no CRM");
+    expect(motivo).toBe("midia_interna");
   });
 
   it("texto puro não tem impedimento", () => {

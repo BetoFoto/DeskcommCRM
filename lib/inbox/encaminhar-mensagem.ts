@@ -76,22 +76,42 @@ export interface EncaminharParams {
 }
 
 /**
- * O que impede o encaminhamento desta origem — ou `null` quando nada impede.
+ * O motivo pelo qual esta origem NÃO pode ser encaminhada — ou `null` quando
+ * nada impede.
  *
- * Devolve o MOTIVO (texto em português, chave do dicionário) em vez de um
- * booleano: quem recusa precisa dizer POR QUE, e um `false` mudo viraria o
- * silêncio que o critério (c) proíbe. Separado da montagem da entrada para
- * poder ser cobrado direto no teste.
+ * Devolve um CÓDIGO, e não a frase: quem recusa precisa dizer POR QUE, e a
+ * frase tem de passar pelo dicionário (há espanhol na tela). Uma frase
+ * pré-montada voltaria como chave de runtime para o `traduzir` — a mesma dívida
+ * que o guarda de i18n proíbe. O código é estável e o texto sai em
+ * `mensagemDoMotivo`, com um literal por ramo.
  */
-export function motivoParaNaoEncaminhar(origem: MensagemDeOrigem): string | null {
-  if (origem.revoked_at) return "Esta mensagem foi apagada e não pode ser encaminhada.";
+export type MotivoNaoEncaminhavel = "apagada" | "midia_interna" | "sem_conteudo";
+
+export function motivoParaNaoEncaminhar(origem: MensagemDeOrigem): MotivoNaoEncaminhavel | null {
+  if (origem.revoked_at) return "apagada";
   // Mídia interna (nosso Storage) sem URL externa e sem texto: nada
   // transportável pelo caminho do envio sem copiar o objeto — fora do escopo.
-  if (origem.media_storage_path && !origem.media_url && !origem.body) {
-    return "Esta mensagem só tem mídia guardada no CRM, que ainda não pode ser encaminhada.";
-  }
-  if (!origem.body && !origem.media_url) return "Só é possível encaminhar mensagens de texto ou mídia.";
+  if (origem.media_storage_path && !origem.media_url && !origem.body) return "midia_interna";
+  if (!origem.body && !origem.media_url) return "sem_conteudo";
   return null;
+}
+
+/**
+ * A frase do motivo, por LITERAL — um ramo por código, para o `traduzir`
+ * receber texto que o código escreveu (nunca uma chave montada em runtime).
+ */
+export function mensagemDoMotivo(
+  motivo: MotivoNaoEncaminhavel,
+  t: (texto: string) => string,
+): string {
+  switch (motivo) {
+    case "apagada":
+      return t("Esta mensagem foi apagada e não pode ser encaminhada.");
+    case "midia_interna":
+      return t("Esta mensagem só tem mídia guardada no CRM, que ainda não pode ser encaminhada.");
+    case "sem_conteudo":
+      return t("Só é possível encaminhar mensagens de texto ou mídia.");
+  }
 }
 
 /**
@@ -245,7 +265,8 @@ export async function encaminharMensagem(
 
   const motivo = motivoParaNaoEncaminhar(origem);
   if (motivo) {
-    throw new ApiError(422, "nao_encaminhavel", undefined, ctx.requestId, traduzir(motivo, ctx.idioma ?? "pt-BR"));
+    const t = (texto: string) => traduzir(texto, ctx.idioma ?? "pt-BR");
+    throw new ApiError(422, "nao_encaminhavel", undefined, ctx.requestId, mensagemDoMotivo(motivo, t));
   }
 
   await validarDestino(supabase, ctx, params.conversationIdDestino);

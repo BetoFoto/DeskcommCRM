@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,14 +54,10 @@ export function EncaminharDialog({
       .filter((c) => c.id !== conversationIdAtual)
       .map((c) => ({
         id: c.id,
-        // Nome de exibição, nome ou telefone — o MESMO trio de rótulo que a
-        // lista usa. `contacts` pode faltar em cache antigo; sem nada, um
-        // rótulo neutro.
-        rotulo:
-          c.contacts?.display_name?.trim() ||
-          c.contacts?.name?.trim() ||
-          c.contacts?.phone_number ||
-          t("Conversa sem nome"),
+        // O rótulo vem da decisão central (`rotuloDoContato`) — nome de gente,
+        // depois telefone, depois "Sem nome". É a MESMA régua da lista; uma
+        // cadeia montada à mão aqui viraria a sétima cópia.
+        rotulo: rotuloDoContato(c.contacts, t),
       }))
       .filter((c) => (termo ? c.rotulo.toLowerCase().includes(termo) : true));
   }, [conversas, conversationIdAtual, busca, t]);
