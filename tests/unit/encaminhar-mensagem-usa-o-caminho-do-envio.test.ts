@@ -231,7 +231,7 @@ describe("encaminhar mensagem — mesmo caminho de envio do Inbox", () => {
 describe("motivoParaNaoEncaminhar — a régua da origem", () => {
   it("mídia só no Storage, sem URL e sem texto, tem motivo declarado", () => {
     const motivo = motivoParaNaoEncaminhar({
-      ...origemValida(),
+      ...origemValida({ body: null }),
       media_storage_path: `${ORG}/${ORIGEM_CONV}/foto.jpg`,
     });
     expect(motivo).toContain("mídia guardada no CRM");
