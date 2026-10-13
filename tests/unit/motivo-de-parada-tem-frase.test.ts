@@ -124,6 +124,20 @@ const ORIGENS: DeclaracaoDeOrigem[] = [
       "a resposta da IA que não virou escolha (JSON vazio, sem JSON, escolha ausente ou fora do conjunto) chega aos dois canais pelo `reason` da decisão; os códigos possíveis são escritos no tipo MotivoDaDecisao, no produtor declarado ao lado",
     produtor: { arquivo: "lib/automation/decider.ts" },
   },
+  {
+    arquivo: "lib/automation/actions/notify-team.ts",
+    expressao: "motivo",
+    porque:
+      "o resumo vazio devolve o motivo por `resumoVazio(motivo)`, e ele chega à tela como `reason` do resultado; os códigos possíveis são os literais do próprio arquivo, varridos no produtor declarado ao lado",
+    produtor: { arquivo: "lib/automation/actions/notify-team.ts" },
+  },
+  {
+    arquivo: "lib/automation/actions/notify-team.ts",
+    expressao: "bloqueio",
+    porque:
+      "o bloqueio vem de `motivoDeBloqueioDoCanal(canal)` (arquivado, pausado, desligado, sem provedor, sem texto livre) e é devolvido como `reason` do resultado",
+    produtor: { arquivo: "lib/automation/actions/notify-team.ts" },
+  },
 ];
 
 describe("o mapa de frases e o código que emite os motivos não podem divergir", () => {
