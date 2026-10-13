@@ -824,6 +824,15 @@ export const DICIONARIO: Traducoes = {
   },
   "Testar conexão": { es: "Probar conexión" },
   "Informe uma porta entre 1 e 65535.": { es: "Indica un puerto entre 1 y 65535." },
+  "Endereço de servidor inválido. Use apenas letras, números, pontos e hífens, como smtp.suaempresa.com — o caractere \"_\" não é aceito.": {
+    es: 'Dirección de servidor inválida. Usa solo letras, números, puntos y guiones, como smtp.suempresa.com — el carácter "_" no se acepta.',
+  },
+  "O e-mail do remetente está em formato inválido. Use algo como suporte@suaempresa.com.": {
+    es: "El correo del remitente tiene un formato inválido. Usa algo como soporte@suempresa.com.",
+  },
+  "Não foi possível salvar o servidor de e-mail. Nada foi gravado; tente novamente em instantes.": {
+    es: "No fue posible guardar el servidor de correo. No se guardó nada; inténtalo de nuevo en unos instantes.",
+  },
   "Informe somente o e-mail do remetente, por exemplo suporte@empresa.com.": {
     es: "Indica solo el correo del remitente, por ejemplo soporte@empresa.com.",
   },
