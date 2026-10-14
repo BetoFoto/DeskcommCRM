@@ -64,6 +64,7 @@ function iaCaladaEm(ate: Date, quando: Date): boolean {
     canalDesativado: false,
     modo: "open",
     forceHuman: false,
+    contatoInterno: false,
     botSilencedUntil: normalizarInstante(ate.toISOString()),
     assigneeKind: null,
     aiAuthorizedAt: null,
