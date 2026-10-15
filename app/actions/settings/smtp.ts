@@ -16,10 +16,11 @@ const schema = z.object({
     .string()
     .trim()
     .max(253)
-    // Espelha a CHECK `platform_smtp_settings_host` (o vazio é o "apagar", que
-    // a constraint aceita como NULL). Sem isto, o `_` do nome de um contêiner
-    // chegava ao banco e voltava como texto cru do Postgres na tela (issue
-    // #2804) — a validação é ANTES de qualquer escrita.
+    // Espelha a CHECK `platform_smtp_settings_host` — agora com `_`, decisão do
+    // item 2 da issue #2804 (o vazio é o "apagar", que a constraint aceita como
+    // NULL). O que não é nome de máquina — espaço, barra, `http://` — é
+    // recusado ANTES de qualquer escrita: era por aqui que o `_` chegava ao
+    // banco e voltava como texto cru do Postgres na tela.
     .refine(
       (valor) => valor === "" || FORMATO_DO_ENDERECO_DE_SERVIDOR.test(valor),
       MENSAGEM_DO_ENDERECO_DE_SERVIDOR,

@@ -94,16 +94,27 @@ beforeEach(() => {
 });
 
 describe("o endereço do servidor SMTP não chega cru à tela (issue #2804)", () => {
-  it("⚠ o `_` do nome de contêiner é recusado ANTES da escrita, em linguagem de operador", async () => {
+  it("⭐ o `_` do nome de contêiner (o caso do relato) é ACEITO — decisão do item 2", async () => {
     const r = await updateSmtp(entrada({ host: ENDERECO_DO_RELATO }));
 
-    expect(r).toEqual({ ok: false, error: MENSAGEM_DO_ENDERECO_DE_SERVIDOR });
-    expect(deps.upsert, "a validação deixou a escrita acontecer").not.toHaveBeenCalled();
-    expect(JSON.stringify(r)).not.toContain("check constraint");
-    expect(JSON.stringify(r)).not.toContain("platform_smtp_settings");
+    expect(r).toEqual({ ok: true });
+    expect(deps.upsert, "o endereço aceito não chegou à escrita").toHaveBeenCalledWith(
+      expect.objectContaining({ smtp_host: ENDERECO_DO_RELATO }),
+      expect.anything(),
+    );
   });
 
-  it("endereço com esquema ou barra também é recusado antes da escrita", async () => {
+  it("relé local com `_` (meu_relay) também é aceito", async () => {
+    const r = await updateSmtp(entrada({ host: "meu_relay" }));
+
+    expect(r).toEqual({ ok: true });
+    expect(deps.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ smtp_host: "meu_relay" }),
+      expect.anything(),
+    );
+  });
+
+  it("espaço, barra e esquema CONTINUAM recusados antes da escrita, sem texto do banco", async () => {
     for (const host of ["https://smtp.empresa.com", "smtp.empresa.com/", "smtp empresa.com"]) {
       const r = await updateSmtp(entrada({ host }));
       expect(r, host).toEqual({ ok: false, error: MENSAGEM_DO_ENDERECO_DE_SERVIDOR });

@@ -880,8 +880,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Testar conexão": { es: "Probar conexión" },
   "Informe uma porta entre 1 e 65535.": { es: "Indica un puerto entre 1 y 65535." },
-  "Endereço de servidor inválido. Use apenas letras, números, pontos e hífens, como smtp.suaempresa.com — o caractere \"_\" não é aceito.": {
-    es: 'Dirección de servidor inválida. Usa solo letras, números, puntos y guiones, como smtp.suempresa.com — el carácter "_" no se acepta.',
+  "Endereço de servidor inválido. Use o nome da máquina, como smtp.suaempresa.com ou meu_relay — sem espaço, sem barra e sem http://.": {
+    es: "Dirección de servidor inválida. Usa el nombre de la máquina, como smtp.suempresa.com o meu_relay — sin espacio, sin barra y sin http://.",
   },
   "O e-mail do remetente está em formato inválido. Use algo como suporte@suaempresa.com.": {
     es: "El correo del remitente tiene un formato inválido. Usa algo como soporte@suempresa.com.",

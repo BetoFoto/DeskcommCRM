@@ -6,16 +6,19 @@ import { decryptWebhookSecret, encryptWebhookSecret } from "@/lib/webhooks/secre
 export type SmtpSecurity = "starttls" | "tls" | "none";
 
 /**
- * O formato que a CHECK `platform_smtp_settings_host` aceita (migration 0333 e
- * apêndice do baseline). A validação de tela ESPELHA a constraint para o
- * operador não descobrir o formato pela mensagem do banco — e o `_` recusado
- * aqui é exatamente o caractere que a issue #2804 mediu na tela (o nome do
- * contêiner de um relé rodando na própria VPS).
+ * O formato que a CHECK `platform_smtp_settings_host` aceita (0333; ampliada
+ * pela 0669). A validação de tela ESPELHA a constraint para o operador não
+ * descobrir o formato pela mensagem do banco.
+ *
+ * O `_` entrou por decisão do item 2 da issue #2804: o `.env` sempre o aceitou,
+ * e quem roda um relé na própria VPS em Docker (`meu_relay`,
+ * `supabase_inbucket_…`) é o público do self-host. Segue recusando espaço,
+ * barra e esquema — o que não é nome de máquina.
  */
-export const FORMATO_DO_ENDERECO_DE_SERVIDOR = /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/;
+export const FORMATO_DO_ENDERECO_DE_SERVIDOR = /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/;
 
 export const MENSAGEM_DO_ENDERECO_DE_SERVIDOR =
-  'Endereço de servidor inválido. Use apenas letras, números, pontos e hífens, como smtp.suaempresa.com — o caractere "_" não é aceito.';
+  "Endereço de servidor inválido. Use o nome da máquina, como smtp.suaempresa.com ou meu_relay — sem espaço, sem barra e sem http://.";
 
 export const MENSAGEM_DO_REMETENTE_INVALIDO =
   "O e-mail do remetente está em formato inválido. Use algo como suporte@suaempresa.com.";
