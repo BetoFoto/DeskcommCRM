@@ -9,6 +9,7 @@ import {
   MENSAGEM_DO_ENDERECO_DE_SERVIDOR,
   saveSmtpConfig,
 } from "@/lib/email/config";
+import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 
 const schema = z.object({
   host: z
@@ -69,7 +70,7 @@ export async function updateSmtp(input: z.input<typeof schema>) {
     actorUserId: user.id,
     resourceType: "platform_smtp_settings",
     requestId: requestHeaders.get("x-request-id") ?? undefined,
-    ip: requestHeaders.get("x-forwarded-for") ?? undefined,
+    ip: ipDoCliente(requestHeaders) ?? undefined,
     userAgent: requestHeaders.get("user-agent") ?? undefined,
     actingAsPlatformAdmin: true,
     metadata: {
