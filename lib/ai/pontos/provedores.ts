@@ -93,10 +93,9 @@ export const PROVEDORES = [
     aceitaEndpointProprio: false,
     catalogoSincronizavel: false,
     // Não existe chave a copiar aqui: quem conecta é o painel de Credenciais
-    // desta instalação (Sign in with ChatGPT por OAuth/PKCE). O link
-    // aponta para o serviço cuja ASSINATURA este provedor usa — o host é o
-    // mesmo da fiação (`OPENAI_CODEX_ENDPOINT`), por isso a catraca de marca
-    // vê um destino só, já declarado como FORNECEDOR.
+    // desta instalação (Sign in with ChatGPT por PKCE). O link aponta para o
+    // serviço cuja ASSINATURA este provedor usa; catálogo e inferência SIWC
+    // usam a API pública oficial em `api.openai.com`.
     ondePegarAChave: "https://chatgpt.com/",
     // Placeholder do campo de chave, que para este provedor não tem o que
     // colar: o texto já diz a recusa antes de a pessoa tentar.

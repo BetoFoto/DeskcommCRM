@@ -58,6 +58,7 @@ import { getAction } from "@/lib/automation/actions";
 // Efeito de import: registra a ação `add_tag` no MESMO mapa que o motor de
 // automação usa. A tag do follow-up é a tag da automação — não uma segunda.
 import "@/lib/automation/actions/add-tag";
+import { renderizarTextoDeFollowup } from "@/lib/automation/texto-do-followup";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { quandoDoRetornoVivo, reavaliarDepoisDoRetorno } from "./retorno-segura-o-fluxo";
 import { triggerConfigSchema } from "./api-schemas";
@@ -138,6 +139,14 @@ export interface AdminClient {
     custom_fields?: Record<string, unknown>;
   }>;
   loadEnrollmentEvents(enrollmentId: string): Promise<EnrollmentEventRef[]>;
+  /**
+   * #2528 — o contexto `{ contact, lead }` do render das mensagens de follow-up
+   * (`lib/automation/template.ts`). Opcional como os demais avisos deste
+   * adaptador: adapter que não implementa manda o texto com as marcações como
+   * estavam (comportamento de antes da correção) — NUNCA com marcação vazia
+   * no lugar, que seria pior que a marcação crua.
+   */
+  loadRenderContext?(orgId: string, contactId: string): Promise<Record<string, unknown> | null>;
   /** Latest inbound `messages.body` for the contact (optionally scoped to the enrollment conversation). */
   loadLastInboundBody(
     orgId: string,
@@ -291,21 +300,40 @@ function eventPayload(result: NodeResult): Record<string, unknown> {
 }
 
 /**
+ * O texto do passo com `{{volta}}`/`{{voltas}}` — e, quando o chamador manda o
+ * contexto do contato e do negócio (#2528), com `{{nome}}`, `{{primeiro_nome}}`,
+ * `{{contact.*}}` e `{{lead.*}}` pelo MESMO renderizador das automações.
+ *
+ * `contexto` fica opcional de propósito: `prompt_hint` (modo `ai_message`) é
+ * orientação pro MODELO, não texto pro cliente, e segue só com a volta.
+ * Sem contexto o comportamento é o de antes — marcação literais.
+ *
+ * A ordem não é livre: a volta entra PRIMEIRO, senão o render de CRM apagaria
+ * `{{volta}}` (não é campo de contato nem de negócio).
+ */
+function interpolarVolta(
+  texto: string,
+  events: EnrollmentEventRef[],
+  contexto?: Record<string, unknown> | null,
+): string {
+  const volta = latestRepeatIndex(events);
+  const comVolta = volta
+    ? texto.replaceAll("{{volta}}", String(volta.index)).replaceAll("{{voltas}}", String(volta.total))
+    : texto;
+  return contexto ? renderizarTextoDeFollowup(comVolta, contexto) : comVolta;
+}
+
+/**
  * Campos extras do payload do job por tipo de nó (Task 5.1) — o turno do
  * agent-engine precisa da orientação do PRÓPRIO nó pinado (prompt_hint da
  * action, classes/hint do ai_classify, guidance do wait smart) pra saber o que
  * fazer; sem isso o job só teria os 3 campos genéricos (enrollment/node/purpose).
  */
-function interpolarVolta(texto: string, events: EnrollmentEventRef[]): string {
-  const volta = latestRepeatIndex(events);
-  if (!volta) return texto;
-  return texto.replaceAll("{{volta}}", String(volta.index)).replaceAll("{{voltas}}", String(volta.total));
-}
-
 function turnPayloadExtras(
   node: FlowNode,
   smartWaits: EsperaAdaptativa[],
   events: EnrollmentEventRef[] = [],
+  contexto?: Record<string, unknown> | null,
 ): Partial<FollowupJobRequest["payload"]> {
   if (node.type === "action" && node.config.mode === "ai_message") {
     return {
@@ -314,7 +342,7 @@ function turnPayloadExtras(
     };
   }
   if (node.type === "action" && node.config.mode === "text") {
-    return { fixed_body: interpolarVolta(node.config.body, events) };
+    return { fixed_body: interpolarVolta(node.config.body, events, contexto) };
   }
   if (node.type === "action" && node.config.mode === "template") {
     const volta = latestRepeatIndex(events);
@@ -413,6 +441,7 @@ async function applyResult(
   smartWaits: EsperaAdaptativa[] = [],
   events: EnrollmentEventRef[] = [],
   respostaParaGravar: string | null = null,
+  contexto?: Record<string, unknown> | null,
 ): Promise<void> {
   const { db, clock, enqueueJob } = deps;
   await db.assertServiceBoundary?.(enrollment);
@@ -611,7 +640,7 @@ async function applyResult(
             node_id: node.id,
             source_step_key: idemKey,
             purpose: result.purpose,
-            ...turnPayloadExtras(node, smartWaits, events),
+            ...turnPayloadExtras(node, smartWaits, events, contexto),
             ...(result.fixed_body ? { fixed_body: result.fixed_body } : {}),
           },
         });
@@ -690,6 +719,24 @@ export async function avancarEnrollmentAtivo(
   await processEnrollment(deps, enrollment, summary);
 }
 
+/**
+ * O TEXTO DO MOTIVO, POR CAUSA. As duas guardas acima lançam o MESMO
+ * `StaleServiceBoundaryError` — `assertServiceBoundary` quando o atendimento
+ * fecha ou é substituído, `assertAgenda` quando a inscrição deixa de ser a
+ * vigente daquele nó. Gravar "atendimento encerrado" para as duas faz a Central
+ * contar uma história que a agenda não contou: `Motivo:` no dossiê precisa
+ * distinguir as duas.
+ */
+const MOTIVO_DA_FRONTEIRA_VENCIDA = {
+  curto: "Atendimento encerrado ou substituído",
+  explica: "o atendimento que o originou foi encerrado ou substituído",
+} as const;
+
+const MOTIVO_DA_AGENDA_VENCIDA = {
+  curto: "Agenda do acompanhamento vencida",
+  explica: "a agenda do acompanhamento deixou de valer",
+} as const;
+
 async function processEnrollment(
   deps: TickDeps,
   enrollment: EnrollmentRow,
@@ -697,8 +744,24 @@ async function processEnrollment(
   inboundBodyOverride?: string,
 ): Promise<void> {
   const { db, clock } = deps;
-  try { await db.assertServiceBoundary?.(enrollment); await db.assertAgenda?.(enrollment); }
-  catch (error) {
+  // O despertar do `dormente` não é um efeito (nada é enviado aqui): a guarda
+  // de agenda (`fn_appointment_enrollment_current`, que só aceita
+  // `active`/`waiting_reply`) vetaria TODA inscrição dormente na hora do
+  // disparo. A guarda volta a valer nos efeitos, que a repetem com o status já
+  // `active` — ver `enviar-texto-fixo.ts`, `turn-bridge.ts` e `send-message.ts`.
+  // A fronteira continua valendo para o dormente: atendimento fechado cancela
+  // com aviso na Central, como antes.
+  // Qual das duas guardas recusou. As DUAS lançam `StaleServiceBoundaryError`, e
+  // o motivo gravado tem de nomear a verdadeira — chamar de "atendimento
+  // encerrado" o que a AGENDA recusou é a mentira que a Central não pode ter.
+  let guarda: "fronteira" | "agenda" = "fronteira";
+  try {
+    await db.assertServiceBoundary?.(enrollment);
+    if (enrollment.status !== "dormente") {
+      guarda = "agenda";
+      await db.assertAgenda?.(enrollment);
+    }
+  } catch (error) {
     if(error instanceof AgendaDeferredError){
       if(error.protection.motivo === "leitura_indisponivel") throw error;
       await db.updateEnrollment(enrollment.id,enrollment.organization_id,{next_eval_at:error.protection.reavaliar_em,claimed_until:null,last_error:error.message});
@@ -718,6 +781,11 @@ async function processEnrollment(
     // propósito (`assertCurrentServiceBoundary`, e o teste que a vigia). Enquanto
     // a decisão de arquitetura não vem, o dever é tornar a perda VISÍVEL — um
     // acompanhamento que some sem aviso é a ilha que a doutrina proíbe.
+    // O MOTIVO NOMEIA A CAUSA (as duas guardas lançam o MESMO erro). Para o
+    // `dormente` o ramo abaixo só alcança a FRONTEIRA — a guarda de agenda é
+    // pulada para ele, acima — mas a frase sai da mesma tabela, para que
+    // reaproximar as duas guardas não faça o texto voltar a mentir.
+    const causa = guarda === "agenda" ? MOTIVO_DA_AGENDA_VENCIDA : MOTIVO_DA_FRONTEIRA_VENCIDA;
     if (enrollment.status === "dormente") {
       const nome =
         (await db.loadFlowPointerName(enrollment.organization_id, enrollment.pointer_id)) ??
@@ -726,13 +794,13 @@ async function processEnrollment(
         organization_id: enrollment.organization_id,
         title: "Um retorno programado não pôde ser enviado",
         body:
-          `O fluxo "${nome}" esperava a data do retorno, mas o atendimento que o originou ` +
-          `foi encerrado ou substituído no meio da espera, e o envio foi cancelado ` +
+          `O fluxo "${nome}" esperava a data do retorno, mas ${causa.explica} ` +
+          `no meio da espera, e o envio foi cancelado ` +
           `(enrollment ${enrollment.id}). Fale com o contato por outro caminho se ainda fizer sentido.`,
         ref_id: enrollment.id,
       });
     }
-    await db.updateEnrollment(enrollment.id, enrollment.organization_id, { status: "cancelled", cancel_reason: "Atendimento encerrado ou substituído", claimed_until: null, completed_at: clock().toISOString() });
+    await db.updateEnrollment(enrollment.id, enrollment.organization_id, { status: "cancelled", cancel_reason: causa.curto, claimed_until: null, completed_at: clock().toISOString() });
     return;
   }
 
@@ -903,6 +971,16 @@ async function processEnrollment(
     repeatTotal,
     proximo,
   });
+  // #2528 — O TEXTO FIXO VAI COM OS DADOS DE QUEM RECEBE. O render é no
+  // ENFILEIRAMENTE (e não no envio) porque são dois caminhos que mandam este
+  // `fixed_body`: o worker (`followup-turn.ts`) e o atalho inline
+  // (`enviar-texto-fixo.ts`), que não tem segunda passada. Só o nó que manda
+  // texto paga a leitura — os demais não renderizam nada.
+  const contexto =
+    result.kind === "enqueue_turn" && node.type === "action" && node.config.mode === "text"
+      ? await db.loadRenderContext?.(enrollment.organization_id, enrollment.contact_id)
+      : null;
+
   await applyResult(
     deps,
     enrollment,
@@ -912,6 +990,7 @@ async function processEnrollment(
     smartWaits,
     events,
     node.type === "match_reply" && wokeEarly ? (lastInboundBody ?? "").trim() || null : null,
+    contexto,
   );
 }
 
@@ -1020,6 +1099,31 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
         contact_name: contact?.name ?? null,
         custom_fields: custom,
       };
+    },
+    /**
+     * #2528 — contexto do render das mensagens de follow-up. Linhas INTEIRAS
+     * (`*`), porque o renderizador resolve caminho (`{{contact.email}}`,
+     * `{{lead.title}}`) — e o MESMO negócio que `loadLeadFacts` escolhe
+     * (`updated_at desc`), senão dois caminhos dariam dados diferentes.
+     */
+    async loadRenderContext(orgId, contactId) {
+      const [{ data: lead, error: leadErr }, { data: contact, error: contactErr }] = await Promise.all([
+        admin
+          .from("crm_leads")
+          .select("*")
+          .eq("organization_id", orgId)
+          .eq("contact_id", contactId)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        admin.from("contacts").select("*").eq("organization_id", orgId).eq("id", contactId).maybeSingle(),
+      ]);
+      if (leadErr) throw new Error(leadErr.message);
+      if (contactErr) throw new Error(contactErr.message);
+      const contexto: Record<string, unknown> = {};
+      if (contact) contexto.contact = contact;
+      if (lead) contexto.lead = lead;
+      return contexto;
     },
     async loadLastInboundBody(orgId, contactId, conversationId, naoAntesDe) {
       const ids = await idsDoContatoEGemeos(admin, orgId, contactId);

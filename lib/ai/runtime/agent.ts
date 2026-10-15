@@ -201,6 +201,8 @@ export function buildModel(
     // o monta é o leitor próprio (`lerLoginCodexRenovandoSeProxima`), nunca a
     // tela de chave. Sem este caso o ensaio responderia `unsupported_provider`
     // enquanto o worker atenderia a mensagem real.
+    // A lista da conta vem de GET /v1/models, conforme o contrato oficial
+    // Sign in with ChatGPT; a inferência usa a API pública de Responses abaixo.
     case PROVEDOR_POR_ASSINATURA:
       return createOpenAI({ apiKey, baseURL: OPENAI_CODEX_ENDPOINT })(modelId);
     case "google":
@@ -862,7 +864,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     return await failRun(run, "runtime_error", message, startedAt);
   } finally {
     if (ephemeralTokenId) {
-      await revokeEphemeralToken(ephemeralTokenId).catch(() => {
+      await revokeEphemeralToken(ephemeralTokenId, run.organization_id).catch(() => {
         // Token TTL=300s; lingering revoke failure is non-critical.
       });
     }

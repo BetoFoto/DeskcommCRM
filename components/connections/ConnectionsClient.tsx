@@ -58,6 +58,8 @@ import { canalDesativado } from "@/lib/channels/desativado";
 import { lerEstadoDoCanal } from "@/lib/channels/estado";
 import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
 import { useT } from "@/hooks/i18n/useT";
+import { AgendaDePausa } from "@/components/connections/AgendaDePausa";
+import { RenomearConexao } from "./RenomearConexao";
 
 type Variant = "success" | "warning" | "error" | "neutral";
 
@@ -446,6 +448,11 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
               {t("Retomar todas")} ({paraRetomar.length})
             </Button>
           )}
+          {/* A JANELA DE MANUTENÇÃO (#2388): o "todas" com HORÁRIO e RETOMADA
+              automática. Ela fica ao lado dos dois botões de lote de propósito:
+              os três são a mesma escrita (`metadata.disabled`), e a diferença é
+              quando — agora, ou quando o operador escolher. */}
+          <AgendaDePausa canais={list} />
           <Button size="sm" disabled={creating || !wahaConfigured} onClick={handleConnectNew}>
             {creating ? (
               <CircleNotch size={14} className="animate-spin" aria-hidden />
@@ -592,6 +599,11 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                 {dependeDoTransporte(c) && <ChannelAcervo channelId={c.id} />}
                 <p className="text-xs text-muted-foreground">{t(!policy ? "Consulte os responsáveis em Atendimento." : policy.mode === "legacy_unconfigured" ? "Usa todos os atendentes elegíveis da organização." : policy.mode === "restricted_empty" ? "Ninguém configurado — as conversas ficarão na fila." : "Somente as pessoas selecionadas recebem este número.")}</p>
                 <div className="mt-auto flex flex-wrap gap-2">
+                  <RenomearConexao
+                    channelId={c.id}
+                    currentName={c.display_name}
+                    onSaved={() => qc.invalidateQueries({ queryKey: ["channel-sessions"] })}
+                  />
                   {/* Some no canal oficial em vez de aparecer desabilitado: não é
                       indisponibilidade passageira (como o Excluir sem o serviço no
                       ar), é uma ação que não existe para esse canal — e o clique

@@ -830,11 +830,16 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
   "chatgpt.com": {
     categoria: "CONSOLE",
     motivo:
-      "destino do link que leva o operador à conta ChatGPT que será conectada por Sign in with ChatGPT; é o painel de autenticação do fornecedor, não um domínio da instalação.",
+      "é o serviço da conta ChatGPT que o operador abre para conectar a assinatura. O produto não faz requests para este host; a consulta do catálogo e a inferência SIWC usam a API pública oficial em api.openai.com.",
   },
   "datamanager.googleapis.com": {
     categoria: "FORNECEDOR",
     motivo: "endpoint oficial da Google Data Manager API: recebe conversões e consulta o processamento na conta autorizada pela própria organização. O destino pertence ao fornecedor e não à instalação do CRM.",
+  },
+  "meet.googleapis.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint oficial da Google Meet REST API (`POST /v2/spaces`, em `lib/agenda/google/transport.ts`): é o DESTINO do request que cria a sala de reunião com acesso aberto (#2063), com o token da própria organização. Diferente de `meet.google.com` — que é o LINK de convite, e por isso entra como PLATAFORMA em CONFERÊNCIA —, este é host que o produto BUSCA: trocar pelo domínio do revendedor faria a chamada não chegar a lugar nenhum, e a sala nunca seria criada.",
   },
   // ── localização compartilhada: o link que abre o pino do cliente ──
   "maps.google.com": {
@@ -870,7 +875,7 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
   "api.openai.com": {
     categoria: "FORNECEDOR",
     motivo:
-      "endpoint da API da OpenAI (embeddings da busca e transcrição de áudio). É o destino do request: trocar pelo domínio do revendedor faria a chamada não chegar a lugar nenhum.",
+      "endpoint da API pública da OpenAI para embeddings, transcrição e os fluxos Sign in with ChatGPT (catálogo de modelos e inferência). É o destino dos requests: trocar pelo domínio do revendedor faria as chamadas não chegarem a lugar nenhum.",
   },
   "auth.openai.com": {
     categoria: "FORNECEDOR",
@@ -935,6 +940,21 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
   "api.tiendanube.com": {
     categoria: "FORNECEDOR",
     motivo: "endpoint da API da Nuvemshop/Tiendanube (ordens e catálogo do e-commerce do cliente).",
+  },
+  "api.stripe.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint da API da Stripe (`lib/cobranca/provedores/stripe.ts`): é por onde o DONO da instalação cobra as empresas dele, com a chave da conta Stripe DELE. É o destino do request; trocar pelo domínio do revendedor faria a cobrança não chegar a lugar nenhum.",
+  },
+  "api.asaas.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint de PRODUÇÃO da API do Asaas (`lib/cobranca/provedores/asaas.ts`): Pix e boleto recorrentes com que o DONO da instalação cobra as empresas dele, com a chave da conta Asaas DELE. Destino do request, não marca.",
+  },
+  "api-sandbox.asaas.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint do SANDBOX do Asaas (`lib/cobranca/provedores/asaas.ts`): a chave `$aact_hmlg_` do dono só funciona aqui, e é com ela que ele testa antes de publicar.",
   },
   "www.tiendanube.com": {
     categoria: "FORNECEDOR",
@@ -1187,7 +1207,8 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // Decisão escrita: painel de chaves da Requesty, o mesmo caso dos outros
       // CONSOLE (o link "Onde pegar a chave" da tela de Credenciais).
       "app.requesty.ai",
-      // Decisão escrita: página de acesso à conta que autoriza SIWC, não endpoint chamado pelo CRM.
+      // A pessoa abre o produto ChatGPT para autenticar a conta; o CRM chama
+      // apenas `api.openai.com` no fluxo SIWC.
       "chatgpt.com",
       "console.anthropic.com",
       // Decisão escrita: é o painel de chaves do Jev, o mesmo caso dos outros

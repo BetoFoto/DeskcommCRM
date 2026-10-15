@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { CopiarLinkDePagamento } from "@/components/admin/cobranca/CopiarLinkDePagamento";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
+import { documentoDoPagador } from "@/lib/cobranca/documento";
 import { ROTULO_DO_ESTADO } from "@/lib/cobranca/rotulos";
 import type { EstadoDaAssinatura } from "@/lib/cobranca/vocabulario";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
@@ -29,6 +31,8 @@ export interface AssinaturaDoCard {
   trial_ate: string | null;
   prazo_extra_ate: string | null;
   provedor: string | null;
+  plano_agendado_id: string | null;
+  proximo_vencimento: string | null;
 }
 
 /** `YYYY-MM-DD` do campo de data → fim daquele dia no fuso de quem clicou, em ISO UTC. */
@@ -37,7 +41,7 @@ export function fimDoDia(dia: string): string {
 }
 
 /** A frase de cada recurso que passa do plano; `{n}` é quanto remover. */
-const FRASE_DO_EXCEDENTE = {
+export const FRASE_DO_EXCEDENTE = {
   assentos: "Revogue o acesso de {n} pessoa(s) em Equipe.",
   canais: "Exclua {n} número(s) em Conexões.",
 } as const;
@@ -71,12 +75,18 @@ export function CardDeCobranca({
   assinatura,
   suspensaPorCobranca,
   rotuloAntigo,
+  pedeDocumento = false,
+  documentoDoCadastro = null,
 }: {
   orgId: string;
   planos: readonly PlanoDoCard[];
   assinatura: AssinaturaDoCard | null;
   suspensaPorCobranca: boolean;
   rotuloAntigo: string | null;
+  /** O link vai criar o cliente no Asaas: o documento de quem paga é obrigatório. */
+  pedeDocumento?: boolean;
+  /** CNPJ do cadastro, já conferido e sem máscara: pré-preenche o documento. */
+  documentoDoCadastro?: string | null;
 }) {
   const t = useT();
   const idioma = useIdioma();
@@ -87,16 +97,22 @@ export function CardDeCobranca({
   const [prazo, setPrazo] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [remover, setRemover] = useState<ReturnType<typeof oQueRemover>>([]);
+  const [documento, setDocumento] = useState(documentoDoCadastro ?? "");
+  const [link, setLink] = useState<string | null>(null);
+  const documentoNormalizado = documentoDoPagador(documento);
+  const documentoErrado = documento.trim() !== "" && documentoNormalizado === null;
   const base = `/api/v1/admin/tenants/${orgId}/assinatura`;
   const data = new Intl.DateTimeFormat(idioma, { dateStyle: "short" });
   const nomeDoPlano = (id: string) => planos.find((p) => p.id === id)?.nome ?? "—";
 
-  async function agir(acao: () => Promise<unknown>, sucesso: string) {
+  async function agir(acao: () => Promise<unknown>, sucesso: string | ((resultado: unknown) => string)) {
     setOcupado(true);
     setRemover([]);
     try {
-      await acao();
-      toast.success(sucesso);
+      const resultado = await acao();
+      // Toda ação do card pode matar o link aberto (a troca no teste o expira no provedor).
+      setLink(null);
+      toast.success(typeof sucesso === "string" ? sucesso : sucesso(resultado));
       router.refresh();
       // O refresh só renova o servidor; ações e banner leem o cache do react-query.
       await queryClient.invalidateQueries({ queryKey: ["admin", "tenant", orgId] });
@@ -104,6 +120,24 @@ export function CardDeCobranca({
       const lista = oQueRemover(err);
       if (lista.length > 0) setRemover(lista);
       else showApiError(err);
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  // Fora do `agir`: o toast não entrega o link, e o dono precisa dele na tela para mandar à empresa.
+  async function gerarLink() {
+    setOcupado(true);
+    try {
+      const r = await apiClient.post<{ data: { url: string } }>(
+        `${base}/checkout`,
+        pedeDocumento && documentoNormalizado !== null ? { documento: documentoNormalizado } : {},
+      );
+      setLink(r.data.url);
+      router.refresh();
+      await queryClient.invalidateQueries({ queryKey: ["admin", "tenant", orgId] });
+    } catch (err) {
+      showApiError(err);
     } finally {
       setOcupado(false);
     }
@@ -121,6 +155,15 @@ export function CardDeCobranca({
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
           <dt className="text-muted-foreground">{t("Plano")}</dt>
           <dd>{nomeDoPlano(assinatura.plano_id)}</dd>
+          {assinatura.plano_agendado_id && (
+            <>
+              <dt className="text-muted-foreground">{t("Novo plano")}</dt>
+              <dd>
+                {nomeDoPlano(assinatura.plano_agendado_id)}
+                {assinatura.proximo_vencimento && `, ${t("a partir de")} ${data.format(new Date(assinatura.proximo_vencimento))}`}
+              </dd>
+            </>
+          )}
           <dt className="text-muted-foreground">{t("Situação")}</dt>
           <dd>{t(ROTULO_DO_ESTADO[assinatura.estado])}</dd>
           {assinatura.trial_ate && (
@@ -143,6 +186,47 @@ export function CardDeCobranca({
         <p className="text-xs text-muted-foreground">
           {t("Rótulo antigo:")} {rotuloAntigo}
         </p>
+      )}
+
+      {assinatura && assinatura.estado !== "ativa" && (
+        <div className="space-y-2">
+          {pedeDocumento && (
+            <div className="space-y-1">
+              <Label htmlFor="documento-do-pagador">{t("CPF ou CNPJ de quem paga")}</Label>
+              <Input
+                id="documento-do-pagador"
+                className="max-w-xs"
+                autoComplete="off"
+                value={documento}
+                onChange={(e) => setDocumento(e.target.value)}
+                aria-invalid={documentoErrado}
+                aria-describedby="documento-do-pagador-ajuda"
+              />
+              <p id="documento-do-pagador-ajuda" className="text-xs text-muted-foreground">
+                {documentoErrado
+                  ? t("Confira o CPF ou CNPJ: os dígitos não batem.")
+                  : t("Vai direto para o Asaas, que emite a cobrança neste documento; não fica guardado neste sistema.")}
+              </p>
+            </div>
+          )}
+          <Button
+            variant="outline"
+            disabled={ocupado || (pedeDocumento && documentoNormalizado === null)}
+            onClick={() => void gerarLink()}
+          >
+            {t("Gerar link de pagamento")}
+          </Button>
+          {link && (
+            <div className="space-y-1">
+              <Label htmlFor="link-de-pagamento">{t("Link de pagamento")}</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input id="link-de-pagamento" className="max-w-md" readOnly value={link} onFocus={(e) => e.currentTarget.select()} />
+                <CopiarLinkDePagamento link={link} />
+              </div>
+              <p className="text-xs text-muted-foreground">{t("Mande para a empresa. Se o link expirar, gere de novo.")}</p>
+            </div>
+          )}
+        </div>
       )}
 
       {remover.length > 0 && (
@@ -181,7 +265,21 @@ export function CardDeCobranca({
             </select>
           </div>
           {assinatura ? (
-            <Button disabled={ocupado || !escolhido} onClick={() => agir(() => apiClient.patch(base, { plano_id: escolhido }), t("Plano trocado."))}>
+            <Button
+              disabled={ocupado || !escolhido}
+              onClick={() =>
+                agir(
+                  () => apiClient.patch(base, { plano_id: escolhido }),
+                  // `apiClient` devolve o envelope inteiro (`{ data }`, lib/api/client.ts), não o `data`.
+                  (r) =>
+                    t(
+                      (r as { data?: { plano_agendado_id?: string | null } } | null)?.data?.plano_agendado_id
+                        ? "Troca agendada: o novo plano vale a partir da próxima cobrança paga."
+                        : "Plano trocado.",
+                    ),
+                )
+              }
+            >
               {t("Trocar plano")}
             </Button>
           ) : (

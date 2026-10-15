@@ -12,6 +12,7 @@ import {
   gravarModulo,
   moduloLigado,
 } from "@/lib/instalacao/modulos";
+import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -111,7 +112,7 @@ export async function updateModuloDaInstalacao(
     actorUserId: user.id,
     resourceType: "platform_config",
     requestId: hdrs.get("x-request-id"),
-    ip: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    ip: ipDoCliente(hdrs),
     userAgent: hdrs.get("user-agent"),
   };
   await audit({ ...quem, action: "platform.modulo_updated", metadata: { modulo, de: antes, para: ligado } });
@@ -119,6 +120,24 @@ export async function updateModuloDaInstalacao(
     await audit({ ...quem, action: "cobranca.modulo_desligado", metadata: { liberadas } });
   }
   revalidatePath("/admin/sistema");
+  /**
+   * ⚠️ PREVENTIVO, POR ANALOGIA — o efeito NÃO foi demonstrado.
+   *
+   * O menu do CRM vive no layout de `/app`: é ele que lê `modulosLigados()` e passa a lista para
+   * `Sidebar`, `NavHub`, `CommandPalette` e `BarraInferior`. `atualizarInterfaceDaEmpresa`, a outra
+   * action que mexe no menu, chama esta mesma linha e escreve o motivo — então a analogia é direta
+   * e a linha fica.
+   *
+   * O que NÃO existe é prova de que sem ela algo quebra. O passo de e2e que eu escrevi usa
+   * `page.goto` (carregamento completo) e afirma no hub `/app/crm`, que relê `modulosLigados()` a
+   * cada request: ele fica verde com ou sem esta chamada. Medir de verdade pede navegação pelo
+   * CLIENTE, com o cache do router do Next em jogo. Registrado assim no
+   * `docs/testing/user-journey-map.md` (achado 21, marcado PREVENTIVO).
+   *
+   * Quem for mexer aqui: não apague a linha por "não ter teste" — a ausência de teste é o que
+   * está escrito acima, não um atestado de que ela é inútil.
+   */
+  revalidatePath("/app", "layout");
 
   return { ok: true };
 }

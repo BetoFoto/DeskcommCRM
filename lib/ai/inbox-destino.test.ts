@@ -51,6 +51,7 @@ describe("destinos da Central", () => {
     ["handoff", "contact", `/app/contacts/${ID}`], ["other", "lead", `/app/pipelines/${PIPELINE}?lead=${ID}`],
     ["followup_dead", "followup_enrollment", `/app/ai/followups/enrollments/${ID}`],
     ["qr_rescan", "channel_session", "/app/connections"], ["conhecimento_nao_indexado", "ai_knowledge_source", "/app/ai/knowledge/sources"],
+    ["other", "agenda_reminder_sender", "/app/settings/tenant/agenda"],
     ["other", "ai_provider_credential", "/app/ai/credentials"],
     // O caso aberto na Central, na hora (`lib/escalacao/caso-na-central.handler.ts`).
     ["other", "agent_case", `/app/ai/cases?caso=${ID}`],
@@ -146,6 +147,29 @@ describe("destinos da Central", () => {
     const [gestor] = await resolverDestinosDosAvisos(leitor().client, ORG, "manager", [
       aviso("budget_exceeded", "plano", ORG),
     ]);
+    expect(gestor?.destination.estado).toBe("sem_permissao");
+  });
+
+  it("aviso da cobrança leva o admin a Plano e cobrança, com ou sem referência", async () => {
+    const [daRegua, doTetoDeIa, deOutraOrg] = await resolverDestinosDosAvisos(leitor().client, ORG, "admin", [
+      aviso("cobranca", null, null),
+      aviso("cobranca", "plano", ORG),
+      aviso("cobranca", "plano", ID),
+    ]);
+    expect(daRegua?.destination).toEqual({
+      estado: "disponivel",
+      href: "/app/settings/billing",
+      rotulo: "Abrir plano e cobrança",
+      orientacao: POLITICAS_DE_AVISO.cobranca.orientacao,
+    });
+    expect(doTetoDeIa?.destination).toEqual({
+      estado: "disponivel",
+      href: "/app/settings/billing",
+      rotulo: "Abrir plano e cobrança",
+    });
+    expect(deOutraOrg?.destination.estado).toBe("indisponivel");
+    // Plano é assunto do admin: o gestor vê o aviso e é mandado a quem administra.
+    const [gestor] = await resolverDestinosDosAvisos(leitor().client, ORG, "manager", [aviso("cobranca", null, null)]);
     expect(gestor?.destination.estado).toBe("sem_permissao");
   });
 
