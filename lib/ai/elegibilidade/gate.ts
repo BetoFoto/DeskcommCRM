@@ -81,6 +81,13 @@ export interface EstadoDeElegibilidade {
    * sem pausar uma por uma. A lista mora em `crmSettingsSchema`.
    */
   contatoInterno: boolean;
+  /**
+   * `contacts.ai_opt_out` — a marca PERMANENTE "sempre atendimento humano"
+   * (migration 0624 / issue 2379). Convive com `force_human` de propósito: a
+   * devolução limpa `force_human`, e esta coluna é o que ela não alcança. Vetado
+   * nos dois transportes (pg e supabase) e nos guards de envio, pela mesma regra.
+   */
+  aiOptOut: boolean;
   /** `conversations.bot_silenced_until` (ou o da conversa em questão). `'infinity'` do Postgres vira `Infinity`. */
   botSilencedUntil: Date | number | null;
   /** `conversations.assignee_kind` — `'user'` = uma pessoa é a dona do thread. */
@@ -102,6 +109,7 @@ export type MotivoDeElegibilidade =
   | "canal_desativado"
   | "gate_aberto"
   | "force_human"
+  | "ai_opt_out"
   | "conversa_silenciada"
   | "conversa_de_humano"
   | "contato_interno"
@@ -143,6 +151,13 @@ export function decidirElegibilidade(e: EstadoDeElegibilidade): DecisaoDeElegibi
   }
   if (e.forceHuman) {
     return { permite: false, motivo: "force_human", bloqueioPorAllowlist: false };
+  }
+  // A marca PERMANENTE (issue 2379): mesmo com `force_human` já limpo pela
+  // devolução, o contato segue vetado — motivo próprio para o rastro de quem
+  // investiga por que a IA não respondeu ("force_human" diria que há uma
+  // passagem humana em andamento, e não é isso).
+  if (e.aiOptOut) {
+    return { permite: false, motivo: "ai_opt_out", bloqueioPorAllowlist: false };
   }
   if (silenciadoAgora(e.botSilencedUntil, e.agora)) {
     return { permite: false, motivo: "conversa_silenciada", bloqueioPorAllowlist: false };
@@ -229,6 +244,12 @@ export function montarEstadoDeElegibilidade(raw: {
   contactTags?: readonly string[] | null | undefined;
   /** `organizations.settings` cru; a lista interna mora em `.crm.internal_contact_tags`. */
   orgSettings?: unknown;
+  /**
+   * `contacts.ai_opt_out` (cru). Obrigatório de propósito, igual a `forceHuman`:
+   * quem monta tem de dizer de onde leu, e um transporte novo que esqueça a
+   * coluna falha no typecompile em vez de virar uma devolução em verde.
+   */
+  aiOptOut: unknown;
   assigneeKind: string | null;
   botSilencedUntil: Date | string | number | null | undefined;
   aiAuthorizedAt: Date | string | null | undefined;
@@ -245,6 +266,7 @@ export function montarEstadoDeElegibilidade(raw: {
     modo,
     forceHuman: raw.forceHuman === true,
     contatoInterno: ehContatoInterno(raw.contactTags, tagsInternasDaOrg(raw.orgSettings)),
+    aiOptOut: raw.aiOptOut === true,
     botSilencedUntil: normalizarInstante(raw.botSilencedUntil),
     assigneeKind: raw.assigneeKind,
     aiAuthorizedAt: autorizadoEm instanceof Date ? autorizadoEm : null,

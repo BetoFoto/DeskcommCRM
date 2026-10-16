@@ -18,6 +18,7 @@ const base: EstadoDeElegibilidade = {
   modo: "open",
   forceHuman: false,
   contatoInterno: false,
+  aiOptOut: false,
   botSilencedUntil: null,
   assigneeKind: "ai",
   aiAuthorizedAt: null,
@@ -50,6 +51,35 @@ describe("decidirElegibilidade — gate 'open' (comportamento de hoje)", () => {
     expect(d.permite).toBe(false);
     expect(d.motivo).toBe("force_human");
     expect(d.bloqueioPorAllowlist).toBe(false);
+  });
+
+  it("#2379: 'sempre atendimento humano' bloqueia sozinho — mesmo com force_human já limpo e autorização vigente", () => {
+    const d = decidirElegibilidade({
+      ...base,
+      modo: "allowlist",
+      forceHuman: false,
+      aiOptOut: true,
+      aiAuthorizedAt: new Date(AGORA.getTime() - DIA),
+    });
+    expect(d.permite).toBe(false);
+    expect(d.motivo).toBe("ai_opt_out");
+    expect(d.bloqueioPorAllowlist).toBe(false);
+  });
+
+  it("#2379: montarEstadoDeElegibilidade só liga a marca com true literal", () => {
+    const cru = {
+      aiGate: "open",
+      forceHuman: false,
+      assigneeKind: null,
+      botSilencedUntil: null,
+      aiAuthorizedAt: null,
+      orgStatus: "active",
+      agora: AGORA,
+      ttlMs: DIA,
+    };
+    expect(montarEstadoDeElegibilidade({ ...cru, aiOptOut: true }).aiOptOut).toBe(true);
+    expect(montarEstadoDeElegibilidade({ ...cru, aiOptOut: null }).aiOptOut).toBe(false);
+    expect(montarEstadoDeElegibilidade({ ...cru, aiOptOut: "true" }).aiOptOut).toBe(false);
   });
 
   it("conversa com dono humano bloqueia mesmo com gate aberto", () => {
@@ -232,6 +262,7 @@ describe("montarEstadoDeElegibilidade — a org viaja", () => {
     const e = montarEstadoDeElegibilidade({
       aiGate: null,
       forceHuman: false,
+      aiOptOut: false,
       assigneeKind: null,
       botSilencedUntil: null,
       aiAuthorizedAt: null,
@@ -247,6 +278,7 @@ describe("montarEstadoDeElegibilidade — a org viaja", () => {
     const e = montarEstadoDeElegibilidade({
       aiGate: "open",
       forceHuman: false,
+      aiOptOut: false,
       assigneeKind: null,
       botSilencedUntil: null,
       aiAuthorizedAt: null,
@@ -263,6 +295,7 @@ describe("montarEstadoDeElegibilidade — a org viaja", () => {
       const e = montarEstadoDeElegibilidade({
         aiGate: "open",
         forceHuman: false,
+        aiOptOut: false,
         assigneeKind: null,
         botSilencedUntil: null,
         aiAuthorizedAt: null,
@@ -276,6 +309,7 @@ describe("montarEstadoDeElegibilidade — a org viaja", () => {
     const ligado = montarEstadoDeElegibilidade({
       aiGate: "open",
       forceHuman: false,
+      aiOptOut: false,
       assigneeKind: null,
       botSilencedUntil: null,
       aiAuthorizedAt: null,
@@ -323,6 +357,7 @@ describe("#2353 · contato interno não é atendido pela IA", () => {
     const comTag = montarEstadoDeElegibilidade({
       aiGate: "open",
       forceHuman: false,
+      aiOptOut: false,
       assigneeKind: null,
       botSilencedUntil: null,
       aiAuthorizedAt: null,
@@ -337,6 +372,7 @@ describe("#2353 · contato interno não é atendido pela IA", () => {
     const semLista = montarEstadoDeElegibilidade({
       aiGate: "open",
       forceHuman: false,
+      aiOptOut: false,
       assigneeKind: null,
       botSilencedUntil: null,
       aiAuthorizedAt: null,

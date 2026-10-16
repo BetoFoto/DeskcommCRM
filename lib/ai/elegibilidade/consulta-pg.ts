@@ -16,7 +16,8 @@ import {
 
 interface LinhaDeElegibilidade {
   channel_metadata: Record<string, unknown> | null;
-  force_human: boolean | null;
+  force_human: boolean;
+  ai_opt_out: boolean;
   assignee_kind: string | null;
   bot_silenced_until: Date | string | null;
   ai_authorized_at: Date | string | null;
@@ -40,6 +41,7 @@ export async function decidirElegibilidadeDaConversa(
     `select
        cs.metadata                  as channel_metadata,
        ct.force_human               as force_human,
+       ct.ai_opt_out                as ai_opt_out,
        cv.assignee_kind             as assignee_kind,
        cv.bot_silenced_until        as bot_silenced_until,
        ct.ai_authorized_at          as ai_authorized_at,
@@ -70,6 +72,7 @@ export async function decidirElegibilidadeDaConversa(
       forceHuman: r.force_human,
       contactTags: r.contact_tags,
       orgSettings: r.org_settings,
+      aiOptOut: r.ai_opt_out,
       assigneeKind: r.assignee_kind,
       botSilencedUntil: r.bot_silenced_until,
       aiAuthorizedAt: r.ai_authorized_at,
