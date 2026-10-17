@@ -7,6 +7,7 @@ set -euo pipefail
 # por install.sh; instalação já em andamento no mesmo processo (install.sh)
 # mantém a escolha, já exportada em DESKCOMM_IDIOMA_CLI.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_i18n.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_manifestos.sh"
 
 COMPOSE="docker-compose.prod.yml"
 COMPOSE_TRAEFIK="docker-compose.traefik.yml"
@@ -400,8 +401,11 @@ pg_container() {
 # o update.sh leva quem já instalou até ela (atualizar_supabase_single_server).
 # Sem `readonly`: o update.sh relê este arquivo depois do checkout.
 # Esta ref foi conferida em ARM64: todas as 11 imagens do compose oficial têm
-# manifesto linux/arm64. Antes de atualizar a ref, confira as imagens novamente;
-# o update automático também precisa continuar funcionando na VPS A1.
+# manifesto linux/arm64. Antes de atualizar a ref, confira as imagens novamente
+# com `preflight_supabase_da_ref <ref nova> linux/arm64` (e linux/amd64), de
+# _supabase-images.sh: a troca da ref reprova tests/shell/single-server-installer.test.sh,
+# que a fixa, e é ali que esta conferência é cobrada — não na promoção de
+# `stable`, onde uma falha de rede ou do upstream seguraria a release de todos.
 SUPABASE_REF="self-hosted/v0.8.1"
 
 dir_do_supabase() { printf '%s/.runtime/supabase' "${PROJECT_DIR:-$PWD}"; }
@@ -1112,6 +1116,100 @@ preflight_atualizacao() {  # preflight_atualizacao <versão alvo>
     printf '%s' "o Docker não respondeu em 30s (daemon parado ou travado — veja 'systemctl status docker' e 'journalctl -u docker -n 100')."
     return 1
   fi
+  # ── Alteração local que a troca de versão RECUSARIA ────────────────────────
+  # O `git checkout` do passo "Baixando o código novo" recusa passar por cima de
+  # alteração local, e a atualização morre LÁ — depois do backup. Medido numa VPS
+  # real em 15/10/2026: o clique na tela passou por este preflight, fez o backup
+  # inteiro (banco, sessões do WhatsApp, 403 MB de anexos) e só então parou em
+  # "Your local changes to the following files would be overwritten by
+  # checkout", sem dizer o que fazer com o arquivo. A pergunta deste passo é
+  # "dá para atualizar sem derrubar o que está no ar?", e com a árvore assim não.
+  #
+  # A régua é o PRÓPRIO git: `read-tree -n -m -u HEAD <tag>` é a mesma fusão de
+  # duas árvores que o checkout faz, e o `-n` não escreve nada. A régua anterior
+  # (#2932: `diff --name-only` cruzado com `diff HEAD <tag>`) se dizia exata e
+  # não era — o doc 144 mediu as três divergências. Medido de novo em 15/10/2026,
+  # git 2.34.1 (VPS) e 2.50.1, read-tree e checkout lado a lado, mesmo veredito
+  # nos onze casos:
+  #   - arquivo APAGADO na VPS (sem `git rm`) que a versão nova troca: passa;
+  #     com `git rm` (apagado no índice): recusa — e o checkout também;
+  #   - alteração no índice IGUAL ao arquivo da versão nova: passa;
+  #   - arquivo FORA do git que a versão nova traz: recusa, mesmo com conteúdo
+  #     idêntico (a régua anterior não via, e o checkout parava depois do backup);
+  #     se o arquivo está no .gitignore, passa (o checkout o sobrescreve);
+  #   - alterado e idêntico nas duas versões: passa.
+  # O `update-index --refresh` vem antes porque o checkout o faz: sem ele, um
+  # arquivo que só teve a data mudada é acusado ("not uptodate") e o checkout
+  # passaria.
+  #
+  # O read-tree para no PRIMEIRO arquivo, e o dono precisa da lista inteira para
+  # não descobrir um por rodada. A decisão sai da rodada na árvore real; para
+  # NOMEAR o resto, a régua roda de novo numa CÓPIA que só tem os arquivos em
+  # que as duas versões diferem (um arquivo igual nas duas nunca trava a troca)
+  # e um índice cópia. A cada recusa, o arquivo nomeado entra na lista e sai da
+  # conta (some da cópia; no índice cópia vale o da versão nova), até passar.
+  # Tirar o arquivo só do índice não basta: medido, arquivo alterado que a
+  # versão nova APAGA continua recusado (vira "untracked") e o laço não anda.
+  # Nada disso toca a instalação: índice e árvore reais ficam como estavam.
+  local raiz_git tag_alvo idx copia saida arq p modo sha alterados fora rodadas
+  raiz_git="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  tag_alvo="v$versao"
+  if [ -n "$raiz_git" ] && git -C "$raiz_git" rev-parse -q --verify "refs/tags/$tag_alvo" >/dev/null 2>&1; then
+    idx=""; copia=""
+    if ! idx="$(mktemp 2>/dev/null)" || ! copia="$(mktemp -d 2>/dev/null)" \
+       || ! (cd "$raiz_git" && cp "$(git rev-parse --git-path index)" "$idx") 2>/dev/null; then
+      rm -rf "$idx" "$copia"
+      printf '%s' "não consegui copiar o índice do git de $raiz_git para um arquivo temporário (disco cheio em /tmp?), e sem ele não sei se a troca para a versão $versao passaria por cima de alteração local."
+      return 1
+    fi
+    alterados=""; fora=""; rodadas=0
+    GIT_INDEX_FILE="$idx" git -C "$raiz_git" update-index -q --refresh >/dev/null 2>&1 || true
+    if ! saida="$(GIT_INDEX_FILE="$idx" LC_ALL=C git -C "$raiz_git" read-tree -n -m -u HEAD "$tag_alvo" 2>&1)"; then
+      # Decidido: o checkout recusaria. Daqui em diante é só para nomear.
+      while IFS= read -r -d '' p; do
+        if [ -e "$raiz_git/$p" ] || [ -L "$raiz_git/$p" ]; then
+          mkdir -p "$copia/$(dirname "$p")" && cp -RP "$raiz_git/$p" "$copia/$p"
+        fi
+      done < <(git -C "$raiz_git" diff -z --name-only --no-renames HEAD "$tag_alvo" 2>/dev/null)
+      (cd "$raiz_git" && cp "$(git rev-parse --git-path index)" "$idx") 2>/dev/null
+      GIT_INDEX_FILE="$idx" GIT_WORK_TREE="$copia" git -C "$raiz_git" update-index -q --refresh >/dev/null 2>&1 || true
+      while :; do
+        # "error: Entry 'x' not uptodate…", "…Untracked working tree file 'x'…"
+        arq="$(printf '%s\n' "$saida" | sed -n "s/^error: [^']*'\\(.*\\)'[^']*\$/\\1/p" | head -1)"
+        if [ -z "$arq" ]; then
+          alterados="$alterados (o git disse: $(printf '%s' "$saida" | head -1))"
+          break
+        fi
+        if [ "$rodadas" -ge 50 ]; then
+          # ponytail: 50 rodadas; além disso a lista sai cortada — o veredito segue sendo recusa
+          alterados="$alterados …"
+          break
+        fi
+        case "$saida" in
+          *ntracked*) fora="$fora $arq" ;;
+          *) alterados="$alterados $arq" ;;
+        esac
+        rm -rf "$copia/$arq"
+        modo=""; sha=""
+        read -r modo _ sha _ <<<"$(git -C "$raiz_git" ls-tree "$tag_alvo" -- "$arq" 2>/dev/null)" || true
+        if [ -n "$sha" ]; then
+          GIT_INDEX_FILE="$idx" git -C "$raiz_git" update-index --add --cacheinfo "$modo,$sha,$arq" >/dev/null 2>&1 || break
+        else
+          GIT_INDEX_FILE="$idx" git -C "$raiz_git" update-index --force-remove -- "$arq" >/dev/null 2>&1 || break
+        fi
+        rodadas=$((rodadas + 1))
+        saida="$(GIT_INDEX_FILE="$idx" GIT_WORK_TREE="$copia" LC_ALL=C git -C "$raiz_git" read-tree -n -m -u HEAD "$tag_alvo" 2>&1)" && break
+      done
+    fi
+    rm -rf "$idx" "$copia"
+    if [ -n "$alterados$fora" ]; then
+      saida="a troca para a versão $versao recusaria passar por cima de alterações locais em $raiz_git, e a atualização pararia DEPOIS do backup."
+      [ -z "$alterados" ] || saida="$saida Arquivo(s) alterado(s) aqui que a versão nova troca:$alterados. Guarde o que é seu (cd $raiz_git && git diff HEAD > minhas-mudancas.patch, ou git stash) ou desfaça (git checkout HEAD -- <arquivo>)."
+      [ -z "$fora" ] || saida="$saida Arquivo(s) fora do git que a versão nova traz:$fora. Mova-os para fora de $raiz_git ou apague-os."
+      printf '%s' "$saida"  # o "rode de novo" já vem na moldura do update.sh
+      return 1
+    fi
+  fi
   # Quem pediu construção local de propósito não depende do registro: é a
   # saída de escape que o próprio portão do build ensina, e recusá-la aqui a
   # anularia justamente com o registro fora.
@@ -1121,17 +1219,17 @@ preflight_atualizacao() {  # preflight_atualizacao <versão alvo>
   # mexer na rede de uma VPS cuja rede está boa.
   if ! com_prazo 20 docker buildx version >/dev/null 2>&1; then
     pacote_buildx="$(pacote_do_buildx)"
-    printf '%s' "o plugin buildx do Docker não está instalado nesta VPS, e é com ele que confiro se a versão $versao está publicada. Instale o pacote $pacote_buildx. Nada foi parado nem baixado."
+    printf '%s' "o plugin buildx do Docker não está instalado nesta VPS, e é com ele que confiro se a versão $versao está publicada. Instale o pacote $pacote_buildx."
     return 1
   fi
   veredito="$(veredito_das_imagens_da_release "$versao")"
   case "$veredito" in
     prontas) return 0 ;;
     incompleta)
-      printf '%s' "a versão $versao está INCOMPLETA no registro: uma ou mais das quatro imagens (app, worker, scheduler, voz) ainda não existe — o run de publicação não terminou. Nada foi parado nem baixado."
+      printf '%s' "a versão $versao está INCOMPLETA no registro: uma ou mais das quatro imagens (app, worker, scheduler, voz) ainda não existe — o run de publicação não terminou."
       return 1 ;;
     *)
-      printf '%s' "não consegui falar com o registro de imagens (DNS/rede) para a versão $versao. Nada foi parado nem baixado: a versão atual segue no ar."
+      printf '%s' "não consegui falar com o registro de imagens (DNS/rede) para a versão $versao."
       return 1 ;;
   esac
 }
@@ -1233,6 +1331,62 @@ EOF
     case "$rodando" in *" $svc "*) ;; *) fora="${fora}${fora:+ }${svc}" ;; esac
   done
   printf '%s' "$fora"
+}
+
+# ── O proxy só é recriado com uma configuração que o Caddy aceitou (#2724) ──
+#
+# `caddy-sites/` é do operador. Um arquivo errado ali, um domínio dele que uma
+# versão nossa passou a usar, ou uma imagem nova do Caddy que recusa o que a
+# antiga aceitava: nos três casos o Caddy RECRIADO não sobe, e o CRM sai do ar
+# junto. O Caddy que já está rodando não sente nada, porque leu a configuração
+# ao subir. Então a atualização confere ANTES de recriar, num contêiner
+# descartável com a imagem já puxada, o Caddyfile desta versão e a pasta do
+# operador. Recusou: o proxy antigo fica no ar e a saída diz o motivo.
+#
+# Falha fechada de propósito: se a conferência nem roda, o proxy também não é
+# recriado. Trocar um proxy que funciona por um que ninguém conferiu é a troca
+# que esta guarda existe para recusar. O `</dev/null` impede o `run` de comer
+# o stdin de quem roda o update.sh por pipe. O motivo fica em PROXY_RECUSA
+# (vazio = aprovado).
+conferir_config_do_proxy() {
+  local saida
+  if saida="$(dc run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile </dev/null 2>&1)"; then
+    PROXY_RECUSA=""
+    return 0
+  fi
+  PROXY_RECUSA="${saida:-(a conferência do Caddy não devolveu mensagem)}"
+  return 1
+}
+
+# O `up -d` do parque. Com a configuração do proxy recusada, sobe todo serviço
+# menos o caddy: um `up -d` sem nome recria o Caddy quando a imagem dele muda,
+# e é justamente esse o caso em que a imagem nova recusa o arquivo do operador.
+# A lista vem do `config --services`, que só lista serviço de profile ativo
+# (nomear à mão ligaria profile desligado).
+subir_o_parque() {
+  [ -n "${PROXY_RECUSA:-}" ] || { dc up -d; return; }
+  local servicos
+  servicos="$(dc config --services | grep -vx caddy)" || return 1
+  # shellcheck disable=SC2086  # um nome de serviço por palavra
+  dc up -d $servicos
+}
+
+# Recria o Caddy, que lê o Caddyfile por bind mount de arquivo e por isso não
+# vê a versão nova sem ser recriado (ver o comentário no update.sh) — só se a
+# conferência aprovou.
+recriar_o_proxy() {
+  if [ -n "${PROXY_RECUSA:-}" ]; then
+    c_ylw "⚠ O proxy NÃO foi recriado: a configuração nova não passou na conferência do Caddy."
+    c_ylw "  O proxy anterior segue no ar e o CRM continua respondendo. A causa mais comum"
+    c_ylw "  é um arquivo seu em caddy-sites/. O que o Caddy disse:"
+    printf '%s\n' "$PROXY_RECUSA" | tail -n 6 | sed 's/^/    /'
+    c_ylw "  Depois de corrigir, confira: docker compose $(dc_files) run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile"
+    c_ylw "  e só com a conferência limpa aplique: docker compose $(dc_files) up -d --force-recreate caddy"
+    return 1
+  fi
+  dc up -d --force-recreate --no-deps caddy >/dev/null 2>&1 \
+    && c_grn "✓ proxy recarregado com a configuração desta versão" \
+    || c_ylw "⚠ não consegui recriar o proxy — rode: docker compose $(dc_files) up -d --force-recreate caddy"
 }
 
 # ── O rollback dos pins de versão (#1955, critério 4) ───────────────────────
@@ -2042,6 +2196,45 @@ trio_publicado() {
     [ "$(ghcr_status "$i" "$tag")" = "200" ] || return 1
   done
   return 0
+}
+
+# Instalação nova usa uma única versão numérica nas quatro imagens próprias e
+# confere a imagem WAHA efetiva, inclusive quando foi escolhida pelo operador.
+# Só consulta registry; não escreve .env, banco, Docker ou configuração.
+preflight_instalacao() { # <X.Y.Z> <linux/platform> <WAHA_IMAGE efetiva>
+  local versao="${1:-}" plataforma="${2:-}" waha="${3:-}"
+  if ! [[ "$versao" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf 'A instalação ARM64 exige versão numérica publicada (X.Y.Z): %s\n' "$versao" >&2
+    return 1
+  fi
+  [ -n "$waha" ] || { printf 'WAHA_IMAGE vazia\n' >&2; return 1; }
+  preflight_imagens_crm "$versao" "$plataforma" || return 1
+  if ! manifesto_tem_plataforma "$waha" "$plataforma"; then
+    printf 'WAHA_IMAGE %s não oferece %s; escolha uma imagem compatível, sem perder sessões/volumes.\n' "$waha" "$plataforma" >&2
+    return 1
+  fi
+}
+
+# Confere uma atualização real sem mudar o .env. No ARM64 legado, apenas os
+# defaults AMD64 conhecidos serão migrados por gravar_imagens DEPOIS do backup;
+# a sonda usa o destino futuro para não rejeitar falsamente a instalação.
+# WAHA customizada/Plus nunca é substituída nem na sonda nem no update.
+preflight_plataforma_atualizacao() { # <vX.Y.Z> <linux/platform>; usa WAHA_IMAGE carregada
+  local tag="${1:-}" plataforma="${2:-}" versao waha
+  if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf 'Atualização exige tag numérica publicada (vX.Y.Z): %s\n' "$tag" >&2
+    return 1
+  fi
+  versao="${tag#v}"
+  waha="${WAHA_IMAGE:-$(imagem_waha_padrao_para_host)}"
+  if [ "$plataforma" = linux/arm64 ] && waha_amd64_conhecido_em_arm arm64 "$waha"; then
+    waha='devlikeapro/waha:noweb-arm-2026.7.2'
+  fi
+  preflight_imagens_crm "$versao" "$plataforma" || return 1
+  if ! manifesto_tem_plataforma "$waha" "$plataforma"; then
+    printf 'WAHA_IMAGE %s não oferece %s; não alterei a escolha do operador.\n' "$waha" "$plataforma" >&2
+    return 1
+  fi
 }
 
 # O .env está com pin PELA METADE? (app fixado numa versão, worker/scheduler não)

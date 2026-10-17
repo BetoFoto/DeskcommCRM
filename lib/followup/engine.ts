@@ -21,6 +21,7 @@ import { idsDoContatoEGemeos } from "@/lib/channels/contato-por-telefone";
 import { logger } from "@/lib/logger";
 
 import { flowGraphSchema, type FlowGraph, type FlowNode, type ReplySaveTo } from "./graph-schema";
+import { TETO_DE_PASSOS_DO_MOTOR } from "./custo-no-motor";
 import {
   ACTION_RECHECK_MS,
   BACKOFF_MS,
@@ -63,7 +64,10 @@ import type { EventRow } from "@/lib/event-log/dispatcher";
 import { quandoDoRetornoVivo, reavaliarDepoisDoRetorno } from "./retorno-segura-o-fluxo";
 import { triggerConfigSchema } from "./api-schemas";
 
-const MAX_STEPS = 80;
+// O teto de ticks do relógio. O número mora em `custo-no-motor.ts` porque a
+// publicação também precisa dele (#2965): contar o caminho linear pelos mesmos
+// ticks que o motor gasta é o que impede um fluxo de publicar e morrer no meio.
+const MAX_STEPS = TETO_DE_PASSOS_DO_MOTOR;
 const CLAIM_LEASE_SECONDS = 120;
 const DEFAULT_CLAIM_LIMIT = 20;
 const MAX_ERROR_LEN = 300;
@@ -103,6 +107,12 @@ export interface FollowupJobRequest {
     fallback_template_id?: string;
     /** action (mode 'text') — corpo pronto; o turno envia sem chamar o modelo. */
     fixed_body?: string;
+    /**
+     * action (mode 'text') — #2734: mídia OPCIONAL (imagem ou PDF) por URL. Presente,
+     * o `fixed_body` vira a LEGENDA. O envio reusa o caminho de mídia do Inbox e das
+     * campanhas (`sendMessageHandler`), nos dois caminhos que mandam o texto fixo.
+     */
+    fixed_media_url?: string;
     /**
      * action (mode 'template') — id em `message_templates` (texto pronto) OU em
      * `meta_templates` (modelo aprovado do canal, o único que sai com a janela de 24 h
@@ -342,7 +352,10 @@ function turnPayloadExtras(
     };
   }
   if (node.type === "action" && node.config.mode === "text") {
-    return { fixed_body: interpolarVolta(node.config.body, events, contexto) };
+    return {
+      fixed_body: interpolarVolta(node.config.body, events, contexto),
+      ...(node.config.media_url ? { fixed_media_url: node.config.media_url } : {}),
+    };
   }
   if (node.type === "action" && node.config.mode === "template") {
     const volta = latestRepeatIndex(events);
@@ -719,6 +732,24 @@ export async function avancarEnrollmentAtivo(
   await processEnrollment(deps, enrollment, summary);
 }
 
+/**
+ * O TEXTO DO MOTIVO, POR CAUSA. As duas guardas acima lançam o MESMO
+ * `StaleServiceBoundaryError` — `assertServiceBoundary` quando o atendimento
+ * fecha ou é substituído, `assertAgenda` quando a inscrição deixa de ser a
+ * vigente daquele nó. Gravar "atendimento encerrado" para as duas faz a Central
+ * contar uma história que a agenda não contou: `Motivo:` no dossiê precisa
+ * distinguir as duas.
+ */
+const MOTIVO_DA_FRONTEIRA_VENCIDA = {
+  curto: "Atendimento encerrado ou substituído",
+  explica: "o atendimento que o originou foi encerrado ou substituído",
+} as const;
+
+const MOTIVO_DA_AGENDA_VENCIDA = {
+  curto: "Agenda do acompanhamento vencida",
+  explica: "a agenda do acompanhamento deixou de valer",
+} as const;
+
 async function processEnrollment(
   deps: TickDeps,
   enrollment: EnrollmentRow,
@@ -733,8 +764,17 @@ async function processEnrollment(
   // `active` — ver `enviar-texto-fixo.ts`, `turn-bridge.ts` e `send-message.ts`.
   // A fronteira continua valendo para o dormente: atendimento fechado cancela
   // com aviso na Central, como antes.
-  try { await db.assertServiceBoundary?.(enrollment); if (enrollment.status !== "dormente") await db.assertAgenda?.(enrollment); }
-  catch (error) {
+  // Qual das duas guardas recusou. As DUAS lançam `StaleServiceBoundaryError`, e
+  // o motivo gravado tem de nomear a verdadeira — chamar de "atendimento
+  // encerrado" o que a AGENDA recusou é a mentira que a Central não pode ter.
+  let guarda: "fronteira" | "agenda" = "fronteira";
+  try {
+    await db.assertServiceBoundary?.(enrollment);
+    if (enrollment.status !== "dormente") {
+      guarda = "agenda";
+      await db.assertAgenda?.(enrollment);
+    }
+  } catch (error) {
     if(error instanceof AgendaDeferredError){
       if(error.protection.motivo === "leitura_indisponivel") throw error;
       await db.updateEnrollment(enrollment.id,enrollment.organization_id,{next_eval_at:error.protection.reavaliar_em,claimed_until:null,last_error:error.message});
@@ -754,6 +794,11 @@ async function processEnrollment(
     // propósito (`assertCurrentServiceBoundary`, e o teste que a vigia). Enquanto
     // a decisão de arquitetura não vem, o dever é tornar a perda VISÍVEL — um
     // acompanhamento que some sem aviso é a ilha que a doutrina proíbe.
+    // O MOTIVO NOMEIA A CAUSA (as duas guardas lançam o MESMO erro). Para o
+    // `dormente` o ramo abaixo só alcança a FRONTEIRA — a guarda de agenda é
+    // pulada para ele, acima — mas a frase sai da mesma tabela, para que
+    // reaproximar as duas guardas não faça o texto voltar a mentir.
+    const causa = guarda === "agenda" ? MOTIVO_DA_AGENDA_VENCIDA : MOTIVO_DA_FRONTEIRA_VENCIDA;
     if (enrollment.status === "dormente") {
       const nome =
         (await db.loadFlowPointerName(enrollment.organization_id, enrollment.pointer_id)) ??
@@ -762,13 +807,13 @@ async function processEnrollment(
         organization_id: enrollment.organization_id,
         title: "Um retorno programado não pôde ser enviado",
         body:
-          `O fluxo "${nome}" esperava a data do retorno, mas o atendimento que o originou ` +
-          `foi encerrado ou substituído no meio da espera, e o envio foi cancelado ` +
+          `O fluxo "${nome}" esperava a data do retorno, mas ${causa.explica} ` +
+          `no meio da espera, e o envio foi cancelado ` +
           `(enrollment ${enrollment.id}). Fale com o contato por outro caminho se ainda fizer sentido.`,
         ref_id: enrollment.id,
       });
     }
-    await db.updateEnrollment(enrollment.id, enrollment.organization_id, { status: "cancelled", cancel_reason: "Atendimento encerrado ou substituído", claimed_until: null, completed_at: clock().toISOString() });
+    await db.updateEnrollment(enrollment.id, enrollment.organization_id, { status: "cancelled", cancel_reason: causa.curto, claimed_until: null, completed_at: clock().toISOString() });
     return;
   }
 

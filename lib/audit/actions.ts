@@ -270,10 +270,11 @@ export const AUDIT_ACTIONS = [
   // Rótulo interno do canal (channel_sessions.display_name); nada vai ao
   // provedor. Emitida por app/api/v1/channel-sessions/[id]/name.
   "channel.renamed",
-  // A janela de manutenção (#2388): criar e cancelar são mutações da tela e
-  // auditam como toda mutação. A pausa e a retomada que a janela aplica saem
-  // como `channel.disabled`/`channel.enabled`, com `origem: schedule`.
+  // A janela de manutenção (#2388): criar, editar e cancelar são mutações da
+  // tela e auditam como toda mutação. A pausa e a retomada que a janela aplica
+  // saem como `channel.disabled`/`channel.enabled`, com `origem: schedule`.
   "channel.schedule_created",
+  "channel.schedule_updated",
   "channel.schedule_cancelled",
   // Chamada de voz WhatsApp (WaCalls, spec 18) — pareamento do segundo
   // dispositivo vinculado, opt-in por org. Admin only.
@@ -1008,6 +1009,11 @@ export const AUDIT_ACTIONS = [
   // PATCH com `tarefa`; metadata.tarefa diz qual, e estado_anterior o de antes.
   "ai.jev.tarefa_alterada",
   "ai.jev.modo_roteador_alterado",
+  // DE ONDE o Jev responde mudou (PATCH com `origem`): TypeSafe direto ou via
+  // OpenRouter. Muda o fornecedor que recebe a mensagem do cliente, então é a
+  // mesma pergunta de LGPD do ligado — metadata.origem diz para qual, e
+  // origem_anterior de onde saiu.
+  "ai.jev.origem_alterada",
   // O pedido de descadastro é do cliente e o padrão é irreversível — mas a
   // regra W-02 do catálogo de negócio prevê o override: admin desbloqueia à
   // mão. Sem esta linha, a ação existiria sem rastro de QUEM a desfez, que é
@@ -1117,6 +1123,11 @@ export const AUDIT_ACTIONS = [
   // `settings/task-plans` — mesma família de `campaign.settings_updated`.
   "task_plans.settings_updated",
 
+  // Fontes liberadas do banco externo (Spec 23): o administrador trocou o modo
+  // (`all`/`list`) e a lista do que o assistente pode ler. O metadata carrega só
+  // CONTAGENS (modo e número de fontes), nunca nomes de tabela ou de coluna.
+  "external_db_sources.updated",
+
   // Gestão de tenants pelo admin da plataforma (migration 0614).
   // A LÁPIDE, gravada pelo banco dentro de `fn_excluir_organizacao`, com
   // `organization_id` nulo e `resource_id` = a organização excluída.
@@ -1132,12 +1143,23 @@ export const AUDIT_ACTIONS = [
   // dedicada `PATCH /contacts/[id]/carteira` (#2591) — a escrita é do servidor,
   // então o audit é a única trilha de quem mudou o dono.
   "contact.carteira_changed",
+  // O admin da plataforma exportou o INVENTÁRIO das instalações em CSV (#2777).
+  // É leitura, mas é leitura EM ESCALA DE PLATAFORMA: grava quem, quando, QUANTO
+  // saiu, se o teto cortou e QUE filtros valiam — nunca o texto da busca, que é
+  // dado de quem foi buscado.
+  "platform.tenants_exported",
   // Marca permanente "sempre atendimento humano" (issue 2379): `ai_opt_out`
   // ligado na ficha do contato — a devolução (manual ou automática) não a desfaz.
   "contacts.always_human_marked",
   // A marca foi removida: só limpa `ai_opt_out`; a conversa segue com a trava
   // de handoff de quem a pôs.
   "contacts.always_human_unmarked",
+  // O operador carregou a imagem que a Resposta rápida passa a enviar junto
+  // com o texto — `POST /message-templates/:id/midias` (#2526). A REMOÇÃO não
+  // tem código próprio: ela acontece dentro do `template.updated` (campo
+  // `removidas` no metadata) ou dentro do `template.deleted`, que são os atos
+  // em que a imagem sai de fato.
+  "template.media_added",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

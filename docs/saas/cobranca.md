@@ -89,14 +89,23 @@ Aba **Planos**:
 | Nome do plano | Até 60 caracteres |
 | Preço (R$) | A partir de R$ 5,00 |
 | Intervalo de cobrança | Mensal ou Anual |
-| Dias de teste grátis | De 0 a 90; o padrão é 14 |
+| Dias de teste grátis | De 0 a 90; o padrão é 14. **0 = entrada paga:** a empresa que nasce nesse plano fica suspensa até o provedor confirmar o primeiro pagamento |
 | Máximo de pessoas | Vazio = sem limite |
 | Máximo de números conectados | Vazio = sem limite |
 | Teto de uso de IA por mês (US$) | Só para a empresa que usa a chave de IA da instalação. Com a chave da própria empresa (BYOK), não se aplica |
 
 - **Salvar plano** grava. Depois, no plano que quem se cadastra sozinho deve ganhar, clique em
-  **Usar no cadastro**. Sem isso, quem se cadastra sozinho fica **isento**: usa de graça e sem
-  limite, e não tem o que assinar.
+  **Usar no cadastro** (o plano padrão).
+- Com a cobrança ligada, **toda empresa nova nasce com plano**: o que a pessoa escolhe na tela de
+  cadastro (a lista mostra os planos visíveis às empresas e já vem marcada no padrão) ou, sem
+  escolha (entrada pelo Google, integração), o padrão.
+- **Sem plano padrão, mas com planos visíveis às empresas:** o "Entrar com Google" some da tela
+  de cadastro, o cadastro sem plano é recusado e a integração (`/api/v1/tenants/provision`)
+  recebe `409 plano_obrigatorio`. A aba Planos avisa quando você está nessa situação. Quem
+  entra pela primeira vez com o Google pela tela de login escolhe o plano na tela seguinte.
+- **Sem plano nenhum** (nenhum padrão e nenhum visível às empresas): tudo como antes da cobrança
+  por plano — quem se cadastra sozinho fica **isento** (usa de graça e sem limite) e o Google
+  aparece.
 - O preço e o intervalo de um plano **travam** quando alguém o assina. Para mudar, arquive e crie
   outro.
 - Plano negociado com um só cliente: **Esconder das empresas**. Ele ganha o selo "Só você
@@ -151,8 +160,20 @@ A troca vale para a empresa (Configurações › Plano e cobrança › **Trocar 
 você (Tenants › empresa › card Cobrança › **Trocar plano**). As regras:
 
 - **No teste grátis**, a troca vale na hora.
-- **Depois do teste**, com a assinatura no provedor, a troca fica **agendada** e vira na próxima
-  cobrança paga. Subir de plano no dia 1 e descer no dia 28 não compensa.
+- **Depois do teste, a empresa sobe de plano:** ela paga na hora a diferença proporcional aos
+  dias que faltam no período. O plano novo e os limites dele valem quando o provedor confirma
+  esse pagamento (Pix e cartão: minutos; boleto: até 1 dia útil), e a data da renovação não muda.
+  A cobrança da diferença vale até o fim do período em que foi feita: não paga até lá, ela é
+  cancelada no provedor; paga depois disso, o plano novo só vale a partir da próxima renovação
+  paga. Diferença abaixo de R$ 5,00 (perto do fim do período) não é cobrada: a troca fica
+  agendada para a renovação.
+- **Com uma diferença esperando pagamento**, escolher outro plano cancela essa cobrança no
+  provedor. Se ela já foi paga, a troca é recusada por alguns minutos, enquanto o plano pago é
+  aplicado.
+- **Descer de plano** fica **agendado** e vira na próxima cobrança paga, sem crédito do que
+  sobrou. A próxima fatura já sai com o preço novo.
+- **Você (o dono) trocando o plano depois do teste**, para cima ou para baixo, também fica
+  agendado: plano negociado não paga diferença.
 - **Em atraso**, ou com o teste vencido sem assinatura, a troca é recusada: regularize antes.
 - **No Asaas**, com a mensalidade do período ainda em aberto, a troca é recusada até o pagamento
   ser confirmado.
@@ -162,6 +183,38 @@ você (Tenants › empresa › card Cobrança › **Trocar plano**). As regras:
   provedor e a troca vale; se não conseguir expirá-lo, recusa até o link ser pago ou vencer.
 - **Uso acima do plano novo** (pessoas ou números a mais) é recusado, com a lista do que remover.
 - A empresa só escolhe planos oferecidos a ela; o plano negociado, só você atribui.
+
+## Mandar o link de pagamento para a empresa
+
+Quando a empresa não vai entrar no sistema para assinar (o cliente pediu "me manda o Pix"), gere
+o link por ela: **Tenants** › empresa › card **Cobrança** › **Gerar link de pagamento**, e mande
+pelo WhatsApp com **Copiar link de pagamento**. O botão aparece em toda assinatura que ainda não
+está **Em dia**: no teste grátis, em atraso ou cancelada. Empresa isenta não tem o botão
+(atribua um plano antes).
+
+- **No Asaas**, a primeira vez pede o **CPF ou CNPJ de quem paga**, já preenchido com o CNPJ do
+  cadastro quando ele confere. O documento vai direto ao Asaas e não fica guardado no sistema.
+- **O cliente no provedor nasce com o e-mail do administrador mais antigo da empresa**, nunca o
+  seu nem o de outro dono da instalação, mesmo que você ainda apareça como administrador dela
+  (empresas criadas antes de 12/09). Na primeira vez, empresa sem outro administrador com e-mail
+  é recusada. São dois casos:
+  - **a empresa que você acabou de criar para outra pessoa:** até o convite ser aceito, o único
+    administrador dela é você, de forma provisória. Gere o link depois do aceite;
+  - **a empresa em que o único administrador é você mesmo:** a recusa não passa sozinha.
+    Convide um administrador da empresa em Equipe e gere o link depois que ele aceitar.
+
+  Depois que o cliente existe no provedor, o e-mail não é mais pedido e a recusa não acontece.
+- **Clicar de novo devolve o mesmo link** enquanto ele vale. Com a fatura já aberta no
+  provedor, o botão devolve o link dela, sem criar outra assinatura. No Asaas, depois do aviso
+  do provedor, a empresa vê o mesmo link em Configurações › Plano e cobrança › **Pagar agora**.
+  Na Stripe ela não vê o link: o **Assinar** dela abre a mesma sessão enquanto ela vale.
+- **Na Stripe, o link vale 24 horas.** Passou disso, gere de novo.
+- **Trocar o plano no teste grátis** expira o link aberto: gere outro depois da troca.
+- **O link gerado com a chave de teste morre ao publicar.** Gere de novo depois de trocar pela
+  chave de produção.
+- **Quem paga pela Stripe volta para a tela de login** do sistema, e não para uma página de
+  "pagamento recebido". O pagamento não depende dessa volta: a confirmação vem do aviso do
+  provedor. Avise o cliente para fechar a aba depois de pagar.
 
 ## Dar prazo, isentar e acompanhar
 

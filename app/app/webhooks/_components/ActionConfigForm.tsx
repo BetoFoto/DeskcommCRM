@@ -23,12 +23,19 @@ import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 import { apiClient } from "@/lib/api/client";
-import type { FollowupFlowPointerRow } from "@/hooks/followup/useFollowupFlows";
+import { useAuth } from "@/hooks/auth/AuthProvider";
+import {
+  followupFlowsListQueryKey,
+  type FollowupFlowPointerRow,
+} from "@/hooks/followup/useFollowupFlows";
 import type { PlanoDeTarefas } from "@/lib/tarefas/plano";
 
 export type ActionItem =
   | { type: "create_or_move_lead"; config: { pipeline_id: string; stage_id: string } }
-  | { type: "send_whatsapp_message"; config: { channel_session_id: string; template: string } }
+  | {
+      type: "send_whatsapp_message";
+      config: { channel_session_id: string; template: string; media_url?: string | null };
+    }
   // #2726 — o e-mail de saída: mesmo campo que a irmã de WhatsApp (`assunto`/
   // `corpo` no lugar do `template`), e `email_fixo` só preenche quando o
   // destinatário é o endereço gravado na regra.
@@ -52,7 +59,10 @@ export type ActionItem =
     }
   | { type: "assign_owner"; config: { user_id: string } }
   | { type: "call_webhook"; config: { url: string; secret?: string; secret_enc?: string; include_owner?: boolean } }
-  | { type: "start_message_flow"; config: { flow_pointer_id: string } }
+  | {
+      type: "start_message_flow";
+      config: { flow_pointer_id: string; surface?: "followup" | "atendimento" };
+    }
   // #1540 — o lembrete interno: mesmos campos do schema da API e do nó de fluxo.
   | {
       type: "create_task";
@@ -90,7 +100,9 @@ export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
     case "call_webhook":
       return { type, config: { url: "" } };
     case "start_message_flow":
-      return { type, config: { flow_pointer_id: "" } };
+      // #2647 — o padrão é follow-up, o comportamento de sempre; `atendimento`
+      // é a opção que quem monta a regra escolhe, e só ela muda o caminho.
+      return { type, config: { flow_pointer_id: "", surface: "followup" } };
     // #1540 — o lembrete interno: mesma forma que o schema da API exige.
     case "create_task":
       return {
@@ -174,10 +186,12 @@ const TEMPLATE_VARS = [
 function SendWhatsappForm({
   config,
   onChange,
-}: FormProps<{ channel_session_id: string; template: string }>) {
+}: FormProps<{ channel_session_id: string; template: string; media_url?: string | null }>) {
   const t = useT();
   const { data: sessions } = useChannelSessions();
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  // Uma regra pode ter mais de uma ação de WhatsApp: id fixo repetiria na página.
+  const midiaId = React.useId();
   // Os campos cadastrados no funil (Configurações › Funis) viram botões: quem
   // monta a mensagem clica em "Serviço" em vez de adivinhar o nome interno. O
   // token é só a chave — `renderTemplate` a resolve em `lead.custom_fields`.
@@ -251,6 +265,19 @@ function SendWhatsappForm({
               (Conexões), no fuso da sua organização, e quem a mudou lá veria a
               tela continuar prometendo outro horário. Rótulo visível é contrato. */}
           {t("Respeitamos a janela de envio e o limite diário configurados para esse número em Conexões — fora da janela, a mensagem espera a próxima.")}
+        </p>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={midiaId}>{t("Imagem ou PDF (opcional)")}</Label>
+        <Input
+          id={midiaId}
+          type="url"
+          value={config.media_url ?? ""}
+          onChange={(e) => onChange({ ...config, media_url: e.target.value || null })}
+          placeholder="https://…/oferta.pdf"
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("Com uma imagem ou PDF, a mensagem acima vira a legenda do arquivo. Outros tipos de arquivo são recusados. Em número oficial, fora da janela de 24h a mídia não sai — só um modelo aprovado.")}
         </p>
       </div>
     </div>
@@ -705,13 +732,41 @@ function CallWebhookForm({
   );
 }
 
-function StartMessageFlowForm({ config, onChange }: FormProps<{ flow_pointer_id: string }>) {
+/**
+ * `start_message_flow` (#2647) — o seletor ganhou a SUPERFÍCIE do fluxo.
+ *
+ * O padrão é follow-up, que é o que toda regra já gravada aponta: mesma lista,
+ * mesma rota e MESMO caminho de inscrição de antes. Escolher atendimento troca
+ * a lista pela dos roteiros publicados (`?surface=atendimento`) e, na hora de
+ * executar, a ação passa por `iniciarFluxoDeAtendimento` — a entrada da
+ * palavra-gatilho e do roteador.
+ *
+ * Trocar de superfície LIMPA o fluxo escolhido: um id de follow-up não é um
+ * roteiro, e a regra não pode ficar gravada apontando para o outro lado.
+ */
+function StartMessageFlowForm({
+  config,
+  onChange,
+}: FormProps<{ flow_pointer_id: string; surface?: "followup" | "atendimento" }>) {
   const t = useT();
+  const superficie: "followup" | "atendimento" =
+    config.surface === "atendimento" ? "atendimento" : "followup";
+  const ehRoteiro = superficie === "atendimento";
+  // O módulo é opcional por instalação (mesmo padrão do QueueTab): desligado, a
+  // opção some — salvo numa regra que já a grava, para não esconder o que está salvo.
+  const { activeOrg } = useAuth();
+  const roteirosLigados = activeOrg?.modulos_ligados?.includes("fluxos_atendimento") === true;
   const { data, isLoading } = useQuery({
-    queryKey: ["followup", "flows", "list"],
+    // Mesma chave do hook de Follow-ups (com o recorte no fim, como ele faz):
+    // a lista de follow-up continua a de sempre, e a dos roteiros fica separada.
+    queryKey: ehRoteiro
+      ? [...followupFlowsListQueryKey, "atendimento"]
+      : followupFlowsListQueryKey,
     queryFn: async () => {
       const res = await apiClient.get<{ data: FollowupFlowPointerRow[] }>(
-        "/api/v1/ai/followup-flows",
+        ehRoteiro
+          ? "/api/v1/ai/followup-flows?surface=atendimento"
+          : "/api/v1/ai/followup-flows",
       );
       return res.data;
     },
@@ -719,33 +774,71 @@ function StartMessageFlowForm({ config, onChange }: FormProps<{ flow_pointer_id:
   const active = (data ?? []).filter((f) => f.status === "active");
 
   return (
-    <div className="space-y-1">
-      <Label>{t("Fluxo de follow-up")}</Label>
-      <Select
-        value={config.flow_pointer_id}
-        onValueChange={(v) => onChange({ flow_pointer_id: v })}
-        disabled={isLoading}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder={t("Escolha um fluxo publicado")} />
-        </SelectTrigger>
-        <SelectContent>
-          {active.map((f) => (
-            <SelectItem key={f.id} value={f.id}>
-              {f.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {!isLoading && active.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          {t("Nenhum fluxo ativo. Publique um follow-up em Follow-ups para usá-lo aqui.")}
-        </p>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          {t("Só entram fluxos publicados e ativos.")}
-        </p>
-      )}
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <Label>{t("Tipo de fluxo")}</Label>
+        <Select
+          value={superficie}
+          onValueChange={(v) =>
+            onChange({
+              flow_pointer_id: "",
+              surface: v === "atendimento" ? "atendimento" : "followup",
+            })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="followup">{t("Follow-up")}</SelectItem>
+            {roteirosLigados || ehRoteiro ? (
+              <SelectItem value="atendimento">{t("Atendimento")}</SelectItem>
+            ) : null}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1">
+        <Label>{ehRoteiro ? t("Fluxo de atendimento") : t("Fluxo de follow-up")}</Label>
+        <Select
+          value={config.flow_pointer_id}
+          onValueChange={(v) => onChange({ ...config, flow_pointer_id: v })}
+          disabled={isLoading}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={t("Escolha um fluxo publicado")} />
+          </SelectTrigger>
+          <SelectContent>
+            {active.map((f) => (
+              <SelectItem key={f.id} value={f.id}>
+                {f.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {!isLoading && active.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {ehRoteiro
+              ? t(
+                  "Nenhum fluxo de atendimento ativo. Publique um em Fluxos de atendimento para usá-lo aqui.",
+                )
+              : t("Nenhum fluxo ativo. Publique um follow-up em Follow-ups para usá-lo aqui.")}
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {t("Só entram fluxos publicados e ativos.")}
+          </p>
+        )}
+        {/* O roteiro não EMPURRA mensagem ao ser aberto: ele vale no próximo
+            turno da conversa. Dizer isso aqui é o que evita quem liga a regra
+            e espera sair uma mensagem na hora. */}
+        {ehRoteiro ? (
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "O roteiro de atendimento acontece na conversa: a automação abre o atendimento e a primeira pergunta sai quando o cliente responder.",
+            )}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
