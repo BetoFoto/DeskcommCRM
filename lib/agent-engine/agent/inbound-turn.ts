@@ -451,6 +451,15 @@ export const AGENT_TOOL_DEFS = {
     // é por isso que eles trazem exemplo em vez de definição.
     inputSchema: z
       .object({
+        motivo_codigo: z
+          .string()
+          .optional()
+          .describe(
+            'código do motivo: requested_human quando o cliente pede uma pessoa; critical_stage ' +
+              'quando uma etapa exige finalização humana (ex.: concluir um agendamento já coletado). ' +
+              'Não use critical_stage só porque o cliente mencionou agendamento. ' +
+              'Sem este campo, mantém requested_human. Não altera as condições para encaminhar.',
+          ),
         por_que: z
           .string()
           .optional()
