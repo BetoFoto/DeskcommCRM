@@ -190,7 +190,13 @@ function ctx(
 
 const acao = () => getAction("send_email");
 
-beforeEach(() => enviar.mockReset());
+beforeEach(() => {
+  enviar.mockReset();
+  // Sucesso por PADRÃO no dublê: um teste de recusa não pode passar só porque o
+  // transporte estourou com `undefined` — se a ação chamar o envio quando não
+  // devia, a asserção de `skipped` é quem fica vermelha, não um TypeError.
+  enviar.mockResolvedValue({ ok: true, id: "e-mail-padrao", via: "smtp" });
+});
 
 describe("send_email no schema", () => {
   it("a regra com a ação é aceita, com destinatário, assunto e corpo", () => {
