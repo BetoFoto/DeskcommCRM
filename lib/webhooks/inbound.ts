@@ -143,6 +143,21 @@ export function mapInboundPayload(
 }
 
 /**
+ * `fb.1.<instante em ms>.<clique>` — o `fbc` que o pixel da Meta escreve no
+ * navegador quando o anúncio levou a uma página.
+ *
+ * Existe porque um formulário pode mandar SÓ o `fbclid` (página sem pixel, ou
+ * pixel que não subiu): sem remontar o `fbc`, esse lead não teria identidade de
+ * navegador nenhuma para a venda ser casada. O instante é o da CAPTURA aqui
+ * (o envio do formulário), não o do clique original — o `fbclid` não carrega a
+ * hora, e inventar uma data antiga não melhoraria a atribuição. O valor cru do
+ * `fbclid` segue em `bruto`, que é a prova.
+ */
+export function fbcAPartirDoFbclid(fbclid: string, capturadoEmMs: number): string {
+  return `fb.1.${capturadoEmMs}.${fbclid}`;
+}
+
+/**
  * A atribuição de anúncio do webhook de entrada (issue #2317) — a MESMA gravação
  * do clique-pro-WhatsApp, a partir de outro transporte: o formulário.
  *
@@ -197,6 +212,22 @@ export function extrairAtribuicaoDoInbound(
     titulo: null,
     corpo: null,
     sourceUrl: null,
+    // ─── O clique de FORMULÁRIO não é `ctwa_clid` (#2317) ────────────────────
+    //
+    // Na Meta, a identidade de quem chegou por PÁGINA é o par `fbc`/`fbp` (o
+    // cookie que o pixel escreveu), não o `ctwa_clid` do anúncio
+    // clique-pro-WhatsApp. Quando o formulário manda só o `fbclid`, o `fbc` é
+    // remontado: sem ele a venda de formulário não tem NENHUMA identidade de
+    // navegador para a plataforma casar, e mandar o `fbclid` cru no lugar do
+    // `ctwa_clid` é o defeito que este campo existe para não repetir.
+    ...(plataforma === "meta_ads"
+      ? {
+          identidadeDoNavegador: {
+            fbc: fbc ?? (fbclid ? fbcAPartirDoFbclid(fbclid, Date.now()) : null),
+            fbp: chaves.fbp ?? null,
+          },
+        }
+      : {}),
     bruto: chaves,
   };
 }

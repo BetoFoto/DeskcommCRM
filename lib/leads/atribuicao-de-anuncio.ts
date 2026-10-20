@@ -55,6 +55,20 @@ export interface AtribuicaoDeAnuncio {
   titulo: string | null;
   corpo: string | null;
   sourceUrl: string | null;
+  /**
+   * A identidade do NAVEGADOR, presente quando o clique foi capturado na
+   * PÁGINA (formulário) e não no `referral` de uma conversa (#2317).
+   *
+   * A PRESENÇA deste campo é o que diz "esta captura foi na página": quem
+   * carimba lê isso para não tratar o clique como `ctwa_clid`, que é o formato
+   * do anúncio clique-pro-WhatsApp. `fbc`/`fbp` são os dois identificadores que
+   * a plataforma casa para venda vinda de página; quando a página manda só o
+   * `fbclid`, o `fbc` é remontado a partir dele no extrator.
+   */
+  identidadeDoNavegador?: {
+    fbc: string | null;
+    fbp: string | null;
+  };
   /** Payload de onde isto foi extraído — nunca descartado, é a prova. */
   bruto: Record<string, unknown>;
 }
@@ -96,6 +110,30 @@ export async function estamparAtribuicaoDoContato(
     p_metadata: {
       ad_platform: atribuicao.plataforma,
       ad_source_id: atribuicao.sourceId,
+      // ─── Captura na PÁGINA, não no `referral` da conversa (#2317) ─────────
+      //
+      // O formulário grava o clique que a landing page capturou. Sem esta
+      // marca, `lib/conversoes` leria o `ad_source_id` como `ctwa_clid` e a
+      // venda sairia com a identidade do anúncio clique-pro-WhatsApp — formato
+      // que não é deste lead. A marca é `ad_click_source: "site"` porque é a
+      // MESMA ideia que a origem de site já usa (`ad_platform: "site"`): o
+      // clique veio da página. `ad_platform` segue sendo a PLATAFORMA, que é
+      // o que o card e o livro-razão mostram.
+      //
+      // `fbc`/`fbp` só entram quando existem: `source_metadata || p_metadata`
+      // aceita nulo, mas chave nula em metadata vira consulta de `typeof
+      // "string"` que falha do mesmo jeito e suja a prova com um campo vazio.
+      ...(atribuicao.identidadeDoNavegador
+        ? {
+            ad_click_source: "site",
+            ...(atribuicao.identidadeDoNavegador.fbc
+              ? { fbc: atribuicao.identidadeDoNavegador.fbc }
+              : {}),
+            ...(atribuicao.identidadeDoNavegador.fbp
+              ? { fbp: atribuicao.identidadeDoNavegador.fbp }
+              : {}),
+          }
+        : {}),
       ad_id: atribuicao.adId,
       ad_title: atribuicao.titulo,
       ad_body: atribuicao.corpo,

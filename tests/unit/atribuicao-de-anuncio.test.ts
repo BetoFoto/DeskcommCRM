@@ -308,6 +308,10 @@ describe("atribuição de anúncio do webhook de entrada (formulário)", () => {
         p_platform: "meta_ads",
         p_metadata: expect.objectContaining({
           ad_platform: "meta_ads",
+          // A marca de que a captura foi na PÁGINA: é ela que faz a leitura
+          // entregar o lead pelo ramo SEM clique (e o transporte trocar a
+          // identidade do evento). Sem ela, o `fbclid` sairia como `ctwa_clid`.
+          ad_click_source: "site",
           // O clique da Meta (fbclid) tem precedência sobre o gclid quando o
           // formulário traz os dois — ordem declarada no extrator.
           ad_source_id: "IwAR-fbclid-do-clique",
