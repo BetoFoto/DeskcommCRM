@@ -195,3 +195,16 @@ describe("a trilha do acompanhamento diz por que encerrou", () => {
     }
   });
 });
+
+describe("o motivo do encerramento sai no idioma de quem lê", () => {
+  it("o motivo gravado tem tradução em espanhol e inglês", () => {
+    const en = JSON.parse(readFileSync("lib/i18n/traducoes/en.json", "utf8")) as Record<string, string>;
+    expect(DICIONARIO[MOTIVO_DA_VAGA_OCUPADA]?.es, "sem espanhol").toBeTruthy();
+    expect(en[MOTIVO_DA_VAGA_OCUPADA], "sem inglês").toBeTruthy();
+  });
+
+  it("a tela do acompanhamento passa o motivo pelo tradutor, e não o mostra cru", () => {
+    const fonte = readFileSync("app/app/ai/followups/enrollments/[id]/_components/DossieDoFollowup.tsx", "utf8");
+    expect(fonte).toMatch(/\{t\("Motivo"\)\}: \{t\(data\.cancel_reason\)\}/);
+  });
+});

@@ -8806,6 +8806,9 @@ export const DICIONARIO: Traducoes = {
   "acordou da espera e encontrou outro fluxo em andamento": {
     es: "despertó de la espera y encontró otro flujo en curso",
   },
+  "Outro acompanhamento já cuida deste contato": {
+    es: "Otro seguimiento ya atiende a este contacto",
+  },
   "Falhou neste passo": { es: "Falló en este paso" },
   "Não conseguiu mover o card para a etapa escolhida": {
     es: "No pudo mover la tarjeta a la etapa elegida",
