@@ -9,6 +9,7 @@ import { z } from "zod";
 import { describeWahaServer, type WahaServerCapabilities } from "@/lib/channels/waha-server";
 
 import { logger } from "@/lib/logger";
+import { wahaPayloadSchema, type WahaPayload } from "@/lib/waha/envelope";
 import { classificarFalhaDeAlcance, explicarFalhaDeAlcance } from "@/lib/net/alcance";
 
 /**
@@ -596,6 +597,98 @@ export class WahaClient {
       grupos.push({ chatId, subject });
     }
     return grupos;
+  }
+
+  /**
+   * Conversas do acervo, paginadas por offset. Medido no WAHA real (2026.7.2,
+   * NOWEB): o id vem como `id` (string) OU `id._serialized`, e a lista traz
+   * `@s.whatsapp.net`, `@lid`, `@g.us` e `status@broadcast`. Grupo e status
+   * ficam de fora: o importador só lê conversa 1:1.
+   */
+  async listarConversas(
+    session: string,
+    opts: { limit: number; offset: number },
+  ): Promise<Array<{ chatId: string; ultimaEm: number | null }>> {
+    const qs = new URLSearchParams({ limit: String(opts.limit), offset: String(opts.offset) });
+    const res = await this.fetchComTeto(`${this.baseUrl}/api/${encodeURIComponent(session)}/chats?${qs}`, {
+      headers: { "X-Api-Key": this.apiKey },
+    });
+    if (!res.ok) throw new Error(`waha_chats_${res.status}`);
+    const bruto = (await res.json().catch(() => null)) as unknown;
+    const lista = Array.isArray(bruto) ? bruto : [];
+    const conversas: Array<{ chatId: string; ultimaEm: number | null }> = [];
+    for (const item of lista) {
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      const id = o.id;
+      const chatId =
+        typeof id === "string" ? id
+        : id && typeof id === "object" && typeof (id as Record<string, unknown>)._serialized === "string"
+          ? ((id as Record<string, unknown>)._serialized as string)
+          : null;
+      if (!chatId || chatId.endsWith("@g.us") || chatId === "status@broadcast") continue;
+      const ultima = o.conversationTimestamp ?? (o.lastMessage as Record<string, unknown> | null | undefined)?.timestamp;
+      conversas.push({ chatId, ultimaEm: typeof ultima === "number" ? ultima : null });
+    }
+    return conversas;
+  }
+
+  /**
+   * Mensagens de uma conversa, SEM mídia, do mais antigo para o mais novo.
+   * Medido no 2026.7.2: o servidor ordena por `sortBy`/`sortOrder` e já filtra
+   * por `filter.timestamp.gte` (epoch em segundos); o filtro local fica por
+   * defesa. Item que o schema recusa é descartado sem derrubar a lista.
+   */
+  async listarMensagens(
+    session: string,
+    chatId: string,
+    opts: { limit: number; offset: number; desde: number },
+  ): Promise<WahaPayload[]> {
+    const qs = new URLSearchParams({
+      limit: String(opts.limit),
+      offset: String(opts.offset),
+      downloadMedia: "false",
+      sortBy: "timestamp",
+      sortOrder: "asc",
+      "filter.timestamp.gte": String(opts.desde),
+    });
+    const res = await this.fetchComTeto(
+      `${this.baseUrl}/api/${encodeURIComponent(session)}/chats/${encodeURIComponent(chatId)}/messages?${qs}`,
+      { headers: { "X-Api-Key": this.apiKey } },
+    );
+    if (!res.ok) throw new Error(`waha_messages_${res.status}`);
+    const bruto = (await res.json().catch(() => null)) as unknown;
+    const lista = Array.isArray(bruto) ? bruto : [];
+    const mensagens: WahaPayload[] = [];
+    for (const item of lista) {
+      const p = wahaPayloadSchema.safeParse(item);
+      if (!p.success) continue;
+      if (typeof p.data.timestamp !== "number" || p.data.timestamp < opts.desde) continue;
+      mensagens.push(p.data);
+    }
+    return mensagens;
+  }
+
+  /**
+   * Pede a mídia de UMA mensagem. `erro: true` quando o WhatsApp não guarda
+   * mais o arquivo (`media.error` na resposta); `url: null` sem `erro` quando
+   * a mensagem simplesmente não traz URL.
+   */
+  async baixarMidiaDaMensagem(
+    session: string,
+    chatId: string,
+    messageId: string,
+  ): Promise<{ url: string | null; erro: boolean }> {
+    const res = await this.fetchComTeto(
+      `${this.baseUrl}/api/${encodeURIComponent(session)}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}?downloadMedia=true`,
+      { headers: { "X-Api-Key": this.apiKey } },
+    );
+    if (!res.ok) throw new Error(`waha_media_${res.status}`);
+    const bruto = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    const media = bruto && typeof bruto.media === "object" ? (bruto.media as Record<string, unknown> | null) : null;
+    if (!media) return { url: null, erro: false };
+    if (media.error) return { url: null, erro: true };
+    return { url: typeof media.url === "string" && media.url ? media.url : null, erro: false };
   }
 
   /**
