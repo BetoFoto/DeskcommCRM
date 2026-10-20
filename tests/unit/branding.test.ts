@@ -846,6 +846,17 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "é o serviço da conta ChatGPT que o operador abre para conectar a assinatura. O produto não faz requests para este host; a consulta do catálogo e a inferência SIWC usam a API pública oficial em api.openai.com.",
   },
+  // ── Web Push: o serviço de push do navegador, destino do envio ──
+  "fcm.googleapis.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "serviço de push do Chrome, Edge Android, Opera e Samsung Internet: o servidor faz POST no endpoint da inscrição (`lib/notifications/web_push.ts`), e só hosts de `lib/notifications/servicos-de-push.ts` são aceitos. O destino é do fornecedor do navegador, não da instalação.",
+  },
+  "updates.push.services.mozilla.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "serviço de push do Firefox: o mesmo papel do FCM para inscrições feitas no Firefox, listado em `lib/notifications/servicos-de-push.ts`. Trocar pelo domínio do revendedor faria o aviso não chegar a aparelho nenhum.",
+  },
   "datamanager.googleapis.com": {
     categoria: "FORNECEDOR",
     motivo: "endpoint oficial da Google Data Manager API: recebe conversões e consulta o processamento na conta autorizada pela própria organização. O destino pertence ao fornecedor e não à instalação do CRM.",

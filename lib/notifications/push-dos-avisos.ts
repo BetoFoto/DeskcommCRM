@@ -30,12 +30,13 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { REFERENCIAS_DE_AVISO } from "@/lib/ai/inbox-destino";
+import { PAPEL_MINIMO_DA_CENTRAL, REFERENCIAS_DE_AVISO } from "@/lib/ai/inbox-destino";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
 
 import { truncar, type PushPayload } from "./push_payload";
 import { somDoAviso } from "./sons-da-org";
+import type { DestinoDoPush } from "./web_push";
 
 /** Sem destino próprio, o push abre a Central — onde o aviso está. */
 const CENTRAL = "/app/ai/inbox";
@@ -52,6 +53,7 @@ type Aviso = {
   ref_id: string | null;
   title: string;
   body: string | null;
+  para_user_id: string | null;
 };
 
 function destinoDaPassagem(item: Aviso): string {
@@ -65,24 +67,36 @@ function destinoDaPassagem(item: Aviso): string {
 }
 
 /**
- * O push de um aviso da Central, ou `null` quando o aviso não vai ao celular.
- * Lê o aviso do banco em vez de confiar no payload: o evento carrega só o id.
+ * O push de um aviso da Central e para quem ele vai, ou `null` quando o aviso
+ * não vai ao celular. Lê o aviso do banco em vez de confiar no payload: o
+ * evento carrega só o id.
+ *
+ * Vai a quem vê o aviso na Central: o papel mínimo da Central e, quando o aviso
+ * tem destinatário (`para_user_id`), só ele — a mesma regra de `avisoVisivelPara`.
  */
 export async function pushDoAvisoDaCentral(
   admin: SupabaseClient,
   orgId: string,
   itemId: string,
-): Promise<PushPayload | null> {
+): Promise<{ payload: PushPayload; para: DestinoDoPush } | null> {
   // ⚠️ Organização junto do id: o client é service-role e ignora RLS.
   const { data } = await admin
     .from("agent_inbox_items")
-    .select("id, kind, ref_kind, ref_id, title, body")
+    .select("id, kind, ref_kind, ref_id, title, body, para_user_id")
     .eq("organization_id", orgId)
     .eq("id", itemId)
     .maybeSingle();
   const item = data as Aviso | null;
   if (!item) return null;
+  const payload = await montarPush(admin, orgId, item);
+  if (!payload) return null;
+  const para: DestinoDoPush = item.para_user_id
+    ? { papelMinimo: PAPEL_MINIMO_DA_CENTRAL, soUsuario: item.para_user_id }
+    : { papelMinimo: PAPEL_MINIMO_DA_CENTRAL };
+  return { payload, para };
+}
 
+async function montarPush(admin: SupabaseClient, orgId: string, item: Aviso): Promise<PushPayload | null> {
   const som = somDoAviso(item);
   if (som === null) return null;
   const idioma = await idiomaDaOrganizacao(admin, orgId);
