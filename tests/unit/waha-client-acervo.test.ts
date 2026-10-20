@@ -19,6 +19,8 @@ let base = "";
 let urls: string[] = [];
 let headers: Array<string | string[] | undefined> = [];
 let forcarStatus: number | null = null;
+/** Corpo 200 que NÃO é lista: o canal respondeu, mas não o que o paginador espera. */
+let corpoForcado: string | null = null;
 let midia: unknown = fx.midia.disponivel;
 let mensagensExtras: unknown[] = [];
 
@@ -31,6 +33,7 @@ beforeAll(async () => {
       res.statusCode = forcarStatus;
       return res.end("{}");
     }
+    if (corpoForcado !== null) return res.end(corpoForcado);
     const u = new URL(req.url ?? "", "http://x");
     if (u.pathname === "/api/s1/chats") return res.end(JSON.stringify(fx.chats));
     const m = u.pathname.match(/^\/api\/s1\/chats\/([^/]+)\/messages$/);
@@ -47,6 +50,7 @@ beforeEach(() => {
   urls = [];
   headers = [];
   forcarStatus = null;
+  corpoForcado = null;
   midia = fx.midia.disponivel;
   mensagensExtras = [];
 });
@@ -56,7 +60,9 @@ const novo = () => new WahaClient(base, "chave");
 describe("listarConversas", () => {
   it("pagina por offset, lê id string e id._serialized, e exclui grupo e status", async () => {
     const r = await novo().listarConversas("s1", { limit: 50, offset: 100 });
-    expect(urls[0]).toBe("/api/s1/chats?limit=50&offset=100");
+    // Ordem ESTÁVEL por id: o cursor da importação é uma posição nesta lista, e a ordem
+    // padrão (por última mensagem) muda a cada mensagem nova, pulando conversa.
+    expect(urls[0]).toBe("/api/s1/chats?limit=50&offset=100&sortBy=id&sortOrder=asc");
     expect(headers[0]).toBe("chave");
     expect(r).toEqual([
       { chatId: "5511900000001@s.whatsapp.net", ultimaEm: 1760000300 },
@@ -67,6 +73,31 @@ describe("listarConversas", () => {
   it("status diferente de 200 vira waha_chats_<status>", async () => {
     forcarStatus = 502;
     await expect(novo().listarConversas("s1", { limit: 1, offset: 0 })).rejects.toThrow("waha_chats_502");
+  });
+
+  it.each(["{}", '{"error":"x"}', "null", "lixo"])(
+    "200 que não é lista vira waha_chats_invalido (%s), não lista vazia",
+    async (corpo) => {
+      corpoForcado = corpo;
+      await expect(novo().listarConversas("s1", { limit: 1, offset: 0 })).rejects.toThrow("waha_chats_invalido");
+    },
+  );
+});
+
+describe("paginaDeConversas", () => {
+  it("diz quantas leu do canal e a posição de cada 1:1, mesmo com grupo e status no meio", async () => {
+    const r = await novo().paginaDeConversas("s1", { limit: 4, offset: 10 });
+    expect(r.lidas).toBe(4);
+    expect(r.conversas).toEqual([
+      { chatId: "5511900000001@s.whatsapp.net", ultimaEm: 1760000300, posicao: 10 },
+      { chatId: "111111111111111@lid", ultimaEm: 1760000500, posicao: 11 },
+    ]);
+  });
+
+  it("página só de grupo: nenhuma conversa, mas lidas > 0 (não é o fim)", async () => {
+    corpoForcado = JSON.stringify([{ id: "120363000000000001@g.us" }, { id: "status@broadcast" }]);
+    const r = await novo().paginaDeConversas("s1", { limit: 2, offset: 0 });
+    expect(r).toEqual({ conversas: [], lidas: 2 });
   });
 });
 
@@ -117,6 +148,16 @@ describe("listarMensagens", () => {
       "waha_messages_500",
     );
   });
+
+  it.each(["{}", '{"error":"x"}', "null", "lixo"])(
+    "200 que não é lista vira waha_messages_invalido (%s), não fim da conversa",
+    async (corpo) => {
+      corpoForcado = corpo;
+      await expect(novo().listarMensagens("s1", "a@lid", { limit: 1, offset: 0, desde: 0 })).rejects.toThrow(
+        "waha_messages_invalido",
+      );
+    },
+  );
 });
 
 describe("baixarMidiaDaMensagem", () => {

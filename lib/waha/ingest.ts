@@ -446,7 +446,7 @@ export function resolveMessageType(p: WahaPayload): string {
   return "text";
 }
 
-function notifyNameOf(p: WahaPayload): string | null {
+export function notifyNameOf(p: WahaPayload): string | null {
   return p._data?.notifyName ?? p._data?.pushName ?? null;
 }
 
@@ -804,7 +804,7 @@ function textoNaoVazio(v: unknown): string | null {
  * linhas para uma reação) e ainda carimbaria a conversa. A linha certa é a do
  * ramo `message.reaction`, ligada ao alvo.
  */
-function ehReacao(p: WahaPayload): boolean {
+export function ehReacao(p: WahaPayload): boolean {
   return p.type === "reaction" || objetoSimples(p.reaction) !== null;
 }
 

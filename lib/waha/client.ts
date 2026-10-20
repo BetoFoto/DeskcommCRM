@@ -609,16 +609,44 @@ export class WahaClient {
     session: string,
     opts: { limit: number; offset: number },
   ): Promise<Array<{ chatId: string; ultimaEm: number | null }>> {
-    const qs = new URLSearchParams({ limit: String(opts.limit), offset: String(opts.offset) });
+    const { conversas } = await this.paginaDeConversas(session, opts);
+    return conversas.map(({ chatId, ultimaEm }) => ({ chatId, ultimaEm }));
+  }
+
+  /**
+   * A mesma página de `listarConversas`, com o que o paginador precisa para
+   * não confundir "acabou" com "a página só tinha grupo": `lidas` é quantos
+   * itens o canal devolveu ANTES do corte de grupo/status, e `posicao` é o
+   * offset de cada conversa 1:1 na lista do canal (o cursor da importação).
+   *
+   * `sortBy=id&sortOrder=asc`: a ordem padrão é pela última mensagem, e uma
+   * mensagem nova move a conversa para o topo — o cursor por posição pularia
+   * uma conversa inteira. Por id, conversa nova só desloca as seguintes (uma
+   * repetida, que a deduplicação recusa), nunca some uma. NÃO medido no
+   * servidor real: um canal que ignore os parâmetros volta à ordem padrão.
+   *
+   * Resposta 200 que não é lista lança `waha_chats_invalido`: virar lista vazia
+   * faria o paginador concluir a importação no meio.
+   */
+  async paginaDeConversas(
+    session: string,
+    opts: { limit: number; offset: number },
+  ): Promise<{ conversas: Array<{ chatId: string; ultimaEm: number | null; posicao: number }>; lidas: number }> {
+    const qs = new URLSearchParams({
+      limit: String(opts.limit),
+      offset: String(opts.offset),
+      sortBy: "id",
+      sortOrder: "asc",
+    });
     const res = await this.fetchComTeto(`${this.baseUrl}/api/${encodeURIComponent(session)}/chats?${qs}`, {
       headers: { "X-Api-Key": this.apiKey },
     });
     if (!res.ok) throw new Error(`waha_chats_${res.status}`);
     const bruto = (await res.json().catch(() => null)) as unknown;
-    const lista = Array.isArray(bruto) ? bruto : [];
-    const conversas: Array<{ chatId: string; ultimaEm: number | null }> = [];
-    for (const item of lista) {
-      if (!item || typeof item !== "object") continue;
+    if (!Array.isArray(bruto)) throw new Error("waha_chats_invalido");
+    const conversas: Array<{ chatId: string; ultimaEm: number | null; posicao: number }> = [];
+    bruto.forEach((item, i) => {
+      if (!item || typeof item !== "object") return;
       const o = item as Record<string, unknown>;
       const id = o.id;
       const chatId =
@@ -626,11 +654,11 @@ export class WahaClient {
         : id && typeof id === "object" && typeof (id as Record<string, unknown>)._serialized === "string"
           ? ((id as Record<string, unknown>)._serialized as string)
           : null;
-      if (!chatId || chatId.endsWith("@g.us") || chatId === "status@broadcast") continue;
+      if (!chatId || chatId.endsWith("@g.us") || chatId === "status@broadcast") return;
       const ultima = o.conversationTimestamp ?? (o.lastMessage as Record<string, unknown> | null | undefined)?.timestamp;
-      conversas.push({ chatId, ultimaEm: typeof ultima === "number" ? ultima : null });
-    }
-    return conversas;
+      conversas.push({ chatId, ultimaEm: typeof ultima === "number" ? ultima : null, posicao: opts.offset + i });
+    });
+    return { conversas, lidas: bruto.length };
   }
 
   /**
@@ -658,7 +686,9 @@ export class WahaClient {
     );
     if (!res.ok) throw new Error(`waha_messages_${res.status}`);
     const bruto = (await res.json().catch(() => null)) as unknown;
-    const lista = Array.isArray(bruto) ? bruto : [];
+    // 200 que não é lista NÃO é conversa vazia: o paginador a daria por terminada.
+    if (!Array.isArray(bruto)) throw new Error("waha_messages_invalido");
+    const lista = bruto;
     const mensagens: WahaPayload[] = [];
     for (const item of lista) {
       const p = wahaPayloadSchema.safeParse(item);
