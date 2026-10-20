@@ -7,7 +7,14 @@
  * da conversa (`last_message_*`, não lidas), nem `emit_event`. O que os
  * gatilhos de `messages` fariam, a 0704 corta pela chave
  * `metadata.historico_importado = 'true'` que o mapeador põe em toda linha.
- * Mídia é passo à parte: aqui só fica o `media_status` que o mapeador devolve.
+ * Mídia (só imagem e áudio): logo depois de gravar cada página, `resolverMidias`
+ * pede ao canal a URL; com URL, grava `media_url` e emite `media.persist_requested`
+ * (o worker guarda no storage e, por causa da chave do histórico, NÃO deriva);
+ * sem URL (`erro: true`), marca `indisponivel` e não tenta de novo. Vídeo,
+ * documento e figurinha ficam `fora_do_escopo`, sem chamada. Se o teto de
+ * chamadas acabar no meio das mídias da página, a rodada para ANTES de firmar o
+ * cursor dela: a página é refeita, as mensagens contam como existentes e só as
+ * mídias ainda `pendente` são tentadas.
  * Auditoria é de quem chama (as rotas).
  *
  * ─── Rodadas curtas que retomam ─────────────────────────────────────────────
@@ -95,6 +102,8 @@ interface Importacao {
   mensagens_gravadas: number | null;
   mensagens_existentes: number | null;
   mensagens_ignoradas: number | null;
+  midias_baixadas: number | null;
+  midias_indisponiveis: number | null;
 }
 
 function mensagemDeErro(err: unknown): string {
@@ -128,6 +137,9 @@ export async function rodarUmaRodada(
     desde: cursorSalvo.desde ?? Math.floor(Date.now() / 1000) - imp.dias * SEGUNDOS_POR_DIA,
   };
   const desta = { conversas: 0, gravadas: 0, existentes: 0, ignoradas: 0 };
+  // Fora de `desta` de propósito: mídia resolvida não volta a `pendente` quando a
+  // rodada recua o cursor, então o contador não pode recuar junto.
+  const midias = { baixadas: 0, indisponiveis: 0 };
 
   /**
    * Grava SÓ se a importação ainda está `rodando`: um cancelamento feito
@@ -146,6 +158,8 @@ export async function rodarUmaRodada(
         mensagens_gravadas: (imp.mensagens_gravadas ?? 0) + desta.gravadas,
         mensagens_existentes: (imp.mensagens_existentes ?? 0) + desta.existentes,
         mensagens_ignoradas: (imp.mensagens_ignoradas ?? 0) + desta.ignoradas,
+        midias_baixadas: (imp.midias_baixadas ?? 0) + midias.baixadas,
+        midias_indisponiveis: (imp.midias_indisponiveis ?? 0) + midias.indisponiveis,
         updated_at: new Date().toISOString(),
         ...extra,
       } as never)
@@ -240,6 +254,7 @@ export async function rodarUmaRodada(
           if (lidas === 0) break;
 
           // O que o schema recusou também foi lido e não vira linha.
+          const ignoradasAntes = desta.ignoradas;
           desta.ignoradas += lidas - mensagens.length;
           const validas: WahaPayload[] = [];
           for (const p of mensagens) {
@@ -255,6 +270,20 @@ export async function rodarUmaRodada(
               const r = await gravarMensagens(admin, imp, alvo, validas);
               desta.gravadas += r.gravadas;
               desta.existentes += r.existentes;
+              const completa = await resolverMidias(admin, imp, canal, nomeNoCanal, conversa.chatId, alvo.conversationId, validas, {
+                noTeto,
+                contarChamada: () => {
+                  chamadas += 1;
+                },
+                midias,
+              });
+              if (!completa) {
+                // Teto de chamadas no meio das mídias: a página inteira é refeita
+                // na próxima rodada, então o cursor fica no último ponto firme.
+                Object.assign(cursor, cursorFirme);
+                desta.ignoradas = ignoradasAntes;
+                return await encerrar("rodando");
+              }
             }
           }
           processadas += lidas;
@@ -380,4 +409,112 @@ async function gravarMensagens(
     else throw new Error(`messages_insert: ${mensagemDeErro(error)}`);
   }
   return { gravadas, existentes };
+}
+
+/** Cliente do canal, só com o que `resolverMidias` usa. */
+type CanalDeMidia = { baixarMidiaDaMensagem(session: string, chatId: string, messageId: string): Promise<{ url: string | null; erro: boolean }> };
+
+/**
+ * Resolve a mídia (imagem e áudio) das mensagens DESTA página, as recém-gravadas
+ * e as que já existiam como `pendente` (página refeita). Devolve `false` quando o
+ * teto de chamadas acabou antes de resolver todas: quem chama não firma o cursor.
+ *
+ * Erro de transporte (exceção do canal) NÃO é tratado aqui: sobe para a rodada,
+ * que para com o cursor firme anterior e tenta de novo depois. Só `erro: true`
+ * (o canal diz que a mídia não existe mais) vira `indisponivel`.
+ */
+async function resolverMidias(
+  admin: SupabaseClient,
+  imp: Importacao,
+  canal: CanalDeMidia,
+  nomeNoCanal: string,
+  chatId: string,
+  conversationId: string,
+  mensagens: WahaPayload[],
+  ctl: {
+    noTeto: () => boolean;
+    contarChamada: () => void;
+    midias: { baixadas: number; indisponiveis: number };
+  },
+): Promise<boolean> {
+  // external_id candidato -> id da mensagem no canal, só das que o mapeador marca `pendente`.
+  const idNoCanal = new Map<string, string>();
+  for (const p of mensagens) {
+    const linha = mapearMensagemDoAcervo(p, {
+      orgId: imp.organization_id,
+      sessionId: imp.channel_session_id,
+      contactId: "",
+      conversationId,
+    });
+    if (linha.metadata.media_status !== "pendente" || !p.id) continue;
+    for (const c of candidatosDeExternalId(p)) idNoCanal.set(c, p.id);
+  }
+  if (idNoCanal.size === 0) return true;
+
+  const { data, error } = await admin
+    .from("messages")
+    .select("id, external_id, metadata")
+    .eq("organization_id", imp.organization_id)
+    .in("external_id", [...idNoCanal.keys()]);
+  if (error) throw new Error(`messages_consulta_midia: ${mensagemDeErro(error)}`);
+
+  const linhas = (data ?? []) as Array<{ id: string; external_id: string; metadata: Record<string, unknown> | null }>;
+  for (const linha of linhas) {
+    const meta = linha.metadata ?? {};
+    // Só o que o importador marcou e ainda ninguém resolveu.
+    if (meta.historico_importado !== "true" || meta.media_status !== "pendente") continue;
+    const messageIdNoCanal = idNoCanal.get(linha.external_id);
+    if (!messageIdNoCanal) continue;
+
+    if (ctl.noTeto()) return false;
+    ctl.contarChamada();
+    const { url, erro } = await canal.baixarMidiaDaMensagem(nomeNoCanal, chatId, messageIdNoCanal);
+
+    if (!url) {
+      // `erro: true` é "indisponível, não tente de novo". Sem URL e sem erro o
+      // canal não devolveu o arquivo agora (não é veredito): fica `pendente`, sem
+      // contar, e a rodada segue. Só uma página refeita voltaria a tentar.
+      if (erro) {
+        await atualizarMensagem(admin, imp, linha.id, { metadata: { ...meta, media_status: "indisponivel" } });
+        ctl.midias.indisponiveis += 1;
+      }
+      continue;
+    }
+
+    // `solicitada` (e não `pendente`) para uma página refeita não pedir de novo; o
+    // worker troca por `stored`. Leia-modifique-escreva: `historico_importado` fica.
+    await atualizarMensagem(admin, imp, linha.id, {
+      media_url: url,
+      metadata: { ...meta, media_status: "solicitada" },
+    });
+    const { error: erroDoEmit } = await admin.rpc("emit_event" as never, {
+      p_event_type: "media.persist_requested",
+      p_entity_kind: "message",
+      p_entity_id: linha.id,
+      p_payload: { message_id: linha.id, conversation_id: conversationId },
+      p_metadata: { source: "historico_importado" },
+      p_organization_id: imp.organization_id,
+    } as never);
+    if (erroDoEmit) {
+      // Desfaz para a próxima rodada tentar de novo; o pedido não saiu.
+      await atualizarMensagem(admin, imp, linha.id, { media_url: null, metadata: meta });
+      throw new Error(`emit_event: ${mensagemDeErro(erroDoEmit)}`);
+    }
+    ctl.midias.baixadas += 1;
+  }
+  return true;
+}
+
+async function atualizarMensagem(
+  admin: SupabaseClient,
+  imp: Importacao,
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await admin
+    .from("messages")
+    .update(patch as never)
+    .eq("id", id)
+    .eq("organization_id", imp.organization_id);
+  if (error) throw new Error(`messages_update_midia: ${mensagemDeErro(error)}`);
 }
