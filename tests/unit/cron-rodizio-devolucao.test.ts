@@ -72,7 +72,16 @@ let respostas: Record<string, () => { data: unknown; error: { message: string } 
 let erroDeUpdate: Record<string, string>;
 
 const SQL_NULL = Symbol("SQL NULL");
-const ehSqlNull = (v: unknown): boolean => v === SQL_NULL;
+/**
+ * Nulo para efeito de `is.null`/`not.is.null`.
+ *
+ * Numa COLUNA comum (`next_attempt_at`), o `null` do JS É o NULL do SQL. Num
+ * CAMINHO jsonb (`a->b`), não: `->` preserva o `null` do JSON (que não é SQL
+ * NULL) e é justamente por isso que `->` e `->>` divergem. A distinção é por
+ * coluna, como no molde.
+ */
+const ehNulo = (coluna: string, v: unknown): boolean =>
+  v === SQL_NULL || (!coluna.includes("->") && v === null);
 
 /**
  * As semânticas do PostgREST para `coluna->a->b` e `coluna->a->>b`, como no
@@ -105,26 +114,30 @@ function passa(f: Filtro, linha: Linha): boolean {
       // Filtro não modelado ESTOURA, nunca passa batido: um `every` permissivo
       // transforma "não medi" em "está certo".
       if (a !== "is" || b !== null) throw new Error(`not(${String(a)}) não modelado`);
-      return !ehSqlNull(navegarJsonb(coluna, linha));
+      return !ehNulo(coluna, navegarJsonb(coluna, linha));
     case "is":
       if (a !== null) throw new Error(`is(${String(a)}) não modelado`);
-      return ehSqlNull(navegarJsonb(coluna, linha));
+      return ehNulo(coluna, navegarJsonb(coluna, linha));
     case "eq":
       return navegarJsonb(coluna, linha) === a;
     case "in":
       return (a as unknown[]).includes(navegarJsonb(coluna, linha));
     case "lte":
       return String(navegarJsonb(coluna, linha)) <= String(b);
-    case "or":
-      // O `or` do worker (`next_attempt_at.is.null,...lte.<iso>`): modelado no
-      // mínimo, e o que não casar o padrão estoura em vez de passar.
-      return (a as string).split(",").some((clausula) => {
+    case "or": {
+      // O `or` do worker (`next_attempt_at.is.null,...lte.<iso>`): aqui o único
+      // argumento é a EXPRESSÃO, não uma coluna. Modelado no mínimo, e o que não
+      // casar o padrão estoura em vez de passar.
+      const [expressao] = f.args as [string];
+      return expressao.split(",").some((clausula) => {
         const m = /^([a-z_]+)\.(is\.null|lte\.(.+)|eq\.(.+))$/.exec(clausula);
         if (!m) throw new Error(`or não modelado: ${clausula}`);
-        if (m[2] === "is.null") return ehSqlNull(navegarJsonb(m[1]!, linha));
-        if (m[3] !== undefined) return String(navegarJsonb(m[1]!, linha)) <= m[3];
-        return String(navegarJsonb(m[1]!, linha)) === m[4];
+        const valor = String(navegarJsonb(m[1]!, linha));
+        if (m[2] === "is.null") return ehNulo(m[1]!, navegarJsonb(m[1]!, linha));
+        if (m[3] !== undefined) return valor <= m[3];
+        return valor === m[4];
       });
+    }
   }
 }
 
@@ -208,7 +221,16 @@ vi.mock("@/lib/audit", () => ({ audit: (...a: unknown[]) => auditar(...a) }));
 vi.mock("@/lib/logger", () => ({
   logger: { error: (...a: unknown[]) => erroDeLog(...a), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
-vi.mock("@/lib/routing/decide", () => ({ decideRouting: (...a: unknown[]) => decidir(...a) }));
+vi.mock("@/lib/routing/decide", () => ({
+  decideRouting: (...a: unknown[]) => decidir(...a),
+  // O worker resolve o roteamento POR NÚMERO antes de decidir (#2331). Aqui a
+  // regra do número é ausente, então o efetivo é o da organização — o mesmo
+  // desfecho do `resolverRoteamentoPorNumero` real, sem arrastar o módulo.
+  resolverRoteamentoPorNumero: (config: { mode: string }, regra?: { distribution_mode?: string; default_assignee_user_id?: string | null } | null) => ({
+    mode: regra?.distribution_mode ?? config.mode,
+    defaultAssigneeUserId: regra?.default_assignee_user_id ?? null,
+  }),
+}));
 vi.mock("@/lib/routing/eligibles", () => ({
   InvalidRoutingChannel: class InvalidRoutingChannel extends Error {},
   loadEligibleAttendants: (...a: unknown[]) => elegiveis(...a),
@@ -318,7 +340,7 @@ describe("GET /api/v1/cron/rodizio-devolucao", () => {
     ]);
 
     // A marca, como ela tem de ficar: a pessoa fora por 24 h e a devolução contada.
-    const marca = banco.conversations[0]?.metadata as Record<string, unknown> | undefined;
+    const marca = banco.conversations?.[0]?.metadata as Record<string, unknown> | undefined;
     expect(marca?.[CHAVE_DA_DEVOLUCAO_AO_RODIZIO]).toMatchObject({ devolucoes: 1 });
     const exclusoes = (marca?.[CHAVE_DA_DEVOLUCAO_AO_RODIZIO] as { exclusoes: unknown[] }).exclusoes;
     expect(exclusoes).toEqual([{ user_id: PESSOA_A, ate: expect.any(String) }]);
@@ -401,7 +423,7 @@ describe("GET /api/v1/cron/rodizio-devolucao", () => {
     expect(trilha[2]?.valores?.metadata).toEqual({});
 
     expect(rpcs.some((r) => r.fn === "fn_request_channel_routing")).toBe(false);
-    expect(banco.conversations[0]?.metadata).toEqual({});
+    expect(banco.conversations?.[0]?.metadata).toEqual({});
     expect(auditar).not.toHaveBeenCalled();
     expect(erroDeLog).not.toHaveBeenCalled();
   });
@@ -410,7 +432,7 @@ describe("GET /api/v1/cron/rodizio-devolucao", () => {
     respostas.fn_conversation_assign = () => ({ data: null, error: { message: "deadlock detected" } });
     const res = await chamar();
     expect(await corpoDe(res)).toMatchObject({ devolvidas: 0, falhas: 1 });
-    expect(banco.conversations[0]?.metadata).toEqual({});
+    expect(banco.conversations?.[0]?.metadata).toEqual({});
     expect(rpcs.some((r) => r.fn === "fn_request_channel_routing")).toBe(false);
     expect(auditar).toHaveBeenCalledTimes(1);
     expect(auditar.mock.calls[0]?.[0]).toMatchObject({
@@ -510,7 +532,11 @@ describe("o worker respeita a exclusão de 24 h ao decidir o rodízio", () => {
         metadata: excluidaAte24h(PESSOA_A),
       }),
     ];
-    await runRoutingWorker({ now: new Date(AGORA) });
+    // Precondição da cerca: o worker de fato processou o evento — sem isto, "não
+    // filtrou" e "nem chegou ao decideRouting" ficariam indistinguíveis.
+    const resumo = await runRoutingWorker({ now: new Date(AGORA) });
+    expect(resumo.errors).toEqual([]);
+    expect(resumo.batch_size).toBe(1);
 
     const entrada = decidir.mock.calls[0]?.[0] as { eligibles: Array<{ userId: string }> };
     expect(entrada.eligibles.map((c) => c.userId)).toEqual([PESSOA_B]);

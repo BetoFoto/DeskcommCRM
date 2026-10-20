@@ -178,16 +178,22 @@ describe("avaliarEntregaAoRodizio — quem vence, e por quê", () => {
   });
 
   it("prazo acima de 3 h nunca dispara — quando vence, a entrega já é estoque antigo", () => {
-    // 240 min de prazo: aos 200 min ainda está dentro do prazo; aos 250 já saiu
-    // da janela. Documentado, porque é consequência da trava, não defeito.
-    expect(avaliarEntregaAoRodizio(conversa({ entregueEm: min(200) }), selecao(240))).toEqual({
+    // Com 240 min de prazo, a conversa só "venceria" aos 240 — idade em que já
+    // saiu da janela de 3 h. Documentado, porque é consequência da trava.
+    expect(avaliarEntregaAoRodizio(conversa({ entregueEm: min(120) }), selecao(240))).toEqual({
       candidata: false,
       motivo: "dentro_do_prazo",
     });
-    expect(avaliarEntregaAoRodizio(conversa({ entregueEm: min(250) }), selecao(240))).toEqual({
+    expect(avaliarEntregaAoRodizio(conversa({ entregueEm: min(241) }), selecao(240))).toEqual({
       candidata: false,
       motivo: "entrega_antiga",
     });
+    // A regra em uma linha: nenhuma idade de entrega faz o prazo de 240 disparar.
+    const idades = Array.from({ length: 61 }, (_, i) => i * 5);
+    for (const idade of idades) {
+      const r = avaliarEntregaAoRodizio(conversa({ entregueEm: min(idade) }), selecao(240));
+      expect(r).toMatchObject({ candidata: false });
+    }
   });
 
   it("a trava é a MESMA da constante: 3 horas", () => {
