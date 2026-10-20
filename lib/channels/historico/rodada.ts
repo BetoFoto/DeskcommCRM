@@ -39,7 +39,7 @@ import {
   identidadeDoChat,
   mapearMensagemDoAcervo,
   type LinhaDeMensagemImportada,
-} from "@/lib/whatsapp-historico/mapear";
+} from "@/lib/channels/historico/mapear";
 
 export interface TetoDaRodada {
   conversas: number;

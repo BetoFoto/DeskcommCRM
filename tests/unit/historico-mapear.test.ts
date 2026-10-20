@@ -4,7 +4,7 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 
 import fixture from "@/lib/waha/__fixtures__/acervo-noweb-2026.7.2.json";
 import { externalIdDeEntrada, externalIdDeSaida, type WahaPayload } from "@/lib/waha/ingest";
-import { candidatosDeExternalId, identidadeDoChat, mapearMensagemDoAcervo } from "@/lib/whatsapp-historico/mapear";
+import { candidatosDeExternalId, identidadeDoChat, mapearMensagemDoAcervo } from "@/lib/channels/historico/mapear";
 
 const ctx = { orgId: "org-1", sessionId: "sess-1", contactId: "ct-1", conversationId: "cv-1" };
 const msgs = fixture.messages as unknown as Record<string, WahaPayload[]>;

@@ -45,7 +45,7 @@ vi.mock("@/lib/waha/client", () => ({
   }),
 }));
 
-import { rodarUmaRodada } from "@/lib/whatsapp-historico/rodada";
+import { rodarUmaRodada } from "@/lib/channels/historico/rodada";
 
 const ORG = "org-1";
 const SESSAO = "sess-1";

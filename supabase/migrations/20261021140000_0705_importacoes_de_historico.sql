@@ -3,7 +3,7 @@
 -- ---- estado da importação do histórico do WhatsApp (migration 0705, #999) ----
 --
 -- A importação traz do celular as conversas anteriores à conexão do número, em
--- RODADAS curtas que retomam de onde pararam (`lib/whatsapp-historico/rodada.ts`).
+-- RODADAS curtas que retomam de onde pararam (`lib/channels/historico/rodada.ts`).
 -- O cursor e os contadores precisam sobreviver entre uma rodada e outra, e a
 -- tela precisa ler o andamento: daí a tabela.
 --
