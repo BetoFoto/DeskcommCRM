@@ -472,19 +472,23 @@ describe("limite de envio por organização", () => {
  *   4. sem `{{resumo}}` no modelo, a ação NÃO lê as tabelas do resumo (o dublê
  *      estoura em qualquer tabela que não seja `user_organizations`).
  */
-const MEMBRO_ID = "membro-1";
+const MEMBRO_ID = "66666666-6666-4666-8666-666666666666";
 const EQUIPE_COM_MEMBRO: Vinculo[] = [
   { user_id: MEMBRO_ID, organization_id: "org-1", revoked_at: null },
 ];
 const ACESSO_DO_MEMBRO = (id: string) => (id === MEMBRO_ID ? "pessoa@estudio.com" : null);
 
+/** O modelo sem `{{resumo}}`: é o que a maioria das regras de e-mail tem. */
 const CONFIG_MEMBRO = {
   destinatario: "membro_da_equipe",
   membro_id: MEMBRO_ID,
   assunto: "Negócio ganho: {{lead.title}}",
-  corpo: "Oi!\n\n{{resumo}}",
+  corpo: "Oi! O negócio {{lead.title}} foi ganho.",
   formato: "texto",
 };
+
+/** O mesmo destinatário, com o resumo automático no corpo. */
+const CONFIG_COM_RESUMO = { ...CONFIG_MEMBRO, corpo: "Oi!\n\n{{resumo}}" };
 
 /** O lead do contexto, com o `contact_id` que liga o negócio ao checkpoint. */
 function contextoDoResumo(): Record<string, unknown> {
@@ -594,7 +598,7 @@ describe("send_email — a variável {{resumo}} (#2642)", () => {
 
     await acao()!.execute(
       ctx(contextoDoResumo(), EQUIPE_COM_MEMBRO, null, leitura, ACESSO_DO_MEMBRO),
-      CONFIG_MEMBRO,
+      CONFIG_COM_RESUMO,
     );
 
     const pedido = enviar.mock.calls[0]![0];
@@ -619,12 +623,13 @@ describe("send_email — a variável {{resumo}} (#2642)", () => {
     enviar.mockResolvedValue({ ok: true, id: "e-mail-simples", via: "smtp" });
     const leitura: Leitura = { tabelas: tabelasDoResumo(), lidas: [] };
 
-    // O dublê de `ctx` estoura em qualquer tabela que não seja
-    // `user_organizations` quando o resumo não é pedido: se a ação passasse a
-    // carregar o resumo sempre, este teste viraria `failed` em vez de `success`.
+    // Montar o resumo custa três consultas: quem não usa a variável não paga
+    // por elas. (Nos outros testes do bloco o `resumo` é `null`, e o dublê
+    // ESTOURA em qualquer tabela que não seja `user_organizations` — é a mesma
+    // prova, pelo lado de quem carrega demais.)
     const r = await acao()!.execute(
-      ctx(contextoDoResumo(), EQUIPE_COM_MEMBRO, null, null, ACESSO_DO_MEMBRO),
-      { ...CONFIG_MEMBRO, corpo: "Oi! Seu negócio foi ganho." },
+      ctx(contextoDoResumo(), EQUIPE_COM_MEMBRO, null, leitura, ACESSO_DO_MEMBRO),
+      CONFIG_MEMBRO,
     );
 
     expect(r.status).toBe("success");
@@ -637,7 +642,7 @@ describe("send_email — a variável {{resumo}} (#2642)", () => {
 
     await acao()!.execute(
       ctx(contextoDoResumo(), EQUIPE_COM_MEMBRO, null, leitura, ACESSO_DO_MEMBRO),
-      { ...CONFIG_MEMBRO, corpo: "<p>{{resumo}}</p>", formato: "html" },
+      { ...CONFIG_COM_RESUMO, corpo: "<p>{{resumo}}</p>", formato: "html" },
     );
 
     const pedido = enviar.mock.calls[0]![0];
