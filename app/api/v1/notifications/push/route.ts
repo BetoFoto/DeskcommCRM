@@ -16,12 +16,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { lerTelaBloqueada } from "@/lib/notifications/tela-bloqueada";
 import { vapidPronto, vapidPublica } from "@/lib/notifications/vapid";
+import { ehServicoDePushConhecido } from "@/lib/notifications/servicos-de-push";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
 
 const subSchema = z.object({
-  endpoint: z.string().url(),
+  endpoint: z.string().url().refine(ehServicoDePushConhecido, "Serviço de push não reconhecido."),
   keys: z.object({
     p256dh: z.string().min(1),
     auth: z.string().min(1),

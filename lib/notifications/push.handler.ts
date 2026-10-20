@@ -172,11 +172,11 @@ async function handleGroupInbound(row: EventRow): Promise<HandlerResult> {
 async function handleAvisoQuePedeGente(row: EventRow): Promise<HandlerResult> {
   const id = typeof row.payload.item_id === "string" ? row.payload.item_id : row.entity_id;
   if (!id) return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "skipped", detail: "sem_alvo" };
-  const payload = await pushDoAvisoDaCentral(createAdminClient(), row.organization_id, id);
-  if (payload === null) {
+  const aviso = await pushDoAvisoDaCentral(createAdminClient(), row.organization_id, id);
+  if (aviso === null) {
     return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "skipped", detail: "aviso_fora_do_celular" };
   }
-  const { sent } = await enviarPushDaOrg(row.organization_id, payload);
+  const { sent } = await enviarPushDaOrg(row.organization_id, aviso.payload, aviso.para);
   return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "ok", detail: `sent:${sent}` };
 }
 

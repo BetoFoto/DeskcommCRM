@@ -1,6 +1,8 @@
 /**
  * DELETE /api/v1/notifications/push — remove a inscrição deste aparelho e
  * audita quando removeu (sem efeito, sem auditoria).
+ * PUT — a inscrição aceita só serviços de push conhecidos; o resto é 422 pelo
+ * `fail()` canônico, sem gravar nada.
  *
  * Roda com: npx vitest run app/api/v1/notifications/push/route.test.ts
  */
@@ -12,6 +14,7 @@ const estado = vi.hoisted(() => ({
   removidas: [] as Array<{ organization_id: string }>,
   filtros: [] as Array<[string, unknown]>,
   audit: vi.fn(),
+  upsert: vi.fn(async () => ({ error: null })),
 }));
 
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: async () => null }));
@@ -33,6 +36,7 @@ vi.mock("@/lib/supabase/server", () => ({
           return q;
         },
         select: async () => ({ data: estado.removidas, error: null }),
+        upsert: estado.upsert,
       };
       return q;
     },
@@ -42,8 +46,9 @@ vi.mock("@/lib/supabase/server", () => ({
 const telaBloqueada = vi.hoisted(() => ({ ler: vi.fn(async () => ({ modo: "nome", idioma: "pt-BR" })) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ admin: true }) }));
 vi.mock("@/lib/notifications/tela-bloqueada", () => ({ lerTelaBloqueada: telaBloqueada.ler }));
+vi.mock("@/lib/notifications/vapid", () => ({ vapidPronto: () => true, vapidPublica: () => "pub" }));
 
-import { DELETE, GET } from "./route";
+import { DELETE, GET, PUT } from "./route";
 
 function pedido(corpo: unknown) {
   return new NextRequest("http://localhost/api/v1/notifications/push", {
@@ -56,6 +61,30 @@ beforeEach(() => {
   estado.removidas = [];
   estado.filtros = [];
   estado.audit.mockReset();
+  estado.upsert.mockClear();
+});
+
+function inscricao(endpoint: string) {
+  return new NextRequest("http://localhost/api/v1/notifications/push", {
+    method: "PUT",
+    body: JSON.stringify({ endpoint, keys: { p256dh: "k", auth: "a" } }),
+  });
+}
+
+describe("PUT da inscrição de push", () => {
+  it("serviço conhecido é gravado", async () => {
+    const res = await PUT(inscricao("https://fcm.googleapis.com/fcm/send/abc"));
+    expect(res.status).toBe(200);
+    expect(estado.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("serviço desconhecido é 422 e não grava", async () => {
+    const res = await PUT(inscricao("https://fcm.googleapis.com.evil.tld/fcm/send/abc"));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(estado.upsert).not.toHaveBeenCalled();
+  });
 });
 
 describe("DELETE /api/v1/notifications/push", () => {
