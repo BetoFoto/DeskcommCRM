@@ -1,6 +1,6 @@
 /**
  * GET/PUT /api/v1/agenda/aviso — a configuração do aviso de agendamento no
- * WhatsApp do dono (migration 0704).
+ * WhatsApp do dono (migration 0707).
  *
  * O desenho é o da rota do aviso de caso (`app/api/v1/ai/cases/alerta`), e
  * pelas mesmas razões, escritas lá por extenso:
@@ -60,7 +60,7 @@ const corpo = z
     message: "channel_session_id e telefone são obrigatórios sem o número do aviso de caso",
   });
 
-/** O que cada exceção do RPC vira no wire. Os nomes são contrato da 0704. */
+/** O que cada exceção do RPC vira no wire. Os nomes são contrato da 0707. */
 const RECUSAS_DO_RPC = {
   aviso_de_agendamento_forbidden: {
     code: "forbidden_role",

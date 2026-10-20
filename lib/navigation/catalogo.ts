@@ -416,7 +416,7 @@ export const NAV_CATALOG = [
     // na navegação" — a porta existia, era outra.
   },
   {
-    // O aviso de agendamento no WhatsApp do dono (migration 0704). Fica junto
+    // O aviso de agendamento no WhatsApp do dono (migration 0707). Fica junto
     // dos tipos de agendamento porque é configuração da agenda do NEGÓCIO, não
     // do dia de quem atende. "Aviso de agendamento", nunca "Aviso no WhatsApp":
     // esse já é o nome do aviso de CASO, e dois destinos com o mesmo rótulo na

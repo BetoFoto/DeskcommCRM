@@ -16462,7 +16462,7 @@ export const DICIONARIO: Traducoes = {
   "Sim ou não": { es: "Sí o no" },
   "Link (URL)": { es: "Enlace (URL)" },
   "O agente terminou sem propor uma resposta. Pode ter sido uma decisão (por exemplo, diante de uma mensagem automática) ou a geração ter parado antes da resposta. Se esperava uma, gere de novo; senão, não há nada a enviar.": { es: "El agente terminó sin proponer una respuesta. Pudo ser una decisión (por ejemplo, ante un mensaje automático) o que la generación se detuviera antes de la respuesta. Si esperabas una, genera de nuevo; si no, no hay nada que enviar." },
-  // ── Aviso de agendamento no WhatsApp (migration 0704) ──
+  // ── Aviso de agendamento no WhatsApp (migration 0707) ──
   "Aviso de agendamento": { es: "Aviso de cita" },
   "Receba no WhatsApp cada horário marcado, remarcado ou cancelado, e às 7h o resumo do dia.": { es: "Recibe en WhatsApp cada cita agendada, reprogramada o cancelada, y a las 7h el resumen del día." },
   "Das 22h às 7h não sai aviso, para não acordar ninguém: o que for marcado nesse horário aparece no resumo das 7h. O horário é o da empresa.": { es: "De 22h a 7h no se envían avisos, para no despertar a nadie: lo que se agende en ese horario aparece en el resumen de las 7h. El horario es el de la empresa." },

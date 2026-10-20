@@ -288,7 +288,7 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
   {
     fn: "fn_definir_aviso_de_agendamento(uuid,boolean,uuid,text,boolean,boolean)",
     razao:
-      "A ÚNICA porta de escrita de `config_aviso_de_agendamento` (migration 0704) — " +
+      "A ÚNICA porta de escrita de `config_aviso_de_agendamento` (migration 0707) — " +
       "a tabela só tem `grant select` sob RLS de admin. PUT " +
       "app/api/v1/agenda/aviso/route.ts chama com createClient da sessão. A função " +
       "exige auth.uid(), fn_role_at_least(p_org,'admin'), " +

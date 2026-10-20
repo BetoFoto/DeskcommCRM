@@ -1,5 +1,5 @@
 /**
- * QUEM CONFIGURA O AVISO DE AGENDAMENTO, E QUEM LÊ O QUE — migration 0704.
+ * QUEM CONFIGURA O AVISO DE AGENDAMENTO, E QUEM LÊ O QUE — migration 0707.
  *
  * O mesmo desenho e os mesmos três eixos de `aviso-de-caso-escrita.test.ts`,
  * pela mesma razão: as duas tabelas ficam fora de `rls-isolation.test.ts` (a
@@ -26,20 +26,20 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { motivoDoErro, sql } from "./psql-transporte";
 
-const ORG_A = "07040000-0000-4000-8000-000000000001";
-const ORG_B = "07040000-0000-4000-8000-000000000002";
+const ORG_A = "07070000-0000-4000-8000-000000000001";
+const ORG_B = "07070000-0000-4000-8000-000000000002";
 /** Organização SEM aviso de caso: mede a recusa de "usar o número do caso". */
-const ORG_C = "07040000-0000-4000-8000-000000000003";
-const ADMIN_A = "07040000-1111-4000-8000-000000000001";
-const GESTOR_A = "07040000-1111-4000-8000-000000000002";
-const ATENDENTE_A = "07040000-1111-4000-8000-000000000003";
-const LEITOR_A = "07040000-1111-4000-8000-000000000004";
-const ADMIN_B = "07040000-1111-4000-8000-000000000005";
-const ADMIN_C = "07040000-1111-4000-8000-000000000006";
-const SESSAO_A = "07040000-2222-4000-8000-000000000001";
-const SESSAO_B = "07040000-2222-4000-8000-000000000002";
-const SESSAO_DESCARTAVEL = "07040000-2222-4000-8000-000000000003";
-const CONTATO_A = "07040000-3333-4000-8000-000000000001";
+const ORG_C = "07070000-0000-4000-8000-000000000003";
+const ADMIN_A = "07070000-1111-4000-8000-000000000001";
+const GESTOR_A = "07070000-1111-4000-8000-000000000002";
+const ATENDENTE_A = "07070000-1111-4000-8000-000000000003";
+const LEITOR_A = "07070000-1111-4000-8000-000000000004";
+const ADMIN_B = "07070000-1111-4000-8000-000000000005";
+const ADMIN_C = "07070000-1111-4000-8000-000000000006";
+const SESSAO_A = "07070000-2222-4000-8000-000000000001";
+const SESSAO_B = "07070000-2222-4000-8000-000000000002";
+const SESSAO_DESCARTAVEL = "07070000-2222-4000-8000-000000000003";
+const CONTATO_A = "07070000-3333-4000-8000-000000000001";
 
 function comoMembro(userId: string): string {
   return `set role authenticated;
@@ -85,18 +85,18 @@ const ENTREGAS = "select count(*) from public.entregas_de_aviso_de_agendamento";
 beforeAll(() => {
   sql(`
     insert into auth.users (id, email) values
-      ('${ADMIN_A}',     'aviso-0704-admin-a@invariant.test'),
-      ('${GESTOR_A}',    'aviso-0704-gestor-a@invariant.test'),
-      ('${ATENDENTE_A}', 'aviso-0704-agent-a@invariant.test'),
-      ('${LEITOR_A}',    'aviso-0704-viewer-a@invariant.test'),
-      ('${ADMIN_B}',     'aviso-0704-admin-b@invariant.test'),
-      ('${ADMIN_C}',     'aviso-0704-admin-c@invariant.test')
+      ('${ADMIN_A}',     'aviso-0707-admin-a@invariant.test'),
+      ('${GESTOR_A}',    'aviso-0707-gestor-a@invariant.test'),
+      ('${ATENDENTE_A}', 'aviso-0707-agent-a@invariant.test'),
+      ('${LEITOR_A}',    'aviso-0707-viewer-a@invariant.test'),
+      ('${ADMIN_B}',     'aviso-0707-admin-b@invariant.test'),
+      ('${ADMIN_C}',     'aviso-0707-admin-c@invariant.test')
       on conflict do nothing;
 
     insert into public.organizations (id, slug, legal_name, display_name) values
-      ('${ORG_A}', 'aviso-0704-a', 'Aviso 0704 A', 'Aviso 0704 A'),
-      ('${ORG_B}', 'aviso-0704-b', 'Aviso 0704 B', 'Aviso 0704 B'),
-      ('${ORG_C}', 'aviso-0704-c', 'Aviso 0704 C', 'Aviso 0704 C')
+      ('${ORG_A}', 'aviso-0707-a', 'Aviso 0707 A', 'Aviso 0707 A'),
+      ('${ORG_B}', 'aviso-0707-b', 'Aviso 0707 B', 'Aviso 0707 B'),
+      ('${ORG_C}', 'aviso-0707-c', 'Aviso 0707 C', 'Aviso 0707 C')
       on conflict do nothing;
 
     insert into public.user_organizations (user_id, organization_id, role, accepted_at) values
@@ -110,15 +110,15 @@ beforeAll(() => {
 
     do $seed$ begin
       insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted)
-        values ('${SESSAO_A}', '${ORG_A}', 'aviso-0704-a', '\\x00'::bytea);
+        values ('${SESSAO_A}', '${ORG_A}', 'aviso-0707-a', '\\x00'::bytea);
     exception when unique_violation then null; end $seed$;
     do $seed$ begin
       insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted)
-        values ('${SESSAO_B}', '${ORG_B}', 'aviso-0704-b', '\\x00'::bytea);
+        values ('${SESSAO_B}', '${ORG_B}', 'aviso-0707-b', '\\x00'::bytea);
     exception when unique_violation then null; end $seed$;
 
     insert into public.contacts (id, organization_id, display_name)
-      values ('${CONTATO_A}', '${ORG_A}', 'Aviso 0704 Contato') on conflict do nothing;
+      values ('${CONTATO_A}', '${ORG_A}', 'Aviso 0707 Contato') on conflict do nothing;
 
     -- O aviso de caso de A e de B existe: é a referência do padrão.
     insert into public.config_aviso_de_caso (organization_id, channel_session_id, telefone_destino, ligado)
@@ -138,7 +138,7 @@ beforeAll(() => {
   `);
 });
 
-describe("0704 — a configuração é lida por quem administra", () => {
+describe("0707 — a configuração é lida por quem administra", () => {
   it("CONTROLE POSITIVO: o admin lê a própria configuração", () => {
     expect(contaComoMembro(ADMIN_A, CONFIGS)).toBe(1);
   });
@@ -154,7 +154,7 @@ describe("0704 — a configuração é lida por quem administra", () => {
   });
 });
 
-describe("0704 — o histórico é lido por quem opera", () => {
+describe("0707 — o histórico é lido por quem opera", () => {
   it("CONTROLE POSITIVO: o gestor lê o histórico da própria organização", () => {
     expect(contaComoMembro(GESTOR_A, ENTREGAS)).toBe(1);
   });
@@ -165,7 +165,7 @@ describe("0704 — o histórico é lido por quem opera", () => {
   });
 });
 
-describe("0704 — `authenticated` não escreve em nenhuma das duas", () => {
+describe("0707 — `authenticated` não escreve em nenhuma das duas", () => {
   const escritas: Array<[string, string]> = [
     [
       "insert na configuração",
@@ -189,7 +189,7 @@ describe("0704 — `authenticated` não escreve em nenhuma das duas", () => {
   }
 });
 
-describe("0704 — fn_definir_aviso_de_agendamento é a única porta", () => {
+describe("0707 — fn_definir_aviso_de_agendamento é a única porta", () => {
   it("`agent` e `viewer` são recusados", () => {
     expect(erroDe(`${comoMembro(ATENDENTE_A)}\n${definir(ORG_A, true, null, null)}`)).toMatch(
       /aviso_de_agendamento_forbidden|permission denied/i,
@@ -254,12 +254,12 @@ describe("0704 — fn_definir_aviso_de_agendamento é a única porta", () => {
   });
 });
 
-describe("0704 — apagar a conexão apontada não pode falhar", () => {
+describe("0707 — apagar a conexão apontada não pode falhar", () => {
   it("o DELETE passa, e o aviso com número próprio fica desligado sozinho", () => {
     sql(`
       do $seed$ begin
         insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted)
-          values ('${SESSAO_DESCARTAVEL}', '${ORG_A}', 'aviso-0704-descartavel', '\\x00'::bytea);
+          values ('${SESSAO_DESCARTAVEL}', '${ORG_A}', 'aviso-0707-descartavel', '\\x00'::bytea);
       exception when unique_violation then null; end $seed$;
       update public.config_aviso_de_agendamento
          set usa_numero_do_aviso_de_caso = false, channel_session_id = '${SESSAO_DESCARTAVEL}',
@@ -275,7 +275,7 @@ describe("0704 — apagar a conexão apontada não pode falhar", () => {
   });
 });
 
-describe("0704 — o expurgo respeita o piso de 30 dias", () => {
+describe("0707 — o expurgo respeita o piso de 30 dias", () => {
   it("apaga o vencido e preserva o recente, mesmo pedindo 1 dia", () => {
     sql(`
       insert into public.entregas_de_aviso_de_agendamento (organization_id, tipo, dia, destino, status, created_at)

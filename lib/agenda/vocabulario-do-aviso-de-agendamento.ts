@@ -1,6 +1,6 @@
 /**
  * O VOCABULÁRIO do aviso de agendamento no WhatsApp — espelho dos CHECKs de
- * `entregas_de_aviso_de_agendamento` (migration 0704).
+ * `entregas_de_aviso_de_agendamento` (migration 0707).
  *
  * Tupla `as const` e não union solta, pelo mesmo motivo do aviso de caso
  * (`lib/escalacao/vocabulario-do-aviso.ts`): o invariante

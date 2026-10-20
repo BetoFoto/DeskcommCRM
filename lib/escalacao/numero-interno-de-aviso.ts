@@ -97,7 +97,7 @@ export function limparCacheDoNumeroInterno(): void {
 const _cacheDaAgenda = new Map<string, { at: number; valor: string | null }>();
 
 /**
- * O número PRÓPRIO do aviso de agendamento (0704), quando ele não reusa o do
+ * O número PRÓPRIO do aviso de agendamento (0707), quando ele não reusa o do
  * aviso de caso — memoizado como o outro. Nunca lança.
  *
  * Quando o aviso de agendamento usa o número do aviso de caso, o corte acima já
