@@ -269,6 +269,42 @@ export interface TickSummary {
   dead: number;
 }
 
+/**
+ * O contato já tem OUTRA inscrição viva: o patch que levaria esta a um status
+ * que ocupa vaga foi recusado por `idx_followup_enrollments_one_live`.
+ *
+ * Tipado para não cair no caminho de falha genérico. O caso que o motiva: a
+ * espera `immune_to_reply` põe a inscrição em `dormente`, que por construção NÃO
+ * ocupa a vaga — então outro fluxo pode, legitimamente, entrar no contato
+ * enquanto ela dorme (medido: a etapa mudou 43 min depois e o "respondeu e
+ * sumiu" inscreveu). No despertar, o `advance` grava `status: 'active'`, o
+ * índice recusa, e o genérico repetia com backoff até `dead`, com o aviso de
+ * INCIDENTE "Um fluxo de follow-up parou de tentar … duplicate key" na Central —
+ * para um estado que o próprio desenho do `dormente` produz.
+ */
+export class VagaDoContatoOcupadaError extends Error {
+  constructor() {
+    super("vaga_do_contato_ocupada");
+    this.name = "VagaDoContatoOcupadaError";
+  }
+}
+
+/**
+ * Converte o erro do `fn_followup_patch` no erro que o motor sabe tratar.
+ * Só o 23505 do índice de vaga vira `VagaDoContatoOcupadaError`: outro 23505
+ * (outro índice único) continua erro comum, porque cada índice guarda uma regra
+ * diferente e não há razão para supor que todos se resolvam cedendo.
+ */
+export function erroDoPatch(error: { code?: string; message: string }): Error {
+  if (error.code === "23505" && error.message.includes("idx_followup_enrollments_one_live")) {
+    return new VagaDoContatoOcupadaError();
+  }
+  return new Error(error.message);
+}
+
+/** O motivo gravado quando a dormente cede a vaga — é o que o acompanhamento mostra. */
+export const MOTIVO_DA_VAGA_OCUPADA = "Outro acompanhamento já cuida deste contato";
+
 function errorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
   // last_error nunca carrega PII — mensagens são strings de código controladas
@@ -454,6 +490,38 @@ async function applyHandlerFailure(
     last_error: errorMessage(rawError),
     next_eval_at: new Date(clock().getTime() + backoffMs).toISOString(),
     claimed_until: null,
+    updated_at: clock().toISOString(),
+  });
+}
+
+/**
+ * A dormente acordou e outra inscrição já ocupa a vaga do contato: ela CEDE.
+ *
+ * Quem já ocupa a vaga fica — o mesmo precedente de `gatilho-etapa.ts` e
+ * `gatilho-caso.ts`, onde 23505 neste índice é caminho normal. Encerra como
+ * `cancelled`, com o motivo legível e um evento na trilha; SEM item na Central:
+ * nada quebrou, e o aviso de incidente é exatamente o ruído que isto elimina.
+ * Não conta tentativa: repetir não muda nada enquanto o outro fluxo estiver vivo.
+ */
+async function cederAVaga(
+  deps: Pick<TickDeps, "db" | "clock">,
+  enrollment: EnrollmentRow,
+): Promise<void> {
+  const { db, clock } = deps;
+  await db.insertEnrollmentEvent({
+    organization_id: enrollment.organization_id,
+    enrollment_id: enrollment.id,
+    node_id: enrollment.current_node_id,
+    event_type: "woke_into_taken_slot",
+    payload: { outro_fluxo_vivo: true },
+    idempotency_key: `${enrollment.current_node_id}:${enrollment.steps_taken}:vaga_ocupada`,
+  });
+  await db.updateEnrollment(enrollment.id, enrollment.organization_id, {
+    status: "cancelled",
+    cancel_reason: MOTIVO_DA_VAGA_OCUPADA,
+    next_eval_at: null,
+    claimed_until: null,
+    completed_at: clock().toISOString(),
     updated_at: clock().toISOString(),
   });
 }
@@ -1112,6 +1180,13 @@ export async function runFollowupTick(deps: TickDeps, opts?: { limit?: number })
       await processEnrollment(deps, enrollment, summary);
     } catch (err) {
       try {
+        // A dormente que acorda com a vaga tomada não FALHOU: cede (ver
+        // `cederAVaga`). Só ela — a mesma recusa numa inscrição que já estava
+        // viva é corrida de verdade e segue o caminho de falha.
+        if (err instanceof VagaDoContatoOcupadaError && enrollment.status === "dormente") {
+          await cederAVaga(deps, enrollment);
+          continue;
+        }
         // Nunca deixa uma falha de UM enrollment derrubar o tick inteiro.
         await applyHandlerFailure(deps, enrollment, errorMessage(err), summary);
       } catch {
@@ -1299,7 +1374,7 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       if(revision===undefined) throw new StaleServiceBoundaryError();
       const {data,error}=await admin.rpc("fn_followup_patch",{p_org:orgId,p_id:id,p_revision:revision,p_patch:patch});
       if(isFollowupCasRecusado(error)) throw new StaleServiceBoundaryError();
-      if(error) throw new Error(error.message);
+      if(error) throw erroDoPatch(error);
       revisions.set(id,Number(data));
     },
     async loadFlowPointerName(orgId, pointerId) {

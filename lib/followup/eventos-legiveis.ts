@@ -505,6 +505,15 @@ export function descreveEvento(
         detalhe: texto(p.error) ?? texto(p.codigo),
         ...motor,
       };
+    case "woke_into_taken_slot":
+      // A espera "imune à resposta" libera a vaga do contato; outro fluxo entrou
+      // nela enquanto esta dormia. Ceder não é falhar — sem esta linha a trilha
+      // terminava num "cancelado" sem dizer por quê.
+      return {
+        titulo: "Encerrado porque outro acompanhamento já cuida deste contato",
+        detalhe: "acordou da espera e encontrou outro fluxo em andamento",
+        ...motor,
+      };
     case "inbound_woke":
       return { titulo: "O cliente respondeu — o fluxo acordou na hora", detalhe: null, ...cliente };
     case "reactivity_replied":

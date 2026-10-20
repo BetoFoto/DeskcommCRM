@@ -8800,6 +8800,12 @@ export const DICIONARIO: Traducoes = {
   "O agente interpretou a resposta": { es: "El agente interpretó la respuesta" },
   "Fluxo concluído": { es: "Flujo concluido" },
   "O fluxo parou de tentar": { es: "El flujo dejó de intentarlo" },
+  "Encerrado porque outro acompanhamento já cuida deste contato": {
+    es: "Cerrado porque otro seguimiento ya atiende a este contacto",
+  },
+  "acordou da espera e encontrou outro fluxo em andamento": {
+    es: "despertó de la espera y encontró otro flujo en curso",
+  },
   "Falhou neste passo": { es: "Falló en este paso" },
   "Não conseguiu mover o card para a etapa escolhida": {
     es: "No pudo mover la tarjeta a la etapa elegida",

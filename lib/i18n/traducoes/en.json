@@ -4866,6 +4866,8 @@
   "O agente interpretou a resposta": "The agent interpreted the response",
   "Fluxo concluído": "Flow completed",
   "O fluxo parou de tentar": "The flow stopped trying",
+  "Encerrado porque outro acompanhamento já cuida deste contato": "Closed because another follow-up is already handling this contact",
+  "acordou da espera e encontrou outro fluxo em andamento": "woke from the wait and found another flow in progress",
   "Falhou neste passo": "Failed at this step",
   "Não conseguiu mover o card para a etapa escolhida": "Couldn't move the card to the chosen stage",
   "O cliente respondeu — o fluxo acordou na hora": "The client responded — the flow woke up right away",
