@@ -672,6 +672,22 @@ export class WahaClient {
     chatId: string,
     opts: { limit: number; offset: number; desde: number },
   ): Promise<WahaPayload[]> {
+    return (await this.paginaDeMensagens(session, chatId, opts)).mensagens;
+  }
+
+  /**
+   * A mesma página de `listarMensagens`, com `lidas` = quantos itens o canal
+   * devolveu ANTES do schema e do filtro local. O paginador avança o offset por
+   * `lidas` e só dá a conversa por terminada com `lidas === 0`: avançar pelo
+   * limite pedido pularia mensagens quando o canal devolve menos que o pedido,
+   * e medir o fim pelo que sobrou do schema terminaria a conversa numa página
+   * inteira recusada.
+   */
+  async paginaDeMensagens(
+    session: string,
+    chatId: string,
+    opts: { limit: number; offset: number; desde: number },
+  ): Promise<{ mensagens: WahaPayload[]; lidas: number }> {
     const qs = new URLSearchParams({
       limit: String(opts.limit),
       offset: String(opts.offset),
@@ -688,15 +704,14 @@ export class WahaClient {
     const bruto = (await res.json().catch(() => null)) as unknown;
     // 200 que não é lista NÃO é conversa vazia: o paginador a daria por terminada.
     if (!Array.isArray(bruto)) throw new Error("waha_messages_invalido");
-    const lista = bruto;
     const mensagens: WahaPayload[] = [];
-    for (const item of lista) {
+    for (const item of bruto) {
       const p = wahaPayloadSchema.safeParse(item);
       if (!p.success) continue;
       if (typeof p.data.timestamp !== "number" || p.data.timestamp < opts.desde) continue;
       mensagens.push(p.data);
     }
-    return mensagens;
+    return { mensagens, lidas: bruto.length };
   }
 
   /**

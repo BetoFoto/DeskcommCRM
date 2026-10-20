@@ -160,6 +160,29 @@ describe("listarMensagens", () => {
   );
 });
 
+describe("paginaDeMensagens", () => {
+  it("lidas conta o que o canal devolveu, inclusive o que o schema recusou", async () => {
+    mensagensExtras = [{ id: "x", timestamp: 1760000999, body: 42 }, "lixo", null];
+    const r = await novo().paginaDeMensagens("s1", "111111111111111@lid", { limit: 20, offset: 0, desde: 0 });
+    expect(r.mensagens).toHaveLength(2);
+    expect(r.lidas).toBe(5);
+  });
+
+  it("página toda recusada pelo schema: nenhuma mensagem, mas lidas > 0 (não é o fim)", async () => {
+    corpoForcado = JSON.stringify([{ id: "x", timestamp: 1, body: 42 }, "lixo"]);
+    const r = await novo().paginaDeMensagens("s1", "a@lid", { limit: 2, offset: 0, desde: 0 });
+    expect(r).toEqual({ mensagens: [], lidas: 2 });
+  });
+
+  it("fim da conversa: lista vazia, lidas 0", async () => {
+    corpoForcado = "[]";
+    expect(await novo().paginaDeMensagens("s1", "a@lid", { limit: 2, offset: 0, desde: 0 })).toEqual({
+      mensagens: [],
+      lidas: 0,
+    });
+  });
+});
+
 describe("baixarMidiaDaMensagem", () => {
   it("devolve a url quando o arquivo está disponível", async () => {
     const r = await novo().baixarMidiaDaMensagem(
