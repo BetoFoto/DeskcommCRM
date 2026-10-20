@@ -18,21 +18,22 @@
  * Ficava sem resposta o caminho mais provável de todos: o closer fechou a
  * venda e ninguém da equipe ficou sabendo.
  *
- * ─── O destinatário é uma PESSOA DA EQUIPE, e só ADMIN escolhe ─────────────
+ * ─── O destinatário é o NÚMERO DA EQUIPE, e não muda ───────────────────────
  *
- * A configuração da ação guarda o `membro_id` (`user_organizations.user_id`) e
- * o canal de entrega — e nada mais. NÃO existe campo de número nem de
- * endereço: o que o administrador registrou é que vale. O WhatsApp sai para o
- * número que o ADMIN cadastrou em `config_aviso_de_caso` (a mesma tela de
- * Avisos, a mesma escrita server-side da disciplina da #1347), e o e-mail sai
- * para o endereço que JÁ ESTÁ cadastrado no GoTrue da própria pessoa. Colar
- * número novo na regra seria abrir a porta de spam — e a disciplina da #1347
- * foi justamente matar isso.
+ * O recorte do mantenedor no PR #2834 deixou esta ação com UM caminho: o
+ * WhatsApp para o número que o ADMIN cadastrou em `config_aviso_de_caso` (a
+ * tela de Avisos, a mesma escrita server-side da disciplina da #1347). NÃO
+ * existe campo de número nem de endereço na regra — colar destino aqui seria
+ * a porta de spam que aquela disciplina fechou —, e por isso o editor também
+ * não pergunta mais "quem recebe": o destino é o da empresa.
  *
- * O portão de papel é da rota (`requireRole("admin")`, mais baixo que o
- * `manager` que abre a tela de regras) e a opção some do editor para quem não
- * é administrador. O executor não confia em nenhum dos dois: ele só aceita
- * membro ATIVO dest-ESTA organização, com papel acima de viewer.
+ * O e-mail para uma PESSOA da equipe não mora mais aqui: ele é o destinatário
+ * "membro da equipe" do `send_email` (#2726), com o teto de envios por
+ * organização valendo e com a variável `{{resumo}}`. Uma ação, um caminho.
+ *
+ * Como a ação não escolhe destinatário, não há portão de papel: o gerente
+ * configura esta ação como configura as outras (o portão só-admin que existia
+ * na rota e no editor saiu junto com o recorte).
  *
  * ─── NÃO abre conversa com o lead ──────────────────────────────────────────
  *
@@ -47,29 +48,30 @@
  *
  * ─── O resumo é LIDO AGORA, nunca gravado ──────────────────────────────────
  *
- * Nada de texto fixo gravado na regra: `montarResumoParaAEquipe` lê o lead, o
- * contato, a pontuação (número E motivo, do jeito que `crm_lead_scores` grava)
- * e a passagem no MOMENTO do disparo. Ver `resumo-para-a-equipe.ts` para a
- * régua de limpeza.
+ * Nada de texto fixo gravado na regra: `carregarResumoParaAEquipe`
+ * (`resumo-do-evento.ts`) lê o lead, o contato, a pontuação (número E motivo,
+ * do jeito que `crm_lead_scores` grava) e a passagem no MOMENTO do disparo, e
+ * `montarResumoParaAEquipe` escreve o texto. É o MESMO carregador que alimenta
+ * a variável `{{resumo}}` do `send_email` — uma régua de limpeza só.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { IDIOMAS, type Idioma } from "@/lib/i18n/idiomas";
-
-import {
-  montarResumoParaAEquipe,
-  type PassagemDoResumo,
-  type PontuacaoDoResumo,
-} from "../resumo-para-a-equipe";
+import { carregarResumoParaAEquipe, leadDoContexto } from "../resumo-do-evento";
 import type { ActionCtx, ActionExecutor, ActionResultDetail } from "../types";
 import { registerAction } from "@/lib/automation/actions";
 
 const TIPO = "notify_team";
 
+/**
+ * A configuração da ação — e ela não escolhe DESTINO nem PESSOA.
+ *
+ * O recorte do mantenedor no PR #2834 deixou um caminho só: o WhatsApp do
+ * número que o ADMIN cadastrou em Avisos. `canal` continua existindo como
+ * `z.literal("whatsapp")` no schema para que a regra gravada diga, por
+ * escrito, por onde o aviso sai — e para que uma regra que ainda traga
+ * `"email"` morra na porta em vez de sair por um canal que ninguém configurou.
+ */
 interface ConfigNotifyTeam {
-  /** `user_organizations.user_id` — a pessoa da equipe que recebe. */
-  membro_id?: string;
-  /** Por onde o resumo sai. */
   canal?: string;
 }
 
@@ -90,141 +92,6 @@ interface CanalDaEquipe {
 }
 
 type Admin = SupabaseClient;
-
-/**
- * Contexto de um evento: o motor monta `lead` e `contact` (`buildContext`),
- * mas o tipo é `Record<string, unknown>` — então o executor tem de estreitar
- * com as MESMAS colunas que o banco devolve. Nomes que batem com
- * `database.types.ts`, e não com o que parece bom.
- */
-interface LeadDoContexto {
-  id: string;
-  title: string | null;
-  description: string | null;
-  status: string | null;
-  value_cents: number | null;
-  currency: string | null;
-  won_reason: string | null;
-  contact_id: string | null;
-}
-
-interface ContatoDoContexto {
-  name: string | null;
-  display_name: string | null;
-  phone_number: string | null;
-}
-
-function estreitarLead(bruto: unknown): LeadDoContexto | null {
-  if (typeof bruto !== "object" || bruto === null) return null;
-  const l = bruto as Record<string, unknown>;
-  if (typeof l.id !== "string" || l.id === "") return null;
-  return {
-    id: l.id,
-    title: typeof l.title === "string" ? l.title : null,
-    description: typeof l.description === "string" ? l.description : null,
-    status: typeof l.status === "string" ? l.status : null,
-    value_cents: typeof l.value_cents === "number" ? l.value_cents : null,
-    currency: typeof l.currency === "string" ? l.currency : null,
-    won_reason: typeof l.won_reason === "string" ? l.won_reason : null,
-    contact_id: typeof l.contact_id === "string" ? l.contact_id : null,
-  };
-}
-
-function estreitarContato(bruto: unknown): ContatoDoContexto | null {
-  if (typeof bruto !== "object" || bruto === null) return null;
-  const c = bruto as Record<string, unknown>;
-  return {
-    name: typeof c.name === "string" ? c.name : null,
-    display_name: typeof c.display_name === "string" ? c.display_name : null,
-    phone_number: typeof c.phone_number === "string" ? c.phone_number : null,
-  };
-}
-
-/** `organizations.locale` pode trazer o que for; o catálogo decide o que é idioma. */
-async function idiomaDaOrganizacao(admin: Admin, organizationId: string): Promise<Idioma> {
-  const { data } = await admin.from("organizations").select("locale").eq("id", organizationId).maybeSingle();
-  const bruto = (data as { locale?: string | null } | null)?.locale;
-  return typeof bruto === "string" && (IDIOMAS as readonly string[]).includes(bruto)
-    ? (bruto as Idioma)
-    : "pt-BR";
-}
-
-/**
- * O membro tem de ser ATIVO DESTA organização, e não pode ser viewer.
- *
- * Mesmo filtro de `assign_owner`: a regra é salva uma vez e dispara para
- * sempre, então um membro revogado ou trocado de empresa tem de morrer aqui e
- * não num envio para gente de fora.
- */
-async function membroAtivo(
-  admin: Admin,
-  organizationId: string,
-  membroId: string,
-): Promise<{ user_id: string; role: string } | null> {
-  const { data, error } = await admin
-    .from("user_organizations")
-    .select("user_id, role")
-    .eq("organization_id", organizationId)
-    .eq("user_id", membroId)
-    .is("revoked_at", null)
-    .maybeSingle();
-  if (error !== null || data === null) return null;
-  const linha = data as { user_id: string; role: string };
-  if (linha.role === "viewer") return null;
-  return linha;
-}
-
-/**
- * `crm_lead_scores` — número E motivo na mesma linha.
- *
- * Os dois vêm juntos porque a própria constraint do banco não deixa número sem
- * frase ("score sem razão não é gravado"). A coluna é `integer`, de 0 a 100.
- */
-async function pontuacaoDoLead(
-  admin: Admin,
-  organizationId: string,
-  leadId: string,
-): Promise<PontuacaoDoResumo | null> {
-  const { data } = await admin
-    .from("crm_lead_scores")
-    .select("ai_probability, ai_probability_reason")
-    .eq("organization_id", organizationId)
-    .eq("lead_id", leadId)
-    .maybeSingle();
-  if (data === null) return null;
-  const linha = data as { ai_probability?: number | null; ai_probability_reason?: string | null };
-  return {
-    probabilidade: typeof linha.ai_probability === "number" ? linha.ai_probability : null,
-    motivo: typeof linha.ai_probability_reason === "string" ? linha.ai_probability_reason : null,
-  };
-}
-
-/** O checkpoint mais novo do contato: o que a conversa COMBINOU com o cliente. */
-async function passagemDoContato(
-  admin: Admin,
-  organizationId: string,
-  contactId: string,
-): Promise<PassagemDoResumo | null> {
-  const { data } = await admin
-    .from("lead_checkpoints")
-    .select("commitments, objections, next_action")
-    .eq("organization_id", organizationId)
-    .eq("contact_id", contactId)
-    .order("seq", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (data === null) return null;
-  const linha = data as {
-    commitments?: string[] | null;
-    objections?: string[] | null;
-    next_action?: string | null;
-  };
-  return {
-    compromissos: Array.isArray(linha.commitments) ? linha.commitments : [],
-    objecoes: Array.isArray(linha.objections) ? linha.objections : [],
-    proximaAcao: typeof linha.next_action === "string" ? linha.next_action : null,
-  };
-}
 
 /**
  * O NÚMERO DA EQUIPE é o que o ADMIN registrou em `config_aviso_de_caso`.
@@ -305,12 +172,6 @@ async function motivoDeBloqueioDoCanal(canal: CanalDaEquipe): Promise<string | n
   return null;
 }
 
-/** Escapa para o HTML do e-mail: o resumo traz fala do MODELO, não é nosso. */
-function emHtml(texto: string): string {
-  const escapado = texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return `<pre style="white-space:pre-wrap;font-family:inherit;margin:0">${escapado}</pre>`;
-}
-
 function resumoVazio(motivo: string): ActionResultDetail {
   return { type: TIPO, status: "skipped", detail: { reason: motivo } };
 }
@@ -367,43 +228,6 @@ async function enviaPorWhatsApp(
   return { type: TIPO, status: "success", detail: { reason: "whatsapp_enviado", canal: "whatsapp" } };
 }
 
-/** E-mail: o endereço JÁ CADASTRADO da pessoa, o SMTP que o admin registrou. */
-async function enviaPorEmail(
-  ctx: ActionCtx,
-  membro: { user_id: string },
-  assunto: string,
-  resumo: string,
-): Promise<ActionResultDetail> {
-  const { data } = await ctx.admin.auth.admin.getUserById(membro.user_id);
-  const email = data?.user?.email ?? null;
-  if (typeof email !== "string" || !email.includes("@")) {
-    return { type: TIPO, status: "skipped", detail: { reason: "membro_sem_email" } };
-  }
-
-  const { emailConfigurado, sendEmail } = await import("@/lib/email/roteador");
-  if (!emailConfigurado()) {
-    return { type: TIPO, status: "skipped", detail: { reason: "smtp_nao_configurado" } };
-  }
-  const { marcaDaSaida } = await import("@/lib/branding/saida");
-  const marca = await marcaDaSaida(ctx.organizationId);
-  const envio = await sendEmail({
-    to: email,
-    subject: assunto,
-    html: emHtml(resumo),
-    text: resumo,
-    fromName: marca.nome,
-    tags: [{ name: "tipo", value: "automacao" }],
-  });
-  if (!envio.ok) {
-    return {
-      type: TIPO,
-      status: "failed",
-      detail: { reason: "email_falhou", error: envio.error ?? "desconhecido" },
-    };
-  }
-  return { type: TIPO, status: "success", detail: { reason: "email_enviado", canal: "email" } };
-}
-
 /**
  * O resumo sai quando o WhatsApp da EQUIPE pode enviar AGORA.
  *
@@ -411,8 +235,7 @@ async function enviaPorEmail(
  * a régua do canal atrasa o EVENTO INTEIRO — e não só esta ação —, porque uma
  * regra que disparou não pode deixar a outra ação meia-executada.
  */
-async function decideEspera(ctx: ActionCtx, config: Record<string, unknown>): Promise<string | null> {
-  if (canalDe(config) !== "whatsapp") return null;
+async function decideEspera(ctx: ActionCtx): Promise<string | null> {
   const numero = await numeroDaEquipe(ctx.admin, ctx.organizationId);
   if (numero === null) return null;
   const canal = await canalDaEquipe(ctx.admin, ctx.organizationId, numero.channel_session_id);
@@ -424,50 +247,40 @@ async function decideEspera(ctx: ActionCtx, config: Record<string, unknown>): Pr
   return decisao.liberaEm.toISOString();
 }
 
-/** `canal` só aceita os dois valores que a UI oferece; qualquer outra coisa é WhatsApp. */
-function canalDe(config: Record<string, unknown> | ConfigNotifyTeam): "whatsapp" | "email" {
+/**
+ * `canal` só aceita `whatsapp`; qualquer outra coisa é configuração torta.
+ *
+ * O schema já recusa `email` na porta, e esta checagem é a defesa em
+ * profundidade do executor: uma regra que chegue aqui com outro canal (gravada
+ * antes do recorte, ou por uma escrita direta no banco) não pode sair pelo
+ * WhatsApp fingindo que o canal pedido foi respeitado.
+ */
+function canalDesconhecido(config: Record<string, unknown>): boolean {
   const bruto = (config as ConfigNotifyTeam).canal;
-  return bruto === "email" ? "email" : "whatsapp";
+  return bruto !== undefined && bruto !== "whatsapp";
 }
 
 export async function executeNotifyTeam(
   ctx: ActionCtx,
   config: Record<string, unknown>,
 ): Promise<ActionResultDetail> {
-  const cfg = config as ConfigNotifyTeam;
-  const membroId = typeof cfg.membro_id === "string" ? cfg.membro_id : "";
-  if (membroId === "") {
-    return { type: TIPO, status: "failed", error: "missing_config", detail: { reason: "sem_membro" } };
+  if (canalDesconhecido(config)) {
+    return { type: TIPO, status: "failed", detail: { reason: "canal_nao_suportado" } };
   }
 
-  const membro = await membroAtivo(ctx.admin, ctx.organizationId, membroId);
-  if (membro === null) {
-    return { type: TIPO, status: "failed", detail: { reason: "membro_invalido" } };
-  }
-
-  const lead = estreitarLead(ctx.context.lead);
+  const lead = leadDoContexto(ctx.context.lead);
   if (lead === null) return resumoVazio("sem_negocio_no_evento");
 
-  const idioma = await idiomaDaOrganizacao(ctx.admin, ctx.organizationId);
-  const resumo = montarResumoParaAEquipe({
-    idioma,
+  const resumo = await carregarResumoParaAEquipe({
+    admin: ctx.admin,
+    organizationId: ctx.organizationId,
     regra: ctx.ruleName,
-    lead,
-    contato: estreitarContato(ctx.context.contact),
-    pontuacao: await pontuacaoDoLead(ctx.admin, ctx.organizationId, lead.id),
-    passagem:
-      lead.contact_id !== null && lead.contact_id !== ""
-        ? await passagemDoContato(ctx.admin, ctx.organizationId, lead.contact_id)
-        : null,
+    contexto: ctx.context,
   });
   // O PISO existe porque uma linha `Pontuação: ` vazia AFIRMARIA pontuação
   // nenhuma. Sem lead não há o que a equipe ler.
-  if (resumo.trim() === "") return resumoVazio("sem_resumo_para_enviar");
+  if (resumo === null || resumo.trim() === "") return resumoVazio("sem_resumo_para_enviar");
 
-  const titulo = typeof lead.title === "string" && lead.title.trim() !== "" ? lead.title.trim() : null;
-  const assunto = titulo === null ? "Resumo do lead para a equipe" : `Resumo do lead para a equipe — ${titulo}`;
-
-  if (canalDe(config) === "email") return enviaPorEmail(ctx, membro, assunto, resumo);
   return enviaPorWhatsApp(ctx, resumo);
 }
 

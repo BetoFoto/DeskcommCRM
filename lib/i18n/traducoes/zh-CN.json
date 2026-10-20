@@ -5668,11 +5668,6 @@
   "Objeções": "异议",
   "Próxima ação": "下一步行动",
   "Membro da equipe": "团队成员",
-  "Canal de entrega": "送达渠道",
-  "WhatsApp (número cadastrado em Avisos)": "WhatsApp（在提醒中登记的号码）",
-  "E-mail do membro": "成员邮箱",
-  "O número vem da configuração de avisos da empresa, cadastrada por um administrador. O resumo é montado na hora do disparo, com a pontuação e o motivo do negócio.": "号码来自管理员在公司提醒设置中登记的配置。摘要在发送时即时生成，包含评分与赢单原因。",
-  "O endereço é o que já está cadastrado da pessoa. Sem SMTP configurado, o aviso não sai e a regra avisa por quê.": "地址使用该成员已登记的邮箱。未配置 SMTP 时提醒不会发出，规则会说明原因。",
   "Motivo do ganho": "赢单原因",
   "Etiqueta juntada em": "标签已合并到",
   "as duas etiquetas viraram uma só.": "两个标签已合并为一个。",
@@ -5775,5 +5770,11 @@
   "A fila do rodízio desta automação está vazia. Abra a automação e escolha quem entra no rodízio.": "此自动化的轮流队列为空。请打开自动化并选择参与轮流的人。",
   "A automação foi alterada e não tem mais o rodízio que disparou esta ação. Nada foi atribuído.": "该自动化已被修改，不再包含触发此动作的轮流。未进行任何分配。",
   "O lead deste evento não foi encontrado nesta organização, então ninguém foi atribuído.": "在此组织中未找到该事件的线索，因此未分配任何人。",
-  "Vez de {nome}, posição {posicao} da fila do rodízio.": "轮到 {nome}，轮流队列第 {posicao} 位。"
+  "Vez de {nome}, posição {posicao} da fila do rodízio.": "轮到 {nome}，轮流队列第 {posicao} 位。",
+  "O resumo vai para o WhatsApp cadastrado em Avisos, com a pontuação e o motivo do negócio, montados na hora do disparo.": "摘要会发送到提醒中登记的 WhatsApp 号码，包含评分与赢单原因，并在发送时即时生成。",
+  "E-mail de uma pessoa da equipe": "团队成员的邮箱",
+  "Resumo do negócio": "业务摘要",
+  "A pessoa recebe no e-mail cadastrado no acesso dela, e o vínculo com a empresa é conferido no momento do envio.": "收件人使用其账号中登记的邮箱接收，与公司的关联会在发送时校验。",
+  "WhatsApp da equipe": "团队 WhatsApp",
+  "Pessoa da equipe": "团队成员"
 }

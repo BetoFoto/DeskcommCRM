@@ -474,7 +474,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Motivo do ganho": { es: "Motivo del negocio ganado" },
   // #2642 — o aviso da EQUIPE na virada para ganho. Rótulos do corpo do
-  // resumo (WhatsApp/e-mail) e do formulário da ação notify_team.
+  // resumo (WhatsApp) e do formulário da ação notify_team. O e-mail para uma
+  // pessoa da equipe (recorte do PR #2834) usa os rótulos do `send_email`.
   "Resumo do lead para a equipe": { es: "Resumen del lead para el equipo" },
   "Mensagem para a equipe (resumo do negócio ganho)": {
     es: "Mensaje al equipo (resumen del negocio ganado)",
@@ -486,17 +487,19 @@ export const DICIONARIO: Traducoes = {
   "Compromissos": { es: "Compromisos" },
   "Objeções": { es: "Objeciones" },
   "Próxima ação": { es: "Próxima acción" },
-  "Membro da equipe": { es: "Miembro del equipo" },
-  "Canal de entrega": { es: "Canal de entrega" },
-  "WhatsApp (número cadastrado em Avisos)": {
-    es: "WhatsApp (número registrado en Avisos)",
+  // #2642 — formulário da ação notify_team, depois do recorte: o destino é o
+  // número de Avisos e não há mais escolha de pessoa nem de canal.
+  "O resumo vai para o WhatsApp cadastrado em Avisos, com a pontuação e o motivo do negócio, montados na hora do disparo.": {
+    es: "El resumen va al WhatsApp registrado en Avisos, con la puntuación y el motivo del negocio, armados en el momento del envío.",
   },
-  "E-mail do membro": { es: "Correo del miembro" },
-  "O número vem da configuração de avisos da empresa, cadastrada por um administrador. O resumo é montado na hora do disparo, com a pontuação e o motivo do negócio.": {
-    es: "El número viene de la configuración de avisos de la empresa, registrada por un administrador. El resumen se arma en el momento del envío, con la puntuación y el motivo del negocio.",
-  },
-  "O endereço é o que já está cadastrado da pessoa. Sem SMTP configurado, o aviso não sai e a regra avisa por quê.": {
-    es: "La dirección es la que ya está registrada de la persona. Sin SMTP configurado, el aviso no sale y la regla avisa por qué.",
+  // #2642 — o destinatário "membro da equipe" e a variável `{{resumo}}` do
+  // `send_email`.
+  "WhatsApp da equipe": { es: "WhatsApp del equipo" },
+  "Pessoa da equipe": { es: "Persona del equipo" },
+  "E-mail de uma pessoa da equipe": { es: "Correo de una persona del equipo" },
+  "Resumo do negócio": { es: "Resumen del negocio" },
+  "A pessoa recebe no e-mail cadastrado no acesso dela, e o vínculo com a empresa é conferido no momento do envio.": {
+    es: "La persona recibe en el correo registrado en su acceso, y el vínculo con la empresa se comprueba en el momento del envío.",
   },
   "Preencha os campos obrigatórios antes de continuar: {campos}.": {
     es: "Completa los campos obligatorios antes de continuar: {campos}.",
@@ -1678,12 +1681,10 @@ export const DICIONARIO: Traducoes = {
   "O telefone cadastrado para avisar a equipe não é válido para este canal. Corrija-o em Configurações › Avisos.": { es: "El teléfono registrado para avisar al equipo no es válido para este canal. Corríjalo en Configuración › Avisos." },
   "O canal do número da equipe recusou a mensagem agora. A automação tenta de novo no próximo disparo.": { es: "El canal del número del equipo rechazó el mensaje ahora. La automatización lo reintenta en el próximo disparo." },
   "A equipe foi avisada pelo WhatsApp.": { es: "El equipo fue avisado por WhatsApp." },
-  "O servidor de e-mail recusou o envio. Revise o SMTP em Configurações › E-mail.": { es: "El servidor de correo rechazó el envío. Revise el SMTP en Configuración › Correo." },
-  "A equipe foi avisada por e-mail.": { es: "El equipo fue avisado por correo." },
+  "A regra guarda um canal que esta ação não envia. Abra a automação e salve de novo com o WhatsApp da equipe.": { es: "La regla guarda un canal que esta acción no envía. Abra la automatización y guárdela de nuevo con el WhatsApp del equipo." },
   "A pessoa escolhida não tem e-mail cadastrado no acesso dela.": { es: "La persona elegida no tiene correo registrado en su acceso." },
-  "Esta instalação ainda não tem SMTP configurado — cadastre-o em Configurações › E-mail.": { es: "Esta instalación aún no tiene SMTP configurado — regístrelo en Configuración › Correo." },
-  "A regra não tem responsável escolhido. Abra a automação e escolha quem deve ser avisado.": { es: "La regla no tiene responsable elegido. Abra la automatización y elija a quién avisar." },
-  "A pessoa escolhida não está ativa nesta organização. Escolha outra na automação.": { es: "La persona elegida no está activa en esta organización. Elija otra en la automatización." },
+  "A regra não tem a pessoa da equipe escolhida. Abra a automação e escolha quem deve receber.": { es: "La regla no tiene la persona del equipo elegida. Abra la automatización y elija quién debe recibir." },
+  "A pessoa escolhida não faz mais parte da equipe, então o e-mail não foi enviado. Escolha outra pessoa na automação.": { es: "La persona elegida ya no forma parte del equipo, así que el correo no se envió. Elija otra persona en la automatización." },
 
   // ─── Contatos ───
   "Buscar contatos…": { es: "Buscar contactos…" },

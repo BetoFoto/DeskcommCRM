@@ -9155,11 +9155,6 @@
   "Objeções": "Objections",
   "Próxima ação": "Next action",
   "Membro da equipe": "Team member",
-  "Canal de entrega": "Delivery channel",
-  "WhatsApp (número cadastrado em Avisos)": "WhatsApp (number registered under Alerts)",
-  "E-mail do membro": "Member e-mail",
-  "O número vem da configuração de avisos da empresa, cadastrada por um administrador. O resumo é montado na hora do disparo, com a pontuação e o motivo do negócio.": "The number comes from the company's alert settings, registered by an administrator. The summary is built at send time, with the score and the reason the deal was won.",
-  "O endereço é o que já está cadastrado da pessoa. Sem SMTP configurado, o aviso não sai e a regra avisa por quê.": "The address is the one already registered for the person. With no SMTP configured, the alert does not go out and the rule reports why.",
   "Destinatário": "Recipient",
   "Escolha quem recebe": "Choose who receives",
   "E-mail do contato": "Contact's email",
@@ -9292,5 +9287,11 @@
   "Lista de várias escolhas": "Multiple-choice list",
   "Lista pesquisável": "Searchable list",
   "Sim ou não": "Yes or no",
-  "Link (URL)": "Link (URL)"
+  "Link (URL)": "Link (URL)",
+  "O resumo vai para o WhatsApp cadastrado em Avisos, com a pontuação e o motivo do negócio, montados na hora do disparo.": "The summary goes to the WhatsApp number registered under Alerts, with the score and the reason for the deal, built at send time.",
+  "E-mail de uma pessoa da equipe": "A team member's email",
+  "Resumo do negócio": "Deal summary",
+  "A pessoa recebe no e-mail cadastrado no acesso dela, e o vínculo com a empresa é conferido no momento do envio.": "The person receives it at the email registered in their login, and their link to the company is checked at send time.",
+  "WhatsApp da equipe": "Team WhatsApp",
+  "Pessoa da equipe": "Team member"
 }

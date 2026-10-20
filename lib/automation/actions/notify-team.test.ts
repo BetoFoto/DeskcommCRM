@@ -10,11 +10,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * fica VERMELHO sozinho na main — que é a prova pedida pela issue — e só fica
  * verde quando a ação existe, se registra e entrega pelo canal certo.
  *
- * ─── As quatro coisas que a ação tem de provar ─────────────────────────────
+ * ─── As três coisas que a ação tem de provar ───────────────────────────────
  *
- * 1. O DESTINATÁRIO é uma pessoa da equipe, e ela tem de estar ATIVA nesta
- *    organização (mesma régua do `assign_owner`: revogado morre aqui, não num
- *    envio para gente de fora).
+ * 1. O schema deixou UM caminho: `canal` é o literal `whatsapp`. O ramo de
+ *    e-mail e o `membro_id` saíram com o recorte do PR #2834 — o e-mail para
+ *    uma pessoa da equipe é o destinatário "membro da equipe" do `send_email`
+ *    (ver `send-email.test.ts`, que é onde o vínculo do membro é cobrado).
  * 2. O WhatsApp sai pelo NÚMERO QUE O ADMIN CADASTROU em `config_aviso_de_caso`
  *    — não por nada escrito na regra — e só depois da CHECAGEM DE CAPACIDADE
  *    do canal (arquivado/pausado/desligado não recebe). Sem configuração, a
@@ -50,12 +51,6 @@ vi.mock("@/lib/agent-engine/pacing/ledger-supabase", () => ({
 vi.mock("@/lib/channels/capabilities", () => ({
   capabilitiesOf: vi.fn(() => ({ freeformOutsideWindow: true })),
 }));
-const roteador = vi.hoisted(() => ({
-  emailConfigurado: vi.fn(() => true),
-  sendEmail: vi.fn(async () => ({ ok: true, via: "smtp" })),
-}));
-vi.mock("@/lib/email/roteador", () => roteador);
-vi.mock("@/lib/branding/saida", () => ({ marcaDaSaida: vi.fn(async () => ({ nome: "Acme" })) }));
 // A prova negativa: se a ação passar por aqui, ela ABREU conversa com o lead.
 const sendMessageHandler = vi.hoisted(() => vi.fn(async () => ({ id: "msg-1", status: "sent" })));
 vi.mock("@/app/api/v1/messages/_handler", () => ({ sendMessageHandler }));
@@ -193,8 +188,6 @@ beforeEach(() => {
   transporte.configurado.mockResolvedValue(true);
   transporte.resolveDestino.mockImplementation(async (_o, _c, telefone) => telefone);
   transporte.envia.mockResolvedValue({ externalId: "wamid.TESTE" });
-  roteador.emailConfigurado.mockReturnValue(true);
-  roteador.sendEmail.mockResolvedValue({ ok: true, via: "smtp" });
 });
 
 describe("notify_team — a ação que NÃO EXISTE ainda (#2642)", () => {
@@ -203,26 +196,35 @@ describe("notify_team — a ação que NÃO EXISTE ainda (#2642)", () => {
     expect(acao, "notify_team não foi registrada — ver lib/automation/actions/register-all.ts").toBeTruthy();
   });
 
-  it("aceita a configuração mínima (membro + canal) e NENHUM destino colado", () => {
-    const ok = actionSchema.safeParse({
-      type: "notify_team",
-      config: { membro_id: MEMBRO, canal: "whatsapp" },
-    });
+  it("aceita a configuração mínima (o WhatsApp da equipe) e NENHUM destino colado", () => {
+    const ok = actionSchema.safeParse({ type: "notify_team", config: { canal: "whatsapp" } });
     expect(ok.success).toBe(true);
 
     // Número colado na regra é a porta de spam que a disciplina da #1347
     // fechou: o schema é FECHADO, então campo extra não passa.
     const comNumero = actionSchema.safeParse({
       type: "notify_team",
-      config: { membro_id: MEMBRO, canal: "whatsapp", telefone: "+5511912340000" },
+      config: { canal: "whatsapp", telefone: "+5511999990000" },
     });
     expect(comNumero.success).toBe(false);
 
-    const canalTorto = actionSchema.safeParse({
-      type: "notify_team",
-      config: { membro_id: MEMBRO, canal: "telegram" },
-    });
+    // O ramo de e-mail saiu com o recorte do PR #2834: uma regra que ainda peça
+    // `email` morre AQUI, e não sai pelo WhatsApp como se o pedido tivesse sido
+    // respeitado. (É o alvo da prova de sabotagem: devolver o `z.enum` com
+    // `email` deixa este `expect` vermelho.)
+    const canalEmail = actionSchema.safeParse({ type: "notify_team", config: { canal: "email" } });
+    expect(canalEmail.success).toBe(false);
+
+    const canalTorto = actionSchema.safeParse({ type: "notify_team", config: { canal: "telegram" } });
     expect(canalTorto.success).toBe(false);
+
+    // `membro_id` também saiu: quem recebe é o número da empresa, não uma
+    // pessoa escolhida na tela.
+    const comMembro = actionSchema.safeParse({
+      type: "notify_team",
+      config: { canal: "whatsapp", membro_id: MEMBRO },
+    });
+    expect(comMembro.success).toBe(false);
   });
 });
 
@@ -230,7 +232,7 @@ describe("notify_team — WhatsApp, pelo número que o ADMIN cadastrou", () => {
   it("entrega o resumo no número cadastrado, com a pontuação E o motivo", async () => {
     const acao = getAction("notify_team")!;
     const admin = adminFake(tabelasComTudo());
-    const r = await acao.execute(ctx(admin), { membro_id: MEMBRO, canal: "whatsapp" });
+    const r = await acao.execute(ctx(admin), { canal: "whatsapp" });
 
     expect(r.status).toBe("success");
     expect(transporte.envia).toHaveBeenCalledTimes(1);
@@ -259,7 +261,7 @@ describe("notify_team — WhatsApp, pelo número que o ADMIN cadastrou", () => {
 
   it("NÃO abre conversa nova com o lead: o handler de mensagens fica intacto", async () => {
     const acao = getAction("notify_team")!;
-    await acao.execute(ctx(adminFake(tabelasComTudo())), { membro_id: MEMBRO, canal: "whatsapp" });
+    await acao.execute(ctx(adminFake(tabelasComTudo())), { canal: "whatsapp" });
 
     expect(
       sendMessageHandler,
@@ -270,7 +272,7 @@ describe("notify_team — WhatsApp, pelo número que o ADMIN cadastrou", () => {
   it("sem número cadastrado, diz que falta configuração — e não envia nada", async () => {
     const acao = getAction("notify_team")!;
     const admin = adminFake(tabelasComTudo({ config_aviso_de_caso: [] }));
-    const r = await acao.execute(ctx(admin), { membro_id: MEMBRO, canal: "whatsapp" });
+    const r = await acao.execute(ctx(admin), { canal: "whatsapp" });
 
     expect(r.status).toBe("skipped");
     expect((r.detail as { reason: string }).reason).toBe("sem_numero_de_aviso_cadastrado");
@@ -280,10 +282,23 @@ describe("notify_team — WhatsApp, pelo número que o ADMIN cadastrou", () => {
   it("canal PAUSADO não recebe: a checagem de capacidade vem ANTES do envio", async () => {
     const acao = getAction("notify_team")!;
     const admin = adminFake(tabelasComTudo({ channel_sessions: [canalLivre({ status: "PAUSED" })] }));
-    const r = await acao.execute(ctx(admin), { membro_id: MEMBRO, canal: "whatsapp" });
+    const r = await acao.execute(ctx(admin), { canal: "whatsapp" });
 
     expect(r.status).toBe("skipped");
     expect((r.detail as { reason: string }).reason).toBe("canal_pausado");
+    expect(transporte.envia).not.toHaveBeenCalled();
+  });
+
+  it("canal desconhecido não sai pelo WhatsApp fingindo que foi respeitado", async () => {
+    // O schema já recusa `email` na porta; esta é a defesa do executor para uma
+    // regra gravada antes do recorte (ou escrita direta no banco). O que NÃO
+    // pode acontecer é o aviso sair pelo WhatsApp com o canal pedido ignorado.
+    const r = await getAction("notify_team")!.execute(ctx(adminFake(tabelasComTudo())), {
+      canal: "email",
+    });
+
+    expect(r.status).toBe("failed");
+    expect((r.detail as { reason: string }).reason).toBe("canal_nao_suportado");
     expect(transporte.envia).not.toHaveBeenCalled();
   });
 
@@ -292,7 +307,7 @@ describe("notify_team — WhatsApp, pelo número que o ADMIN cadastrou", () => {
     vi.mocked(capabilitiesOf).mockReturnValue({ freeformOutsideWindow: false } as never);
     const acao = getAction("notify_team")!;
     const admin = adminFake(tabelasComTudo());
-    const r = await acao.execute(ctx(admin), { membro_id: MEMBRO, canal: "whatsapp" });
+    const r = await acao.execute(ctx(admin), { canal: "whatsapp" });
 
     expect(r.status).toBe("skipped");
     expect((r.detail as { reason: string }).reason).toBe("canal_nao_aceita_texto_livre");
@@ -300,74 +315,6 @@ describe("notify_team — WhatsApp, pelo número que o ADMIN cadastrou", () => {
     vi.mocked(capabilitiesOf).mockReturnValue({ freeformOutsideWindow: true } as never);
   });
 
-  it("membro REVOGADO morre aqui: nada sai para gente de fora", async () => {
-    const acao = getAction("notify_team")!;
-    const admin = adminFake(
-      tabelasComTudo({
-        user_organizations: [
-          { organization_id: ORG, user_id: MEMBRO, role: "agent", revoked_at: "2026-01-01" },
-        ],
-      }),
-    );
-    const r = await acao.execute(ctx(admin), { membro_id: MEMBRO, canal: "whatsapp" });
-
-    expect(r.status).toBe("failed");
-    expect((r.detail as { reason: string }).reason).toBe("membro_invalido");
-    expect(transporte.envia).not.toHaveBeenCalled();
-  });
-
-  it("membro de OUTRA organização também morre aqui", async () => {
-    const acao = getAction("notify_team")!;
-    const admin = adminFake(tabelasComTudo({ user_organizations: [] }));
-    const r = await acao.execute(ctx(admin), { membro_id: MEMBRO, canal: "whatsapp" });
-
-    expect(r.status).toBe("failed");
-    expect((r.detail as { reason: string }).reason).toBe("membro_invalido");
-    expect(transporte.envia).not.toHaveBeenCalled();
-  });
-});
-
-describe("notify_team — e-mail, para o endereço que JÁ ESTÁ cadastrado", () => {
-  it("entrega por e-mail quando a pessoa não tem WhatsApp e o SMTP está ligado", async () => {
-    const acao = getAction("notify_team")!;
-    const admin = adminFake(tabelasComTudo());
-    const r = await acao.execute(ctx(admin), { membro_id: MEMBRO, canal: "email" });
-
-    expect(r.status).toBe("success");
-    expect(transporte.envia, "o e-mail não pode passar pelo WhatsApp").not.toHaveBeenCalled();
-    expect(roteador.sendEmail).toHaveBeenCalledTimes(1);
-
-    const chamada = roteador.sendEmail.mock.calls[0] as unknown as [
-      { to: string; subject: string; text: string },
-    ];
-    const envio = chamada[0];
-    expect(envio.to, "o endereço vem do GoTrue, não da regra").toBe("closer@acme.com.br");
-    expect(envio.subject).toContain("Plano anual — Franca Log");
-    expect(envio.text).toContain("Pontuação: 72%");
-  });
-
-  it("envio que LANÇA vira falha explícita — e o ledger não conta o que não saiu", async () => {
-    transporte.envia.mockRejectedValue(new Error("canal_sem_referencia_de_transporte"));
-    const acao = getAction("notify_team")!;
-    const admin = adminFake(tabelasComTudo());
-    const r = await acao.execute(ctx(admin), { membro_id: MEMBRO, canal: "whatsapp" });
-
-    expect(r.status, "exceção do transporte NÃO pode virar 'enviado'").toBe("failed");
-    expect((r.detail as { reason: string }).reason).toBe("whatsapp_falhou");
-    expect((r.detail as { error?: string }).error).toContain("canal_sem_referencia_de_transporte");
-    expect(pacing.registraEnvio, "sem envio não há pacing a cobrar").not.toHaveBeenCalled();
-  });
-
-  it("sem SMTP configurado, o aviso não sai e o motivo fica explícito", async () => {
-    roteador.emailConfigurado.mockReturnValue(false);
-    const acao = getAction("notify_team")!;
-    const admin = adminFake(tabelasComTudo());
-    const r = await acao.execute(ctx(admin), { membro_id: MEMBRO, canal: "email" });
-
-    expect(r.status).toBe("skipped");
-    expect((r.detail as { reason: string }).reason).toBe("smtp_nao_configurado");
-    expect(roteador.sendEmail).not.toHaveBeenCalled();
-  });
 });
 
 describe("notify_team — o resumo é MONTADO, não gravado", () => {
