@@ -16381,6 +16381,15 @@ export const DICIONARIO: Traducoes = {
   // abaixo são exclusivas desta fatia.
   // Novas da F3.
   "contatos por chamada.": { es: "contactos por llamada." },
+  // Textos que as telas escreviam crus, fora de t(), e que por isso saíam iguais em todo idioma. Os rótulos do
+  // vocabulário do funil eram inglês em toda língua (Lead, Deal, Won, Lost): a chave é o próprio inglês, para o
+  // português seguir mostrando o mesmo; o atalho de exemplo das respostas rápidas era « oi »; o título de excluir um
+  // fluxo leva o nome entre as aspas do idioma.
+  Deal: { es: "Negocio" },
+  Won: { es: "Ganado" },
+  Lost: { es: "Perdido" },
+  oi: { es: "hola" },
+  "Excluir “{nome}”?": { es: "¿Eliminar “{nome}”?" },
   "1 contato selecionado": { es: "1 contacto seleccionado" },
   "contatos selecionados": { es: "contactos seleccionados" },
   "Adicionar etiqueta": { es: "Agregar etiqueta" },
