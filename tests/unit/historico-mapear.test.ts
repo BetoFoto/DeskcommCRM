@@ -4,7 +4,7 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 
 import fixture from "@/lib/waha/__fixtures__/acervo-noweb-2026.7.2.json";
 import { externalIdDeEntrada, externalIdDeSaida, type WahaPayload } from "@/lib/waha/ingest";
-import { identidadeDoChat, mapearMensagemDoAcervo } from "@/lib/whatsapp-historico/mapear";
+import { candidatosDeExternalId, identidadeDoChat, mapearMensagemDoAcervo } from "@/lib/whatsapp-historico/mapear";
 
 const ctx = { orgId: "org-1", sessionId: "sess-1", contactId: "ct-1", conversationId: "cv-1" };
 const msgs = fixture.messages as unknown as Record<string, WahaPayload[]>;
@@ -18,6 +18,7 @@ describe("mapearMensagemDoAcervo", () => {
   it("entrada: external_id é o mesmo que o caminho ao vivo grava", () => {
     const p = porId("AAA001");
     const l = mapearMensagemDoAcervo(p, ctx);
+    expect(l.external_id).toBe("false_222222222222222@lid_AAA001");
     expect(l.external_id).toBe(externalIdDeEntrada(p));
     expect(l.direction).toBe("inbound");
     expect(l.status).toBe("delivered");
@@ -85,7 +86,7 @@ describe("mapearMensagemDoAcervo", () => {
 
 describe("identidadeDoChat", () => {
   it("telefone", () => {
-    const i = identidadeDoChat(porId("AAA001"));
+    const i = identidadeDoChat(porId("AAA003"));
     expect(i).toMatchObject({ kind: "phone", phone: "+5511900000001", lid: null });
     expect(i.chatId).toBe("5511900000001@s.whatsapp.net");
   });
@@ -102,6 +103,34 @@ describe("identidadeDoChat", () => {
     expect(i.chatId).toBe("111111111111111@lid");
     expect(i.phone).toBe("+5511900000002");
     const o = identidadeDoChat(porId("AAA002"));
-    expect(o).toMatchObject({ kind: "phone", phone: "+5511900000001" });
+    expect(o).toMatchObject({ kind: "lid", lid: "222222222222222", phone: "+5511900000001" });
+  });
+});
+
+describe("candidatosDeExternalId", () => {
+  it("entrada @s.whatsapp.net: completo, variante @c.us e bare", () => {
+    const c = candidatosDeExternalId(porId("AAA003"));
+    expect(c[0]).toBe("false_5511900000001@s.whatsapp.net_AAA003");
+    expect(c).toContain("false_5511900000001@c.us_AAA003");
+    expect(c).toContain("AAA003");
+    expect(new Set(c).size).toBe(c.length);
+  });
+
+  it("entrada @c.us: variante @s.whatsapp.net", () => {
+    const p = { ...porId("AAA003"), id: "false_5511900000001@c.us_AAA003" } as WahaPayload;
+    const c = candidatosDeExternalId(p);
+    expect(c).toContain("false_5511900000001@s.whatsapp.net_AAA003");
+    expect(c).toContain("false_5511900000001@c.us_AAA003");
+  });
+
+  it("entrada @lid: completo e bare, sem variantes de telefone", () => {
+    const c = candidatosDeExternalId(porId("AAA001"));
+    expect(c).toEqual(["false_222222222222222@lid_AAA001", "AAA001"]);
+  });
+
+  it("saída: bare primeiro, e o completo", () => {
+    const c = candidatosDeExternalId(porId("AAA002"));
+    expect(c[0]).toBe("AAA002");
+    expect(c).toContain("true_222222222222222@lid_AAA002");
   });
 });

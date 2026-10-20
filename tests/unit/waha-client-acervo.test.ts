@@ -81,10 +81,10 @@ describe("listarMensagens", () => {
     expect(u.searchParams.get("filter.timestamp.gte")).toBe("0");
     expect(u.searchParams.get("limit")).toBe("20");
     expect(r.map((m) => m.id)).toEqual([
-      "false_5511900000001@s.whatsapp.net_AAA001",
-      "true_5511900000001@s.whatsapp.net_AAA002",
+      "false_222222222222222@lid_AAA001",
+      "true_222222222222222@lid_AAA002",
       "false_5511900000001@s.whatsapp.net_AAA003",
-      "false_5511900000001@s.whatsapp.net_AAA004",
+      "false_222222222222222@lid_AAA004",
     ]);
     expect(r[1]?.fromMe).toBe(true);
     expect(r[2]?.hasMedia).toBe(true);
@@ -135,7 +135,7 @@ describe("baixarMidiaDaMensagem", () => {
     const r = await novo().baixarMidiaDaMensagem(
       "s1",
       "5511900000001@s.whatsapp.net",
-      "false_5511900000001@s.whatsapp.net_AAA004",
+      "false_222222222222222@lid_AAA004",
     );
     expect(r).toEqual({ url: null, erro: true });
   });

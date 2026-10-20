@@ -86,10 +86,36 @@ export function mapearMensagemDoAcervo(
 }
 
 /**
+ * Todas as formas em que a MESMA mensagem pode já ter sido gravada em
+ * `messages.external_id` pelo caminho ao vivo. A importação consulta
+ * `external_id in (candidatos)` antes de inserir, porque o chat dentro do id pode
+ * mudar de sufixo entre o acervo e o webhook (`@s.whatsapp.net` x `@c.us`).
+ * Saída: o bare primeiro (forma que o ao vivo grava) e o completo. Entrada: o
+ * completo, as variantes de sufixo de telefone e o bare. Sem duplicatas.
+ */
+export function candidatosDeExternalId(p: WahaPayload): string[] {
+  const id = p.id;
+  if (!id) return [];
+  const bare = externalIdDeSaida(p) as string;
+  const lista: string[] = [];
+  if (p.fromMe === true) {
+    lista.push(bare, id);
+  } else {
+    lista.push(externalIdDeEntrada(p) as string);
+    if (id.includes("@s.whatsapp.net_")) lista.push(id.replace("@s.whatsapp.net_", "@c.us_"));
+    else if (id.includes("@c.us_")) lista.push(id.replace("@c.us_", "@s.whatsapp.net_"));
+    lista.push(bare);
+  }
+  return [...new Set(lista)];
+}
+
+/**
  * Com quem é o chat. O chat vem do id (`{fromMe}_{chat}_{bare}`), igual nas duas direções: na
  * saída `from` é o número do operador no acervo. Sem id composto, `from` (entrada)
  * ou `to`/`from` (saída).
  * No `@lid`, o telefone real vem de `_data.key.remoteJidAlt`.
+ * O telefone sai cru (E.164): o chamador deve canonicalizá-lo com
+ * `canonicalPhoneBR`, como o ingest ao vivo faz, antes de buscar ou criar contato.
  */
 export interface IdentidadeDoChat {
   kind: ChatIdentity["kind"];
