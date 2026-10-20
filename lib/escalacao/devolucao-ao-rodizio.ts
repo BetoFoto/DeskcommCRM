@@ -28,6 +28,14 @@
  * funções separadas: quem chama só vai ao banco perguntar por mensagem depois de
  * a conversa passar no portão barato.
  *
+ * ## A trava das 3 horas: estoque antigo não volta de uma vez
+ *
+ * Ligar o prazo numa instalação que já roda transformaria todo o histórico em
+ * candidatas na primeira rodada. Por isso só entra entrega das últimas 3 h
+ * (`JANELA_DE_ENTREGA_RECENTE_MINUTOS`): a devolução conserta o plantão de
+ * agora, não redistribui o mês passado. O preço é explícito — prazo acima de
+ * 180 min nunca dispara, porque quando vence a entrega já saiu da janela.
+ *
  * ## A exclusão de 24 h, e por que ela é o que faz a devolução servir
  *
  * Soltar o dono sem mais nada não conserta nada: o `routing-worker` roda 1×/min
@@ -45,6 +53,12 @@
  * na fila, se o rodízio ainda não a entregou, ou com o terceiro dono, que ao
  * menos viu a conversa chegar. Avisar alguém é a fatia 3 (aqui não há
  * notificação nenhuma, por decisão de recorte).
+ *
+ * O contador NÃO zera com o tempo: é contagem de devoluções da conversa, não
+ * "devoluções recentes" (a pergunta do mantenedor no #2988). `ultima_devolucao_em`
+ * é a régua já gravada se a decisão mudar — zerar por silêncio seria "passou
+ * tanto tempo que a conversa é nova de novo", e isso é da fatia 2/3, com o
+ * tamanho da janela decidido por quem opera.
  *
  * ## Como a marca se lê, e por que ela é defensiva
  *
@@ -68,6 +82,22 @@ export const MAX_DEVOLUCOES_AO_RODIZIO = 2;
 
 /** Por quanto tempo a pessoa devolvida fica fora DESTA conversa. */
 export const JANELA_DE_EXCLUSAO_MINUTOS = 24 * 60;
+
+/**
+ * A TRAVA DAS 3 HORAS (issue #2985), e por que ela existe
+ *
+ * Ligar o prazo numa instalação que já roda há meses transformaria TODO o
+ * estoque de conversas antigas entregues pelo rodízio em candidatas na primeira
+ * rodada: a fila receberia de uma vez conversas de dias atrás, e o rodízio as
+ * redistribuiria — o oposto de "quem recebeu e não respondeu no prazo". A trava
+ * corta isso na régua: só é candidata a entrega das últimas 3 horas.
+ *
+ * O efeito colateral é conhecido e é a régua que se quer: um prazo acima de
+ * 180 min nunca dispara, porque quando ele vence a entrega já é estoque antigo.
+ * A faixa do knob continua a da devolução ao agente (5 min – 24 h) — baixar o
+ * teto aqui faria o knob mentir sobre o valor gravado.
+ */
+export const JANELA_DE_ENTREGA_RECENTE_MINUTOS = 3 * 60;
 
 /** Chave do objeto dentro de `conversations.metadata`. */
 export const CHAVE_DA_DEVOLUCAO_AO_RODIZIO = "devolucao_ao_rodizio";
@@ -244,6 +274,7 @@ export type MotivoDeNaoDevolver =
   | "ciclos_esgotados"
   | "ultimo_evento_nao_e_rodizio"
   | "sem_entrega"
+  | "entrega_antiga"
   | "dentro_do_prazo";
 
 /**
@@ -271,6 +302,12 @@ export function avaliarEntregaAoRodizio(
   }
   const entregaMs = c.entregueEm === null ? NaN : Date.parse(c.entregueEm);
   if (Number.isNaN(entregaMs)) return { candidata: false, motivo: "sem_entrega" };
+  // A trava de estoque vem ANTES do prazo: com ela, "entregue há dias" sai por
+  // `entrega_antiga` e não por `dentro_do_prazo` — o motivo importa para quem
+  // ler o log e para o teste que guarda a promessa da issue.
+  if (sel.agoraMs - entregaMs > JANELA_DE_ENTREGA_RECENTE_MINUTOS * 60_000) {
+    return { candidata: false, motivo: "entrega_antiga" };
+  }
   if (sel.agoraMs - entregaMs < minutos * 60_000) return { candidata: false, motivo: "dentro_do_prazo" };
   return { candidata: true, minutos, entregueEm: c.entregueEm! };
 }

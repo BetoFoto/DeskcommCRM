@@ -30,21 +30,39 @@
  * dezenas de minutos. Cinco minutos de atraso não mudam nada para uma conversa
  * que já está parada.
  *
- * ## As três escritas, e por que nesta ordem
+ * ## As três escritas, e por que NESTA ordem
  *
- * 1. `fn_conversation_assign(..., 'release')` com `p_enforce_expected: true` e o
+ * 1. A marca em `conversations.metadata` vem PRIMEIRO. Soltar o dono não é um
+ *    evento local: `fn_conversation_assign` faz o UPDATE de `conversations` e o
+ *    gatilho `trg_routing_assignment_changed` (`after update of
+ *    assigned_to_user_id,status`) JÁ chama `fn_request_channel_routing` na
+ *    MESMA transação. Ou seja: o pedido de rodízio nasce no commit do release —
+ *    a frase antiga deste cabeçalho (que o gatilho de emissão era só AFTER
+ *    INSERT) estava errada. Com o pedido nascendo ali, marcar DEPOIS deixava uma
+ *    janela em que o `routing-worker` (1×/min) pegava o pedido sem a exclusão de
+ *    24 h e reentregava a conversa à MESMA pessoa. Marcando antes, o pedido
+ *    nunca existe sem a marca.
+ * 2. `fn_conversation_assign(..., 'release')` com `p_enforce_expected: true` e o
  *    dono LIDO como esperado: quem assumiu a conversa entre a leitura e a
- *    escrita ganha a corrida (0 linhas) e nada mais é escrito. É a MESMA função
- *    do botão "Liberar" da tela — não há régua paralela de atribuição aqui.
- * 2. A marca em `conversations.metadata` — só DEPOIS do release dar certo:
- *    marcar uma devolução que não aconteceu tiraria a pessoa da conversa sem
- *    devolvê-la.
- * 3. `fn_request_channel_routing` devolve a conversa AO RODÍZIO (o trigger de
- *    emissão é AFTER INSERT, então o release não gera evento sozinho).
+ *    escrita ganha a corrida (0 linhas) — e a marca é DESFEITA, porque marcar
+ *    uma devolução que não aconteceu tiraria a pessoa da conversa sem devolvê-la.
+ *    É a MESMA função do botão "Liberar" da tela — não há régua paralela de
+ *    atribuição aqui.
+ * 3. `fn_request_channel_routing` — REDUNDANTE e inofensivo: o gatilho do passo 2
+ *    já pediu o rodízio. Fica como cinto de segurança para o caso de o gatilho
+ *    não existir (banco antigo) e é idempotente: o `on conflict` do índice único
+ *    de evento ativo só reancora `next_attempt_at`.
+ *
+ * ## A trava das 3 horas
+ *
+ * Só entra entrega das últimas 3 h (`JANELA_DE_ENTREGA_RECENTE_MINUTOS`): ligar
+ * o prazo numa instalação que já roda não pode devolver o estoque antigo inteiro
+ * de uma vez. Consequência declarada: prazo acima de 180 min nunca dispara.
  *
  * Auth: mesmo contrato dos demais crons (Bearer INTERNAL_CRON_SECRET|
  * INTERNAL_SECRET, fail-closed). Audita SÓ quando devolveu ou falhou — varredura
  * vazia não é mutação (`tests/unit/cron-audita-so-quando-ha-efeito.test.ts`).
+ * As três coisas acima estão presas por `tests/unit/cron-rodizio-devolucao.test.ts`.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -161,8 +179,15 @@ async function ultimaRespostaHumana(
 }
 
 /**
- * Solta o dono, marca a exclusão e devolve a conversa ao rodízio.
- * `false` = a conversa mudou desde a leitura (corrida benigna): nada foi escrito.
+ * Grava a marca de exclusão e devolve a conversa ao rodízio.
+ * `false` = a conversa mudou desde a leitura (corrida benigna): a marca é
+ * desfeita e nada mais é escrito.
+ *
+ * ORDEM: marca → release → pedido de rodízio (ver o cabeçalho). A marca vem
+ * antes porque o pedido de rodízio nasce DENTRO da transação do release, pelo
+ * gatilho `trg_routing_assignment_changed`; marcar depois deixaria o
+ * `routing-worker` reentregar a conversa à mesma pessoa na janela entre os dois
+ * commits.
  */
 async function devolverAoRodizio(
   admin: SupabaseClient,
@@ -173,7 +198,35 @@ async function devolverAoRodizio(
   const dono = conversa.assigned_to_user_id;
   if (dono === null) return { ok: false, erro: "sem_dono" };
 
-  // (1) Solta o dono pela regra de sempre. `p_enforce_expected: true` com o dono
+  const escreverMetadata = (valor: unknown) =>
+    admin
+      .from("conversations")
+      .update({ metadata: valor })
+      .eq("id", conversa.id)
+      .eq("organization_id", conversa.organization_id);
+
+  // (1) A MARCA primeiro: aquela pessoa fora DESTA conversa por 24 h, e a
+  // devolução contada (é ela que faz a conversa sair do ciclo na segunda).
+  const metadata = registrarDevolucaoAoRodizio(conversa.metadata, dono, agora.getTime());
+  const { error: markErr } = await escreverMetadata(metadata);
+  if (markErr) {
+    // Nada foi solto ainda: a falha não deixa conversa na fila sem marca.
+    return { ok: false, erro: "marca_nao_gravada", detalhe: markErr.message };
+  }
+
+  /**
+   * A marca foi escrita e a devolução NÃO aconteceu (corrida ou erro de banco):
+   * repõe o metadata lido. Best-effort de propósito — se a reposição falhar, o
+   * erro que importa é o do release; a marca órfã vira `marca_nao_revertida`
+   * para aparecer no log, nunca silêncio.
+   */
+  const desfazerMarca = async (erro: string, detalhe?: string) => {
+    const { error: revertErr } = await escreverMetadata(conversa.metadata);
+    if (revertErr) return { ok: false as const, erro: "marca_nao_revertida", detalhe: `${erro}: ${revertErr.message}` };
+    return { ok: false as const, erro, ...(detalhe ? { detalhe } : {}) };
+  };
+
+  // (2) Solta o dono pela regra de sempre. `p_enforce_expected: true` com o dono
   // LIDO: se alguém assumiu entre a leitura e a escrita, 0 linhas e a pessoa que
   // assumiu ganha — o desfecho certo.
   const { data: liberadas, error: releaseErr } = await admin.rpc("fn_conversation_assign", {
@@ -184,27 +237,13 @@ async function devolverAoRodizio(
     p_expected_assignee: dono,
     p_enforce_expected: true,
   });
-  if (releaseErr) return { ok: false, erro: "release_failed", detalhe: releaseErr.message };
+  if (releaseErr) return desfazerMarca("release_failed", releaseErr.message);
   const liberada = Array.isArray(liberadas) ? liberadas[0] : liberadas;
-  if (!liberada) return { ok: false, erro: "assignment_conflict" };
+  if (!liberada) return desfazerMarca("assignment_conflict");
 
-  // (2) A marca: aquela pessoa fora DESTA conversa por 24 h, e a devolução
-  // contada (é ela que faz a conversa sair do ciclo na segunda).
-  const metadata = registrarDevolucaoAoRodizio(conversa.metadata, dono, agora.getTime());
-  const { error: markErr } = await admin
-    .from("conversations")
-    .update({ metadata })
-    .eq("id", conversa.id)
-    .eq("organization_id", conversa.organization_id);
-  if (markErr) {
-    // A conversa já voltou à fila — não desfazer é o certo. Mas a exclusão não
-    // foi gravada, então ela PODE voltar para a mesma pessoa: é falha, e conta.
-    return { ok: false, erro: "marca_nao_gravada", detalhe: markErr.message };
-  }
-
-  // (3) Devolve a conversa AO RODÍZIO. O trigger de emissão é AFTER INSERT, então
-  // o release acima não gera evento sozinho — sem esta chamada a conversa ficaria
-  // parada na fila sem ninguém tentando atribuí-la.
+  // (3) Devolve a conversa AO RODÍZIO. Redundante: o gatilho do release já
+  // pediu, na transação do passo 2. Fica como cinto de segurança para banco sem
+  // o gatilho, e o `on conflict` do índice único de evento ativo o torna inócuo.
   const { error: routingErr } = await admin.rpc("fn_request_channel_routing", {
     p_org: conversa.organization_id,
     p_conversation: conversa.id,

@@ -6,6 +6,7 @@ import {
   contarDevolucoesAoRodizio,
   filtrarCandidatosExcluidos,
   houveRespostaHumanaDepoisDaEntrega,
+  JANELA_DE_ENTREGA_RECENTE_MINUTOS,
   JANELA_DE_EXCLUSAO_MINUTOS,
   lerMarcasDeDevolucaoAoRodizio,
   lerPrazoDeDevolucaoAoRodizioMinutos,
@@ -146,6 +147,51 @@ describe("avaliarEntregaAoRodizio — quem vence, e por quê", () => {
       candidata: false,
       motivo: "sem_entrega",
     });
+  });
+
+  /**
+   * A TRAVA DAS 3 HORAS (promessa da #2985). Ligar o prazo numa instalação que
+   * já roda não pode devolver de uma vez o estoque de conversas entregues em
+   * dias anteriores — só o plantão de agora.
+   */
+  it("só entra entrega das últimas 3 horas: estoque antigo fica fora por 'entrega_antiga'", () => {
+    // Dentro da janela (2 h 59), passado o prazo de 60: devolve.
+    expect(avaliarEntregaAoRodizio(conversa({ entregueEm: min(179) }), selecao(60))).toEqual({
+      candidata: true,
+      minutos: 60,
+      entregueEm: min(179),
+    });
+    // Exatamente no limite da janela: ainda é o plantão de agora.
+    expect(avaliarEntregaAoRodizio(conversa({ entregueEm: min(180) }), selecao(60))).toMatchObject({
+      candidata: true,
+    });
+    // Um minuto depois do limite: estoque antigo, e o motivo é OUTRO.
+    expect(avaliarEntregaAoRodizio(conversa({ entregueEm: min(181) }), selecao(60))).toEqual({
+      candidata: false,
+      motivo: "entrega_antiga",
+    });
+    // Semanas depois de a pessoa ligar o prazo: nada de redistribuir o passado.
+    expect(avaliarEntregaAoRodizio(conversa({ entregueEm: min(60 * 24 * 30) }), selecao(60))).toEqual({
+      candidata: false,
+      motivo: "entrega_antiga",
+    });
+  });
+
+  it("prazo acima de 3 h nunca dispara — quando vence, a entrega já é estoque antigo", () => {
+    // 240 min de prazo: aos 200 min ainda está dentro do prazo; aos 250 já saiu
+    // da janela. Documentado, porque é consequência da trava, não defeito.
+    expect(avaliarEntregaAoRodizio(conversa({ entregueEm: min(200) }), selecao(240))).toEqual({
+      candidata: false,
+      motivo: "dentro_do_prazo",
+    });
+    expect(avaliarEntregaAoRodizio(conversa({ entregueEm: min(250) }), selecao(240))).toEqual({
+      candidata: false,
+      motivo: "entrega_antiga",
+    });
+  });
+
+  it("a trava é a MESMA da constante: 3 horas", () => {
+    expect(JANELA_DE_ENTREGA_RECENTE_MINUTOS).toBe(180);
   });
 });
 
