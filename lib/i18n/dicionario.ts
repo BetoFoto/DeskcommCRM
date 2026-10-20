@@ -3244,6 +3244,10 @@ export const DICIONARIO: Traducoes = {
   "Erro ao salvar": { es: "Error al guardar" },
   "Agent default": { es: "Agente predeterminado" },
   "Criado em": { es: "Creado el" },
+  "Nome na agenda do celular": { es: "Nombre en la agenda del celular" },
+  "Só a equipe vê. Para usar em mensagens, copie para o nome.": {
+    es: "Solo lo ve el equipo. Para usarlo en mensajes, cópialo al nombre.",
+  },
   "Geral": { es: "General" },
   "Descrição interna do agent": { es: "Descripción interna del agente" },
   "Agent ativo": { es: "Agente activo" },
@@ -9749,6 +9753,12 @@ export const DICIONARIO: Traducoes = {
   "Esse convite expirou ou não é mais válido. Peça um novo a quem te convidou — esta instalação não aceita cadastro sem convite.": {
     es: "Esa invitación venció o ya no es válida. Pide una nueva a quien te invitó. Esta instalación no permite registrarse sin invitación.",
   },
+  "Não conseguimos enviar o e-mail de confirmação, porque o envio de e-mails desta instalação não está configurado. Tentar de novo não resolve: avise quem convidou você.": {
+    es: "No pudimos enviar el correo de confirmación, porque el envío de correos de esta instalación no está configurado. Intentarlo de nuevo no lo resuelve: avisa a quien te invitó.",
+  },
+  "Não conseguimos enviar o e-mail de confirmação, porque o envio de e-mails desta instalação não está configurado. Tentar de novo não resolve: avise quem administra o sistema.": {
+    es: "No pudimos enviar el correo de confirmación, porque el envío de correos de esta instalación no está configurado. Intentarlo de nuevo no lo resuelve: avisa a quien administra el sistema.",
+  },
   "Esta instalação aceita cadastro apenas por convite. Se você foi convidado, use o link que chegou no seu e-mail.": {
     es: "Esta instalación solo permite el registro por invitación. Si te invitaron, usa el enlace que llegó a tu correo.",
   },
@@ -14281,6 +14291,8 @@ export const DICIONARIO: Traducoes = {
   "Verificar certificado": { es: "Verificar certificado" },
   "Preferir TLS": { es: "Preferir TLS" },
   "Sem TLS (rede local confiável)": { es: "Sin TLS (red local de confianza)" },
+  PostgreSQL: { es: "PostgreSQL" },
+  MySQL: { es: "MySQL" },
   "Nenhuma tabela liberada ainda. Marque acima, em “O que o assistente pode ver”, as que podem ser lidas.": {
     es: "Ninguna tabla habilitada todavía. Marca arriba, en “Qué puede ver el asistente”, las que se pueden leer.",
   },
@@ -14368,6 +14380,25 @@ export const DICIONARIO: Traducoes = {
   "O assistente ainda não enxerga nada deste banco.": { es: "El asistente aún no ve nada de esta base de datos." },
   "Escolher o que ele pode ler": { es: "Elegir qué puede leer" },
   "Conexão criada. Agora escolha o que o assistente pode ler.": { es: "Conexión creada. Ahora elige qué puede leer el asistente." },
+  "Este usuário do banco pode escrever. Crie um usuário só de leitura (apenas SELECT) para o assistente.": { es: "Este usuario de la base de datos puede escribir. Crea un usuario solo de lectura (únicamente SELECT) para el asistente." },
+  "Este usuário lê o banco inteiro. Libere só as tabelas e views que o assistente deve ver.": { es: "Este usuario lee toda la base de datos. Libera solo las tablas y vistas que el asistente debe ver." },
+  "Não consegui conferir os papéis deste usuário. Confirme que ele só lê.": { es: "No pude verificar los roles de este usuario. Confirma que solo lee." },
+  "Não consegui conferir os privilégios deste usuário. Confirme que ele só lê.": { es: "No pude verificar los privilegios de este usuario. Confirma que solo lee." },
+  "Tipo de banco": { es: "Tipo de base de datos" },
+  "O tipo de banco não muda depois de criado. Para trocar, apague a conexão e crie outra.": { es: "El tipo de base de datos no cambia una vez creado. Para cambiarlo, elimina la conexión y crea otra." },
+  "No MySQL, conecte com um usuário só de leitura (apenas SELECT). Se for um WordPress, crie uma view com os dados que o assistente deve ver.": { es: "En MySQL, conecta con un usuario solo de lectura (únicamente SELECT). Si es un WordPress, crea una vista con los datos que el asistente debe ver." },
+  "O teste passou, mas há um aviso sobre o usuário deste banco. Veja no cartão da conexão.": { es: "La prueba pasó, pero hay un aviso sobre el usuario de esta base de datos. Míralo en la tarjeta de la conexión." },
+  "Como criar um acesso só de leitura (guia rápido)": { es: "Cómo crear un acceso de solo lectura (guía rápida)" },
+  "Quem administra o banco de dados do cliente executa estes comandos nele. O CRM só precisa de um acesso que leia o que você quiser mostrar ao assistente, e nada além disso.": { es: "Quien administra la base de datos del cliente ejecuta estos comandos en ella. El CRM solo necesita un acceso que lea lo que quieras mostrar al asistente, y nada más." },
+  "Crie um usuário novo. Troque a senha por uma forte, que você não use em nenhum outro lugar.": { es: "Crea un usuario nuevo. Cambia la contraseña por una fuerte, que no uses en ningún otro lugar." },
+  "Se você souber o endereço (IP) do servidor do CRM, troque o % por ele: assim só esse servidor consegue entrar.": { es: "Si conoces la dirección (IP) del servidor del CRM, cambia el % por ella: así solo ese servidor puede entrar." },
+  "Crie uma view (uma tabela virtual) só com as colunas que o assistente pode ver, e libere somente ela. Troque os nomes em MAIÚSCULAS pelos do seu banco.": { es: "Crea una vista (una tabla virtual) solo con las columnas que el asistente puede ver, y libera únicamente esa. Cambia los nombres en MAYÚSCULAS por los de tu base de datos." },
+  "Não libere o banco inteiro: é assim que tabelas como a de senhas ficam de fora.": { es: "No liberes toda la base de datos: así es como tablas como la de contraseñas quedan afuera." },
+  "Volte aqui, conecte com esse usuário, clique em Testar e, na conexão criada, marque a view em «O que o assistente pode ver».": { es: "Vuelve aquí, conecta con ese usuario, haz clic en Probar y, en la conexión creada, marca la vista en «Qué puede ver el asistente»." },
+  "Quando o seu outro sistema guarda os dados num banco PostgreSQL ou MySQL, conecte-o aqui e o agente passa a responder com esses dados — pedido, assinatura, matrícula, saldo.": { es: "Si tu otro sistema guarda sus datos en una base PostgreSQL o MySQL, conéctala aquí y el agente podrá responder con esa información: pedidos, suscripciones, matrículas, saldo." },
+  "Conecte um banco de dados de outro sistema — o seu segundo CRM, um ERP, uma planilha num banco PostgreSQL ou MySQL — e o agente passa a consultá-lo em tempo real. A conexão é sempre somente leitura: nada que o agente faz altera o banco de origem.": {
+    es: "Conecta la base de datos de otro sistema (tu segundo CRM, un ERP, una hoja de cálculo en una base PostgreSQL o MySQL) y el agente podrá consultarla en tiempo real. La conexión es siempre de solo lectura: nada de lo que haga el agente modifica la base de origen.",
+  },
   // Frase inteira, e não "Ativada" seco: essa chave já existe neste arquivo,
   // de outra tela e no feminino (`Activada`) — reusá-la duplicaria a chave e
   // discordaria do gênero de `Recorrido`.

@@ -448,8 +448,9 @@ valor_compose() { printf '"%s"' "$(printf '%s' "${1-}" | sed 's/[\\"$]/\\&/g')";
 # O compose oficial aponta o GoTrue para `supabase-mail`, que não existe em
 # produção: "esqueci a senha" e a confirmação de cadastro não chegariam. O SMTP
 # do CRM (#1176) é a fonte, na MESMA precedência de lib/email/config.ts: a
-# linha da tela /admin/email, se existe; senão o .env. Sai 1 (e não toca em
-# nada) quando o CRM não tem SMTP — quem chama avisa o dono.
+# linha da tela /admin/email, se existe; senão o .env. Sem SMTP, a Resend do
+# CRM (resend_da_instalacao), que é o que o app usa nesse caso. Sai 1 (e não
+# toca em nada) quando o CRM não tem nenhum dos dois — quem chama avisa o dono.
 sincronizar_smtp_do_gotrue() {
   local env_sb sep=$'\x1f' linha="" host porta usuario senha remetente nome
   env_sb="$(dir_do_supabase)/.env"
@@ -465,13 +466,50 @@ sincronizar_smtp_do_gotrue() {
     host="${SMTP_HOST:-}"; porta="${SMTP_PORT:-587}"; usuario="${SMTP_USERNAME:-}"
     senha="${SMTP_PASSWORD:-}"; remetente="${SMTP_FROM_EMAIL:-}"; nome="${SMTP_FROM_NAME:-}"
   fi
-  [ -n "$host" ] && [ -n "$remetente" ] || return 1
+  if [ -z "$host" ] || [ -z "$remetente" ]; then
+    # Sem SMTP o app envia pela Resend (lib/email/roteador.ts) — e o GoTrue também pode.
+    linha="$(resend_da_instalacao)" || return 1
+    IFS="$sep" read -r senha remetente <<<"$linha"
+    host=smtp.resend.com; porta=465; usuario=resend
+  fi
   set_env_var "$env_sb" SMTP_HOST "$(valor_compose "$host")"
   set_env_var "$env_sb" SMTP_PORT "${porta:-587}"
   set_env_var "$env_sb" SMTP_USER "$(valor_compose "$usuario")"
   set_env_var "$env_sb" SMTP_PASS "$(valor_compose "$senha")"
   set_env_var "$env_sb" SMTP_ADMIN_EMAIL "$(valor_compose "$remetente")"
   set_env_var "$env_sb" SMTP_SENDER_NAME "$(valor_compose "${nome:-${APP_NAME:-DeskcommCRM}}")"
+}
+
+# A Resend também fala SMTP (smtp.resend.com:465, usuário `resend`, senha = a
+# chave). Sem isto, a instalação com e-mail SÓ pela Resend deixava o GoTrue no
+# `supabase-mail` de mentira, e o cadastro por convite morria em 500 "Error
+# sending confirmation email" (medido numa VPS v1.85.0).
+#
+# Mesma precedência de valorDaInstalacao (lib/instalacao/config.ts), chave a
+# chave: a linha de `platform_config` manda, inclusive vazia; sem linha, o
+# .env; banco que não respondeu, o .env. O segredo da tela é AES-256-GCM com a
+# AI_CRED_AES_KEY, que mora no app e não no banco: quem abre o envelope é o Node
+# do contêiner do app, e a chave de cifra nunca sai dele. Envelope que não abre
+# vale vazio, como no app. Imprime "chave<US>remetente"; sai 1 sem os dois.
+resend_da_instalacao() {
+  local sep=$'\x1f' linhas chave eh valor ct iv tag
+  local api="${RESEND_API_KEY:-}" de="${RESEND_FROM_EMAIL:-}"
+  linhas="$(psql_run -tA -F "$sep" -c "select chave, eh_segredo, coalesce(valor,''),
+      coalesce(encode(ciphertext,'hex'),''), coalesce(encode(iv,'hex'),''), coalesce(encode(tag,'hex'),'')
+    from public.platform_config where chave in ('RESEND_API_KEY','RESEND_FROM_EMAIL')" 2>/dev/null)" || linhas=""
+  while IFS="$sep" read -r chave eh valor ct iv tag; do
+    if [ "$eh" = t ]; then
+      valor="$(printf '%s %s %s' "$ct" "$iv" "$tag" | (cd "${PROJECT_DIR:-$PWD}" && dc exec -T app node -e \
+        "const [c,i,t]=require('fs').readFileSync(0,'utf8').trim().split(' ').map(h=>Buffer.from(h,'hex'));const d=require('crypto').createDecipheriv('aes-256-gcm',Buffer.from(process.env.AI_CRED_AES_KEY||'','base64'),i);d.setAuthTag(t);process.stdout.write(Buffer.concat([d.update(c),d.final()]).toString('utf8'))") 2>/dev/null)" || valor=""
+    fi
+    case "$chave" in
+      RESEND_API_KEY) api="$valor" ;;
+      RESEND_FROM_EMAIL) de="$valor" ;;
+    esac
+  done <<<"$linhas"
+  api="$(printf '%s' "$api" | tr -d '[:space:]')"; de="$(printf '%s' "$de" | tr -d '[:space:]')"
+  [ -n "$api" ] && [ -n "$de" ] || return 1
+  printf '%s%s%s' "$api" "$sep" "$de"
 }
 
 # ── `so_convite` fecha o caminho DIRETO do GoTrue (#1653) ────────────────────
@@ -688,6 +726,15 @@ atualizar_supabase_single_server() {
   # aviso, não saída 1: o CRM segue atualizável.
   if sincronizar_signup_mode_do_gotrue; then
     dc_supabase up -d --no-deps auth >/dev/null 2>&1 || c_ylw "⚠ Não consegui reiniciar o auth do Supabase com o modo de cadastro (#1653)."
+  fi
+  # Pelo mesmo motivo, o SMTP do GoTrue também é sincronizado aqui: a chamada do
+  # update.sh roda com o kit ANTIGO, que não conhece a Resend como SMTP. O auth
+  # só reinicia quando um VALOR do .env do Supabase mudou (ordenado: o
+  # set_env_var move a chave regravada para o fim, e ordem não é mudança).
+  local antes
+  antes="$(sort "$dir/.env" | cksum)"
+  if sincronizar_smtp_do_gotrue && [ "$(sort "$dir/.env" | cksum)" != "$antes" ]; then
+    dc_supabase up -d --no-deps auth >/dev/null 2>&1 || c_ylw "⚠ Não consegui reiniciar o auth do Supabase com o SMTP do CRM."
   fi
   return 0
 }
