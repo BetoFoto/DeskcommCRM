@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ingest.ts importa @/lib/audit (→ supabase/server → validação de env).
-vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
+const auditEspiao = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/audit", () => ({ audit: auditEspiao }));
 
 // ESPIÕES: a rodada grava o passado e nada mais. Qualquer um destes chamado
 // seria um efeito de mensagem NOVA (IA, demanda, push, carimbo da conversa).
@@ -23,6 +24,10 @@ const canal = vi.hoisted(() => ({
   mensagens: {} as Record<string, Array<Record<string, unknown>>>,
   falha: null as string | null,
   chamadas: [] as string[],
+  /** Teto do canal por página, abaixo do `limit` pedido (o canal pode devolver menos). */
+  maxPorPagina: Number.POSITIVE_INFINITY,
+  /** Gancho chamado a cada página de mensagens (para simular cancelamento no meio). */
+  aoLerMensagens: null as null | (() => void),
 }));
 vi.mock("@/lib/waha/client", () => ({
   getWahaClient: () => ({
@@ -34,13 +39,16 @@ vi.mock("@/lib/waha/client", () => ({
         .filter((c) => !c.chatId.endsWith("@g.us") && c.chatId !== "status@broadcast");
       return { conversas, lidas: fatia.length };
     },
-    async listarMensagens(session: string, chatId: string, opts: { limit: number; offset: number; desde: number }) {
+    async paginaDeMensagens(session: string, chatId: string, opts: { limit: number; offset: number; desde: number }) {
       canal.chamadas.push(`msgs:${session}:${chatId}:${opts.offset}:${opts.limit}`);
       if (canal.falha) throw new Error(canal.falha);
-      return (canal.mensagens[chatId] ?? [])
+      canal.aoLerMensagens?.();
+      const bruto = (canal.mensagens[chatId] ?? [])
         .filter((m) => typeof m.timestamp === "number" && (m.timestamp as number) >= opts.desde)
         .sort((a, b) => (a.timestamp as number) - (b.timestamp as number))
-        .slice(opts.offset, opts.offset + opts.limit);
+        .slice(opts.offset, opts.offset + Math.min(opts.limit, canal.maxPorPagina));
+      // `invalido` = o item que o schema do cliente recusaria: conta em `lidas`, não vem.
+      return { mensagens: bruto.filter((m) => !m.invalido), lidas: bruto.length };
     },
   }),
 }));
@@ -104,13 +112,18 @@ function bancoDeMentira() {
               maybeSingle: async () => ({ data: importacoes.has(id) ? { ...importacoes.get(id) } : null, error: null }),
             }),
           }),
-          update: (patch: Linha) => ({
-            eq: async (_c: string, id: string) => {
-              const atual = importacoes.get(id);
-              if (atual) importacoes.set(id, { ...atual, ...structuredClone(patch) });
-              return { error: null };
-            },
-          }),
+          update: (patch: Linha) => {
+            const filtros: Array<[string, unknown]> = [];
+            const q = {
+              eq: (c: string, v: unknown) => (filtros.push([c, v]), q),
+              select: async () => {
+                const alvos = [...importacoes.values()].filter((l) => filtros.every(([c, v]) => l[c] === v));
+                for (const l of alvos) importacoes.set(l.id as string, { ...l, ...structuredClone(patch) });
+                return { data: alvos.map((l) => ({ id: l.id })), error: null };
+              },
+            };
+            return q;
+          },
         };
       }
       if (tabela === "channel_sessions") {
@@ -227,11 +240,14 @@ function acervoPadrao() {
   };
 }
 
-const SEM_TETO = { conversas: 1000, mensagens: 100_000 };
+const SEM_TETO = { conversas: 1000, mensagens: 100_000, chamadas: 10_000 };
 
 beforeEach(() => {
   canal.falha = null;
   canal.chamadas = [];
+  canal.maxPorPagina = Number.POSITIVE_INFINITY;
+  canal.aoLerMensagens = null;
+  auditEspiao.mockReset();
   espioes.dispatch.mockReset();
   espioes.posEntrada.mockReset();
   espioes.marcar.mockReset();
@@ -399,8 +415,86 @@ describe("rodarUmaRodada", () => {
     expect(espioes.dispatch).not.toHaveBeenCalled();
     expect(espioes.posEntrada).not.toHaveBeenCalled();
     expect(espioes.marcar).not.toHaveBeenCalled();
+    expect(auditEspiao).not.toHaveBeenCalled();
     const fns = new Set(db.rpcs.map((x) => x.fn));
     expect([...fns].sort()).toEqual(["fn_upsert_wa_contact", "fn_upsert_wa_conversation_importada"]);
     expect(new Set(db.tabelasTocadas)).toEqual(new Set(["importacoes_de_historico", "channel_sessions", "messages"]));
+  });
+
+  it("canal que devolve MENOS que o pedido, com mais itens depois: nenhuma mensagem pulada", async () => {
+    canal.maxPorPagina = 1;
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    const r = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(r.status).toBe("concluida");
+    expect(db.messages.map((m) => m.external_id).sort()).toEqual(
+      [`false_${TEL}_A1`, "A2", `false_${LID}_B1`, "B2"].sort(),
+    );
+  });
+
+  it("página inteira recusada pelo schema não termina a conversa", async () => {
+    canal.maxPorPagina = 2;
+    canal.mensagens[TEL] = [
+      { id: `false_${TEL}_X1`, invalido: true, timestamp: agora - 9 * DIA },
+      { id: `false_${TEL}_X2`, invalido: true, timestamp: agora - 8 * DIA },
+      { id: `false_${TEL}_A1`, from: TEL, fromMe: false, body: "oi", timestamp: agora - 3 * DIA },
+    ];
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(db.messages.map((m) => m.external_id)).toContain(`false_${TEL}_A1`);
+  });
+
+  it("200 conversas antigas: a rodada respeita o teto de chamadas e o cursor avança", async () => {
+    canal.chats = Array.from({ length: 200 }, (_, i) => ({
+      id: `55119${String(i).padStart(8, "0")}@s.whatsapp.net`,
+      ultimaEm: agora - 100 * DIA,
+    }));
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    const r = await rodarUmaRodada(db.admin as never, IMP, { conversas: 3, mensagens: 300, chamadas: 2 });
+    expect(canal.chamadas.length).toBeLessThanOrEqual(2);
+    expect(canal.chamadas.every((c) => c.startsWith("chats:"))).toBe(true);
+    expect(r.status).toBe("rodando");
+    expect((db.importacoes.get(IMP)!.cursor as { indiceConversa: number }).indiceConversa).toBe(100);
+    // e o padrão traz teto de chamadas: a lista inteira termina em poucas rodadas, sem conversa contada
+    let ultima = r;
+    for (let i = 0; i < 10 && ultima.status === "rodando"; i++) {
+      ultima = await rodarUmaRodada(db.admin as never, IMP, { conversas: 3, mensagens: 300, chamadas: 2 });
+    }
+    expect(ultima.status).toBe("concluida");
+    expect(db.messages).toHaveLength(0);
+  });
+
+  it("teto padrão de chamadas é 20", async () => {
+    canal.maxPorPagina = 1;
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    await rodarUmaRodada(db.admin as never, IMP, { conversas: 100, mensagens: 10_000 });
+    expect(canal.chamadas.length).toBeLessThanOrEqual(20);
+    canal.chamadas = [];
+    canal.mensagens[TEL] = Array.from({ length: 40 }, (_, i) => ({
+      id: `false_${TEL}_M${i}`, from: TEL, body: "x", timestamp: agora - 2 * DIA + i,
+    }));
+    const db2 = bancoDeMentira();
+    novaImportacao(db2);
+    const r = await rodarUmaRodada(db2.admin as never, IMP);
+    expect(canal.chamadas).toHaveLength(20);
+    expect(r.status).toBe("rodando");
+  });
+
+  it("cancelamento durante a rodada não é sobrescrito", async () => {
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    canal.aoLerMensagens = () => {
+      const l = db.importacoes.get(IMP)!;
+      db.importacoes.set(IMP, { ...l, status: "cancelada" });
+    };
+    const r = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(r.status).toBe("cancelada");
+    const imp = db.importacoes.get(IMP)!;
+    expect(imp.status).toBe("cancelada");
+    expect(imp.cursor).toEqual({});
+    expect(imp.mensagens_gravadas).toBe(0);
   });
 });

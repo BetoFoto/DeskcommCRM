@@ -13,7 +13,8 @@
  * ─── Rodadas curtas que retomam ─────────────────────────────────────────────
  *
  * Cada rodada faz no máximo `teto.conversas` conversas OU `teto.mensagens`
- * mensagens (o que vier primeiro) e grava o cursor
+ * mensagens OU `teto.chamadas` chamadas ao canal (o que vier primeiro) e grava
+ * o cursor
  * `{ indiceConversa, offsetMensagens, desde }`:
  *   - `indiceConversa` é a POSIÇÃO da conversa na lista do canal (ordenada por
  *     id; ver `paginaDeConversas`), contando grupo e status, que ficam de fora;
@@ -22,9 +23,10 @@
  *   - `desde` (epoch em segundos) é fixado na PRIMEIRA rodada: recalcular a
  *     cada rodada faria a janela deslizar e o offset apontar para outro lugar.
  *
- * O offset avança pelo tamanho PEDIDO da página, não pelo devolvido: o cliente
- * descarta localmente o item que o schema recusa, e avançar pelo devolvido
- * repetiria mensagens. A conversa termina quando a página volta vazia.
+ * O offset avança por `lidas`, o que o canal DEVOLVEU antes do schema local
+ * (`paginaDeMensagens`): avançar pelo pedido pularia mensagens quando o canal
+ * devolve menos, e avançar pelo que sobrou do schema repetiria. A conversa só
+ * termina com `lidas === 0`: página inteira recusada pelo schema não é fim.
  *
  * Refazer um pedaço (rodada interrompida antes de gravar o cursor) é seguro: a
  * mensagem já gravada é reconhecida pelo `external_id` e conta como existente.
@@ -44,10 +46,16 @@ import {
 export interface TetoDaRodada {
   conversas: number;
   mensagens: number;
+  /**
+   * Chamadas ao canal por rodada (páginas de conversas + páginas de mensagens).
+   * Sem ele, uma conta com centenas de conversas antigas ou de grupos faria a
+   * rodada andar a lista inteira, já que essas não contam como conversa feita.
+   */
+  chamadas?: number;
 }
 
-/** 3 conversas OU 300 mensagens por rodada, o que vier primeiro. */
-export const TETO_PADRAO: TetoDaRodada = { conversas: 3, mensagens: 300 };
+/** 3 conversas OU 300 mensagens OU 20 chamadas ao canal por rodada, o que vier primeiro. */
+export const TETO_PADRAO: Required<TetoDaRodada> = { conversas: 3, mensagens: 300, chamadas: 20 };
 
 export interface CursorDaImportacao {
   indiceConversa: number;
@@ -56,16 +64,23 @@ export interface CursorDaImportacao {
   desde?: number;
 }
 
+export type StatusDaImportacao = "previa" | "rodando" | "concluida" | "erro" | "cancelada";
+
 export interface ResultadoDaRodada {
-  status: "rodando" | "concluida" | "erro";
+  /**
+   * `rodando`/`concluida`/`erro` vêm desta rodada. Outro valor (`cancelada`,
+   * por exemplo) é o que a linha tinha quando a rodada foi gravar e encontrou
+   * a importação fora de `rodando`: a rodada não sobrescreve.
+   */
+  status: StatusDaImportacao;
   gravadas: number;
   existentes: number;
 }
 
 /** Página de mensagens pedida ao canal; menor quando o teto está perto. */
 const PAGINA_DE_MENSAGENS = 100;
-/** Página de conversas: só a do cursor é processada por vez, mas uma página de
- * grupos inteira é pulada numa chamada só. */
+/** Página de conversas: processada inteira em memória (grupo, status e conversa
+ * antiga são pulados sem nova chamada). */
 const PAGINA_DE_CONVERSAS = 50;
 const SEGUNDOS_POR_DIA = 86_400;
 
@@ -114,8 +129,16 @@ export async function rodarUmaRodada(
   };
   const desta = { conversas: 0, gravadas: 0, existentes: 0, ignoradas: 0 };
 
-  const salvar = async (extra: Record<string, unknown>) => {
-    const { error } = await admin
+  /**
+   * Grava SÓ se a importação ainda está `rodando`: um cancelamento feito
+   * durante a rodada não vira `concluida`. NÃO serializa duas execuções
+   * simultâneas da mesma importação (as duas veem `rodando`); isso é de quem
+   * dispara a rodada. O índice único parcial da 0705 só impede duas
+   * importações `rodando` no mesmo número.
+   * Devolve `null` quando gravou, ou o status que a linha tem quando não gravou.
+   */
+  const salvar = async (extra: Record<string, unknown>): Promise<StatusDaImportacao | null> => {
+    const { data, error } = await admin
       .from("importacoes_de_historico")
       .update({
         cursor,
@@ -126,14 +149,42 @@ export async function rodarUmaRodada(
         updated_at: new Date().toISOString(),
         ...extra,
       } as never)
-      .eq("id", importacaoId);
+      .eq("id", importacaoId)
+      .eq("status", "rodando")
+      .select("id");
     if (error) throw new Error(`importacao_gravacao: ${mensagemDeErro(error)}`);
+    if ((data ?? []).length > 0) return null;
+    const { data: atual, error: erroDoAtual } = await admin
+      .from("importacoes_de_historico")
+      .select("*")
+      .eq("id", importacaoId)
+      .maybeSingle();
+    if (erroDoAtual) throw new Error(`importacao_leitura: ${mensagemDeErro(erroDoAtual)}`);
+    return (atual as { status?: StatusDaImportacao } | null)?.status ?? "cancelada";
   };
 
-  // O cursor que vale em caso de erro é o do último ponto inteiro: o pedaço em
+  const encerrar = async (
+    status: "rodando" | "concluida" | "erro",
+    extra: Record<string, unknown> = {},
+  ): Promise<ResultadoDaRodada> => {
+    const outro = await salvar(status === "rodando" ? extra : { status, ...extra });
+    return { status: outro ?? status, gravadas: desta.gravadas, existentes: desta.existentes };
+  };
+
+  // O cursor que vale ao parar por erro é o do último ponto inteiro: o pedaço em
   // andamento é refeito na próxima (a deduplicação absorve a repetição).
   let cursorFirme = { ...cursor };
   let firmes = { ...desta };
+  const firmar = () => {
+    cursorFirme = { ...cursor };
+    firmes = { ...desta };
+  };
+
+  const tetoDeChamadas = teto.chamadas ?? TETO_PADRAO.chamadas;
+  let chamadas = 0;
+  let processadas = 0;
+  const noTeto = () =>
+    desta.conversas >= teto.conversas || processadas >= teto.mensagens || chamadas >= tetoDeChamadas;
 
   try {
     const canal = getWahaClient();
@@ -148,94 +199,88 @@ export async function rodarUmaRodada(
     const nomeNoCanal = (sessao as { waha_session_name?: string } | null)?.waha_session_name;
     if (!nomeNoCanal) throw new Error("sessao_nao_encontrada");
 
-    let processadas = 0;
     for (;;) {
-      if (desta.conversas >= teto.conversas || processadas >= teto.mensagens) {
-        await salvar({});
-        return { status: "rodando", gravadas: desta.gravadas, existentes: desta.existentes };
-      }
+      if (noTeto()) return await encerrar("rodando");
 
+      const offsetDaPagina = cursor.indiceConversa;
+      chamadas += 1;
       const pagina = await canal.paginaDeConversas(nomeNoCanal, {
         limit: PAGINA_DE_CONVERSAS,
-        offset: cursor.indiceConversa,
+        offset: offsetDaPagina,
       });
-      if (pagina.lidas === 0) {
-        await salvar({ status: "concluida", erro: null });
-        return { status: "concluida", gravadas: desta.gravadas, existentes: desta.existentes };
-      }
-      const conversa = pagina.conversas[0];
-      if (!conversa) {
-        // Página só de grupo/status: pula inteira.
-        cursor.indiceConversa += pagina.lidas;
-        cursor.offsetMensagens = 0;
-        continue;
-      }
-      if (conversa.posicao !== cursor.indiceConversa) {
-        cursor.indiceConversa = conversa.posicao;
-        cursor.offsetMensagens = 0;
-      }
+      if (pagina.lidas === 0) return await encerrar("concluida", { erro: null });
 
-      // Conversa sem nada dentro da janela: o canal já diz pela última mensagem.
-      if (conversa.ultimaEm !== null && conversa.ultimaEm < cursor.desde) {
-        cursor.indiceConversa += 1;
-        cursor.offsetMensagens = 0;
-        continue;
-      }
-
-      let alvo: { contactId: string; conversationId: string } | null = null;
-      let conversaTerminou = false;
-      while (processadas < teto.mensagens) {
-        const limite = Math.min(PAGINA_DE_MENSAGENS, teto.mensagens - processadas);
-        const mensagens = await canal.listarMensagens(nomeNoCanal, conversa.chatId, {
-          limit: limite,
-          offset: cursor.offsetMensagens,
-          desde: cursor.desde,
-        });
-        if (mensagens.length === 0) {
-          conversaTerminou = true;
-          break;
+      for (const conversa of pagina.conversas) {
+        if (conversa.posicao < cursor.indiceConversa) continue;
+        if (conversa.posicao > cursor.indiceConversa) {
+          cursor.indiceConversa = conversa.posicao;
+          cursor.offsetMensagens = 0;
         }
 
-        const validas: WahaPayload[] = [];
-        for (const p of mensagens) {
-          if (!p.id || ehReacao(p)) desta.ignoradas += 1;
-          else validas.push(p);
+        // Conversa sem nada dentro da janela: o canal já diz pela última
+        // mensagem, e a página já está em memória (sem nova chamada).
+        if (conversa.ultimaEm !== null && conversa.ultimaEm < cursor.desde) {
+          cursor.indiceConversa += 1;
+          cursor.offsetMensagens = 0;
+          firmar();
+          continue;
         }
-        if (validas.length > 0) {
-          alvo ??= await garantirContatoEConversa(admin, imp, conversa.chatId, validas);
-          if (!alvo) {
-            // Chat que não é endereçável (nem telefone nem @lid): nada a gravar nele.
-            desta.ignoradas += validas.length;
-          } else {
-            const r = await gravarMensagens(admin, imp, alvo, validas);
-            desta.gravadas += r.gravadas;
-            desta.existentes += r.existentes;
+
+        let alvo: { contactId: string; conversationId: string } | null = null;
+        for (;;) {
+          if (noTeto()) return await encerrar("rodando");
+          const limite = Math.min(PAGINA_DE_MENSAGENS, teto.mensagens - processadas);
+          chamadas += 1;
+          const { mensagens, lidas } = await canal.paginaDeMensagens(nomeNoCanal, conversa.chatId, {
+            limit: limite,
+            offset: cursor.offsetMensagens,
+            desde: cursor.desde,
+          });
+          // Só `lidas === 0` é fim: página inteira recusada pelo schema não é.
+          if (lidas === 0) break;
+
+          // O que o schema recusou também foi lido e não vira linha.
+          desta.ignoradas += lidas - mensagens.length;
+          const validas: WahaPayload[] = [];
+          for (const p of mensagens) {
+            if (!p.id || ehReacao(p)) desta.ignoradas += 1;
+            else validas.push(p);
           }
+          if (validas.length > 0) {
+            alvo ??= await garantirContatoEConversa(admin, imp, conversa.chatId, validas);
+            if (!alvo) {
+              // Chat que não é endereçável (nem telefone nem @lid): nada a gravar nele.
+              desta.ignoradas += validas.length;
+            } else {
+              const r = await gravarMensagens(admin, imp, alvo, validas);
+              desta.gravadas += r.gravadas;
+              desta.existentes += r.existentes;
+            }
+          }
+          processadas += lidas;
+          // Avança pelo que o canal DEVOLVEU, não pelo que foi pedido.
+          cursor.offsetMensagens += lidas;
+          firmar();
         }
-        processadas += mensagens.length;
-        cursor.offsetMensagens += limite;
-        cursorFirme = { ...cursor };
-        firmes = { ...desta };
-      }
 
-      if (conversaTerminou) {
         desta.conversas += 1;
         cursor.indiceConversa += 1;
         cursor.offsetMensagens = 0;
-        cursorFirme = { ...cursor };
-        firmes = { ...desta };
-      } else {
-        // Teto de mensagens no meio da conversa: ela conta para o teto desta
-        // rodada (para não começar outra), mas não como feita.
-        await salvar({});
-        return { status: "rodando", gravadas: desta.gravadas, existentes: desta.existentes };
+        firmar();
+        if (noTeto()) return await encerrar("rodando");
       }
+
+      // Página esgotada: o que sobrou depois da última conversa 1:1 era grupo ou status.
+      if (offsetDaPagina + pagina.lidas > cursor.indiceConversa) {
+        cursor.indiceConversa = offsetDaPagina + pagina.lidas;
+        cursor.offsetMensagens = 0;
+      }
+      firmar();
     }
   } catch (err) {
     Object.assign(cursor, cursorFirme);
     Object.assign(desta, firmes);
-    await salvar({ status: "erro", erro: mensagemDeErro(err).slice(0, 500) });
-    return { status: "erro", gravadas: desta.gravadas, existentes: desta.existentes };
+    return await encerrar("erro", { erro: mensagemDeErro(err).slice(0, 500) });
   }
 }
 

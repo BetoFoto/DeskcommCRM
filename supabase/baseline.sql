@@ -60773,10 +60773,18 @@ grant select on public.external_db_connections_safe to authenticated;
 -- O cursor e os contadores precisam sobreviver entre uma rodada e outra, e a
 -- tela precisa ler o andamento: daí a tabela.
 --
--- Uma `rodando` por número (índice único parcial): duas rodadas da mesma
--- importação, ou duas importações do mesmo número, andariam o mesmo acervo com
--- cursores diferentes. `previa`, `concluida`, `erro` e `cancelada` não entram:
--- o histórico de importações fica.
+-- Uma `rodando` por número (índice único parcial): impede duas IMPORTAÇÕES
+-- `rodando` no mesmo número, que andariam o mesmo acervo com cursores
+-- diferentes. NÃO impede duas EXECUÇÕES da mesma importação (é a mesma linha).
+-- O que a rodada faz é gravar com update condicional
+-- (`... where id = $1 and status = 'rodando'`): a importação que saiu de
+-- `rodando` durante a rodada (cancelada, por exemplo) não é sobrescrita. Duas
+-- execuções SIMULTÂNEAS, ambas vendo `rodando`, passam as duas pelo update; a
+-- deduplicação por `external_id` evita linha repetida, mas o cursor e os
+-- contadores ficam com a última. Serializar as rodadas é de quem as dispara.
+-- `previa`,
+-- `concluida`, `erro` e `cancelada` não entram no índice: o histórico de
+-- importações fica.
 --
 -- Leitura por membro da organização (`fn_user_org_ids`, o padrão das tabelas
 -- por org); escrita só pelo `service_role`: nenhuma policy de escrita e nenhum

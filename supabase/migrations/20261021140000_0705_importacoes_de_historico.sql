@@ -1,4 +1,4 @@
--- manifest: **Estado da importação do histórico do WhatsApp (#999).** Cria `importacoes_de_historico`: uma linha por importação pedida num número conectado, com a janela (`dias` 30/90/365), o estado (`previa`/`rodando`/`concluida`/`erro`/`cancelada`), o `cursor` de onde a próxima rodada retoma (`indiceConversa`, `offsetMensagens`, `desde`), a prévia e os contadores (conversas feitas, mensagens gravadas, já existentes, ignoradas, mídias baixadas e indisponíveis). Índice único parcial: no máximo UMA importação `rodando` por número, para duas rodadas não andarem o mesmo cursor. RLS: membro da organização lê; escrita só `service_role` (a rodada e as rotas). Tabela nova, sem função, sem dado; idempotente; apêndice igual no fim do `baseline.sql`.
+-- manifest: **Estado da importação do histórico do WhatsApp (#999).** Cria `importacoes_de_historico`: uma linha por importação pedida num número conectado, com a janela (`dias` 30/90/365), o estado (`previa`/`rodando`/`concluida`/`erro`/`cancelada`), o `cursor` de onde a próxima rodada retoma (`indiceConversa`, `offsetMensagens`, `desde`), a prévia e os contadores (conversas feitas, mensagens gravadas, já existentes, ignoradas, mídias baixadas e indisponíveis). Índice único parcial: no máximo UMA importação `rodando` por número (duas importações do mesmo número andariam o mesmo acervo); o índice não barra duas execuções da MESMA importação: a rodada grava com update condicional (`status = 'rodando'`), que não sobrescreve importação cancelada no meio, e serializar execuções simultâneas é de quem dispara a rodada. RLS: membro da organização lê; escrita só `service_role` (a rodada e as rotas). Tabela nova, sem função, sem dado; idempotente; apêndice igual no fim do `baseline.sql`.
 
 -- ---- estado da importação do histórico do WhatsApp (migration 0705, #999) ----
 --
@@ -7,10 +7,18 @@
 -- O cursor e os contadores precisam sobreviver entre uma rodada e outra, e a
 -- tela precisa ler o andamento: daí a tabela.
 --
--- Uma `rodando` por número (índice único parcial): duas rodadas da mesma
--- importação, ou duas importações do mesmo número, andariam o mesmo acervo com
--- cursores diferentes. `previa`, `concluida`, `erro` e `cancelada` não entram:
--- o histórico de importações fica.
+-- Uma `rodando` por número (índice único parcial): impede duas IMPORTAÇÕES
+-- `rodando` no mesmo número, que andariam o mesmo acervo com cursores
+-- diferentes. NÃO impede duas EXECUÇÕES da mesma importação (é a mesma linha).
+-- O que a rodada faz é gravar com update condicional
+-- (`... where id = $1 and status = 'rodando'`): a importação que saiu de
+-- `rodando` durante a rodada (cancelada, por exemplo) não é sobrescrita. Duas
+-- execuções SIMULTÂNEAS, ambas vendo `rodando`, passam as duas pelo update; a
+-- deduplicação por `external_id` evita linha repetida, mas o cursor e os
+-- contadores ficam com a última. Serializar as rodadas é de quem as dispara.
+-- `previa`,
+-- `concluida`, `erro` e `cancelada` não entram no índice: o histórico de
+-- importações fica.
 --
 -- Leitura por membro da organização (`fn_user_org_ids`, o padrão das tabelas
 -- por org); escrita só pelo `service_role`: nenhuma policy de escrita e nenhum
