@@ -16513,6 +16513,27 @@ export const DICIONARIO: Traducoes = {
   "Esse é um dos números conectados da sua conta. Ele não pode receber os avisos, senão um responde ao outro sem parar.": { es: "Ese es uno de los números conectados de tu cuenta. No puede recibir los avisos, o uno le responde al otro sin parar." },
   "Esse número já é de um cliente seu. Se você continuar, as mensagens dele param de chegar ao CRM.": { es: "Ese número ya es de un cliente tuyo. Si continúas, sus mensajes dejan de llegar al CRM." },
   "Receber no WhatsApp cada horário marcado, remarcado ou cancelado, e o resumo das 7h.": { es: "Recibir en WhatsApp cada cita agendada, reprogramada o cancelada, y el resumen de las 7h." },
+  "Novo aviso": { es: "Nuevo aviso" },
+  "Opção inválida.": { es: "Opción inválida." },
+  "Não consegui ler esta configuração agora.": { es: "No pude leer esta configuración ahora." },
+  "O que os avisos mostram fora do app": { es: "Qué muestran los avisos fuera de la app" },
+  "Vale para o celular bloqueado e para as notificações do computador, para toda a empresa. Só administradores podem mudar.": {
+    es: "Vale para el celular bloqueado y para las notificaciones de la computadora, para toda la empresa. Solo los administradores pueden cambiarlo.",
+  },
+  "Esconder tudo": { es: "Ocultar todo" },
+  "O aviso diz só que chegou algo. Nem o nome do cliente nem a mensagem aparecem.": {
+    es: "El aviso solo dice que llegó algo. No aparecen ni el nombre del cliente ni el mensaje.",
+  },
+  "Mostrar quem mandou (recomendado)": { es: "Mostrar quién lo envió (recomendado)" },
+  "Aparecem o nome e a foto do cliente, mas não o que ele escreveu.": {
+    es: "Aparecen el nombre y la foto del cliente, pero no lo que escribió.",
+  },
+  "Mostrar quem mandou e a mensagem": { es: "Mostrar quién lo envió y el mensaje" },
+  "Aparecem o nome, a foto e o começo da mensagem.": { es: "Aparecen el nombre, la foto y el comienzo del mensaje." },
+  "Quem decide é um administrador.": { es: "Quien decide es un administrador." },
+  "Desligar o push de mensagem desliga todos os avisos deste aparelho fora do app.": {
+    es: "Apagar el push de mensajes apaga todos los avisos de este dispositivo fuera de la app.",
+  },
 };
 
 /**

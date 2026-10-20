@@ -443,6 +443,37 @@ export const crmSettingsSchema = z
   .object({ cliente_pela_agenda: z.boolean().catch(false) })
   .catch({ cliente_pela_agenda: false });
 
+/**
+ * `organizations.settings.notificacoes.conteudo_na_tela_bloqueada` — o que o
+ * aviso do celular mostra com a tela bloqueada: nada além de "chegou algo"
+ * (`oculto`), quem mandou sem a mensagem (`nome`), ou quem mandou e o começo
+ * da mensagem (`nome_e_previa`). O padrão `nome` é decisão do dono do produto.
+ *
+ * Lido pelo funil do push (`lib/notifications/web_push.ts`) e pela rota
+ * `conversations/[id]/aviso-de-mensagem`; gravado só por
+ * `definirConteudoNaTelaBloqueada`.
+ */
+export const CONTEUDOS_NA_TELA_BLOQUEADA = ["oculto", "nome", "nome_e_previa"] as const;
+export type ConteudoNaTelaBloqueada = (typeof CONTEUDOS_NA_TELA_BLOQUEADA)[number];
+export const CONTEUDO_NA_TELA_BLOQUEADA_PADRAO: ConteudoNaTelaBloqueada = "nome";
+
+export const conteudoNaTelaBloqueadaWriteSchema = z.enum(CONTEUDOS_NA_TELA_BLOQUEADA);
+
+export const notificacoesSettingsSchema = z
+  .object({
+    conteudo_na_tela_bloqueada: conteudoNaTelaBloqueadaWriteSchema.catch(CONTEUDO_NA_TELA_BLOQUEADA_PADRAO),
+  })
+  .catch({ conteudo_na_tela_bloqueada: CONTEUDO_NA_TELA_BLOQUEADA_PADRAO });
+
+/** O que aparece com a tela bloqueada nesta organização. Nunca lança. */
+export function conteudoNaTelaBloqueada(settings: unknown): ConteudoNaTelaBloqueada {
+  const notificacoes =
+    settings && typeof settings === "object" && !Array.isArray(settings)
+      ? (settings as Record<string, unknown>).notificacoes
+      : undefined;
+  return notificacoesSettingsSchema.parse(notificacoes ?? {}).conteudo_na_tela_bloqueada;
+}
+
 /** A regra "cliente pela agenda" está ligada nesta organização? Nunca lança. */
 export function clientePelaAgendaLigado(settings: unknown): boolean {
   const crm =

@@ -23,6 +23,10 @@
  * na tela bloqueada sem nome de ninguém, e quem precisa do dado toca e abre o
  * contexto com a permissão que tem. O destino é o mesmo que a Central daria ao
  * aviso (`REFERENCIAS_DE_AVISO`).
+ *
+ * Os corpos são frases fixas, por isso todo ramo declara `corpoSemPrevia` igual
+ * ao `body`. O que de fato aparece com a tela bloqueada segue, além disso, a
+ * opção da empresa, aplicada pelo funil `./web_push.ts`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -87,9 +91,11 @@ export async function pushDoAvisoDaCentral(
   // Sem saldo no provedor: o título já nasceu no idioma da organização
   // (`espera-de-saldo.ts`); o corpo diz o remédio, que fica fora do CRM.
   if (item.kind === "other" && item.ref_kind === "ai_provider_credential") {
+    const body = traduzir("Recarregue o saldo na conta do provedor: as respostas saem sozinhas quando ele voltar.", idioma);
     return {
       title: truncar(item.title),
-      body: traduzir("Recarregue o saldo na conta do provedor: as respostas saem sozinhas quando ele voltar.", idioma),
+      body,
+      corpoSemPrevia: body,
       tag,
       href: REFERENCIAS_DE_AVISO.ai_provider_credential.href(),
     };
@@ -108,18 +114,22 @@ export async function pushDoAvisoDaCentral(
   // responder o cliente" — falso, e mandava quem atendia procurar uma conversa
   // que não existe.
   if (item.kind === "proposta_pronta_para_revisao") {
+    const body = traduzir("A IA preparou uma proposta. Confira antes de enviar.", idioma);
     return {
       title: truncar(item.title),
-      body: traduzir("A IA preparou uma proposta. Confira antes de enviar.", idioma),
+      body,
+      corpoSemPrevia: body,
       tag,
       href: destinoDaPassagem(item),
     };
   }
 
   if (som === "pessoa") {
+    const body = traduzir("Abra a conversa para responder o cliente.", idioma);
     return {
       title: traduzir("A IA passou uma conversa para a equipe", idioma),
-      body: traduzir("Abra a conversa para responder o cliente.", idioma),
+      body,
+      corpoSemPrevia: body,
       tag,
       href: destinoDaPassagem(item),
     };
@@ -139,5 +149,6 @@ export async function pushDoAvisoDaCentral(
     const pipelineId = (lead as { pipeline_id?: string | null } | null)?.pipeline_id;
     if (pipelineId) href = REFERENCIAS_DE_AVISO.lead.href(item.ref_id, pipelineId);
   }
-  return { title: truncar(item.title), body: truncar(item.body ?? ""), tag, href };
+  const body = truncar(item.body ?? "");
+  return { title: truncar(item.title), body, corpoSemPrevia: body, tag, href };
 }

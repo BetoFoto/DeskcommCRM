@@ -77,6 +77,8 @@ describe("aviso da Central → celular", () => {
     expect(payload).toEqual({
       title: "Negocio entró en «Pedido confirmado»",
       body: "Abre el negocio para dar el siguiente paso. Este aviso se pidió en la configuración de la etapa.",
+      // Frase fixa, sem dado de cliente: pode aparecer no modo "só quem mandou".
+      corpoSemPrevia: "Abre el negocio para dar el siguiente paso. Este aviso se pidió en la configuración de la etapa.",
       tag: "aviso:i1",
       href: "/app/pipelines/p1?lead=l1",
     });
@@ -95,6 +97,8 @@ describe("aviso da Central → celular", () => {
     expect(vi.mocked(enviarPushDaOrg).mock.calls[0]![1]).toEqual({
       title: "La IA pasó una conversación al equipo",
       body: "Abre la conversación para responder al cliente.",
+      // Frase fixa, sem dado de cliente: pode aparecer no modo "só quem mandou".
+      corpoSemPrevia: "Abre la conversación para responder al cliente.",
       tag: "aviso:i2",
       href: "/app/inbox/c1",
     });
@@ -124,6 +128,8 @@ describe("aviso da Central → celular", () => {
     expect(vi.mocked(enviarPushDaOrg).mock.calls[0]![1]).toEqual({
       title: "La IA se quedó sin saldo en el proveedor",
       body: "Recarga el saldo en la cuenta del proveedor: las respuestas salen solas cuando vuelva.",
+      // Frase fixa, sem dado de cliente: pode aparecer no modo "só quem mandou".
+      corpoSemPrevia: "Recarga el saldo en la cuenta del proveedor: las respuestas salen solas cuando vuelva.",
       tag: "aviso:i4",
       href: "/app/ai/credentials",
     });
@@ -151,6 +157,8 @@ describe("aviso da Central → celular", () => {
       // como "A IA passou uma conversa para a equipe" — falso, e mandava quem
       // atendia procurar uma conversa que não existe.
       body: "A IA preparou uma proposta. Confira antes de enviar.",
+      // Frase fixa, sem dado de cliente: pode aparecer no modo "só quem mandou".
+      corpoSemPrevia: "A IA preparou uma proposta. Confira antes de enviar.",
       tag: "aviso:i7",
       href: "/app/proposals/prop-1",
     });
