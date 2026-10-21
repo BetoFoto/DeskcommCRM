@@ -384,10 +384,12 @@ describe("main.ts liga o prazo no sinal (#2823)", () => {
     const corpo = corpoDoShutdown();
     const chamada = corpo.indexOf("desligarNoPrazo(");
     expect(chamada, "o shutdown não usa o módulo do prazo").toBeGreaterThan(-1);
-    // Comentário não é código: o `await` citado num comentário explicativo não
-    // pode acusar o inocente.
+    // A PARTIR do começo da LINHA da chamada: o `await` que está na própria
+    // linha (`const fim = await desligarNoPrazo({`) é o que arma o prazo, e não
+    // vale como "esperou antes". Comentário também não é código: o `await`
+    // citado num comentário explicativo não pode acusar o inocente.
     const antes = corpo
-      .slice(0, chamada)
+      .slice(0, corpo.lastIndexOf("\n", chamada))
       .split("\n")
       .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
       .join("\n");
