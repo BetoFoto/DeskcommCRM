@@ -15987,7 +15987,7 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível guardar esta opção.": { es: "No fue posible guardar esta opción." },
   // ─── Importação do histórico (#999) ───
   "Trazer conversas antigas para o atendimento": { es: "Traer conversaciones antiguas a la atención" },
-  "Período: últimos 30, 90 ou 365 dias": { es: "Período: últimos 30, 90 o 365 días" },
+  "Período: últimos 30, 90, 180 ou 365 dias": { es: "Período: últimos 30, 90, 180 o 365 días" },
   "{dias} dias": { es: "{dias} días" },
   "{conversas} conversas, {mensagens} mensagens, {audios} áudios e {imagens} imagens": { es: "{conversas} conversaciones, {mensagens} mensajes, {audios} audios e {imagens} imágenes" },
   "Pelo menos {conversas} conversas, {mensagens} mensagens, {audios} áudios e {imagens} imagens": { es: "Al menos {conversas} conversaciones, {mensagens} mensajes, {audios} audios e {imagens} imágenes" },

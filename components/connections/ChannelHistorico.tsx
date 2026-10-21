@@ -38,7 +38,7 @@ interface Historico {
   importacao: Importacao | null;
 }
 
-const DIAS = [30, 90, 365] as const;
+const DIAS = [30, 90, 180, 365] as const;
 const PREVIA_TIMEOUT_MS = 120_000;
 
 /** 409: outra aba (ou o cron) mudou a importação; não é o número que falhou. */
@@ -137,7 +137,7 @@ export function ChannelHistorico({ channelId }: { channelId: string }) {
   return (
     <div className="flex flex-col gap-1">
       {titulo}
-      <p className="text-[11px] text-muted-foreground">{t("Período: últimos 30, 90 ou 365 dias")}</p>
+      <p className="text-[11px] text-muted-foreground">{t("Período: últimos 30, 90, 180 ou 365 dias")}</p>
 
       {rodando && imp && (
         <>
@@ -207,7 +207,7 @@ export function ChannelHistorico({ channelId }: { channelId: string }) {
       {podePedirPrevia && (
         <div className="flex items-center gap-2">
           <select
-            aria-label={t("Período: últimos 30, 90 ou 365 dias")}
+            aria-label={t("Período: últimos 30, 90, 180 ou 365 dias")}
             className="h-8 rounded-md border bg-background px-2 text-xs"
             value={dias}
             disabled={contando}

@@ -60834,3 +60834,18 @@ grant select on public.importacoes_de_historico to authenticated;
 grant all on public.importacoes_de_historico to service_role;
 
 notify pgrst, 'reload schema';
+
+-- ---- período de 180 dias na importação do histórico (migration 0706, #999) ----
+--
+-- A 0705 já está aplicada onde a importação rodou (prova de 21/10), e o
+-- `create table if not exists` dela não refaz o CHECK: daí uma migration nova
+-- em vez de editar a 0705. Tela, rota e banco mudam no MESMO commit, ou a
+-- prévia de 180 dias falha com 23514 no insert.
+
+alter table public.importacoes_de_historico
+  drop constraint if exists importacoes_de_historico_dias_check;
+alter table public.importacoes_de_historico
+  add constraint importacoes_de_historico_dias_check
+  check (dias in (30, 90, 180, 365));
+
+notify pgrst, 'reload schema';

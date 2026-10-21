@@ -61,6 +61,17 @@ describe("importacoes_de_historico: RLS e unicidade", () => {
     ).toContain("3");
   });
 
+  it("os quatro períodos da tela são aceitos, 180 inclusive (0706)", () => {
+    expect(
+      sql(`begin;
+        insert into importacoes_de_historico (organization_id, channel_session_id, status, dias)
+          values ('${orgA}', '${sessA}', 'previa', 30), ('${orgA}', '${sessA}', 'previa', 90),
+                 ('${orgA}', '${sessA}', 'previa', 180), ('${orgA}', '${sessA}', 'previa', 365);
+        select count(*) from importacoes_de_historico where channel_session_id = '${sessA}' and status = 'previa';
+        rollback;`).split("\n"),
+    ).toContain("4");
+  });
+
   it("dias e status fora do combinado são recusados", () => {
     expect(() =>
       sql(`insert into importacoes_de_historico (organization_id, channel_session_id, status, dias) values ('${orgA}', '${sessA}', 'previa', 60);`),

@@ -56,7 +56,7 @@ async function sessaoOuFalha(
 }
 
 const corpo = z.discriminatedUnion("acao", [
-  z.object({ acao: z.literal("previa"), dias: z.union([z.literal(30), z.literal(90), z.literal(365)]) }),
+  z.object({ acao: z.literal("previa"), dias: z.union([z.literal(30), z.literal(90), z.literal(180), z.literal(365)]) }),
   z.object({ acao: z.literal("importar"), importacaoId: z.uuid() }),
   z.object({ acao: z.literal("cancelar"), importacaoId: z.uuid() }),
   z.object({ acao: z.literal("retomar"), importacaoId: z.uuid() }),

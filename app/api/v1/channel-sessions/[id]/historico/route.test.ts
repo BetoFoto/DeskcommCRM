@@ -117,6 +117,15 @@ describe("importação do histórico: rotas (#999)", () => {
     expect((await POST(req({ acao: "previa", dias: 90 }), context())).status).toBe(200);
   });
 
+  it("os quatro períodos são aceitos, 180 dias inclusive", async () => {
+    for (const dias of [30, 90, 180, 365]) {
+      expect((await POST(req({ acao: "previa", dias }), context())).status).toBe(200);
+      expect(vi.mocked(calcularPrevia)).toHaveBeenLastCalledWith("sessao-1", dias);
+    }
+    const inseridas = escritas.filter((e) => e.op === "insert").map((e) => (e.payload as { dias?: number }).dias);
+    expect(inseridas).toContain(180);
+  });
+
   it("agente e gerente recebem 403, sem tocar no banco nem auditar", async () => {
     vi.mocked(requireRole).mockResolvedValue({ ok: false, response: fail("forbidden", "Acesso negado.", 403) });
     expect((await GET(req({}, "GET"), context())).status).toBe(403);

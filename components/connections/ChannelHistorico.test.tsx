@@ -68,6 +68,18 @@ describe("ChannelHistorico", () => {
     expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
   });
 
+  it("o período oferece 30, 90, 180 e 365 dias, e pede a prévia no escolhido", async () => {
+    get.mockResolvedValue(resposta(true, null));
+    post.mockResolvedValue({ data: {} });
+    tela();
+    const periodo = await screen.findByRole("combobox", { name: "Período: últimos 30, 90, 180 ou 365 dias" });
+    expect([...(periodo as HTMLSelectElement).options].map((o) => o.value)).toEqual(["30", "90", "180", "365"]);
+    fireEvent.change(periodo, { target: { value: "180" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ver prévia" }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]![1]).toMatchObject({ acao: "previa", dias: 180 });
+  });
+
   it("pedir a prévia mostra 'Contando as conversas…' e erro do canal mostra a frase", async () => {
     get.mockResolvedValue(resposta(true, null));
     post.mockRejectedValue(new Error("502"));
