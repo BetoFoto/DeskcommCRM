@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/types";
 
 interface Previa {
   conversas: number;
@@ -39,6 +40,21 @@ interface Historico {
 const DIAS = [30, 90, 365] as const;
 const PREVIA_TIMEOUT_MS = 120_000;
 
+/** 409: outra aba (ou o cron) mudou a importação; não é o número que falhou. */
+function ehConflito(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409;
+}
+
+/**
+ * O erro gravado pela rodada é técnico (`messages_consulta: …`) e pode citar o
+ * transporte do canal pelo nome: a tela mostra uma linha curta, com o nome do
+ * transporte trocado por "canal".
+ */
+function resumirErro(erro: string): string {
+  const limpo = erro.replace(/waha/gi, "canal").replace(/\s+/g, " ").trim();
+  return limpo.length > 140 ? `${limpo.slice(0, 140)}…` : limpo;
+}
+
 /**
  * A importação do histórico do número (#999), no cartão da conexão.
  *
@@ -52,8 +68,12 @@ export function ChannelHistorico({ channelId }: { channelId: string }) {
   const [dias, setDias] = useState<number>(30);
   const [contando, setContando] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [erroDoCanal, setErroDoCanal] = useState(false);
+  const [erroDaPrevia, setErroDaPrevia] = useState<"conflito" | "rede" | null>(null);
   const rota = `/api/v1/channel-sessions/${channelId}/historico`;
+  const frase = (tipo: "conflito" | "rede") =>
+    tipo === "conflito"
+      ? t("A importação mudou enquanto você olhava. A tela foi atualizada com o estado atual.")
+      : t("Não foi possível falar com o número agora. Tente de novo em instantes.");
   const chave = ["channel-historico", channelId];
 
   const query = useQuery({
@@ -70,30 +90,31 @@ export function ChannelHistorico({ channelId }: { channelId: string }) {
     setBusy(true);
     try {
       await apiClient.post(rota, corpo, { timeoutMs: 20_000 });
-      await qc.invalidateQueries({ queryKey: chave });
-    } catch {
-      toast.error(t("Não foi possível falar com o número agora. Tente de novo em instantes."));
+    } catch (err) {
+      toast.error(frase(ehConflito(err) ? "conflito" : "rede"));
     } finally {
+      // Com sucesso ou não, a tela passa a mostrar o estado que o servidor tem.
+      await qc.invalidateQueries({ queryKey: chave });
       setBusy(false);
     }
   }
 
   async function pedirPrevia() {
     setContando(true);
-    setErroDoCanal(false);
+    setErroDaPrevia(null);
     try {
       await apiClient.post(rota, { acao: "previa", dias }, { timeoutMs: PREVIA_TIMEOUT_MS });
-      await qc.invalidateQueries({ queryKey: chave });
-    } catch {
-      setErroDoCanal(true);
+    } catch (err) {
+      setErroDaPrevia(ehConflito(err) ? "conflito" : "rede");
     } finally {
+      await qc.invalidateQueries({ queryKey: chave });
       setContando(false);
     }
   }
 
   if (query.isLoading) return null;
   if (query.isError) {
-    return <p role="alert" className="text-[11px] text-destructive">{t("Não foi possível falar com o número agora. Tente de novo em instantes.")}</p>;
+    return <p role="alert" className="text-[11px] text-destructive">{frase("rede")}</p>;
   }
 
   const titulo = <p className="text-xs font-medium">{t("Trazer conversas antigas para o atendimento")}</p>;
@@ -145,9 +166,19 @@ export function ChannelHistorico({ channelId }: { channelId: string }) {
       {status === "erro" && imp && (
         <>
           <p role="alert" className="text-[11px] text-destructive">{t("A importação parou por um erro.")}</p>
-          <div>
+          {imp.erro && (
+            <p className="text-[11px] text-muted-foreground">
+              {t("Detalhe: {erro}").replace("{erro}", resumirErro(imp.erro))}
+            </p>
+          )}
+          {/* Erro que se repete (o mesmo chat sempre recusado) não tem saída por
+              "Tentar de novo": cancelar libera o número para uma prévia nova. */}
+          <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" disabled={busy} onClick={() => void acao({ acao: "retomar", importacaoId: imp.id })}>
               {t("Tentar de novo")}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void acao({ acao: "cancelar", importacaoId: imp.id })}>
+              {t("Cancelar")}
             </Button>
           </div>
         </>
@@ -201,8 +232,8 @@ export function ChannelHistorico({ channelId }: { channelId: string }) {
         </div>
       )}
 
-      {erroDoCanal && (
-        <p role="alert" className="text-[11px] text-destructive">{t("Não foi possível falar com o número agora. Tente de novo em instantes.")}</p>
+      {erroDaPrevia && (
+        <p role="alert" className="text-[11px] text-destructive">{frase(erroDaPrevia)}</p>
       )}
     </div>
   );

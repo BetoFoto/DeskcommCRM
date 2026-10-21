@@ -2,6 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api/types";
+import { toast } from "sonner";
+
 import { ChannelHistorico } from "./ChannelHistorico";
 
 const get = vi.fn();
@@ -24,6 +27,7 @@ function tela() {
 beforeEach(() => {
   get.mockReset();
   post.mockReset();
+  vi.mocked(toast.error).mockReset();
 });
 
 describe("ChannelHistorico", () => {
@@ -80,6 +84,50 @@ describe("ChannelHistorico", () => {
     expect(await screen.findByText("A importação parou por um erro.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/channel-sessions/c1/historico", { acao: "retomar", importacaoId: "i1" }, expect.anything()));
+  });
+
+  it("status erro mostra o erro resumido, sem citar o transporte, e permite Cancelar", async () => {
+    const longo = `messages_consulta: waha devolveu 414 Request-URI Too Large ${"x".repeat(300)}`;
+    get.mockResolvedValue(resposta(true, { id: "i1", status: "erro", dias: 30, previa, erro: longo }));
+    post.mockResolvedValue({ data: { importacao: { id: "i1", status: "cancelada" } } });
+    const { container } = tela();
+    const detalhe = await screen.findByText(/^Detalhe: messages_consulta: canal devolveu 414/);
+    expect(detalhe.textContent!.length).toBeLessThan(200);
+    expect(container.textContent).not.toMatch(new RegExp(["wa", "ha"].join(""), "i"));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/channel-sessions/c1/historico", { acao: "cancelar", importacaoId: "i1" }, expect.anything()));
+  });
+
+  it("409 numa ação diz que a importação mudou e recarrega o estado", async () => {
+    get.mockResolvedValue(resposta(true, { id: "i1", status: "erro", dias: 30, previa, erro: "x" }));
+    post.mockRejectedValue(new ApiError(409, "invalid_state_transition", undefined, "r1"));
+    tela();
+    fireEvent.click(await screen.findByRole("button", { name: "Tentar de novo" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("A importação mudou enquanto você olhava. A tela foi atualizada com o estado atual."),
+    );
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+  });
+
+  it("falha de rede numa ação mostra a frase do número e também recarrega", async () => {
+    get.mockResolvedValue(resposta(true, { id: "i1", status: "rodando", dias: 30, previa, conversas_feitas: 1 }));
+    post.mockRejectedValue(new Error("fetch failed"));
+    tela();
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Não foi possível falar com o número agora. Tente de novo em instantes."),
+    );
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+  });
+
+  it("409 ao pedir a prévia diz que a importação mudou, não que o número não respondeu", async () => {
+    get.mockResolvedValue(resposta(true, null));
+    post.mockRejectedValue(new ApiError(409, "state_conflict", undefined, "r1"));
+    tela();
+    fireEvent.click(await screen.findByRole("button", { name: "Ver prévia" }));
+    expect(await screen.findByText("A importação mudou enquanto você olhava. A tela foi atualizada com o estado atual.")).toBeInTheDocument();
+    expect(screen.queryByText("Não foi possível falar com o número agora. Tente de novo em instantes.")).toBeNull();
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
   });
 
   it("concluída mostra o resumo e permite nova prévia", async () => {
