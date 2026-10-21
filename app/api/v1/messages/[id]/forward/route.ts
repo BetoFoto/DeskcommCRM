@@ -63,7 +63,9 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
         requestId,
         idioma: authz.user.idioma,
       },
-      { messageId: id, conversationIdDestino: corpo.conversation_id },
+      // A rota é de SESSÃO (navegador): é o que permite a regra "a conversa
+      // fica com quem atendeu" valer no encaminhamento, como no envio.
+      { messageId: id, conversationIdDestino: corpo.conversation_id, via: "session" },
     );
     return ok(mensagem, { status: 201, requestId });
   } catch (err) {

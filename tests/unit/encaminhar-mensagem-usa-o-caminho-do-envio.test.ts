@@ -24,6 +24,12 @@
  * caminho lê (`messages`, `conversations`, `channel_sessions`). O fake registra
  * toda escrita, e é o registro que prova (b) — a origem não vira linha nova nem
  * sofre `update`.
+ *
+ * ⚠️ O que ESTE dublê não alcança, e por isso tem arquivo próprio: a guarda
+ * anti-SSRF mora DENTRO de `sendMessageHandler`, então um handler dublado nunca
+ * a executa. Foi essa cegueira que deixou passar o defeito da mídia recebida
+ * (`http://localhost:3000/api/files/...` recusada como `unsafe_url`). Quem mede
+ * a mídia no caminho REAL é `encaminhar-midia-chega-como-objeto.test.ts`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -142,6 +148,7 @@ describe("encaminhar mensagem — mesmo caminho de envio do Inbox", () => {
     const resultado = await encaminharMensagem(supabase, ctx, {
       messageId: ORIGEM_ID,
       conversationIdDestino: DESTINO_CONV,
+      via: "session",
     });
 
     expect(enviado).toHaveBeenCalledTimes(1);
@@ -172,6 +179,7 @@ describe("encaminhar mensagem — mesmo caminho de envio do Inbox", () => {
     await encaminharMensagem(supabase, ctx, {
       messageId: ORIGEM_ID,
       conversationIdDestino: DESTINO_CONV,
+      via: "session",
     });
 
     // Nenhum insert/update/delete em tabela nenhuma passou por este caminho:
@@ -184,7 +192,7 @@ describe("encaminhar mensagem — mesmo caminho de envio do Inbox", () => {
     const { supabase } = fakeSupabase({ destino: null });
 
     await expect(
-      encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV }),
+      encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV, via: "session" }),
     ).rejects.toMatchObject({ status: 422, code: "destino_invalido" });
     expect(enviado).not.toHaveBeenCalled();
   });
@@ -193,7 +201,7 @@ describe("encaminhar mensagem — mesmo caminho de envio do Inbox", () => {
     const { supabase } = fakeSupabase({ destino: { id: DESTINO_CONV, channel_session_id: null } });
 
     await expect(
-      encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV }),
+      encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV, via: "session" }),
     ).rejects.toMatchObject({ status: 422, code: "destino_sem_canal" });
     expect(enviado).not.toHaveBeenCalled();
   });
@@ -202,7 +210,7 @@ describe("encaminhar mensagem — mesmo caminho de envio do Inbox", () => {
     const { supabase } = fakeSupabase({ sessao: { id: SESSAO, metadata: { disabled: true } } });
 
     await expect(
-      encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV }),
+      encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV, via: "session" }),
     ).rejects.toMatchObject({ status: 422, code: "canal_desativado" });
     expect(enviado).not.toHaveBeenCalled();
   });
@@ -211,7 +219,7 @@ describe("encaminhar mensagem — mesmo caminho de envio do Inbox", () => {
     const { supabase } = fakeSupabase({ origem: origemValida({ revoked_at: new Date().toISOString() }) });
 
     await expect(
-      encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV }),
+      encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV, via: "session" }),
     ).rejects.toMatchObject({ status: 422, code: "nao_encaminhavel" });
     expect(enviado).not.toHaveBeenCalled();
   });
@@ -220,7 +228,7 @@ describe("encaminhar mensagem — mesmo caminho de envio do Inbox", () => {
     const { supabase } = fakeSupabase({ destino: null });
     let capturado: unknown;
     try {
-      await encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV });
+      await encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV, via: "session" });
     } catch (err) {
       capturado = err;
     }
@@ -230,15 +238,27 @@ describe("encaminhar mensagem — mesmo caminho de envio do Inbox", () => {
 });
 
 describe("motivoParaNaoEncaminhar — a régua da origem", () => {
-  it("mídia só no Storage, sem URL e sem texto, tem motivo declarado", () => {
+  // Mídia só no NOSSO Storage era motivo de recusa até o conserto do #2835: o
+  // objeto agora é COPIADO para a pasta do destino e enviado por
+  // `media_storage_path` (prova no caminho real em
+  // `tests/unit/encaminhar-midia-chega-como-objeto.test.ts`). Deixou de ser
+  // impedimento — e este caso existe para que voltar a recusá-la fique vermelho.
+  it("mídia só no Storage, sem URL e sem texto, NÃO tem impedimento", () => {
     const motivo = motivoParaNaoEncaminhar({
-      ...origemValida({ body: null }),
+      ...origemValida({ body: null, media_url: null }),
       media_storage_path: `${ORG}/${ORIGEM_CONV}/foto.jpg`,
     });
-    expect(motivo).toBe("midia_interna");
+    expect(motivo).toBeNull();
   });
 
   it("texto puro não tem impedimento", () => {
     expect(motivoParaNaoEncaminhar(origemValida())).toBeNull();
+  });
+
+  it("sem texto e sem mídia nenhuma: sem_conteudo", () => {
+    const motivo = motivoParaNaoEncaminhar(
+      origemValida({ body: null, media_url: null, media_storage_path: null }),
+    );
+    expect(motivo).toBe("sem_conteudo");
   });
 });

@@ -19,18 +19,22 @@
  * encaminhamento herdar todos os guards do envio normal — inclusive a
  * marcação de `failed`/`queued` quando o canal do destino não pode enviar.
  *
- * ─── Escopo entregue, e o que ficou de fora ─────────────────────────────────
+ * ─── A MÍDIA: o objeto, e não a URL que o provedor mandou ───────────────────
  *
- * ENTREGUE: texto (com legenda de mídia) e mídia EXTERNA (`media_url`, a URL
- * do CDN do WhatsApp que o inbound carrega). O destino é uma conversa
- * existente da organização, escolhida na tela.
+ * O comentário anterior aqui afirmava que a `media_url` da mensagem recebida era
+ * "a URL do CDN público do WhatsApp" e que bastava repassá-la. NÃO É, e foi essa
+ * premissa que gerou o defeito: no WAHA da instalação padrão ela é
+ * `http://localhost:3000/api/files/...` e na Meta é `meta-media:<id>` — as duas
+ * RECUSADAS pela guarda anti-SSRF do envio, com 422 `unsafe_media_url` e o texto
+ * técnico "media_url recusada" na cara de quem tentou encaminhar uma imagem.
  *
- * FORA DO ESCOPO, de propósito e declarado: mídia guardada no NOSSO Storage
- * (`media_storage_path`). Ela é escopada à conversa dona (o handler recusa
- * `media_storage_path` que não pertença à conversa do envio — `isMediaPathOwnedBy`),
- * e copiar o objeto para a pasta do destino é um trabalho que a issue não pede
- * e que este PR não inventa. Uma mensagem só de mídia interna cai no motivo
- * claro de `motivoParaNaoEncaminhar`, nunca num envio mudo.
+ * O caminho certo é o MESMO que o envio normal e o upload usam: o OBJETO no
+ * nosso Storage (`media_storage_path`), que o handler assina e manda por URL
+ * assinada. O encaminhamento copia o objeto para a pasta da conversa de DESTINO
+ * e manda por ali — a decisão inteira, com a medição, está em
+ * `lib/inbox/midia-do-encaminhamento.ts`. Só a mídia EXTERNA (URL pública que
+ * passa na guarda) continua viajando por `media_url`, que é o único caso em que
+ * ela é transportável.
  *
  * ─── O destino sem canal válido falha ALTO (critério c) ─────────────────────
  *
@@ -39,6 +43,14 @@
  * com motivo — nunca a mensagem saindo e falhando em silêncio depois. O mesmo
  * `canalDesativado` da lei do produto (#2318) é quem decide o último caso, para
  * que a tela e o envio concordem sobre o que é "desativado".
+ *
+ * ─── A conversa do destino e a regra "fica com quem atendeu" ────────────────
+ *
+ * Encaminhar é responder, e responder assume a conversa quando a empresa liga
+ * `settings.routing.conversation_stays_with_attendant`. A regra NÃO mora aqui:
+ * ela é `assumirConversaAposEnvio` (`lib/inbox/assumir-conversa-apos-envio.ts`),
+ * o MESMO helper que a rota de envio chama depois do handler — uma regra, dois
+ * chamadores.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -46,6 +58,11 @@ import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { ApiError } from "@/lib/api/types";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import { canalDesativado } from "@/lib/channels/desativado";
+import { assumirConversaAposEnvio } from "@/lib/inbox/assumir-conversa-apos-envio";
+import {
+  resolverMidiaDoEncaminhamento,
+  type MidiaParaEncaminhar,
+} from "@/lib/inbox/midia-do-encaminhamento";
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { SendMessageInput } from "@/lib/schemas";
 import type { Message } from "@/lib/types/messaging";
@@ -73,6 +90,12 @@ export interface EncaminharParams {
   messageId: string;
   /** A conversa de destino — existente e acessível à organização. */
   conversationIdDestino: string;
+  /**
+   * De ONDE veio o pedido. A rota de encaminhamento é de sessão (navegador), e
+   * é o que permite a regra "a conversa fica com quem atendeu" valer também
+   * aqui — token de servidor não é "quem atendeu".
+   */
+  via: "session" | "token";
 }
 
 /**
@@ -84,15 +107,23 @@ export interface EncaminharParams {
  * pré-montada voltaria como chave de runtime para o `traduzir` — a mesma dívida
  * que o guarda de i18n proíbe. O código é estável e o texto sai em
  * `mensagemDoMotivo`, com um literal por ramo.
+ *
+ * Aqui só moram os motivos que se veem na PRÓPRIA origem, sem tocar o Storage:
+ * apagada e sem conteúdo nenhum. A mídia que não pôde ser preparada é um
+ * desfecho da resolução (`MidiaParaEncaminhar`) e entra pelos mesmos dois
+ * códigos de mídia, logo abaixo.
  */
-export type MotivoNaoEncaminhavel = "apagada" | "midia_interna" | "sem_conteudo";
+export type MotivoNaoEncaminhavel =
+  | "apagada"
+  | "midia_aguardando"
+  | "midia_falhou"
+  | "sem_conteudo";
 
 export function motivoParaNaoEncaminhar(origem: MensagemDeOrigem): MotivoNaoEncaminhavel | null {
   if (origem.revoked_at) return "apagada";
-  // Mídia interna (nosso Storage) sem URL externa e sem texto: nada
-  // transportável pelo caminho do envio sem copiar o objeto — fora do escopo.
-  if (origem.media_storage_path && !origem.media_url && !origem.body) return "midia_interna";
-  if (!origem.body && !origem.media_url) return "sem_conteudo";
+  // Sem texto e sem mídia NENHUMA — nem a externa, nem o objeto no nosso
+  // Storage: não há o que transportar.
+  if (!origem.body && !origem.media_url && !origem.media_storage_path) return "sem_conteudo";
   return null;
 }
 
@@ -107,8 +138,14 @@ export function mensagemDoMotivo(
   switch (motivo) {
     case "apagada":
       return t("Esta mensagem foi apagada e não pode ser encaminhada.");
-    case "midia_interna":
-      return t("Esta mensagem só tem mídia guardada no CRM, que ainda não pode ser encaminhada.");
+    case "midia_aguardando":
+      return t(
+        "A mídia desta mensagem ainda não chegou ao CRM. Tente encaminhar de novo em alguns segundos.",
+      );
+    case "midia_falhou":
+      return t(
+        "Não consegui preparar a mídia desta mensagem para o encaminhamento. Tente de novo em instantes.",
+      );
     case "sem_conteudo":
       return t("Só é possível encaminhar mensagens de texto ou mídia.");
   }
@@ -118,30 +155,38 @@ export function mensagemDoMotivo(
  * O corpo `input` do envio, montado a partir da mensagem de origem.
  *
  * Mesmo shape que o Inbox manda em `POST /api/v1/messages` — de propósito: o
- * destino é só a `conversation_id` trocada. O conteúdo (texto e/ou URL de
- * mídia) viaja igual; a origem fica gravada em `metadata` para a conversa de
- * destino guardar de onde a mensagem veio, sem inventar coluna.
+ * destino é só a `conversation_id` trocada. O conteúdo (texto e/ou a mídia já
+ * RESOLVIDA — objeto copiado para a pasta do destino, ou URL externa segura)
+ * viaja igual; a origem fica gravada em `metadata` para a conversa de destino
+ * guardar de onde a mensagem veio, sem inventar coluna.
  */
 export function montarEntradaDeEncaminhamento(
   origem: MensagemDeOrigem,
   conversationIdDestino: string,
+  midia: MidiaParaEncaminhar,
 ): SendMessageInput {
+  const temMidia = midia.tipo === "copia" || midia.tipo === "externa";
   const entrada: SendMessageInput = {
     conversation_id: conversationIdDestino,
-    // Com mídia externa, o tipo é o da origem (image/video/…); só texto é
-    // `text`. Um balão sem tipo certo sairia como texto com URL dentro.
+    // Com mídia, o tipo é o da origem (image/video/…); só texto é `text`. Um
+    // balão sem tipo certo sairia como texto com URL dentro.
     // O tipo vem do NOSSO banco (`messages.type`), logo dentro do vocabulário
     // do schema — o cast só acomoda o literal que `SendMessageInput` exige.
-    type: (origem.media_url ? (origem.type ?? "text") : "text") as SendMessageInput["type"],
+    type: (temMidia ? (origem.type ?? "text") : "text") as SendMessageInput["type"],
     metadata: {
       forwarded_from_message_id: origem.id,
       forwarded_from_conversation_id: origem.conversation_id,
     },
   };
   if (origem.body) entrada.body = origem.body;
-  if (origem.media_url) {
-    entrada.media_url = origem.media_url;
-    if (origem.media_mime) entrada.media_mime = origem.media_mime;
+  // Mídia do NOSSO Storage vai por `media_storage_path` — o handler assina o
+  // objeto e manda a URL assinada. A URL crua do provedor NUNCA viaja daqui.
+  if (midia.tipo === "copia") {
+    entrada.media_storage_path = midia.media_storage_path;
+    if (midia.media_mime) entrada.media_mime = midia.media_mime;
+  } else if (midia.tipo === "externa") {
+    entrada.media_url = midia.media_url;
+    if (midia.media_mime) entrada.media_mime = midia.media_mime;
   }
   return entrada;
 }
@@ -254,26 +299,54 @@ async function validarDestino(
  * pelo MESMO caminho de envio do Inbox (`sendMessageHandler`).
  *
  * Devolve a linha criada na conversa de destino, com o mesmo conteúdo da
- * origem. A mensagem ORIGINAL não é tocada — este caminho só a LÊ.
+ * origem. A mensagem ORIGINAL não é tocada — este caminho só a LÊ (o objeto no
+ * Storage é COPIADO, o original fica onde está).
  */
 export async function encaminharMensagem(
   supabase: SB,
   ctx: HandlerCtx,
   params: EncaminharParams,
 ): Promise<Message> {
+  const t = (texto: string) => traduzir(texto, ctx.idioma ?? "pt-BR");
   const origem = await lerOrigem(supabase, ctx, params.messageId);
 
   const motivo = motivoParaNaoEncaminhar(origem);
   if (motivo) {
-    const t = (texto: string) => traduzir(texto, ctx.idioma ?? "pt-BR");
     throw new ApiError(422, "nao_encaminhavel", undefined, ctx.requestId, mensagemDoMotivo(motivo, t));
   }
 
+  // O destino primeiro: recusar antes de copiar qualquer objeto evita encher a
+  // pasta de uma conversa que nem pode receber.
   await validarDestino(supabase, ctx, params.conversationIdDestino);
 
-  return sendMessageHandler(
+  const midia = await resolverMidiaDoEncaminhamento(origem, params.conversationIdDestino);
+  if (midia.tipo === "aguardando" || midia.tipo === "falhou") {
+    throw new ApiError(
+      422,
+      "nao_encaminhavel",
+      undefined,
+      ctx.requestId,
+      mensagemDoMotivo(midia.tipo === "aguardando" ? "midia_aguardando" : "midia_falhou", t),
+    );
+  }
+
+  const message = await sendMessageHandler(
     supabase,
     ctx,
-    montarEntradaDeEncaminhamento(origem, params.conversationIdDestino),
+    montarEntradaDeEncaminhamento(origem, params.conversationIdDestino, midia),
   );
+
+  // Encaminhar é responder: a conversa do destino é assumida pela MESMA regra
+  // do envio normal, quando a empresa ligou "a conversa fica com quem atendeu".
+  await assumirConversaAposEnvio({
+    supabase,
+    organizationId: ctx.organization_id,
+    actor: ctx.actor,
+    requestId: ctx.requestId,
+    via: params.via,
+    conversationId: message.conversation_id,
+    status: message.status,
+  });
+
+  return message;
 }

@@ -50,8 +50,11 @@ export const DICIONARIO: Traducoes = {
     es: "El canal de la conversación de destino está desactivado. Reactívalo para reenviar.",
   },
   "Esta mensagem foi apagada e não pode ser encaminhada.": { es: "Este mensaje fue eliminado y no se puede reenviar." },
-  "Esta mensagem só tem mídia guardada no CRM, que ainda não pode ser encaminhada.": {
-    es: "Este mensaje solo tiene contenido multimedia guardado en el CRM, que aún no se puede reenviar.",
+  "A mídia desta mensagem ainda não chegou ao CRM. Tente encaminhar de novo em alguns segundos.": {
+    es: "El contenido multimedia de este mensaje aún no llegó al CRM. Intenta reenviarlo de nuevo en unos segundos.",
+  },
+  "Não consegui preparar a mídia desta mensagem para o encaminhamento. Tente de novo em instantes.": {
+    es: "No pude preparar el contenido multimedia de este mensaje para reenviarlo. Inténtalo de nuevo en unos instantes.",
   },
   "Só é possível encaminhar mensagens de texto ou mídia.": { es: "Solo se pueden reenviar mensajes de texto o multimedia." },
   "Há um ajuste proporcional esperando pagamento. Escolher outro plano cancela esse ajuste.": { es: "Hay un ajuste proporcional esperando el pago. Elegir otro plan cancela ese ajuste." },
