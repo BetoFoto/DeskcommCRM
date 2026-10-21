@@ -4052,20 +4052,30 @@ async function executarTurnoDoAgente(
                 : {}),
             });
             if (!mirror.ok) {
+              // `to_stage` continua sendo o PASSO INTERNO do agente — o log é
+              // diagnóstico de quem depura, não texto para o dono (#3148).
               runLog.warn('espelho de stage no CRM falhou — harness mantido', {
                 to_stage: update.transition.to,
                 reason: mirror.reason,
               });
               // QUAL aviso cada recusa produz, e como ele deixa de se repetir, é
-              // decisão de `move-lead-stage` — aqui só se passa o motivo e o
-              // lead. Ver `abreAvisoDoEspelhoRecusado`: escrever o
-              // `insertInboxItem` à mão neste ponto é o que deixava o `dedupe`
-              // sem guarda.
+              // decisão de `move-lead-stage` — aqui só se passa o motivo, o lead e
+              // o NOME da etapa do funil. Ver `abreAvisoDoEspelhoRecusado`:
+              // escrever o `insertInboxItem` à mão neste ponto é o que deixava o
+              // `dedupe` sem guarda.
+              //
+              // ⚠️ `etapaDoFunil` (o `stageName` que o resolvedor devolve) e NÃO
+              // `update.transition.to`: o aviso da Central nomeia a etapa do quadro
+              // do dono ("Perdido"), não o passo interno do atendimento ("lost",
+              // issue #3148). Quando o nome não foi resolvido (recusa de escopo,
+              // que decide antes de ler as etapas) o aviso usa um texto de reserva
+              // legível — nunca o rótulo interno.
               await abreAvisoDoEspelhoRecusado(pool, tenantId, {
                 leadId,
                 motivo: mirror.reason,
                 detalhe: mirror.detail,
                 etapaDeDestino: update.transition.to,
+                ...(mirror.stageName !== undefined ? { etapaDoFunil: mirror.stageName } : {}),
               });
             }
           }
