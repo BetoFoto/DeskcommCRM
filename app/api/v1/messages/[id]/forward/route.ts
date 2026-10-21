@@ -57,9 +57,14 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     return fail("validation_failed", t("Escolha uma conversa de destino."), 422, { requestId });
   }
 
-  // O `apiClient` carimba Idempotency-Key em todo POST: um duplo clique ou uma
-  // retentativa de rede encaminharia duas vezes. Mesma régua de
-  // `POST /api/v1/messages`: chave, quando vem, é UUID.
+  // O `apiClient` carimba Idempotency-Key em todo POST — mas sorteia uma chave
+  // NOVA quando nenhuma vem (`lib/api/client.ts`: `opts.idempotencyKey ??
+  // randomId()`). Sem chave ESTÁVEL, dois cliques chegavam aqui como duas
+  // chaves e o `comIdempotencia` abaixo não reconhecia repetição nenhuma. Quem
+  // garante a estabilidade é `hooks/inbox/useEncaminharMensagem.ts`: uma chave
+  // por INTENÇÃO (mensagem + destino), guardada em ref e reusada na retentativa
+  // de rede — e o mesmo ref barra o segundo clique antes do POST. Mesma régua
+  // de `POST /api/v1/messages`: chave, quando vem, é UUID.
   const chave = chaveDaRequisicao(req);
   if (chave !== null && !z.string().uuid().safeParse(chave).success) {
     return fail("validation_error", "Idempotency-Key deve ser UUID", 400, { requestId });

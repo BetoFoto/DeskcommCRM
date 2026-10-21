@@ -43,6 +43,9 @@ export const DICIONARIO: Traducoes = {
   "Escolha a conversa que vai receber esta mensagem.": { es: "Elige la conversación que recibirá este mensaje." },
   "Buscar conversa": { es: "Buscar conversación" },
   "Mensagem encaminhada.": { es: "Mensaje reenviado." },
+  // A rota responde 201 mesmo quando o envio falhou (`status: "failed"`): o
+  // toast precisa dizer isso, com o motivo que o envio gravou.
+  "Não foi possível encaminhar: {motivo}": { es: "No se pudo reenviar: {motivo}" },
   // Recusas do encaminhamento (`lib/inbox/encaminhar-mensagem.ts`).
   "Escolha uma conversa de destino desta organização.": { es: "Elige una conversación de destino de esta organización." },
   "A conversa de destino não tem canal de envio.": { es: "La conversación de destino no tiene canal de envío." },

@@ -1054,7 +1054,12 @@ export function InboxLayout({
       <EncaminharDialog
         open={encaminhando !== null}
         onOpenChange={(aberto) => {
-          if (!aberto) setEncaminhando(null);
+          if (!aberto) {
+            setEncaminhando(null);
+            // Diálogo fechado, intenção zerada: reabrir depois — outra mensagem
+            // ou até a mesma — tem de poder encaminhar de novo, com chave nova.
+            encaminhar.limparIntencao();
+          }
         }}
         conversas={conversasDaLista}
         conversationIdAtual={selectedConversation?.id ?? null}

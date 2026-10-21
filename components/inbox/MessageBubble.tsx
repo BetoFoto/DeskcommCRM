@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { Message } from "@/lib/types/messaging";
 import type { ReacaoNoBalao } from "@/lib/inbox/reacoes-no-fio";
 import { lerRemetenteDeGrupo, rotuloDoRemetente } from "@/lib/messaging/remetente-de-grupo";
+import { motivoDaFalhaDaMensagem } from "@/lib/inbox/motivo-da-falha";
 import { CitationButton } from "@/components/ai/CitationButton";
 import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
 import { MediaUnavailable } from "@/components/inbox/media/MediaUnavailable";
@@ -477,7 +478,7 @@ export function MessageBubble({
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {message.error_message ? t(message.error_message) : (message.error_code ?? t("Erro desconhecido"))}
+                  {motivoDaFalhaDaMensagem(message, t)}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
