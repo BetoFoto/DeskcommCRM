@@ -16,7 +16,12 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { comecaComPalavraDeSaida, ehOptOutProvavel, ehPedidoDeOptOut } from "@/lib/opt-out/deteccao";
+import {
+  comecaComPalavraDeSaida,
+  ehOptOutProvavel,
+  ehPedidoDeOptOut,
+  semAssinaturaDaAtendente,
+} from "@/lib/opt-out/deteccao";
 
 /** Pedidos de descadastro que PRECISAM ser respeitados (bloqueiam o contato). */
 const PEDE_PARA_SAIR = [
@@ -779,5 +784,90 @@ describe("com objeto de comunicação, `assinatura` BLOQUEIA (#2971)", () => {
       expect(ehPedidoDeOptOut(texto), texto).toBe(false);
       expect(ehOptOutProvavel(texto), texto).toBe(true);
     }
+  });
+});
+
+/**
+ * ─── A ASSINATURA DA ATENDENTE NA PRIMEIRA LINHA (#3078) ─────────────────────
+ *
+ * O caso do relato: WhatsApp Business com vários atendentes prefixa a
+ * ASSINATURA ao texto, e o "PARAR" chega na SEGUNDA linha:
+ *
+ *   *Amanda Nobre:*
+ *   PARAR
+ *
+ * Com o texto cru, `ehPalavraIsolada` cola as letras ("amandanobreparar") e
+ * nenhuma frase casa — o pedido se perdia, o contato não era bloqueado e a IA
+ * respondia. O recorte tira a assinatura da FRENTE e julga o resto pela MESMA
+ * régua; nada no vocabulário nem no limiar que grava `is_blocked` se move.
+ */
+describe("a assinatura da atendente na primeira linha não esconde o pedido (#3078)", () => {
+  it("(a) o caso do defeito: `*Amanda Nobre:*` + `PARAR` é pedido INEQUÍVOCO", () => {
+    // Este é o caso que fica VERMELHO sem o recorte (ver o PR: sabotagem).
+    expect(ehPedidoDeOptOut("*Amanda Nobre:*\nPARAR")).toBe(true);
+    // ...e também escala, pela mesma razão de sempre (inequívoco ⇒ provável).
+    expect(ehOptOutProvavel("*Amanda Nobre:*\nPARAR")).toBe(true);
+  });
+
+  it("(b) variações da assinatura — todas reconhecidas", () => {
+    for (const texto of [
+      "Amanda Nobre:\nPARAR", // sem asteriscos, dois pontos no fim
+      "*Nome:*\nsair", // nome curto, palavra de saída diferente
+      "*Amanda Nobre*:\nPARAR", // dois pontos FORA dos asteriscos
+      "*Amanda Nobre:*\nnao quero mais receber", // frase de opt-out, não só palavra
+      "*Dra. Amanda Nobre:*\nparar de me mandar mensagem", // ponto de abreviação no nome
+    ]) {
+      expect(ehPedidoDeOptOut(texto), `deveria reconhecer ${JSON.stringify(texto)}`).toBe(true);
+    }
+  });
+
+  it("(b) controle negativo: assinatura em mensagem que NÃO pede saída segue não sendo pedido", () => {
+    // O recorte não pode virar um "ignore o que vem antes": com a assinatura
+    // removida, o que sobra é atendimento normal — nem bloqueia, nem escala.
+    for (const texto of [
+      "*Amanda Nobre:*\nBom dia, tudo bem?",
+      "Amanda Nobre:\nvocês abrem amanhã?",
+      "*Joana:*\nvou pensar e te falo",
+    ]) {
+      expect(ehPedidoDeOptOut(texto), texto).toBe(false);
+      expect(ehOptOutProvavel(texto), texto).toBe(false);
+    }
+  });
+
+  it("(c) pedido SEM assinatura continua reconhecido igual a hoje", () => {
+    for (const texto of ["PARAR", "sair", "nao quero mais receber", "parar de me mandar mensagem"]) {
+      expect(ehPedidoDeOptOut(texto), texto).toBe(true);
+    }
+  });
+
+  it("(d) mensagem legítima de duas linhas não passa a ser pedido", () => {
+    for (const texto of [
+      "Bom dia\nvamos falar amanha",
+      "oi\nqueria saber o preço",
+      "Bom dia:\nvamos falar amanha", // dois pontos no fim, mas a 2ª linha não é pedido
+    ]) {
+      expect(ehPedidoDeOptOut(texto), texto).toBe(false);
+    }
+  });
+
+  it("mensagem de UMA linha só é PRESERVADA — `*PARAR:*` sozinho continua bloqueando", () => {
+    // O limite mais delicado: a "assinatura" é a mensagem INTEIRA. Recortá-la
+    // devolveria vazio e o pedido morreria — por isso o recorte exige texto
+    // DEPOIS da primeira linha.
+    expect(semAssinaturaDaAtendente("*PARAR:*")).toBe("*PARAR:*");
+    expect(ehPedidoDeOptOut("*PARAR:*")).toBe(true);
+    expect(ehPedidoDeOptOut("PARAR:\n")).toBe(true);
+  });
+
+  it("o recorte é puro e devolve o RESTO intacto (não decide nada)", () => {
+    expect(semAssinaturaDaAtendente("*Amanda Nobre:*\nPARAR")).toBe("PARAR");
+    expect(semAssinaturaDaAtendente("Amanda Nobre:\nPARAR\npor favor")).toBe("PARAR\npor favor");
+    // não é assinatura: primeira linha com pontuação de frase / sem dois pontos
+    expect(semAssinaturaDaAtendente("Bom dia\nvamos falar amanha")).toBe("Bom dia\nvamos falar amanha");
+    expect(semAssinaturaDaAtendente("Bom dia, tudo bem:\nsegue o pedido")).toBe(
+      "Bom dia, tudo bem:\nsegue o pedido",
+    );
+    // texto que COMEÇA com dois pontos nunca é assinatura
+    expect(semAssinaturaDaAtendente(": nota\nPARAR")).toBe(": nota\nPARAR");
   });
 });

@@ -576,12 +576,78 @@ function ehPalavraIsolada(normalizado: string): boolean {
 }
 
 /**
+ * ─── A ASSINATURA DA ATENDENTE NA PRIMEIRA LINHA (#3078) ─────────────────────
+ *
+ * Num WhatsApp Business com vários atendentes, a assinatura é prefixada ao
+ * texto — a mensagem chega assim:
+ *
+ *   *Amanda Nobre:*
+ *   PARAR
+ *
+ * A decisão lia o texto INTEIRO: `*amanda nobre:*\nparar` faz `ehPalavraIsolada`
+ * colar as letras ("amandanobreparar", fora do conjunto) e nenhuma frase de
+ * `FRASES_DE_OPT_OUT` casa — o pedido se perdia. Efeito medido no relato
+ * (1.85.0): o contato não era bloqueado, o card não ia para perdido e a IA
+ * respondia — quem pediu para sair seguia recebendo prospecção (risco de
+ * denúncia do número e de LGPD, art. 18).
+ *
+ * O recorte NÃO é regra nova: a assinatura muda o TEXTO analisado, e o pedido
+ * continua julgado pela MESMA régua — palavra sozinha ou frase de
+ * `FRASES_DE_OPT_OUT`. Nenhuma palavra duvidosa vira inequívoca aqui, e o
+ * limiar que grava `is_blocked` não se move.
+ */
+
+/**
+ * A primeira linha é uma ASSINATURA de atendente?
+ *
+ * Duas formas, com a linha INTEIRA (nada antes, nada depois — o chamador já
+ * passou `trim`):
+ *   `*Amanda Nobre:*` / `*Amanda Nobre*` / `*Amanda Nobre*:` — negrito do
+ *     WhatsApp Business, com ou sem os dois pontos dentro dos asteriscos;
+ *   `Amanda Nobre:` — sem asteriscos: POUCAS palavras (≤ 4) e sem pontuação de
+ *     frase (`? ! , ;`), para não engolir por acidente uma frase real que
+ *     termine em dois pontos.
+ *
+ * Um `.` é permitido de propósito: `Dra. Amanda Nobre:` tem ponto de abreviação
+ * dentro do nome e continua sendo assinatura. Um texto que COMECE com dois
+ * pontos não casa nenhuma das duas formas (exige conteúdo antes do `:`).
+ */
+function ehAssinaturaDaAtendente(linha: string): boolean {
+  if (linha === "") return false;
+  if (/^\*[^*\n]+\*:?$/u.test(linha)) return true;
+  if (/[?!,;]/u.test(linha)) return false;
+  if (!/^\S[^:\n]*:$/u.test(linha)) return false;
+  return linha.slice(0, -1).trim().split(/\s+/u).length <= 4;
+}
+
+/**
+ * O texto SEM a assinatura da atendente na primeira linha — pura e pequena,
+ * para rodar na ENTRADA de toda decisão que hoje olha o texto cru.
+ *
+ * Limites do recorte, medidos com os casos de `opt-out-deteccao.test.ts`:
+ *   - só recorta quando a primeira linha INTEIRA é uma assinatura E existe
+ *     texto DEPOIS dela. Mensagem de UMA linha só é preservada — é o que
+ *     mantém `*PARAR:*` sozinho bloqueando (recortar devolveria vazio e o
+ *     pedido morreria), e o que protege uma mensagem legítima de duas linhas
+ *     cujo começo não é assinatura (`Bom dia\nvamos falar amanha`);
+ *   - o RESTO é devolvido intacto: o recorte não decide nada, só tira o ruído
+ *     da frente. Quem decide é `ehPedidoDeOptOut`/`ehOptOutProvavel`, como hoje.
+ */
+export function semAssinaturaDaAtendente(texto: string): string {
+  const quebra = texto.indexOf("\n");
+  if (quebra === -1) return texto;
+  const resto = texto.slice(quebra + 1);
+  if (resto.trim() === "") return texto;
+  return ehAssinaturaDaAtendente(texto.slice(0, quebra).trim()) ? resto : texto;
+}
+
+/**
  * É pedido de descadastro INEQUÍVOCO? Só este autoriza gravar `is_blocked` —
  * ver o cabeçalho deste arquivo sobre por que o ambíguo não entra aqui.
  */
 export function ehPedidoDeOptOut(texto: string | null | undefined): boolean {
   if (!texto) return false;
-  const normalizado = normalizarTexto(texto.trim());
+  const normalizado = normalizarTexto(semAssinaturaDaAtendente(texto.trim()).trim());
   if (normalizado === "") return false;
   if (ehPalavraIsolada(normalizado)) return true;
   return FRASES_DE_OPT_OUT.some((re) => re.test(normalizado));
@@ -595,7 +661,7 @@ export function ehPedidoDeOptOut(texto: string | null | undefined): boolean {
 export function ehOptOutProvavel(texto: string | null | undefined): boolean {
   if (!texto) return false;
   if (ehPedidoDeOptOut(texto)) return true;
-  const normalizado = normalizarTexto(texto.trim());
+  const normalizado = normalizarTexto(semAssinaturaDaAtendente(texto.trim()).trim());
   return FRASES_AMBIGUAS_DE_OPT_OUT.some((re) => re.test(normalizado));
 }
 
