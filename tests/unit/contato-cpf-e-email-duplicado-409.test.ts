@@ -467,3 +467,46 @@ describe("#3084 — o telefone segue pelo caminho de sempre", () => {
     });
   });
 });
+
+describe("#3084 — PATCH pela tela reenvia o telefone do próprio contato", () => {
+  // O EditContactDialog manda o telefone junto com o e-mail. Se a releitura por
+  // telefone viesse primeiro, ela acharia o PRÓPRIO contato e o 409 diria
+  // "telefone" apontando para quem está sendo editado.
+  it("e-mail de outro + telefone próprio: 409 de e-mail com o id do OUTRO", async () => {
+    const telefone = canonicalPhoneBR("+5532984793302");
+    const erro = await erroDe(
+      editar(
+        clienteFalso({
+          contatos: [
+            { id: EXISTENTE, organization_id: ORG, email: "antigo@example.com", phone_number: telefone },
+            { id: NOVO, organization_id: ORG, email: EMAIL },
+          ],
+        }),
+        { email: EMAIL, phone_number: "+5532984793302" },
+      ),
+    );
+    expect(erro).toMatchObject({
+      status: 409,
+      code: "contact_exists",
+      details: { contact_id: NOVO },
+      message: "Já existe um contato com este e-mail.",
+    });
+  });
+
+  it("telefone próprio + 23505 de índice desconhecido: 500, não 409 apontando para si", async () => {
+    const telefone = canonicalPhoneBR("+5532984793302");
+    const erro = await erroDe(
+      editar(
+        clienteFalso({
+          contatos: [{ id: EXISTENTE, organization_id: ORG, phone_number: telefone }],
+          falhaDoUpdate: {
+            code: "23505",
+            message: 'duplicate key value violates unique constraint "uq_contacts_grupo"',
+          },
+        }),
+        { phone_number: "+5532984793302" },
+      ),
+    );
+    expect(erro).toMatchObject({ status: 500, code: "internal_error" });
+  });
+});

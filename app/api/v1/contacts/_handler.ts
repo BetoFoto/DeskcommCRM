@@ -508,26 +508,14 @@ async function erroDeConflitoUnico(
   ctx: HandlerCtx,
   campos: { phone_number?: unknown; email?: unknown; cpf_hash?: unknown },
   erro: { code?: string; message?: string; details?: string | null; constraint?: string | null },
+  excluirId?: string,
 ): Promise<ApiError | null> {
   if (erro.code !== "23505") return null;
   const idioma = ctx.idioma ?? "pt-BR";
 
-  // 1) Telefone — o desenho de sempre (fatia S1 da #852): a releitura decide.
-  const telefone = typeof campos.phone_number === "string" ? campos.phone_number : null;
-  if (telefone) {
-    const existente = await encontrarContatoPorTelefone(supabase, ctx.organization_id, telefone);
-    if (existente) {
-      return new ApiError(
-        409,
-        "contact_exists",
-        { contact_id: existente.id },
-        ctx.requestId,
-        traduzir("Já existe um contato com este telefone.", idioma),
-      );
-    }
-  }
-
-  // 2) CPF e e-mail — só quando o erro NOMEIA o índice (#3084).
+  // 1) CPF e e-mail — só quando o erro NOMEIA o índice (#3084). Vem ANTES do
+  //    telefone: o PATCH da tela reenvia o telefone do PRÓPRIO contato, e a
+  //    releitura por telefone o acharia — 409 de telefone apontando para si mesmo.
   const indice = nomeDoIndiceUnico(erro);
   if (indice === INDICE_CPF) {
     const hash = typeof campos.cpf_hash === "string" ? campos.cpf_hash : null;
@@ -557,6 +545,25 @@ async function erroDeConflitoUnico(
           traduzir("Já existe um contato com este e-mail.", idioma),
         );
       }
+    }
+  }
+
+  // 2) Telefone — o desenho de sempre (fatia S1 da #852): a releitura decide,
+  //    salvo quando o erro já nomeou CPF ou e-mail. No PATCH, `excluirId` é o
+  //    contato editado: achar a si mesmo pelo telefone não explica conflito
+  //    nenhum, e o 23505 segue no 500.
+  if (indice === INDICE_CPF || indice === INDICE_EMAIL) return null;
+  const telefone = typeof campos.phone_number === "string" ? campos.phone_number : null;
+  if (telefone) {
+    const existente = await encontrarContatoPorTelefone(supabase, ctx.organization_id, telefone);
+    if (existente && existente.id !== excluirId) {
+      return new ApiError(
+        409,
+        "contact_exists",
+        { contact_id: existente.id },
+        ctx.requestId,
+        traduzir("Já existe um contato com este telefone.", idioma),
+      );
     }
   }
 
@@ -833,7 +840,7 @@ export async function patchContactHandler(
     // `uniq_contacts_org_email` é o caso medido na issue (trocar o e-mail por um
     // que já é de outro contato). O 409 sai com o `contact_id` de quem já tem o
     // dado; qualquer outro conflito segue no 500 de sempre.
-    const conflito = await erroDeConflitoUnico(supabase, ctx, patch, updErr);
+    const conflito = await erroDeConflitoUnico(supabase, ctx, patch, updErr, contactId);
     if (conflito) throw conflito;
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, updErr.message);
   }
