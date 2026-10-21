@@ -121,18 +121,23 @@ export function LeadDossier({
     (activeOrg ? ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent : false);
 
   /**
-   * Uma única linha do tempo, montada uma vez e usada nos dois estados da
+   * As props da linha do tempo, montadas UMA vez e usadas nos dois estados da
    * seção. Duplicar o bloco seria a maneira mais fácil de os dois divergirem —
    * e o recolhido é justamente o estado menos olhado por quem revisa.
+   *
+   * São as props, e não o elemento da linha do tempo já montado numa variável
+   * lá em cima: `tests/unit/dossie-atalho-conversa` prova que o bloco da
+   * conversa aparece ANTES da linha do tempo lendo a posição do primeiro
+   * elemento dela no arquivo, e uma variável içada para o topo do componente
+   * inverteria essa leitura sem nada ter mudado na tela — o teste passaria a
+   * medir a posição de uma variável, e não da seção.
    */
-  const linhaDoTempo = (
-    <LeadTimeline
-      itens={itensDaTimeline}
-      chegouAoVivo={timeline.chegouAoVivo}
-      isLoading={timeline.isLoading}
-      isError={timeline.isError}
-    />
-  );
+  const propsDaLinhaDoTempo = {
+    itens: itensDaTimeline,
+    chegouAoVivo: timeline.chegouAoVivo,
+    isLoading: timeline.isLoading,
+    isError: timeline.isError,
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -261,7 +266,7 @@ export function LeadDossier({
           className="flex-1"
           conteudoRecolhido={
             <>
-              {linhaDoTempo}
+              <LeadTimeline {...propsDaLinhaDoTempo} />
               {/* Só quando há o que ver: "ver tudo" numa lista de três seria um
                   botão que não leva a lugar nenhum. */}
               {temMaisNaTimeline && (
@@ -276,7 +281,7 @@ export function LeadDossier({
             </>
           }
         >
-          {linhaDoTempo}
+          <LeadTimeline {...propsDaLinhaDoTempo} />
         </SecaoDoDossie>
 
         {/* N1 — seção "Propostas", depois da linha do tempo. Some sozinha
