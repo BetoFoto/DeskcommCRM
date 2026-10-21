@@ -22,6 +22,8 @@ import { importarOpcoesCsv } from "@/lib/leads/campos-pesquisaveis";
 import { modoDeReabertura } from "@/lib/leads/reabertura";
 import { CATEGORIAS_DE_PERDA } from "@/lib/schemas/leads";
 import { rotuloDoTipo } from "@/lib/schemas/rotulos-do-campo";
+import { useMoedaDaOrgAtiva } from "@/hooks/auth/AuthProvider";
+import { MOEDA_PADRAO } from "@/lib/money";
 import { customFieldSchema, type CustomFieldDef } from "@/lib/schemas/settings";
 import {
   mostrarQuandoSchema,
@@ -320,6 +322,8 @@ function PipelineEditor({
   ehFunilPadrao: boolean;
 }) {
   const t = useT();
+  // O tipo moeda diz a moeda da organização (« Moeda (EUR) »), não « (BRL) » em duro.
+  const moeda = useMoedaDaOrgAtiva() ?? MOEDA_PADRAO;
   const v = pipeline.vocabulary ?? {};
   const [lead, setLead] = useState(v.lead ?? "Lead");
   const [deal, setDeal] = useState(v.deal ?? "Deal");
@@ -604,7 +608,7 @@ function PipelineEditor({
               <SelectContent>
                 {TIPOS_DE_CAMPO.map((tipo) => (
                   <SelectItem key={tipo} value={tipo}>
-                    {rotuloDoTipo(tipo, t)}
+                    {rotuloDoTipo(tipo, t, moeda)}
                   </SelectItem>
                 ))}
               </SelectContent>

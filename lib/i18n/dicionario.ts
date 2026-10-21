@@ -1064,7 +1064,7 @@ export const DICIONARIO: Traducoes = {
   "Acesso da IA no WhatsApp": { es: "Acceso de la IA en WhatsApp" },
   "Teste com pessoas de confiança antes de liberar o atendimento automático.": { es: "Prueba con personas de confianza antes de habilitar la atención automática." },
   "Não foi possível carregar o acesso da IA.": { es: "No se pudo cargar el acceso de la IA." },
-  "Use um telefone com DDI por linha, por exemplo +5511999998888.": { es: "Usa un teléfono con prefijo internacional por línea, por ejemplo +5511999998888." },
+  "Use um telefone com DDI por linha, por exemplo {exemplo}.": { es: "Usa un teléfono con prefijo internacional por línea, por ejemplo {exemplo}." },
   "Acesso da IA atualizado.": { es: "Acceso de la IA actualizado." },
   "Não foi possível confirmar o salvamento. Reabra este painel para conferir a configuração.": { es: "No se pudo confirmar el guardado. Vuelve a abrir este panel para comprobar la configuración." },
   "Somente os números desta lista podem receber respostas automáticas neste canal.": { es: "Solo los números de esta lista pueden recibir respuestas automáticas en este canal." },
@@ -14078,6 +14078,7 @@ export const DICIONARIO: Traducoes = {
     { es: "Casos sin aviso" },
   "Comece pelo código do país. Um celular do Brasil fica assim: +55, DDD e o número.":
     { es: "Empieza por el código del país. Un celular de Brasil se escribe así: +55, código de área y número." },
+  "Comece pelo código do país, por exemplo {exemplo}.": { es: "Empieza por el código del país, por ejemplo {exemplo}." },
   "Como a conexão não existe mais, o aviso foi desligado sozinho. Escolha outra conexão abaixo e ligue de novo.":
     { es: "Como la conexión ya no existe, el aviso se desactivó solo. Elige otra conexión abajo y actívalo de nuevo." },
   "Como chamar esse número (opcional)":
