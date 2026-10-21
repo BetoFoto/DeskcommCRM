@@ -270,6 +270,10 @@ describe("rodarUmaRodada", () => {
       expect.objectContaining({ p_org: ORG, p_kind: "lid", p_phone: "+5511900000002", p_lid: "111111111111111", p_chat_id: LID }),
     );
     expect(db.rpcs.filter((x) => x.fn === "fn_upsert_wa_conversation_importada").length).toBeGreaterThanOrEqual(2);
+    // A conversa nova nasce com a data da última mensagem que o canal tem nela
+    // (`ultimaEm`), para a inbox ordená-la; a RPC só grava no INSERT.
+    const datas = db.rpcs.filter((x) => x.fn === "fn_upsert_wa_conversation_importada").map((x) => x.args.p_last_message_at);
+    expect(new Set(datas)).toEqual(new Set([new Date((agora - DIA) * 1000).toISOString()]));
     expect(db.messages.map((m) => m.external_id).sort()).toEqual(
       [`false_${TEL}_A1`, "A2", `false_${LID}_B1`, "B2"].sort(),
     );

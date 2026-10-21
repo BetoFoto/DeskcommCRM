@@ -203,14 +203,64 @@ describe("a mensagem do histórico importado não dispara gatilho", () => {
   });
 });
 
+/** A última mensagem que o canal diz ter na conversa (`conversa.ultimaEm`). */
+const ULTIMA_DO_CANAL = "2026-08-14T13:05:00.000Z";
+
+async function ultimaDa(conversation: string) {
+  const { rows } = await pool.query(
+    "select last_message_at from conversations where id=$1 and organization_id=$2",
+    [conversation, GOV_ORG],
+  );
+  const v = rows[0]?.last_message_at as Date | null | undefined;
+  return { last_message_at: v ? v.toISOString() : null };
+}
+
 describe("fn_upsert_wa_conversation_importada", () => {
+  it("conversa NOVA nasce com `last_message_at` do canal, para a inbox ordená-la pela data", async () => {
+    const contact = await novoContato();
+    const { rows } = await pool.query(
+      "select public.fn_upsert_wa_conversation_importada($1,$2,$3,$4) as id",
+      [GOV_ORG, contact, GOV_SESSION, ULTIMA_DO_CANAL],
+    );
+    expect(await ultimaDa(rows[0].id as string)).toEqual({ last_message_at: ULTIMA_DO_CANAL });
+  });
+
+  it("conversa EXISTENTE não muda: nem `last_message_at` nem `updated_at`", async () => {
+    const contact = await novoContato();
+    const existente = randomUUID();
+    await pool.query(
+      `insert into conversations(id,organization_id,contact_id,channel_session_id,status,last_message_at,updated_at)
+       values($1,$2,$3,$4,'open','2026-10-01T10:00:00Z','2026-10-01T10:00:00Z')`,
+      [existente, GOV_ORG, contact, GOV_SESSION],
+    );
+    const antes = await pool.query("select last_message_at, updated_at from conversations where id=$1", [existente]);
+
+    const { rows } = await pool.query(
+      "select public.fn_upsert_wa_conversation_importada($1,$2,$3,$4) as id",
+      [GOV_ORG, contact, GOV_SESSION, ULTIMA_DO_CANAL],
+    );
+
+    expect(rows[0].id).toBe(existente);
+    const depois = await pool.query("select last_message_at, updated_at from conversations where id=$1", [existente]);
+    expect(depois.rows[0]).toEqual(antes.rows[0]);
+  });
+
+  it("sem data do canal (`null`): conversa nova nasce sem `last_message_at`, como antes", async () => {
+    const contact = await novoContato();
+    const { rows } = await pool.query(
+      "select public.fn_upsert_wa_conversation_importada($1,$2,$3,$4) as id",
+      [GOV_ORG, contact, GOV_SESSION, null],
+    );
+    expect(await ultimaDa(rows[0].id as string)).toEqual({ last_message_at: null });
+  });
+
   it("contato sem conversa: cria `closed`, sem dono, sem `conversation.routing_requested`", async () => {
     const contact = await novoContato();
     const eventosAntes = await eventosDaOrg();
 
     const { rows } = await pool.query(
-      "select public.fn_upsert_wa_conversation_importada($1,$2,$3) as id",
-      [GOV_ORG, contact, GOV_SESSION],
+      "select public.fn_upsert_wa_conversation_importada($1,$2,$3,$4) as id",
+      [GOV_ORG, contact, GOV_SESSION, ULTIMA_DO_CANAL],
     );
     const conv = rows[0].id as string;
 
@@ -234,8 +284,8 @@ describe("fn_upsert_wa_conversation_importada", () => {
     const antes = await estado(aberta);
 
     const { rows } = await pool.query(
-      "select public.fn_upsert_wa_conversation_importada($1,$2,$3) as id",
-      [GOV_ORG, contact, GOV_SESSION],
+      "select public.fn_upsert_wa_conversation_importada($1,$2,$3,$4) as id",
+      [GOV_ORG, contact, GOV_SESSION, ULTIMA_DO_CANAL],
     );
 
     expect(rows[0].id).toBe(aberta);
@@ -246,17 +296,19 @@ describe("fn_upsert_wa_conversation_importada", () => {
 
   it("chamada repetida é idempotente: mesma conversa, continua `closed`", async () => {
     const contact = await novoContato();
-    const q = "select public.fn_upsert_wa_conversation_importada($1,$2,$3) as id";
-    const a = (await pool.query(q, [GOV_ORG, contact, GOV_SESSION])).rows[0].id as string;
-    const b = (await pool.query(q, [GOV_ORG, contact, GOV_SESSION])).rows[0].id as string;
+    const q = "select public.fn_upsert_wa_conversation_importada($1,$2,$3,$4) as id";
+    const a = (await pool.query(q, [GOV_ORG, contact, GOV_SESSION, ULTIMA_DO_CANAL])).rows[0].id as string;
+    const b = (await pool.query(q, [GOV_ORG, contact, GOV_SESSION, new Date().toISOString()])).rows[0].id as string;
     expect(b).toBe(a);
     expect((await estado(a)).status).toBe("closed");
+    // A segunda chamada achou a conversa: a data dela não muda.
+    expect(await ultimaDa(a)).toEqual({ last_message_at: new Date(ULTIMA_DO_CANAL).toISOString() });
   });
 
   it("permissão igual à da irmã: só service_role executa", async () => {
     const { rows } = await pool.query(
       `select r.rolname,
-              has_function_privilege(r.rolname, 'public.fn_upsert_wa_conversation_importada(uuid,uuid,uuid)', 'execute') as nova,
+              has_function_privilege(r.rolname, 'public.fn_upsert_wa_conversation_importada(uuid,uuid,uuid,timestamptz)', 'execute') as nova,
               has_function_privilege(r.rolname, 'public.fn_upsert_wa_conversation(uuid,uuid,uuid)', 'execute') as irma
          from pg_roles r where r.rolname in ('anon','authenticated','service_role') order by r.rolname`,
     );

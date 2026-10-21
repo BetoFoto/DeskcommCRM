@@ -56501,7 +56501,7 @@ end;$fn$;
 revoke all on function public.fn_reply_inbound_revision() from public,anon,authenticated;
 
 create or replace function public.fn_upsert_wa_conversation_importada(
-  p_org uuid, p_contact uuid, p_session uuid
+  p_org uuid, p_contact uuid, p_session uuid, p_last_message_at timestamptz
 ) returns uuid language plpgsql security definer set search_path = '' as $fn$
 declare v_id uuid;
 begin
@@ -56517,9 +56517,13 @@ begin
 
   -- Nasce `closed` e sem dono: o `when` de `trg_conversation_routing_requested`
   -- (sem dono E `open`/`pending`) não a vê, e nada entra na fila do roteamento.
+  -- `last_message_at` é a data da última mensagem que o canal tem na conversa:
+  -- sem ela a inbox (`order by last_message_at desc nulls last`) jogaria toda
+  -- conversa importada para o fim da lista, sem data. Só no INSERT: conversa
+  -- existente já tem a data dela, e tocar nela passaria pelos gatilhos de UPDATE.
   insert into public.conversations
-    (organization_id, contact_id, channel_session_id, channel, status, is_group, unread_count_for_assignee, metadata)
-  values (p_org, p_contact, p_session, 'whatsapp', 'closed', false, 0, '{}'::jsonb)
+    (organization_id, contact_id, channel_session_id, channel, status, is_group, unread_count_for_assignee, metadata, last_message_at)
+  values (p_org, p_contact, p_session, 'whatsapp', 'closed', false, 0, '{}'::jsonb, p_last_message_at)
   on conflict (organization_id, contact_id, channel_session_id) where is_group = false
   do nothing
   returning id into v_id;
@@ -56535,12 +56539,12 @@ begin
   return v_id;
 end; $fn$;
 
-comment on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid) is
-  'Irmã de fn_upsert_wa_conversation para o importador de histórico do WhatsApp (#999): devolve a conversa 1:1 existente (organização + contato + sessão) sem tocar nela, ou cria uma closed e sem dono — que não emite conversation.routing_requested. Só service_role.';
+comment on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) is
+  'Irmã de fn_upsert_wa_conversation para o importador de histórico do WhatsApp (#999): devolve a conversa 1:1 existente (organização + contato + sessão) sem tocar nela, ou cria uma closed e sem dono, com last_message_at = p_last_message_at — que não emite conversation.routing_requested. Só service_role.';
 
-revoke all on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid) from public;
-revoke execute on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid) from anon, authenticated;
-grant execute on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid) to service_role;
+revoke all on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) from public;
+revoke execute on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) from anon, authenticated;
+grant execute on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) to service_role;
 
 notify pgrst, 'reload schema';
 

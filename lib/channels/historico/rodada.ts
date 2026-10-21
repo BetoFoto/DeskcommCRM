@@ -4,7 +4,9 @@
  * Lê o acervo do servidor do canal e grava contato, conversa e mensagens do
  * passado SEM nenhum efeito de mensagem nova: não chama o roteador do webhook,
  * nem os efeitos pós-entrada (IA, demanda, campanha, follow-up), nem o carimbo
- * da conversa (`last_message_*`, não lidas), nem `emit_event`. O que os
+ * da conversa (`last_message_*`, não lidas), nem `emit_event`. A única data que
+ * a conversa recebe é a de nascimento: a conversa CRIADA pela importação nasce
+ * com `last_message_at` da lista do canal (ver `garantirContatoEConversa`). O que os
  * gatilhos de `messages` fariam, a 0704 corta pela chave
  * `metadata.historico_importado = 'true'` que o mapeador põe em toda linha.
  * Mídia (só imagem e áudio): logo depois de gravar cada página, `resolverMidias`
@@ -272,7 +274,7 @@ export async function rodarUmaRodada(
             else validas.push(p);
           }
           if (validas.length > 0) {
-            alvo ??= await garantirContatoEConversa(admin, imp, conversa.chatId, validas);
+            alvo ??= await garantirContatoEConversa(admin, imp, conversa.chatId, conversa.ultimaEm, validas);
             if (!alvo) {
               // Chat que não é endereçável (nem telefone nem @lid): nada a gravar nele.
               desta.ignoradas += validas.length;
@@ -327,11 +329,15 @@ export async function rodarUmaRodada(
  * Contato pela MESMA RPC e com o MESMO telefone canônico do ingest ao vivo, e
  * conversa pela irmã que não reabre nem distribui. O nome só vem de mensagem
  * RECEBIDA: na enviada, o `pushName` é o do operador.
+ * `ultimaEm` (epoch em segundos, da lista do canal) vira o `last_message_at` da
+ * conversa SÓ quando ela nasce aqui: a inbox ordena por essa coluna, e sem ela
+ * a conversa importada iria para o fim da lista. Conversa existente fica como está.
  */
 async function garantirContatoEConversa(
   admin: SupabaseClient,
   imp: Importacao,
   chatId: string,
+  ultimaEm: number | null,
   mensagens: WahaPayload[],
 ): Promise<{ contactId: string; conversationId: string } | null> {
   const identidades = mensagens.map(identidadeDoChat);
@@ -355,7 +361,12 @@ async function garantirContatoEConversa(
 
   const { data: conversationId, error: erroDaConversa } = await admin.rpc(
     "fn_upsert_wa_conversation_importada" as never,
-    { p_org: imp.organization_id, p_contact: contactId, p_session: imp.channel_session_id } as never,
+    {
+      p_org: imp.organization_id,
+      p_contact: contactId,
+      p_session: imp.channel_session_id,
+      p_last_message_at: ultimaEm !== null ? new Date(ultimaEm * 1000).toISOString() : null,
+    } as never,
   );
   if (erroDaConversa) throw new Error(`fn_upsert_wa_conversation_importada: ${mensagemDeErro(erroDaConversa)}`);
   if (!conversationId) throw new Error("fn_upsert_wa_conversation_importada: sem id");

@@ -1,4 +1,4 @@
--- manifest: **A mensagem do histórico importado não dispara gatilho (#999).** O importador de histórico do WhatsApp grava em `messages` conversas antigas marcadas com `metadata.historico_importado = 'true'` (contrato já escrito na 0686). Sem corte, cada linha atravessava os TRÊS gatilhos de INSERT que tratam toda linha como mensagem recebida: `trg_messages_emit_event` emitia `message.received`/`message.sent` (que acorda a IA, a push, o webhook de saída, a campanha e o follow-up — a IA responderia gente que falou meses atrás), `trg_demanda_abre_no_inbound` chamava `fn_service_inbound` (reabre a conversa encerrada, abre demanda/SLA, carimba `service_revision`) e `trg_reply_inbound_revision` somava +1 na revisão de contexto. A cura é o corte `coalesce(new.metadata->>'historico_importado','') = 'true'` no topo das três funções, no mesmo molde do corte da reação (0684): a linha continua gravada, só não conta como fala. E a RPC nova `fn_upsert_wa_conversation_importada(p_org, p_contact, p_session)` devolve a conversa 1:1 existente (mesma chave da `fn_upsert_wa_conversation`) ou cria uma `closed`, sem dono — `trg_conversation_routing_requested` só dispara para `open`/`pending` sem dono, então a conversa importada não entra na fila. `create or replace` e função nova; sem tabela/coluna/policy/dado novo; apêndice idempotente no `baseline.sql` antes da VARREDURA anon.
+-- manifest: **A mensagem do histórico importado não dispara gatilho (#999).** O importador de histórico do WhatsApp grava em `messages` conversas antigas marcadas com `metadata.historico_importado = 'true'` (contrato já escrito na 0686). Sem corte, cada linha atravessava os TRÊS gatilhos de INSERT que tratam toda linha como mensagem recebida: `trg_messages_emit_event` emitia `message.received`/`message.sent` (que acorda a IA, a push, o webhook de saída, a campanha e o follow-up — a IA responderia gente que falou meses atrás), `trg_demanda_abre_no_inbound` chamava `fn_service_inbound` (reabre a conversa encerrada, abre demanda/SLA, carimba `service_revision`) e `trg_reply_inbound_revision` somava +1 na revisão de contexto. A cura é o corte `coalesce(new.metadata->>'historico_importado','') = 'true'` no topo das três funções, no mesmo molde do corte da reação (0684): a linha continua gravada, só não conta como fala. E a RPC nova `fn_upsert_wa_conversation_importada(p_org, p_contact, p_session, p_last_message_at)` devolve a conversa 1:1 existente (mesma chave da `fn_upsert_wa_conversation`) sem tocar nela, ou cria uma `closed`, sem dono, com `last_message_at` da última mensagem que o canal tem (a inbox ordena por ela) — `trg_conversation_routing_requested` só dispara para `open`/`pending` sem dono, então a conversa importada não entra na fila. `create or replace` e função nova; sem tabela/coluna/policy/dado novo; apêndice idempotente no `baseline.sql` antes da VARREDURA anon.
 
 -- ---- o histórico importado não é mensagem recebida (migration 0704, #999) ----
 --
@@ -50,7 +50,10 @@
 -- `fn_upsert_wa_conversation_importada`, usa a MESMA chave (organização +
 -- contato + sessão, `is_group = false`), devolve a conversa que já existe SEM
 -- tocar nela (nem `updated_at`: um UPDATE passaria pelos gatilhos de UPDATE de
--- `conversations`), e só quando não existe cria uma `closed`, sem dono. O
+-- `conversations`), e só quando não existe cria uma `closed`, sem dono, com
+-- `last_message_at` = a última mensagem que o canal tem na conversa (sem ela a
+-- inbox, que ordena por essa coluna com `nulls last`, mandaria toda conversa
+-- importada para o fim da lista, sem data). O
 -- `when` do gatilho de roteamento não a vê. Uma mensagem NOVA de verdade do
 -- cliente, depois, passa por `fn_service_inbound` e reabre normalmente
 -- (`service_closed_at` nulo não segura nada).
@@ -152,7 +155,7 @@ end;$fn$;
 revoke all on function public.fn_reply_inbound_revision() from public,anon,authenticated;
 
 create or replace function public.fn_upsert_wa_conversation_importada(
-  p_org uuid, p_contact uuid, p_session uuid
+  p_org uuid, p_contact uuid, p_session uuid, p_last_message_at timestamptz
 ) returns uuid language plpgsql security definer set search_path = '' as $fn$
 declare v_id uuid;
 begin
@@ -168,9 +171,13 @@ begin
 
   -- Nasce `closed` e sem dono: o `when` de `trg_conversation_routing_requested`
   -- (sem dono E `open`/`pending`) não a vê, e nada entra na fila do roteamento.
+  -- `last_message_at` é a data da última mensagem que o canal tem na conversa:
+  -- sem ela a inbox (`order by last_message_at desc nulls last`) jogaria toda
+  -- conversa importada para o fim da lista, sem data. Só no INSERT: conversa
+  -- existente já tem a data dela, e tocar nela passaria pelos gatilhos de UPDATE.
   insert into public.conversations
-    (organization_id, contact_id, channel_session_id, channel, status, is_group, unread_count_for_assignee, metadata)
-  values (p_org, p_contact, p_session, 'whatsapp', 'closed', false, 0, '{}'::jsonb)
+    (organization_id, contact_id, channel_session_id, channel, status, is_group, unread_count_for_assignee, metadata, last_message_at)
+  values (p_org, p_contact, p_session, 'whatsapp', 'closed', false, 0, '{}'::jsonb, p_last_message_at)
   on conflict (organization_id, contact_id, channel_session_id) where is_group = false
   do nothing
   returning id into v_id;
@@ -186,11 +193,11 @@ begin
   return v_id;
 end; $fn$;
 
-comment on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid) is
-  'Irmã de fn_upsert_wa_conversation para o importador de histórico do WhatsApp (#999): devolve a conversa 1:1 existente (organização + contato + sessão) sem tocar nela, ou cria uma closed e sem dono — que não emite conversation.routing_requested. Só service_role.';
+comment on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) is
+  'Irmã de fn_upsert_wa_conversation para o importador de histórico do WhatsApp (#999): devolve a conversa 1:1 existente (organização + contato + sessão) sem tocar nela, ou cria uma closed e sem dono, com last_message_at = p_last_message_at — que não emite conversation.routing_requested. Só service_role.';
 
-revoke all on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid) from public;
-revoke execute on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid) from anon, authenticated;
-grant execute on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid) to service_role;
+revoke all on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) from public;
+revoke execute on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) from anon, authenticated;
+grant execute on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) to service_role;
 
 notify pgrst, 'reload schema';
