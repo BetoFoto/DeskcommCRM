@@ -138,8 +138,10 @@ describe("a ordem das seções do dossiê (#3181)", () => {
     expect(ordemDasSecoes()).toEqual(["contato", "dados-do-negocio", "linha-do-tempo"]);
 
     // A mesma ordem pelo TEXTO que o atendente lê, e não só pelos ids: o id
-    // poderia estar certo com o título trocado de lugar.
-    const titulos = ordemDasSecoes().map((id) => secao(id).querySelector("h3")?.textContent);
+    // poderia estar certo com o título trocado de lugar. O seletor pega o
+    // primeiro `<span>` do cabeçalho — o segundo é o sinal `+`/`−`, que é
+    // `aria-hidden` mas continua no `textContent` do `<h3>`.
+    const titulos = ordemDasSecoes().map((id) => secao(id).querySelector("h3 button span")?.textContent);
     expect(titulos).toEqual(["Contato", "Dados do negócio", "Linha do tempo"]);
 
     // E os campos do negócio vêm ANTES de a linha do tempo começar: era
