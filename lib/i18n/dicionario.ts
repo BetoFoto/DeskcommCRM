@@ -6078,6 +6078,7 @@ export const DICIONARIO: Traducoes = {
   "Iniciar follow-up": { es: "Iniciar seguimiento" },
   "Tarefa interna": { es: "Tarea interna" },
   "Plano de tarefas": { es: "Plan de tareas" },
+  "Mensagem para a equipe": { es: "Mensaje para el equipo" },
   "Automação ligada.": { es: "Automatización activada." },
   "Automação pausada.": { es: "Automatización pausada." },
   "Crie sua primeira automação": { es: "Crea tu primera automatización" },
