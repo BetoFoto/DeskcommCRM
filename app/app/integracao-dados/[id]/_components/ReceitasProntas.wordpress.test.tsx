@@ -426,7 +426,7 @@ describe("Receitas prontas — o que vai para o PUT", () => {
     expect(vi.mocked(toast.error)).toHaveBeenCalledWith("Escreva o tipo de post do site.");
   });
 
-  it("campo apagado tira a CHAVE do mapeamento (não grava vazio)", async () => {
+  it("campo apagado e não preenchido não grava: a tela recusa e diz o que falta", async () => {
     renderComQuery([INSTANCIA_WORDPRESS], true);
 
     await act(async () => {
@@ -437,8 +437,15 @@ describe("Receitas prontas — o que vai para o PUT", () => {
       fireEvent.input(within(grupo).getByLabelText("Campo no site"), { target: { value: "" } });
     });
 
-    const fixos = await salvarEObterFixos();
-    const campos = fixos.campos as Array<{ meta_key: string }>;
-    expect(campos.map((c) => c.meta_key)).not.toContain("");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Salvar/i }));
+    });
+
+    // A recusa do editor impede a gravação: salvarReceitas nunca é chamado.
+    expect(deps.salvarReceitas).not.toHaveBeenCalled();
+    // E a tela diz o que falta, em vez de falhar em silêncio.
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      "Preencha o rótulo e o nome do campo de todos os dados.",
+    );
   });
 });
