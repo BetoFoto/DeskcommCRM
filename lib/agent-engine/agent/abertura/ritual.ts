@@ -46,6 +46,12 @@ export function ritualBlocks(
    * o inbound decidiu.
    */
   compromissosBlock = '',
+  /**
+   * O anúncio que o contato clicou, em texto (ver `origem-do-contato.ts`).
+   * OPCIONAL e último, pela mesma razão do bloco de compromissos: só o inbound
+   * decide pagar por ele.
+   */
+  origemBlock = '',
 ): string[] {
   const checkpointBlock = previous
     ? JSON.stringify({
@@ -107,6 +113,10 @@ export function ritualBlocks(
           '',
         ]
       : []),
+    // Só entra quando o contato veio de anúncio: ausência não custa token.
+    ...(origemBlock.trim() !== ''
+      ? ['## Origem deste contato — o anúncio que ele clicou', origemBlock, '']
+      : []),
     '## Contexto do lead (contato + últimas mensagens)',
     // Campo de cadastro VAZIO não é prova de que a informação não existe.
     //
@@ -162,6 +172,8 @@ export function buildOpeningMessage(
    * mensagens anteriores e perde justamente a que está respondendo.
    */
   currentInboundSender?: { name: string | null; phone: string | null },
+  /** O anúncio de origem do contato, em texto (vazio = não veio de anúncio). */
+  origemBlock = '',
 ): string {
   const entregue = (nome: string): boolean => entregues.includes(nome);
   const mensagemAtual =
@@ -199,7 +211,7 @@ export function buildOpeningMessage(
   return [
     'Novo turno de atendimento: o lead enviou uma mensagem (a última inbound do histórico abaixo).',
     '',
-    ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta, compromissosBlock),
+    ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta, compromissosBlock, origemBlock),
     '',
     ...mensagemAtualBlock,
     '',
