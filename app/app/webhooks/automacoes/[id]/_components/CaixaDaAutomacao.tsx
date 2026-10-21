@@ -109,6 +109,11 @@ function DescricaoDaAcao({ tipo, config }: { tipo: string; config: Record<string
       const texto = cfg(config, "template").trim();
       return <>{texto ? `“${texto}”` : t("Escreva a mensagem")}</>;
     }
+    // O e-mail de saída não tinha caso: o cartão caía no `tipo` cru e dizia « send_email » em todo idioma.
+    case "send_email": {
+      const assunto = cfg(config, "assunto").trim();
+      return <>{assunto ? `“${assunto}”` : t("Escreva o e-mail")}</>;
+    }
     case "add_tag": {
       const tags = Array.isArray(config.tags) ? (config.tags as unknown[]).map(String) : [];
       return <>{tags.length ? tags.join(", ") : t("Escreva pelo menos uma tag")}</>;

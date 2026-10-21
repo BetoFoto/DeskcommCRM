@@ -243,6 +243,24 @@ export const customFieldSchema = z.object({
    */
   mostrar_quando: mostrarQuandoSchema.optional(),
   /**
+   * O FORMATO que o valor tem de ter (issue #2730): regex em string, na grafia
+   * do `pipeline.settings.fields` — `"^\\d{1,2}(,\\d{1,2})*$"` por exemplo.
+   *
+   * Opcional e SEM refinamento aqui de propósito. `camposDoFunil` lê esta
+   * definição com `safeParse` e DESCARTE o campo que não passa: se este schema
+   * passasse a exigir regex compilável, um `padrao` quebrado apagaria o campo
+   * inteiro da tela em vez de bloquear a gravação dele. A régua em si é em
+   * `lib/leads/padrao-do-campo` — fecha a porta com frase legível e nunca
+   * lança — e é lá que a regex inválida vira `padrao_invalido`.
+   *
+   * `mensagem_padrao` é a frase que o DONO escreveu para quem digitar fora do
+   * formato ("Use só números separados por vírgula, ex.: 2,9"). É dado, não
+   * interface: aparece como está, em qualquer idioma, porque traduzi-la seria
+   * trocar a instrução que o próprio operador deu.
+   */
+  padrao: z.string().optional(),
+  mensagem_padrao: z.string().optional(),
+  /**
    * PERMITIR VALOR NOVO (issue #2521) — só faz sentido no `searchable_select`.
    *
    * LIGADO, a pessoa pode cadastrar na ficha um valor que não está na lista e
