@@ -72,7 +72,7 @@ describe("envolverFerramentasComTraco", () => {
     const coletor = criarColetorDeFerramentas();
     const envolvidas = envolverFerramentasComTraco(tools, coletor, relogioDeMentira());
 
-    const devolvido = await (envolvidas.get_lead_context as { execute: Function }).execute({}, {});
+    const devolvido = await (envolvidas.get_lead_context as { execute: (input: unknown, options: unknown) => unknown }).execute({}, {});
 
     expect(devolvido).toBe(resultado);
     expect(coletor.listar()).toEqual([
@@ -87,7 +87,7 @@ describe("envolverFerramentasComTraco", () => {
     const coletor = criarColetorDeFerramentas();
     const envolvidas = envolverFerramentasComTraco(tools, coletor, relogioDeMentira());
 
-    await (envolvidas.send_message as { execute: Function }).execute({}, {});
+    await (envolvidas.send_message as { execute: (input: unknown, options: unknown) => unknown }).execute({}, {});
 
     expect(coletor.listar()[0]).toMatchObject({
       nome: "send_message",
@@ -106,7 +106,7 @@ describe("envolverFerramentasComTraco", () => {
     const coletor = criarColetorDeFerramentas();
     const envolvidas = envolverFerramentasComTraco(tools, coletor, relogioDeMentira());
 
-    await (envolvidas.search_knowledge as { execute: Function }).execute({}, {});
+    await (envolvidas.search_knowledge as { execute: (input: unknown, options: unknown) => unknown }).execute({}, {});
 
     expect(coletor.listar()[0]?.estado).toBe("bloqueada");
   });
@@ -122,7 +122,7 @@ describe("envolverFerramentasComTraco", () => {
     const envolvidas = envolverFerramentasComTraco(tools, coletor, relogioDeMentira());
 
     await expect(
-      (envolvidas.get_lead_context as { execute: Function }).execute({}, {}),
+      (envolvidas.get_lead_context as { execute: (input: unknown, options: unknown) => unknown }).execute({}, {}),
     ).rejects.toBe(erro);
     expect(coletor.listar()[0]).toMatchObject({
       nome: "get_lead_context",
@@ -148,7 +148,7 @@ describe("envolverFerramentasComTraco", () => {
     const coletor = criarColetorDeFerramentas();
     const envolvidas = envolverFerramentasComTraco(tools, coletor, relogioDeMentira());
 
-    await (envolvidas.a as { execute: Function }).execute({}, {});
+    await (envolvidas.a as { execute: (input: unknown, options: unknown) => unknown }).execute({}, {});
 
     expect(coletor.listar().map((c) => c.nome)).toEqual(["a"]);
   });
