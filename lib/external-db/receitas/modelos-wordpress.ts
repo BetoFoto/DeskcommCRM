@@ -24,9 +24,11 @@ import type {
   EsconderMapeado,
   FiltroDeCampo,
   FiltroDeCategoria,
-  NivelDaTaxonomia,
   TipoDeCampo,
 } from "./wordpress-conteudo";
+// O NÍVEL do termo mora no módulo da taxonomia (é a hierarquia do WordPress,
+// não do modelo): é de lá que vem, e é de lá que a receita o importa também.
+import type { NivelDaTaxonomia } from "./taxonomia";
 
 /** Um campo do modelo: a chave, o rótulo e a meta_key sugerida. */
 export interface CampoModelado {

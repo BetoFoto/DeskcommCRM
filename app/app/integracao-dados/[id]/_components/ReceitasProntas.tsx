@@ -26,9 +26,11 @@ import {
   type CampoMapeado,
   type FiltroDeCampo,
   type FiltroDeCategoria,
-  type NivelDaTaxonomia,
   type TipoDeCampo,
 } from "@/lib/external-db/receitas/wordpress-conteudo";
+// O NÍVEL do termo (qualquer/filho/raiz) mora no módulo da taxonomia: é a
+// hierarquia do WordPress, e não sai pela receita.
+import type { NivelDaTaxonomia } from "@/lib/external-db/receitas/taxonomia";
 import {
   MODELOS_WORDPRESS,
   categoriasDoModelo,
