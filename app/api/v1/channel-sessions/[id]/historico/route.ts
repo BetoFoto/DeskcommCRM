@@ -25,6 +25,7 @@ type Context = { params: Promise<{ id: string }> };
  *
  * Transições:
  *   - `previa`   → cria linha `previa` com os números (teto de custo na lib);
+ *                  409 se o número já tem uma `rodando`;
  *   - `importar` → `previa` → `rodando`;
  *   - `cancelar` → `previa`/`rodando`/`erro` → `cancelada`;
  *   - `retomar`  → `erro` → `rodando`, limpando o erro.
@@ -120,6 +121,18 @@ export async function POST(req: NextRequest, { params }: Context): Promise<Respo
   const pedido = parsed.data;
   if (pedido.acao === "previa") {
     if (!sessao.guardarHistorico || !sessao.nomeNoCanal) return fail("state_conflict", ACERVO_DESLIGADO, 409, { requestId });
+    // Com uma `rodando` no número, a prévia nova viraria a mais recente no GET e
+    // esconderia a que está andando (e o botão de cancelar dela). Duas abas.
+    const { data: andando, error: erroDoAndamento } = await admin
+      .from(TABELA)
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("channel_session_id", id)
+      .eq("status", "rodando")
+      .limit(1)
+      .maybeSingle();
+    if (erroDoAndamento) return fail("internal_error", "Não foi possível ler a importação.", 500, { requestId });
+    if (andando) return fail("state_conflict", "Já há uma importação em andamento neste número.", 409, { requestId });
     let previa;
     try {
       previa = await calcularPrevia(sessao.nomeNoCanal, pedido.dias);

@@ -102,6 +102,21 @@ beforeEach(() => {
 });
 
 describe("importação do histórico: rotas (#999)", () => {
+  it("prévia nova com importação rodando no mesmo número: 409, sem contar nem gravar", async () => {
+    linha({ status: "rodando" });
+    const r = await POST(req({ acao: "previa", dias: 90 }), context());
+    expect(r.status).toBe(409);
+    expect((await r.json()).error.code).toBe("state_conflict");
+    expect(calcularPrevia).not.toHaveBeenCalled();
+    expect(escritas.filter((e) => e.op === "insert")).toHaveLength(0);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("importação rodando em OUTRO número não barra a prévia", async () => {
+    linha({ status: "rodando", channel_session_id: "44444444-4444-4444-8444-444444444444" });
+    expect((await POST(req({ acao: "previa", dias: 90 }), context())).status).toBe(200);
+  });
+
   it("agente e gerente recebem 403, sem tocar no banco nem auditar", async () => {
     vi.mocked(requireRole).mockResolvedValue({ ok: false, response: fail("forbidden", "Acesso negado.", 403) });
     expect((await GET(req({}, "GET"), context())).status).toBe(403);
