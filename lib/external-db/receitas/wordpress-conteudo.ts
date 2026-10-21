@@ -323,11 +323,20 @@ export function chaveDoRotulo(rotulo: string): string {
 /**
  * Uma chave que ainda não existe entre as outras — para o rótulo repetido
  * não virar o mesmo dado duas vezes.
+ *
+ * As chaves RESERVADAS (id, titulo, link) contam como já usadas: elas já
+ * estão na SAÍDA da consulta, e um dado chamado "Título" viraria `titulo` —
+ * a mesma coluna duas vezes. O rótulo "Título" vira `titulo_2`.
  */
 export function chaveUnica(base: string, usadas: readonly string[]): string {
-  if (!usadas.includes(base)) return base;
+  // Um rótulo que não vira chave nenhuma (só símbolos) fica vazio: quem
+  // decide o que fazer com isso é a tela, que recusa com frase legível.
+  if (base.length === 0) return "";
+  const ocupada = (chave: string): boolean =>
+    usadas.includes(chave) || (CHAVES_RESERVADAS as readonly string[]).includes(chave);
+  if (!ocupada(base)) return base;
   let n = 2;
-  while (usadas.includes(`${base}_${n}`)) n += 1;
+  while (ocupada(`${base}_${n}`)) n += 1;
   return `${base}_${n}`.slice(0, 32);
 }
 
@@ -512,12 +521,15 @@ export const RECEITA_WORDPRESS_CONTEUDO: DefinicaoDeReceita = {
       // O PREÇO é lido com a conversão robusta (650.000,00 / 650,000.00 /
       // 480000); os outros campos saem como o site gravou.
       const expressao = campo.tipo === "preco" ? precoNumero(`${alias}.meta_value`) : `${alias}.meta_value`;
-      colunas.push(`${expressao} as ${campo.chave}`);
+      // O apelido da SAÍDA vai QUOTADO: a chave sai do rótulo que a pessoa
+      // escreveu, e `key`, `order`, `range` e `rank` são palavras reservadas
+      // do MySQL — cru no texto, a consulta não roda.
+      colunas.push(`${expressao} as ${quotarIdentificadorMysql(campo.chave)}`);
     }
 
     for (const categoria of categorias) {
       colunas.push(
-        `${subqueryDeTermos(ctx, categoria.taxonomia, categoria.nivel)} as ${categoria.chave}`,
+        `${subqueryDeTermos(ctx, categoria.taxonomia, categoria.nivel)} as ${quotarIdentificadorMysql(categoria.chave)}`,
       );
     }
 

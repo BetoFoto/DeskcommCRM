@@ -475,6 +475,27 @@ describe("receita wordpress-conteudo contra MySQL 8 de verdade", () => {
     expect(sql.split("?").length - 1).toBe(valores.length);
   });
 
+  it("a chave que é PALAVRA RESERVADA do MySQL sai na consulta (o 'key' de verdade)", async () => {
+    // `key` é palavra reservada do MySQL: como apelido cru, a consulta nem
+    // roda (erro de sintaxe). O apelido da saída vai quotado — e o dado
+    // chamado "key" volta na linha, com o nome "key".
+    const fixosComKey = {
+      ...FIXOS_IMOVEIS,
+      campos: [
+        { chave: "key", rotulo: "Chave do anúncio", meta_key: "codigo", tipo: "texto", filtro: "contem" },
+      ],
+      categorias: [],
+    };
+    const linhas = await consultar({ filtros: { key: "IM-001" } }, 5, fixosComKey);
+    registrar(
+      "C1-wordpress-conteudo-chave-reservada",
+      `chave 'key' → ${titulos(linhas).join(", ")}`,
+    );
+    expect(titulos(linhas)).toEqual(["Casa Centro Sorocaba"]);
+    // E a COLUNA saiu com o nome que a pessoa pediu.
+    expect(String(linhas[0]?.key)).toBe("IM-001");
+  });
+
   it("CAUSA 1 — bairro só em categoria: a busca acha o imóvel do bairro", async () => {
     const linhas = await consultar({ filtros: { bairro: "campolim" } });
     registrar(

@@ -494,12 +494,45 @@ describe("receita wordpress-conteudo (unit, sem MySQL)", () => {
       const { sql } = RECEITA_WORDPRESS_CONTEUDO.montar(FIXOS_IMOVEIS, {}, 5);
       expect(sql).toContain("p.ID as id");
       expect(sql).toContain("p.post_title as titulo");
-      expect(sql).toContain("as codigo");
-      expect(sql).toContain("as preco");
-      expect(sql).toContain("as quartos");
-      expect(sql).toContain("as bairro");
-      expect(sql).toContain("as finalidade");
+      expect(sql).toContain("as `codigo`");
+      expect(sql).toContain("as `preco`");
+      expect(sql).toContain("as `quartos`");
+      expect(sql).toContain("as `bairro`");
+      expect(sql).toContain("as `finalidade`");
       expect(sql).toContain("p.guid as link");
+    });
+
+    it("o apelido da SAÍDA vai QUOTADO (chave reservada do MySQL não quebra a consulta)", () => {
+      // `key`, `order` e `rank` são palavras RESERVADAS do MySQL: cruas no
+      // texto, a consulta nem roda. A chave sai do rótulo que a pessoa
+      // escreveu — então ela vai quotada, como todo identificador.
+      const fixosComReservadas = {
+        prefixo: "wp_",
+        post_type: "imovel",
+        campos: [
+          { chave: "key", rotulo: "Chave do anúncio", meta_key: "chave_imovel", tipo: "texto", filtro: "nenhum" },
+          { chave: "order", rotulo: "Ordem", meta_key: "ordem_imovel", tipo: "numero", filtro: "nenhum" },
+        ],
+        categorias: [
+          {
+            chave: "rank",
+            rotulo: "Posição",
+            taxonomia: "posicao",
+            nivel: "qualquer",
+            filtro: "contem",
+          },
+        ],
+      };
+      const { sql } = RECEITA_WORDPRESS_CONTEUDO.montar(fixosComReservadas, {}, 5);
+      expect(sql).toContain("as `key`");
+      expect(sql).toContain("as `order`");
+      expect(sql).toContain("as `rank`");
+      // Cru no texto, nenhuma delas aparece.
+      expect(sql).not.toMatch(/as (key|order|rank)\b/);
+      // E o SQL continua passando no validador.
+      expect(() =>
+        validarConsultaDeReceita(sql, RECEITA_WORDPRESS_CONTEUDO.tabelas(fixosComReservadas)),
+      ).not.toThrow();
     });
 
     it("o SQL passa no validador com as tabelas permitidas (e falha sem as de categoria)", () => {
@@ -579,6 +612,24 @@ describe("receita wordpress-conteudo (unit, sem MySQL)", () => {
       expect(chaveUnica("preco", ["preco"])).toBe("preco_2");
       expect(chaveUnica("preco", ["preco", "preco_2"])).toBe("preco_3");
       expect(chaveUnica("preco", ["outro"])).toBe("preco");
+    });
+
+    it("a chave RESERVADA da saída conta como usada (o rótulo 'Título' vira 'titulo_2')", () => {
+      // `id`, `titulo` e `link` já são colunas da saída: um dado com o mesmo
+      // nome colidiria com elas, e o servidor recusaria com um erro que a
+      // pessoa não entende. A tela tem de resolver antes.
+      expect(chaveUnica("titulo", [])).toBe("titulo_2");
+      expect(chaveUnica("titulo", ["titulo_2"])).toBe("titulo_3");
+      expect(chaveUnica("id", [])).toBe("id_2");
+      expect(chaveUnica("link", [])).toBe("link_2");
+      // E uma chave normal continua como estava.
+      expect(chaveUnica("preco", [])).toBe("preco");
+    });
+
+    it("um rótulo que não vira chave fica vazio (a tela recusa com frase legível)", () => {
+      expect(chaveDoRotulo("!!!")).toBe("");
+      expect(chaveDoRotulo("   ")).toBe("");
+      expect(chaveUnica(chaveDoRotulo("!!!"), [])).toBe("");
     });
   });
 
