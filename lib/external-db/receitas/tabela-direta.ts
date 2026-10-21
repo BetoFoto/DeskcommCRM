@@ -24,7 +24,7 @@ import { z } from "zod";
 
 import { precoNumero } from "./preco";
 import { quotarIdentificadorMysql } from "./sql-mysql";
-import { alvoDeLike } from "./wordpress-conteudo";
+import { alvoDeLike } from "./taxonomia";
 import { ErroDeFiltroDesconhecido } from "./erros";
 import type { DefinicaoDeReceita } from "./tipos";
 
