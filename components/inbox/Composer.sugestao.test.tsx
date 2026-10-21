@@ -198,6 +198,10 @@ describe("a faixa da assistência só existe com rascunho (issue #3027)", () => 
     renderComposer();
 
     const icone = await screen.findByLabelText("Sugerir resposta");
+    // O bloco NÃO existe antes do clique: se existisse, este caso passaria sem
+    // que a montagem do bloco dependesse do rascunho (foi o que a sabotagem de
+    // 21/10/2026 mostrou — com o painel montado sempre, este caso ficava verde).
+    expect(bloco(), "o bloco já estava na tela antes de haver rascunho").toBeNull();
     // O rascunho nasce no servidor; a próxima leitura da consulta já o traz.
     comRascunhos([rascunho({ status: "pending", original_body: "Sugestão do agente" })]);
     await userEvent.click(icone);
