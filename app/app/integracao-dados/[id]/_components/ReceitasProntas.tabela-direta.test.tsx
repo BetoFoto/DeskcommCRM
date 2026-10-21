@@ -130,7 +130,7 @@ describe("Receitas prontas — tabela direta", () => {
     expect(screen.getByLabelText("Coluna do id")).toHaveValue("_ID");
     expect(screen.getByLabelText("Coluna do título")).toHaveValue("titulo");
     // E traz os campos do imóvel.
-    expect(screen.getByLabelText("Preço")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Preço de venda")).toBeInTheDocument();
   });
 
   it("aplicar o modelo pergunta antes de apagar o que já foi digitado", async () => {
@@ -200,7 +200,8 @@ describe("Receitas prontas — tabela direta", () => {
       });
     });
     await act(async () => {
-      fireEvent.input(screen.getByLabelText("Coluna"), {
+      // "Coluna" existe duas vezes (Só mostrar quando / Esconder quando); a primeira é a do "Só mostrar quando".
+      fireEvent.input(screen.getAllByLabelText("Coluna")[0]!, {
         target: { value: "cct_status" },
       });
     });
