@@ -14,4 +14,4 @@ português em todo idioma. E o título da aba do navegador das telas de entrar,
 recuperar e redefinir a senha, da verificação em duas etapas e de criar conta
 era sempre o português: agora segue o idioma em que a tela aparece.
 
-Em português, nada muda.
+Em português, o título da aba e o rótulo do e-mail não mudam.
