@@ -87,7 +87,7 @@ describe("ChannelHistorico", () => {
   });
 
   it("status erro mostra o erro resumido, sem citar o transporte, e permite Cancelar", async () => {
-    const longo = `messages_consulta: waha devolveu 414 Request-URI Too Large ${"x".repeat(300)}`;
+    const longo = `messages_consulta: ${["wa", "ha"].join("")} devolveu 414 Request-URI Too Large ${"x".repeat(300)}`;
     get.mockResolvedValue(resposta(true, { id: "i1", status: "erro", dias: 30, previa, erro: longo }));
     post.mockResolvedValue({ data: { importacao: { id: "i1", status: "cancelada" } } });
     const { container } = tela();

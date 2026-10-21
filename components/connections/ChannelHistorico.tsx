@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
+import { resumirErroDaImportacao } from "@/lib/channels/historico/resumo-do-erro";
 
 interface Previa {
   conversas: number;
@@ -43,16 +44,6 @@ const PREVIA_TIMEOUT_MS = 120_000;
 /** 409: outra aba (ou o cron) mudou a importação; não é o número que falhou. */
 function ehConflito(err: unknown): boolean {
   return err instanceof ApiError && err.status === 409;
-}
-
-/**
- * O erro gravado pela rodada é técnico (`messages_consulta: …`) e pode citar o
- * transporte do canal pelo nome: a tela mostra uma linha curta, com o nome do
- * transporte trocado por "canal".
- */
-function resumirErro(erro: string): string {
-  const limpo = erro.replace(/waha/gi, "canal").replace(/\s+/g, " ").trim();
-  return limpo.length > 140 ? `${limpo.slice(0, 140)}…` : limpo;
 }
 
 /**
@@ -168,7 +159,7 @@ export function ChannelHistorico({ channelId }: { channelId: string }) {
           <p role="alert" className="text-[11px] text-destructive">{t("A importação parou por um erro.")}</p>
           {imp.erro && (
             <p className="text-[11px] text-muted-foreground">
-              {t("Detalhe: {erro}").replace("{erro}", resumirErro(imp.erro))}
+              {t("Detalhe: {erro}").replace("{erro}", resumirErroDaImportacao(imp.erro))}
             </p>
           )}
           {/* Erro que se repete (o mesmo chat sempre recusado) não tem saída por
