@@ -1926,6 +1926,7 @@ export const DICIONARIO: Traducoes = {
   Renomear: { es: "Renombrar" },
   Despausar: { es: "Reanudar" },
   Pausar: { es: "Pausar" },
+  Permitir: { es: "Permitir" },
   Arquivar: { es: "Archivar" },
   "Agent duplicado.": { es: "Agente duplicado." },
   "Agent reativado.": { es: "Agente reanudado." },
