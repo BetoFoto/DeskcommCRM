@@ -192,10 +192,18 @@ function filtroQueCabe(tipo: TipoDeCampo, filtro: FiltroDeCampo): FiltroDeCampo 
   return filtro === "contem" ? "nenhum" : filtro;
 }
 
-/** A tela já tem coisa preenchida? (para pedir confirmação antes de trocar) */
-function temConteudo(editor: EditorDoWordpress | null): boolean {
+/**
+ * A tela já tem coisa preenchida? (para pedir confirmação antes de trocar)
+ *
+ * O TIPO DE POST conta como conteúdo: o modelo "Imóveis" traz o tipo dele, e
+ * aplicá-lo troca o tipo que a pessoa digitou. Sem esta conta, o modelo
+ * trocava o tipo de post em silêncio — e o site que o tipo não era o do modelo
+ * parava de responder.
+ */
+function temConteudo(editor: EditorDoWordpress | null, postType: string): boolean {
   if (!editor) return false;
   return (
+    postType.trim().length > 0 ||
     editor.campos.some((c) => c.rotulo.trim().length > 0 || c.meta_key.trim().length > 0) ||
     editor.categorias.some((c) => c.rotulo.trim().length > 0 || c.taxonomia.trim().length > 0) ||
     editor.esconderCampo.trim().length > 0 ||
@@ -218,10 +226,19 @@ function problemaDoEditor(editor: EditorDoWordpress | null, postType: string): s
     if (campo.rotulo.trim().length === 0 || campo.meta_key.trim().length === 0) {
       return "Preencha o rótulo e o nome do campo de todos os dados.";
     }
+    // O rótulo que não vira chave (só símbolos) deixaria o dado sem nome na
+    // saída — e o servidor recusaria com um erro de validação que a pessoa
+    // não entende. A tela recusa antes, dizendo o que escrever.
+    if (campo.chave.trim().length === 0) {
+      return "Um dos rótulos não virou uma chave. Escreva o rótulo com letras ou números.";
+    }
   }
   for (const categoria of editor.categorias) {
     if (categoria.rotulo.trim().length === 0 || categoria.taxonomia.trim().length === 0) {
       return "Preencha o rótulo e o nome da categoria de todos os dados.";
+    }
+    if (categoria.chave.trim().length === 0) {
+      return "Um dos rótulos não virou uma chave. Escreva o rótulo com letras ou números.";
     }
   }
   return null;
@@ -476,13 +493,17 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
   /**
    * Aplica um MODELO: ele só preenche a configuração da tela.
    *
-   * Trocar de modelo apaga o que estava preenchido, então a tela pergunta
-   * antes — só quando já há algo digitado.
+   * Trocar de modelo apaga o que estava preenchido — inclusive o TIPO DE
+   * POST, que o modelo traz o dele. Por isso a tela pergunta antes, e o tipo
+   * de post digitado conta como coisa preenchida.
    */
   const aplicarModelo = (id: string) => {
     const modelo = modeloDe(id);
     if (!modelo) return;
-    if (temConteudo(editor) && confirmandoModelo !== id) {
+    const postTypeAtual = String(
+      (rascunho?.fixos as { post_type?: string } | undefined)?.post_type ?? "",
+    );
+    if (temConteudo(editor, postTypeAtual) && confirmandoModelo !== id) {
       setConfirmandoModelo(id);
       return;
     }

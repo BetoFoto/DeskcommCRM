@@ -227,6 +227,25 @@ describe("Receitas prontas — o modelo Imóveis", () => {
     });
     expect(screen.getByText("Trocar de modelo apaga o que você preencheu. Quer continuar?")).toBeInTheDocument();
   });
+
+  it("aplicar o modelo com o TIPO DE POST digitado pergunta antes de trocar", async () => {
+    // O modelo "Imóveis" traz o tipo de post DELE ("imovel"). A pessoa tinha
+    // escrito o tipo do site dela: trocar em silêncio deixaria a receita
+    // apontando para um tipo de post que o site não tem.
+    renderComQuery([], true);
+    await adicionarReceita("wordpress");
+    await act(async () => {
+      fireEvent.input(screen.getByLabelText("Tipo de post"), { target: { value: "imovel_venda" } });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Imóveis" }));
+    });
+
+    expect(screen.getByText("Trocar de modelo apaga o que você preencheu. Quer continuar?")).toBeInTheDocument();
+    // E nada foi trocado sem a resposta: o tipo digitado continua.
+    expect(screen.getByLabelText("Tipo de post")).toHaveValue("imovel_venda");
+  });
 });
 
 describe("Receitas prontas — a lista de campos", () => {
@@ -280,6 +299,53 @@ describe("Receitas prontas — a lista de campos", () => {
       fireEvent.click(screen.getByRole("button", { name: /Chaves \(avançado\)/i }));
     });
     expect(screen.getByLabelText("Chave")).toHaveValue("quilometragem");
+  });
+
+  it("a chave RESERVADA da saída não nasce do rótulo (o 'Título' vira 'titulo_2')", async () => {
+    // `titulo` já é coluna da saída: um dado com o mesmo nome colidiria com
+    // ela, e o servidor recusaria com um erro que a pessoa não entende.
+    renderComQuery([], true);
+    await adicionarReceita("wordpress");
+
+    const grupo = screen.getByRole("group", { name: "Campo" });
+    await act(async () => {
+      fireEvent.input(within(grupo).getByLabelText("Rótulo"), { target: { value: "Título" } });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Chaves \(avançado\)/i }));
+    });
+    expect(screen.getByLabelText("Chave")).toHaveValue("titulo_2");
+  });
+
+  it("um rótulo que NÃO vira chave recusa a gravação, dizendo o que escrever", async () => {
+    // "!!!" não vira chave nenhuma: o dado ficaria sem nome na saída. A tela
+    // recusa ANTES do clique, com frase legível — não com erro de validação.
+    renderComQuery([], true);
+    await adicionarReceita("wordpress");
+    await act(async () => {
+      fireEvent.input(screen.getByLabelText("Tipo de post"), { target: { value: "imovel" } });
+    });
+
+    const grupo = screen.getByRole("group", { name: "Campo" });
+    await act(async () => {
+      fireEvent.input(within(grupo).getByLabelText("Rótulo"), { target: { value: "!!!" } });
+    });
+    const grupoDoCampo = screen.getByRole("group", { name: "!!!" });
+    await act(async () => {
+      fireEvent.input(within(grupoDoCampo).getByLabelText("Campo no site"), {
+        target: { value: "chave" },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Salvar/i }));
+    });
+
+    expect(deps.salvarReceitas).not.toHaveBeenCalled();
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      "Um dos rótulos não virou uma chave. Escreva o rótulo com letras ou números.",
+    );
   });
 });
 

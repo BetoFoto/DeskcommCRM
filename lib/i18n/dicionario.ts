@@ -14545,6 +14545,9 @@ export const DICIONARIO: Traducoes = {
   "Preencha o rótulo e o nome da categoria de todos os dados.": {
     es: "Llena la etiqueta y el nombre de la categoría de todos los datos.",
   },
+  "Um dos rótulos não virou uma chave. Escreva o rótulo com letras ou números.": {
+    es: "Una de las etiquetas no se convirtió en una clave. Escribe la etiqueta con letras o números.",
+  },
   // ─── O rótulo do caminho que falhou no 422 das receitas ───
   "Categoria do bairro": { es: "Categoría del barrio" },
   "Categoria da cidade": { es: "Categoría de la ciudad" },
