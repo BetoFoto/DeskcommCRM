@@ -368,7 +368,7 @@ describe("receita wordpress-conteudo (unit, sem MySQL)", () => {
             i = j;
             continue;
           }
-          out.push(s[i]);
+          out.push(s[i]!);
           i += 1;
         }
         return out.join("");
