@@ -776,8 +776,8 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
       }));
       const novo: EditorTabelaDireta = {
         tabela: modelo.tabela,
-        colunaId: modelo.colunaId,
-        colunaTitulo: modelo.colunaTitulo,
+        colunaId: modelo.coluna_id,
+        colunaTitulo: modelo.coluna_titulo,
         campos:
           campos.length > 0
             ? campos
@@ -791,10 +791,10 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                   filtro: "nenhum",
                 },
               ],
-        soMostrarQuandoColuna: modelo.soMostrarQuando?.coluna ?? "",
-        soMostrarQuandoValor: modelo.soMostrarQuando?.valor ?? "",
-        esconderQuandoColuna: modelo.esconderQuando?.coluna ?? "",
-        esconderQuandoValores: (modelo.esconderQuando?.valores ?? []).join(", "),
+        soMostrarQuandoColuna: modelo.so_mostrar_quando?.coluna ?? "",
+        soMostrarQuandoValor: modelo.so_mostrar_quando?.valor ?? "",
+        esconderQuandoColuna: modelo.esconder_quando?.coluna ?? "",
+        esconderQuandoValores: (modelo.esconder_quando?.valores ?? []).join(", "),
       };
       mudarEditorTabelaDireta(novo);
       return;

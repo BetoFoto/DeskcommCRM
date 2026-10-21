@@ -45,15 +45,15 @@ export interface ModeloDeReceitaTabelaDireta {
   /** A tabela sugerida. */
   tabela: string;
   /** A coluna do id sugerida. */
-  colunaId: string;
+  coluna_id: string;
   /** A coluna do título sugerida. */
-  colunaTitulo: string;
+  coluna_titulo: string;
   /** Os campos do modelo. */
   campos: CampoModeladoTabelaDireta[];
   /** Só mostrar quando a coluna é igual a este valor. */
-  soMostrarQuando?: SoMostrarQuandoTabelaDireta;
+  so_mostrar_quando?: SoMostrarQuandoTabelaDireta;
   /** Esconder quando a coluna está entre estes valores. */
-  esconderQuando?: EsconderQuandoTabelaDireta;
+  esconder_quando?: EsconderQuandoTabelaDireta;
 }
 
 /**
@@ -70,8 +70,8 @@ export const MODELO_JETENGINE_CCT: ModeloDeReceitaTabelaDireta = {
   descricao:
     "Tabela plana wp_jet_cct_<slug>: id (_ID), título (titulo), só publicados (cct_status = publish) e campos de imóveis.",
   tabela: "wp_jet_cct_imovel",
-  colunaId: "_ID",
-  colunaTitulo: "titulo",
+  coluna_id: "_ID",
+  coluna_titulo: "titulo",
   campos: [
     { chave: "codigo", rotulo: "Código", coluna: "codigo", tipo: "texto", filtro: "nenhum" },
     { chave: "preco", rotulo: "Preço de venda", coluna: "preco", tipo: "preco", filtro: "maximo" },
@@ -85,8 +85,8 @@ export const MODELO_JETENGINE_CCT: ModeloDeReceitaTabelaDireta = {
     { chave: "bairro", rotulo: "Bairro", coluna: "bairro", tipo: "texto", filtro: "contem" },
     { chave: "cidade", rotulo: "Cidade", coluna: "cidade", tipo: "texto", filtro: "contem" },
   ],
-  soMostrarQuando: { coluna: "cct_status", valor: "publish" },
-  esconderQuando: { coluna: "situacao", valores: ["vendido", "alugado"] },
+  so_mostrar_quando: { coluna: "cct_status", valor: "publish" },
+  esconder_quando: { coluna: "situacao", valores: ["vendido", "alugado"] },
 };
 
 /**
@@ -102,8 +102,8 @@ export const MODELO_EM_BRANCO: ModeloDeReceitaTabelaDireta = {
   rotulo: "Em branco",
   descricao: "Comece do zero: escreva a tabela, as colunas e mapeie os dados que o site guarda.",
   tabela: "",
-  colunaId: "",
-  colunaTitulo: "",
+  coluna_id: "",
+  coluna_titulo: "",
   campos: [],
 };
 
