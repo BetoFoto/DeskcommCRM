@@ -217,28 +217,37 @@ function temConteudo(editor: EditorDoWordpress | null, postType: string): boolea
  * A tela impede aqui o que o servidor recusaria em 422: é mais honesto dizer
  * "preencha o rótulo" do que devolver um erro de validação depois do clique.
  * A frase é ESTÁTICA (uma chave de dicionário), nunca montada em runtime.
+ * Recebe `t` para devolver a frase JÁ traduzida no idioma da tela.
  */
-function problemaDoEditor(editor: EditorDoWordpress | null, postType: string): string | null {
+function problemaDoEditor(
+  t: (texto: string) => string,
+  editor: EditorDoWordpress | null,
+  postType: string,
+): string | null {
   if (!editor) return null;
-  if (postType.trim().length === 0) return "Escreva o tipo de post do site.";
-  if (editor.campos.length === 0) return "Mapeie pelo menos um campo do site.";
+  if (postType.trim().length === 0) return t("Escreva o tipo de post do site.");
+  if (editor.campos.length === 0) return t("Mapeie pelo menos um campo do site.");
   for (const campo of editor.campos) {
     if (campo.rotulo.trim().length === 0 || campo.meta_key.trim().length === 0) {
-      return "Preencha o rótulo e o nome do campo de todos os dados.";
+      return t("Preencha o rótulo e o nome do campo de todos os dados.");
     }
     // O rótulo que não vira chave (só símbolos) deixaria o dado sem nome na
     // saída — e o servidor recusaria com um erro de validação que a pessoa
     // não entende. A tela recusa antes, dizendo o que escrever.
     if (campo.chave.trim().length === 0) {
-      return "Um dos rótulos não virou uma chave. Escreva o rótulo com letras ou números.";
+      return t(
+        "Um dos rótulos não virou uma chave. Escreva o rótulo com letras ou números.",
+      );
     }
   }
   for (const categoria of editor.categorias) {
     if (categoria.rotulo.trim().length === 0 || categoria.taxonomia.trim().length === 0) {
-      return "Preencha o rótulo e o nome da categoria de todos os dados.";
+      return t("Preencha o rótulo e o nome da categoria de todos os dados.");
     }
     if (categoria.chave.trim().length === 0) {
-      return "Um dos rótulos não virou uma chave. Escreva o rótulo com letras ou números.";
+      return t(
+        "Um dos rótulos não virou uma chave. Escreva o rótulo com letras ou números.",
+      );
     }
   }
   return null;
@@ -342,11 +351,12 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
     if (!canWrite) return;
     if (rascunho) {
       const problema = problemaDoEditor(
+        t,
         editor,
         String((rascunho.fixos as { post_type?: string } | undefined)?.post_type ?? ""),
       );
       if (problema) {
-        toast.error(t(problema));
+        toast.error(problema);
         return;
       }
     }
