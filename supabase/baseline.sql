@@ -5428,8 +5428,8 @@ grant execute on function public.fn_can_view_conversation(uuid, uuid)
   to authenticated, service_role;
 
 -- `conversations_select` nasce na 0035 com o escopo da conversa, linha por linha.
--- Desde a 0717 a policy resolve o escopo em conjunto, uma vez por consulta, e vive
--- no bloco da 0717, lá embaixo, junto do `fn_conversation_scope()`. A versão
+-- Desde a 0726 a policy resolve o escopo em conjunto, uma vez por consulta, e vive
+-- no bloco da 0726, lá embaixo, junto do `fn_conversation_scope()`. A versão
 -- linha-por-linha que vivia aqui era reinstalada a cada update.sh e valia até
 -- aquele bloco, e era ela que fazia a caixa de entrada custar ~7 ms por linha
 -- (#3090): quem derruba o clone antigo é o `drop` colado no bloco final.
@@ -57670,7 +57670,7 @@ end;$$;
 notify pgrst,'reload schema';
 
 
--- ---- o escopo da conversa avaliado uma vez por consulta (migration 0717) ----
+-- ---- o escopo da conversa avaliado uma vez por consulta (migration 0726) ----
 -- manifest: O escopo de leitura da conversa passa a ser avaliado UMA VEZ por consulta (`fn_conversation_scope()`) em vez de uma vez por linha (`fn_can_view_conversation`): a caixa de entrada deixa de custar ~7 ms por linha no RLS (#3090)
 --
 -- ─── O defeito, medido (issue #3090) ────────────────────────────────────────
