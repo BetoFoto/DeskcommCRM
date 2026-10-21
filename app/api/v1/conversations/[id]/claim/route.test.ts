@@ -25,8 +25,22 @@ const USER = "aaaaaaaa-3333-4000-8000-000000000003";
 const CONV_A = "aaaaaaaa-1111-4000-8000-000000000001";
 const CONTATO_A = "aaaaaaaa-5555-4000-8000-000000000009";
 const LEAD_ABERTO = "aaaaaaaa-7777-4000-8000-000000000001";
+/** O negócio JÁ encerrado do controle: não pode ser tocado nem ganhar dono. */
+const LEAD_PERDIDO = "aaaaaaaa-7777-4000-8000-000000000002";
 
 type Linha = Record<string, unknown>;
+
+/**
+ * A linha do dublê por id — `linhas[0]` é opcional para o compilador
+ * (`noUncheckedIndexedAccess`) e um `?.` transformaria linha ausente em asserção
+ * fraca. Aqui, linha que falta estoura.
+ */
+function linhaDe(linhas: Linha[], id: string): Linha {
+  const achada = linhas.find((l) => l.id === id);
+  if (!achada) throw new Error(`dublê sem a linha ${id}`);
+  return achada;
+}
+
 
 interface Estado {
   leads: Linha[];
@@ -150,7 +164,7 @@ describe("POST /api/v1/conversations/[id]/claim — o negócio aberto segue (#31
     const res = await POST(req(), params);
 
     expect(res.status).toBe(200);
-    expect(estado.leads[0]).toMatchObject({
+    expect(linhaDe(estado.leads, LEAD_ABERTO)).toMatchObject({
       owner_user_id: USER,
       owner_agent_id: null,
       owner_kind: "user",
@@ -166,13 +180,13 @@ describe("POST /api/v1/conversations/[id]/claim — o negócio aberto segue (#31
   });
 
   it("CONTROLE: sem negócio aberto, assumir não cria card nenhum", async () => {
-    estado.leads = [lead("aaaaaaaa-7777-4000-8000-000000000002", "lost", null)];
+    estado.leads = [lead(LEAD_PERDIDO, "lost", null)];
 
     const res = await POST(req(), params);
 
     expect(res.status).toBe(200);
     expect(estado.leads).toHaveLength(1);
-    expect(estado.leads[0]).toMatchObject({ status: "lost", owner_user_id: null });
+    expect(linhaDe(estado.leads, LEAD_PERDIDO)).toMatchObject({ status: "lost", owner_user_id: null });
     expect(estado.escritasDeLead).toHaveLength(0);
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -188,7 +202,7 @@ describe("POST /api/v1/conversations/[id]/claim — o negócio aberto segue (#31
 
     expect(res.status).toBe(200);
     expect(estado.escritasDeLead).toHaveLength(0);
-    expect(estado.leads[0].assigned_at).toBe("2026-01-01T00:00:00.000Z");
+    expect(linhaDe(estado.leads, LEAD_ABERTO).assigned_at).toBe("2026-01-01T00:00:00.000Z");
   });
 
   it("a rota de assumir não inventa evento de automação novo", async () => {

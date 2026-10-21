@@ -46,6 +46,18 @@ const LEAD_DE_OUTRO_CONTATO = "aaaaaaaa-7777-4000-8000-000000000004";
 
 type Linha = Record<string, unknown>;
 
+/**
+ * A linha do dublê por id — `linhas[0]` é opcional para o compilador
+ * (`noUncheckedIndexedAccess`) e um `?.` transformaria linha ausente em asserção
+ * fraca. Aqui, linha que falta estoura.
+ */
+function linhaDe(linhas: Linha[], id: string): Linha {
+  const achada = linhas.find((l) => l.id === id);
+  if (!achada) throw new Error(`dublê sem a linha ${id}`);
+  return achada;
+}
+
+
 interface Estado {
   conversas: Linha[];
   membros: Linha[];
@@ -241,18 +253,18 @@ describe("POST /api/v1/conversations/[id]/transfer — o negócio aberto segue (
 
     expect(res.status).toBe(200);
     // A conversa mudou de dono (o que já era o comportamento)…
-    expect(estado.conversas[0].assigned_to_user_id).toBe(DESTINO);
+    expect(linhaDe(estado.conversas, CONV_A).assigned_to_user_id).toBe(DESTINO);
     expect(estado.rpcs.find((r) => r.nome === "fn_conversation_assign")?.params).toMatchObject({
       p_to_user_id: DESTINO,
       p_reason: "transfer",
     });
     // …e o card do funil foi junto: dono humano e `owner_kind` coerente (0070).
-    expect(estado.leads[0]).toMatchObject({
+    expect(linhaDe(estado.leads, LEAD_ABERTO)).toMatchObject({
       owner_user_id: DESTINO,
       owner_agent_id: null,
       owner_kind: "user",
     });
-    expect(estado.leads[0].assigned_at).not.toBe("2026-01-01T00:00:00.000Z");
+    expect(linhaDe(estado.leads, LEAD_ABERTO).assigned_at).not.toBe("2026-01-01T00:00:00.000Z");
     expect(estado.escritasDeLead).toHaveLength(1);
     expect(metadataDaTransferencia()).toMatchObject({
       to_user_id: DESTINO,
@@ -270,7 +282,7 @@ describe("POST /api/v1/conversations/[id]/transfer — o negócio aberto segue (
 
     expect(res.status).toBe(200);
     expect(estado.leads).toHaveLength(1);
-    expect(estado.leads[0]).toMatchObject({ status: "won", owner_user_id: ANTIGO });
+    expect(linhaDe(estado.leads, LEAD_GANHO)).toMatchObject({ status: "won", owner_user_id: ANTIGO });
     expect(estado.escritasDeLead).toHaveLength(0);
     expect(metadataDaTransferencia()).toMatchObject({ negocio_aberto: "sem_negocio_aberto" });
   });
@@ -313,7 +325,7 @@ describe("POST /api/v1/conversations/[id]/transfer — o negócio aberto segue (
 
     expect(res.status).toBe(200);
     expect(estado.escritasDeLead).toHaveLength(0);
-    expect(estado.leads[0].assigned_at).toBe("2026-01-01T00:00:00.000Z");
+    expect(linhaDe(estado.leads, LEAD_ABERTO).assigned_at).toBe("2026-01-01T00:00:00.000Z");
     expect(metadataDaTransferencia()).toMatchObject({
       negocio_aberto: "ja_era_o_responsavel",
       negocio_id: LEAD_ABERTO,
@@ -329,8 +341,8 @@ describe("POST /api/v1/conversations/[id]/transfer — o negócio aberto segue (
     const res = await transferir();
 
     expect(res.status).toBe(200);
-    expect(estado.conversas[0].assigned_to_user_id).toBe(DESTINO);
-    expect(estado.leads[0].owner_user_id).toBe(ANTIGO);
+    expect(linhaDe(estado.conversas, CONV_A).assigned_to_user_id).toBe(DESTINO);
+    expect(linhaDe(estado.leads, LEAD_ABERTO).owner_user_id).toBe(ANTIGO);
     expect(estado.escritasDeLead).toHaveLength(0);
     expect(metadataDaTransferencia()).toMatchObject({ negocio_aberto: "recusado_pelo_banco" });
   });
@@ -341,7 +353,7 @@ describe("POST /api/v1/conversations/[id]/transfer — o negócio aberto segue (
     const res = await transferir();
 
     expect(res.status).toBe(200);
-    expect(estado.conversas[0].assigned_to_user_id).toBe(DESTINO);
+    expect(linhaDe(estado.conversas, CONV_A).assigned_to_user_id).toBe(DESTINO);
     expect(metadataDaTransferencia()).toMatchObject({ negocio_aberto: "falha" });
   });
 

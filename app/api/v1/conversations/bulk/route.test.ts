@@ -41,6 +41,18 @@ const LEAD_DE_TERCEIRO = "aaaaaaaa-7777-4000-8000-000000000003";
 
 type Linha = Record<string, unknown>;
 
+/**
+ * A linha do dublê por id — `linhas[0]` é opcional para o compilador
+ * (`noUncheckedIndexedAccess`) e um `?.` transformaria linha ausente em asserção
+ * fraca. Aqui, linha que falta estoura.
+ */
+function linhaDe(linhas: Linha[], id: string): Linha {
+  const achada = linhas.find((l) => l.id === id);
+  if (!achada) throw new Error(`dublê sem a linha ${id}`);
+  return achada;
+}
+
+
 /** Estado mutável do dublê, recriado a cada teste. */
 interface Estado {
   conversas: Linha[];
@@ -491,7 +503,7 @@ describe("POST /api/v1/conversations/bulk", () => {
     const corpo = await corpoDe(res);
     expect(corpo.data.feitos).toBe(2);
     expect(estado.escritasDeLead).toHaveLength(1);
-    expect(estado.leads[0].owner_user_id).toBe(DESTINATARIO);
+    expect(linhaDe(estado.leads, LEAD_DA_CONV_A).owner_user_id).toBe(DESTINATARIO);
   });
 
   it("archive vai pelo PATCH de status (#923) e audita conversation.archived", async () => {

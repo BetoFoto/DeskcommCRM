@@ -125,6 +125,11 @@ export async function sincronizarNegocioAbertoDoContato(
     }
 
     const negocio = abertos[0];
+    // Inalcançável (a contagem acima já garantiu exatamente um), mas o índice de
+    // um array é opcional para o compilador — e a saída é a mesma de "nenhum".
+    if (!negocio) {
+      return { gravou: false, motivo: "sem_negocio_aberto", abertos: 0 };
+    }
     if (negocio.owner_user_id === toUserId) {
       return {
         gravou: false,
