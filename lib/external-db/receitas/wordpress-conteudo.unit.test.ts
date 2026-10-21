@@ -346,7 +346,11 @@ describe("receita wordpress-conteudo (unit, sem MySQL)", () => {
       expect(valores).toContain("imovel");
       expect(valores).toContain("publish");
       // Nenhuma junção obrigatória: todo campo mapeado entra por LEFT JOIN.
-      expect(sql.replace(/left join/gi, "")).not.toMatch(/\bjoin\b/i);
+      // As categorias saem por subconsulta (group_concat) com join interno;
+      // essas subconsultas saem do texto antes de conferir que sobrou só
+      // left join no nível de fora.
+      const sqlSemSubconsultas = sql.replace(/\(select[^)]*\)/gi, "");
+      expect(sqlSemSubconsultas.replace(/left join/gi, "")).not.toMatch(/\bjoin\b/i);
       expect(sql.match(/left join/gi)?.length).toBe(FIXOS_IMOVEIS.campos.length);
       expect(sql.split("?").length - 1).toBe(valores.length);
     });
