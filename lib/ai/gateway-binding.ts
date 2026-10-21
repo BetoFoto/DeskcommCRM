@@ -42,8 +42,11 @@ export interface ModeloResolvido {
   modelId: string;
   origem: "binding" | "credencial_da_organizacao" | "padrao";
   /**
-   * O provedor EFETIVO do endereço desta chamada — o do binding quando há um,
-   * senão o da credencial ou do padrão que atendeu o ponto.
+   * O provedor do binding ou da credencial da organização; vazio quando quem
+   * atende é a chave da instalação (origem `padrao`). Nesse caso quem escolhe o
+   * endereço é o ambiente (`resolveLanguageModel`: gateway, OpenRouter, ou o
+   * fornecedor direto pelo prefixo), não o provedor configurado na organização,
+   * e o vazio devolve a decisão ao palpite de `provedorDaChamada`.
    *
    * Existe para quem chama pelo gateway ENTREGAR este valor ao log de invocação
    * (issue #3098). Antes, quem logava só tinha o id do modelo, e o palpite por
@@ -51,8 +54,8 @@ export interface ModeloResolvido {
    * personalizado da empresa (`qwen/qwen3.8-27b` no Groq) — a divisão de custo
    * por provedor ficava errada e a instalação parecia usar um provedor que ela
    * tinha decidido não usar. É o MESMO valor que vai para o log estruturado da
-   * resolução (`logarResolucaoDeModelo`), e é `""` quando nem o binding nem a
-   * organização disseram de quem é o endereço.
+   * resolução (`logarResolucaoDeModelo`) nas origens `binding` e
+   * `credencial_da_organizacao`.
    */
   provider: string;
 }
@@ -132,7 +135,15 @@ export async function resolverModeloDoPonto(
     // Quem chama pelo gateway entrega este campo ao log de invocação, e é ele
     // que impede `llm_calls` de carimbar `openrouter` numa chamada ao provedor
     // personalizado cujo id de modelo tem barra.
-    return resolvido === null ? null : { ...resolvido, provider };
+    //
+    // Só nas origens em que o provedor É o executor. Com origem `padrao` quem
+    // atende é a chave do `.env`, e o provedor configurado na organização não
+    // decide o destino: uma org em `openrouter` sem credencial, numa instalação
+    // só com `ANTHROPIC_API_KEY`, faz chamada Anthropic direta, e gravar
+    // `openrouter` ali seria o mesmo sintoma da #3098 por outro caminho.
+    return resolvido === null
+      ? null
+      : { ...resolvido, provider: resolvido.origem === "padrao" ? "" : provider };
   };
 
   // ── O DEFAULT DO PRODUTO NÃO CRUZA PROVEDOR ─────────────────────────────

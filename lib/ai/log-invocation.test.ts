@@ -32,6 +32,10 @@
  *     `purpose` dele (`visao_de_imagem`) não cabe em `logInvocation`
  *     (`InvocationKind` espelha o CHECK de `ai_invocations`), então a linha
  *     sai pelo escritor irmão, e os dois agora importam a régua de lá.
+ *
+ * E um quinto, que fecha o ramo sem binding: quando quem atende é a chave do
+ * `.env` (origem `padrao`), o provedor configurado na organização não é o
+ * executor, e a resolução devolve `provider` vazio para o palpite decidir.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -43,6 +47,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bindings = vi.hoisted(() => ({ linha: null as Record<string, unknown> | null }));
 const credenciais = vi.hoisted(() => ({ linha: null as Record<string, unknown> | null }));
+const organizacao = vi.hoisted(() => ({ linha: null as Record<string, unknown> | null }));
+/** O `.env` da instalação: vazio por padrão, cada caso põe só a chave que mede. */
+const envDaInstalacao = vi.hoisted(() => ({}) as Record<string, string>);
 const gravadas = vi.hoisted(() => ({ llm_calls: [] as Array<Record<string, unknown>> }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -56,17 +63,25 @@ vi.mock("@/lib/supabase/admin", () => ({
           },
         };
       }
-      const alvo = tabela === "ai_purpose_bindings" ? bindings : credenciais;
+      const alvo =
+        tabela === "ai_purpose_bindings" ? bindings : tabela === "organizations" ? organizacao : credenciais;
       const cadeia = {
         select: () => cadeia,
         eq: () => cadeia,
         not: () => cadeia,
+        order: () => cadeia,
         limit: () => cadeia,
         maybeSingle: () => Promise.resolve({ data: alvo.linha, error: null }),
       };
       return cadeia;
     },
   }),
+}));
+
+vi.mock("@/lib/env", () => ({
+  get env() {
+    return envDaInstalacao;
+  },
 }));
 
 vi.mock("@/lib/crypto/aes_gcm", () => ({
@@ -118,6 +133,8 @@ async function comBinding(
 beforeEach(() => {
   bindings.linha = null;
   credenciais.linha = null;
+  organizacao.linha = null;
+  for (const k of Object.keys(envDaInstalacao)) delete envDaInstalacao[k];
   gravadas.llm_calls.length = 0;
 });
 
@@ -250,6 +267,43 @@ describe("o provedor efetivo do binding vence o palpite por barra (#3098)", () =
       provider: "custom",
       model: MODELO_DO_GROQ,
       status: "ok",
+    });
+  });
+
+  it("sem binding nem credencial da organização, quem atende é a chave da instalação: o provedor configurado NÃO vai para a linha", async () => {
+    // A organização escolheu `openrouter` no painel, mas não cadastrou chave
+    // validada; a instalação só tem a `ANTHROPIC_API_KEY` do install.sh. Quem
+    // decide o destino é o ambiente (`resolveLanguageModel`), e o destino é a
+    // Anthropic direta. Gravar `openrouter` aqui seria o sintoma da #3098 por
+    // outro caminho.
+    organizacao.linha = { settings: { llm: { provider: "openrouter" } } };
+    credenciais.linha = null;
+    envDaInstalacao.ANTHROPIC_API_KEY = "sk-ant-da-instalacao";
+
+    const resolvido = await resolverModeloDoPonto("bot_respond", ORG, "anthropic/claude-sonnet-4-6");
+
+    expect(resolvido?.origem, "a chave da instalação não atendeu o ponto").toBe("padrao");
+
+    logInvocation({
+      organization_id: ORG,
+      agent_id: null,
+      conversation_id: null,
+      message_id: null,
+      invocation_kind: "bot_respond",
+      provider: resolvido!.provider,
+      model: resolvido!.modelId,
+      prompt_tokens: 900,
+      completion_tokens: 120,
+      latency_ms: 1400,
+      cost_cents: 4,
+      finish_reason: "stop",
+    });
+    await drenar();
+
+    expect(gravadas.llm_calls[0]).toMatchObject({
+      purpose: "bot_respond",
+      provider: "anthropic",
+      model: "anthropic/claude-sonnet-4-6",
     });
   });
 });
