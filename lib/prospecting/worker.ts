@@ -25,7 +25,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { assertProspectingContinuation, assertProspectingDelivery } from "./guard";
 import { campaignConfigSchema } from "./schema";
-import { ProspectingError } from "./provider";
+import { CanalReconectandoError, ProspectingError } from "./provider";
 import { OrgNaoOperanteError } from "@/lib/organizacao/operante";
 import {
   withProspectingLock,
@@ -637,7 +637,29 @@ export async function tickProspecting(pool: pg.Pool, admin: SupabaseClient) {
                 ? error.message
                 : "Falha inesperada no envio. Confira o histórico antes de retomar.";
 
-            if (doCandidato) {
+            // TERCEIRO CASO, e o único dos três que NÃO é falha: a conexão saiu
+            // de `WORKING` por instantes (reconexão). Antes ele caía no MESMO
+            // `else` da pausa, e a campanha ia para `paused` no instante exato
+            // da queda — a sessão voltava a `WORKING` em segundos e a lista
+            // seguia parada esperando alguém retomar à mão (issue #3073).
+            //
+            // Aqui a fila ESPERA, pelo mesmo mecanismo que ela já usa para
+            // janela fechada, teto diário e ritmo: `next_send_at`. Nenhum
+            // candidato foi tentado (a checagem do canal vem antes de
+            // `attempted_at`), então não há quota queimada, nem candidato a
+            // marcar, nem erro a gravar na campanha — a lista não perdeu nada.
+            if (error instanceof CanalReconectandoError) {
+              await db.query(
+                "update prospecting_campaigns set next_send_at=$3,updated_at=now() where organization_id=$1 and id=$2",
+                [org, c.id, new Date(Date.now() + error.retomarEmMs)],
+              );
+              logger.info("[prospecting] conexão reconectando; o envio foi adiado e a campanha segue", {
+                organization_id: org,
+                campaign_id: c.id,
+                error: error.message,
+                retomar_em_ms: error.retomarEmMs,
+              });
+            } else if (doCandidato) {
               // Marca o candidato e SEGUE: a próxima rodada pega o próximo.
               // `attempted_at` já foi gravado antes do envio, então ele não
               // volta para a fila sozinho.

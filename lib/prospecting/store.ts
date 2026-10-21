@@ -21,7 +21,7 @@ import {
   type SearchInput,
   type Prospect,
 } from "./schema";
-import { ProspectingError } from "./provider";
+import { CanalReconectandoError, ProspectingError } from "./provider";
 import {
   provedorDaOrganizacao,
   validarCredencialDaOrganizacao,
@@ -231,6 +231,24 @@ export async function synchronizeSearch(db: pg.PoolClient, admin: SupabaseClient
     throw error;
   }
 }
+/**
+ * A SESSÃO VAI VOLTAR SOZINHA?
+ *
+ * `STARTING` é a reconexão em curso — é o estado que a linha assume no instante
+ * da queda, e a tela o rotula "Conectando…" (`lib/channels/estado.ts`). `STOPPED`
+ * é a sessão parada que o vigia religa sem ninguém (`deveRetomarSessao`,
+ * `session-reconciler.ts`). Desses dois a sessão volta por conta própria — e é
+ * por isso que eles ADIAM o envio em vez de pausar a campanha.
+ *
+ * `SCAN_QR_CODE` e `FAILED` ficam DE FORA de propósito: são os dois estados de
+ * ESCALADA (alguém precisa ler o QR no celular, ou o número caiu de vez — pode
+ * ser banimento, e religar sozinho piora). Neles a recusa de configuração
+ * continua valendo, como antes.
+ */
+function canalReconectando(status: string): boolean {
+  return status === "STARTING" || status === "STOPPED";
+}
+
 export async function validateConfig(db: pg.PoolClient, org: string, input: CampaignConfig) {
   const config = campaignConfigSchema.parse(input);
   const agent = (
@@ -253,13 +271,30 @@ export async function validateConfig(db: pg.PoolClient, org: string, input: Camp
       [org, config.channel_session_id],
     )
   ).rows[0];
-  if (
-    !channel ||
-    channel.status !== "WORKING" ||
-    !capabilitiesOf(channel.provider).freeformOutsideWindow
-  )
+  // TRÊS MOTIVOS MUITO DIFERENTES, TRÊS RECUSAS DIFERENTES. Antes os três caíam
+  // na MESMA mensagem e no MESMO escopo `campanha` — que é o escopo que o tick
+  // lê para PAUSAR a fila. Foi assim que uma reconexão de segundos parou a
+  // campanha (issue #3073): o canal voltou a `WORKING` e a campanha não.
+  if (!channel)
     throw new ProspectingError(
-      "Escolha uma conexão ativa que permita iniciar conversas de texto. Canais que exigem modelo aprovado ainda não participam desta campanha.",
+      "A conexão escolhida não existe nesta organização ou foi arquivada. Escolha uma conexão ativa para esta campanha.",
+    );
+  if (!capabilitiesOf(channel.provider).freeformOutsideWindow)
+    throw new ProspectingError(
+      "Esta conexão exige modelo aprovado e ainda não participa desta campanha. Escolha uma conexão que permita iniciar conversas de texto.",
+    );
+  // O ÚNICO dos três que NÃO é defeito: a sessão está voltando sozinha.
+  if (canalReconectando(channel.status))
+    throw new CanalReconectandoError(
+      "A conexão de saída está reconectando; o envio sai quando ela voltar.",
+    );
+  if (channel.status !== "WORKING")
+    // Fora dos estados que voltam sozinhos (reconexão em curso / sessão parada
+    // que o vigia religa) e fora das escaladas: o canal está desconectado e
+    // alguém precisa reconectá-lo. A recusa continua valendo — falhar fechado é
+    // o certo para o que não se sabe explicar.
+    throw new ProspectingError(
+      "A conexão de saída está desconectada e precisa ser reconectada antes de a campanha continuar.",
     );
   const router = await loadActiveRouter(db as unknown as pg.Pool, org, config.channel_session_id);
   if (router) {
