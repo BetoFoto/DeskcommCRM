@@ -39,6 +39,7 @@ export interface SkillsState {
 export interface SkillMatcher {
   any_keywords: string[];
   probe_keywords?: string[];
+  any_tags?: string[];
 }
 
 /** Corpo completo de uma skill instalada, para o editor. */
