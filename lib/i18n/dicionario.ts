@@ -15985,6 +15985,22 @@ export const DICIONARIO: Traducoes = {
   "Acervo desligado: só as mensagens novas entram, como sempre.": { es: "Acervo desactivado: solo entran los mensajes nuevos, como siempre." },
   "Opção de histórico salva.": { es: "Opción de historial guardada." },
   "Não foi possível guardar esta opção.": { es: "No fue posible guardar esta opción." },
+  // ─── Importação do histórico (#999) ───
+  "Trazer conversas antigas para o atendimento": { es: "Traer conversaciones antiguas a la atención" },
+  "Período: últimos 30, 90 ou 365 dias": { es: "Período: últimos 30, 90 o 365 días" },
+  "{dias} dias": { es: "{dias} días" },
+  "{conversas} conversas, {mensagens} mensagens, {audios} áudios e {imagens} imagens": { es: "{conversas} conversaciones, {mensagens} mensajes, {audios} audios e {imagens} imágenes" },
+  "Pelo menos {conversas} conversas, {mensagens} mensagens, {audios} áudios e {imagens} imagens": { es: "Al menos {conversas} conversaciones, {mensagens} mensajes, {audios} audios e {imagens} imágenes" },
+  "Nenhuma mensagem antiga será respondida pela IA nem dispara automação.": { es: "Ningún mensaje antiguo será respondido por la IA ni dispara automatización." },
+  "Áudios e imagens antigos que o WhatsApp não guarda mais aparecem como indisponíveis.": { es: "Los audios e imágenes antiguos que WhatsApp ya no guarda aparecen como no disponibles." },
+  "Importando: {feitas} de {conversas} conversas": { es: "Importando: {feitas} de {conversas} conversaciones" },
+  "Importação concluída": { es: "Importación concluida" },
+  "{gravadas} mensagens trazidas; {indisponiveis} áudios ou imagens não estavam mais disponíveis.": { es: "{gravadas} mensajes traídos; {indisponiveis} audios o imágenes ya no estaban disponibles." },
+  "Ligue 'Guardar o histórico' e conecte o número de novo": { es: "Activa 'Guardar el historial' y conecta el número de nuevo" },
+  "Ver prévia": { es: "Ver vista previa" },
+  "Contando as conversas…": { es: "Contando las conversaciones…" },
+  "Não foi possível falar com o número agora. Tente de novo em instantes.": { es: "No fue posible comunicarse con el número ahora. Inténtalo de nuevo en unos instantes." },
+  "A importação parou por um erro.": { es: "La importación se detuvo por un error." },
 
   // ─── Cobrança do revendedor — Central (PR 3a) ───
   "Plano e cobrança da empresa precisam de atenção": { es: "El plan y la facturación de la empresa necesitan atención" },
