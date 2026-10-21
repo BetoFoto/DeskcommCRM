@@ -199,6 +199,16 @@ A fatia R2 (receita `acf-imoveis`) entrega:
 > sozinho (não vira curinga: 1 linha), `limite` 2. O ACF Pro não é necessário: a receita só lê campos
 > simples.
 
+> **JetEngine no modo padrão (tipo de post, CPT) medido no mesmo dia**, JetEngine 3.5.8: tipo de post
+> `imovel_jet` e 6 campos criados pela tela do JetEngine; um imóvel salvo pela tela de edição do WordPress
+> grava cada campo como linha simples em `wp_postmeta` (`preco` = `520000`, `imagem` = `17`, o id do anexo),
+> igual ao ACF menos o par `_campo`. A mesma receita, com `post_type` = `imovel_jet`, acertou os mesmos 8
+> casos (4 publicados, rascunho escondido). Por isso o rótulo é "Imóveis do WordPress (ACF ou JetEngine)";
+> o id `acf-imoveis` fica. A receita `jetengine-imoveis` (R3) passa a ser só para Custom Content Types (CCT).
+> Não medido: a opção "Custom Meta Storage (Beta)" do JetEngine, que guarda os campos numa tabela própria.
+> Para a R4: no JetEngine a foto costuma ficar num campo de mídia próprio (id do anexo), não na imagem
+> destacada — o campo da foto precisa ser escolhido pelo admin.
+
 **Limitações conhecidas da R2 (medidas, não estimadas):**
 
 - `link` vem de `wp_posts.guid`, que o WordPress **não** atualiza quando o site muda de domínio: o link do imóvel continua apontando para o domínio antigo.

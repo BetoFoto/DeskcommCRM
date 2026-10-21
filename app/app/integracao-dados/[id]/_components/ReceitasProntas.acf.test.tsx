@@ -28,7 +28,7 @@ const receitasMock = vi.hoisted(() => ({
         id: "acf-imoveis",
         familia: "acf-imoveis",
         motores: ["mysql"],
-        rotulo: "Imóveis do WordPress com ACF",
+        rotulo: "Imóveis do WordPress (ACF ou JetEngine)",
         descricao: "Imóveis publicados com ACF",
         parametrosFixos: {} as z.ZodTypeAny,
         parametrosDaBusca: {} as z.ZodTypeAny,

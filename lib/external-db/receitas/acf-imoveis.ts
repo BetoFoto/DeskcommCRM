@@ -119,9 +119,10 @@ export const RECEITA_ACF_IMOVEIS: DefinicaoDeReceita = {
   id: "acf-imoveis",
   familia: "acf-imoveis",
   motores: ["mysql"],
-  rotulo: "Imóveis do WordPress com ACF",
+  rotulo: "Imóveis do WordPress (ACF ou JetEngine)",
   descricao:
-    "Lê os imóveis publicados de um WordPress com ACF: título, preço, quartos, bairro " +
+    "Lê os imóveis publicados de um WordPress cujos campos ficam no tipo de post (ACF, ou " +
+    "JetEngine no modo padrão de tipo de post): título, preço, quartos, bairro " +
     "e (opcional) cidade, área e finalidade. O admin informa o tipo de post e qual meta_key " +
     "é cada campo. Sem taxonomia nesta fatia (o bairro vem de campo ACF). Sem foto nesta fatia.",
   parametrosFixos: PARAMETROS_FIXOS_ACF_IMOVEIS,
