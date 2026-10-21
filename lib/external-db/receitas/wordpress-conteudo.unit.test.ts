@@ -455,8 +455,8 @@ describe("receita wordpress-conteudo (unit, sem MySQL)", () => {
         { filtros: { ano: 2020, km: 60000, preco: 90000 } },
         5,
       );
-      expect(sql).toContain("CAST(`mano`.meta_value AS DECIMAL(10,2)) >= ?");
-      expect(sql).toContain("CAST(`mkm`.meta_value AS DECIMAL(10,2)) <= ?");
+      expect(sql).toContain("(CAST(`mano`.meta_value AS DECIMAL(10,2))) >= ?");
+      expect(sql).toContain("(CAST(`mkm`.meta_value AS DECIMAL(10,2))) <= ?");
       expect(sql).toContain("CASE");
       expect(sql).toContain("REGEXP");
       expect(valores).toContain(2020);
