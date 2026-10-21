@@ -44,7 +44,7 @@ caminho único e vira o modo avançado; o padrão passa a ser a receita pronta
 | # | Tema | Decisão |
 |---|---|---|
 | D1 | Escopo da fase | Receitas prontas por família (padrão) + VIEW na origem (avançado) + foto por URL validada (proposta; a confirmação fica para o PR da parte que envia a foto) + ida ao funil via `crm_create_lead`. Sem SQL livre em v1. |
-| D2 | Famílias da v1 | `woocommerce` (produtos/pedidos), `acf-imoveis`, `jetengine-imoveis`, `tabela-direta` (tabelas planas, coluna = dado). Sistema artesanal com relacionamento próprio: sem receita — cai no avançado (VIEW). |
+| D2 | Famílias da v1 | `woocommerce` (produtos/pedidos), `wordpress` (o **conteúdo de qualquer tipo de post** — imóveis, veículos, cursos, cardápio; ACF ou JetEngine), `jetengine-imoveis` (Custom Content Types), `tabela-direta` (tabelas planas, coluna = dado). Sistema artesanal com relacionamento próprio: sem receita — cai no avançado (VIEW). |
 | D3 | Onde a receita mora | Template + schema de parâmetros no **código** (versionado, revisado, sai no `update.sh`). A **instância** (receita X + parâmetros preenchidos na tela) é gravada no nosso Postgres, na linha da conexão (`jsonb`, RLS por org — mesma mecânica das `sources` da Spec 23 D3/Fatia 2a). Proposta de coluna nova segue a tripla (migration com `-- manifest:`, apêndice idempotente no `baseline.sql` com `add column if not exists`, colunas novas no FIM de qualquer lista de view, `revoke`/`grant` reemitidos se `_safe` mudar, sem linha no `MANIFEST.md`, `pnpm checar:colisao-de-migration`); tabela própria só pela função provisionadora da ADR-0002 — decisão do mantenedor. Precedente das `sources`: a coluna `receitas` fica **fora** da view `_safe` e das listas `COLUNAS_SEGURAS` (só contagem exposta); o array só é lido pelo servidor com `organization_id` no filtro. |
 | D4 | Execução | Template + parâmetros validados (Zod) → placeholders ligados, nunca concatenação. Validador SELECT-only + tabelas permitidas antes de rodar. As tabelas do JOIN da receita passam pela mesma lista de fontes liberadas da Spec 23 D7, no mesmo ponto único de aplicação (`tabelaLiberada`/`colunasLiberadas`/`aplicarAoCatalogo` em `lib/external-db/fontes.ts`, aplicados em `criarDialetoPostgres`, `lib/external-db/dialeto.ts`): tabela fora da lista → `fonte_nao_liberada`; a receita nunca furta a lista. Execução na armadura do dialeto: transação só-leitura + timeouts (`lib/external-db/conexao.ts:127-147`, CONFIRMADO) e tetos (`max_rows`/`max_filters`/`max_response_bytes` em `lib/external-db/credenciais.ts`, truncagem de célula em `lib/external-db/leitura.ts:23`, teto de bytes da tool — CONFIRMADO). Nada da origem é persistido como entidade: o resultado volta ao turno e o que fica é o rastro da execução sob as regras da D8; auditoria sem valores (padrão de `dados-externos.ts:17-22`, CONFIRMADO). |
 | D5 | ACF vs. JetEngine | Receitas separadas por família; o sistema **sugere** pela heurística (tabelas existentes + amostra de `meta_key`), a palavra final é do admin na tela. A heurística roda só no caminho de preview do admin (só-leitura); em empate (ambos presentes, restos de `meta_key` legados), sugere as duas e o admin escolhe. Nenhuma receita é liberada sem o C1 verde naquela família/versão. |
@@ -90,7 +90,7 @@ Spec 23:
 ## O fluxo do apartamento (caso de aceite)
 
 1. Cliente no WhatsApp: "quero apê de 2 quartos na Asa Norte até 600 mil".
-2. Agente executa a instância `acf-imoveis` (ou `jetengine-imoveis`) da conexão com esses filtros, ao vivo, só-leitura.
+2. Agente executa a instância `wordpress-conteudo` da conexão com esses filtros, ao vivo, só-leitura.
 3. Responde até 2 mensagens, uma por imóvel: foto + legenda (endereço, preço, quartos).
 4. Cliente: "tenho interesse nesse segundo" → `crm_create_lead` (`source: "external"`, `acf:4821` na descrição + nota, funil/etapa padrão da instância) → atendimento segue no funil.
 5. Mesmo roteiro vale para produto (WooCommerce) e carro (tabela direta).
@@ -122,8 +122,8 @@ Spec 23:
 | Fatia | O que entrega |
 |---|---|
 | R1 | Receita `woocommerce` + instância + tool (sem foto, sem funil; exige a regra de escopo da D8 escrita) |
-| R2 | Receita `acf-imoveis` (exige C1 ACF verde) |
-| R3 | Receita `jetengine-imoveis` (exige C1 JetEngine verde) + `tabela-direta` |
+| R2 | Receita `wordpress-conteudo` (o conteúdo de QUALQUER tipo de post; exige C1 verde — medido em 21/10/2026) |
+| R3 | Receita `jetengine-imoveis` (Custom Content Types) + `tabela-direta` |
 | R4 | `imagem_url` no envio (exige C3/C6 verdes) |
 | R5 | Ida ao funil (D6: contrato, padrão de destino, dedup) + e2e do apartamento |
 | R6 | Runbook do leigo (a regra de escopo da D8 já entrou antes da R1) |
@@ -172,29 +172,23 @@ A fatia R1 (receita `woocommerce` + instância + tool) entrega:
 
 Destino: núcleo, dentro do módulo de banco externo, que nasce desligado (revisão 1 da Spec 25, aceita pelo mantenedor).
 
-## R2 entregue: o que mudou
+## R2 entregue: o conteúdo do WordPress, de qualquer nicho
 
-A fatia R2 (receita `acf-imoveis`) entrega:
+A fatia R2 entrega a receita **`wordpress-conteudo`** — o conteúdo de um site
+WordPress, de **qualquer tipo de post** — mais o modelo "Imóveis" e a tela que
+monta a configuração.
 
-- `lib/external-db/receitas/acf-imoveis.ts` — receita `acf-imoveis` (JOIN `posts`+`postmeta`+ as tabelas de CATEGORIA, uma junção por campo mapeado; parâmetros fixos `prefixo`/`post_type`/`campos`/`taxonomias`/`situacao`; parâmetros de busca `bairro`/`cidade`/`tipo`/`finalidade`/`quartos_min`/`vagas_min`/`preco_max`/`aluguel_max`/`limite`; teto = 5). **Sem foto** (a `imagem_url` é a R4, como na R1).
-- `lib/external-db/receitas/taxonomia.ts` — as três tabelas de categoria do WordPress (`terms`/`term_taxonomy`/`term_relationships`), a SUÍDA (uma subconsulta com `group_concat`, que faz um imóvel com dois termos sair UMA vez) e o FILTRO (um `exists`, que não multiplica a linha do imóvel), com o NÍVEL da hierarquia (termo que tem um termo acima / termo que não tem).
-- `lib/external-db/receitas/preco.ts` — `precoNumero`: converte o `meta_value` de preço (texto) em número dentro do SQL, sem novo `?` ("650.000,00", "650,000.00", "480000", "650000.50", "1.200.000", "R$ 650.000,00"); preço sem nenhum dígito vira NULL, nunca 0
-- `lib/external-db/receitas/sql-mysql.ts` — `quotarIdentificadorMysql` e `escaparLikeMysql` (já existentes desde a R1) reutilizados pela receita do ACF, em vez de cópia local
-- `lib/external-db/receitas/tipos.ts` — `tabelas` e `colunas` passam a receber os **fixos** (e não o prefixo): a receita precisa saber se HÁ categoria mapeada para liberar as três tabelas de termos — quem não usa categoria não precisa liberá-las
-- `lib/external-db/receitas/registro.ts` + `tipos.ts` — a receita entra no registro (a lista de receitas é derivada do registro; nada é hard-coded no catálogo do MCP)
-- `app/app/integracao-dados/[id]/_components/ReceitasProntas.tsx` — no caminho ACF: "Tipo de post", "Campos do imóvel" (código, preço de venda, aluguel, condomínio, quartos, suítes, banheiros, vagas, área), "Categorias" (bairro, cidade, tipo e finalidade: **categoria**, **campo** ou **não usar**, com o nível da hierarquia) e "Esconder imóveis" (o campo da situação + os valores a esconder). Sem sugestão automática (R5), sem destino de funil (R5), sem foto (R4)
-- `lib/external-db/receitas/instancias.ts` — `validarFixosDaReceita` passou a devolver os motivos do Zod **pelo caminho do campo** (`taxonomias.bairro.taxonomia`, `situacao.campo`), e a rota de gravação os manda no 422: a tela mostra o rótulo legível do caminho ("Categoria do bairro", "Campo da situação") e a frase que explica o que falta, em vez de um "Campos inválidos." genérico
-- `lib/i18n/dicionario.ts` — entradas em espanhol dos textos novos de tela
-- `docs/architecture/banco-de-dados-externo.architecture.json` — a peça nova (`taxonomia.ts`) entra com ≥2 arestas
-- `.changes/banco-externo-receitas-acf-imoveis.md` — `impacto: capacidade_nova`, `secao: adicionado`
-- Testes: `acf-imoveis.unit.test.ts` (SQL montado nos três formatos (só campos, só categoria, misto), Zod dos fixos e da busca, alvos de tipo/categoria, a finalidade por igualdade, guardas de foto e de tabela liberada), `instancias.unit.test.ts` (o motivo do Zod pelo caminho inteiro do campo), `preco.unit.test.ts` (forma do CASE do preço) e `tests/mysql/receita-acf-imoveis.test.ts` (MySQL 8 de verdade: seed de uma imobiliária pequena com as três tabelas de categoria, nos DOIS formatos — ACF com o par `_campo` e JetEngine no modo padrão com outro `post_type`)
-- Spec 25: esta seção e a medição C1 abaixo
+### A decisão do dono (21/10/2026): a receita deixa de ser de UM nicho
 
-### A decisão do dono (21/10/2026): a CATEGORIA entra na R2
+**O que foi medido.** Num WordPress real — **ACF 6.8.10** (gratuito) +
+**JetEngine 3.5.8**, MySQL **8.0.45** —, o cadastro típico de uma imobiliária
+(16 imóveis) guarda **bairro e cidade só como CATEGORIA**: a taxonomia
+hierárquica `localizacao` (Cidade › Bairro), mais `tipo_imovel` e
+`finalidade`. O preço, o aluguel, os quartos e a situação são campos
+(`meta_key`).
 
-**O que foi medido.** Num WordPress real — **ACF 6.8.10** (gratuito) + **JetEngine 3.5.8**, MySQL **8.0.45** —, o cadastro típico de uma imobiliária (16 imóveis) guarda **bairro e cidade só como CATEGORIA**: a taxonomia hierárquica `localizacao` (Cidade › Bairro), mais `tipo_imovel` e `finalidade`. O preço, o aluguel, os quartos e a situação são campos (`meta_key`).
-
-**O que a receita anterior devolvia: ZERO imóveis.** Quatro causas, todas medidas:
+**O que a receita anterior devolvia: ZERO imóveis.** Quatro causas, todas
+medidas:
 
 | # | Causa | Efeito |
 |---|---|---|
@@ -203,45 +197,156 @@ A fatia R2 (receita `acf-imoveis`) entrega:
 | 3 | a situação **não era filtrada** | imóvel vendido era oferecido ao cliente |
 | 4 | tipo e finalidade **não eram lidos** | a busca por "casa" ou "para venda" não filtrava |
 
-**A decisão:** a R2 sai com categoria. O id da receita **não muda** (`acf-imoveis`) e o rótulo continua "Imóveis do WordPress (ACF ou JetEngine)" — o JetEngine no modo padrão grava as mesmas linhas simples em `wp_postmeta`, e a mesma receita serve aos dois.
+**A decisão.** A receita vira **"Conteúdo do WordPress (qualquer tipo de
+post)"**, e o administrador é quem diz o tipo de post, quais campos o site
+guarda e de onde vem cada um. Três razões, todas escritas:
 
-### O contrato novo da receita `acf-imoveis`
+1. **Um site de veículos, de cursos ou de cardápio guarda os dados do mesmo
+   jeito** (tipo de post + `wp_postmeta` + categorias) e não conseguia usar a
+   receita: os campos de imobiliária estavam fixos no código.
+2. **Uma receita de um nicho só tende a ser EXTENSÃO, não núcleo**
+   (`docs/doctrine/extensoes.md`). O núcleo continua útil com zero extensões.
+3. **O "Imóveis" continua existindo — como MODELO**: uma configuração que
+   pré-preenche a tela (um clique), sem código de nicho na receita.
+
+**O que a R2 preserva** (medido em 21/10/2026: 10 buscas certas em cada
+cadastro realista, pelo motor e pela tela — Pré-visualizar): o LEFT JOIN por
+campo (nenhum campo é obrigatório — o imóvel só de aluguel não tem preço de
+venda), o `precoNumero`, a regra de nível filho/raiz, a finalidade por
+**igualdade**, o "esconder", o `group_concat` (um imóvel com dois termos na
+mesma taxonomia sai UMA vez), as tabelas de termo liberadas só quando há
+categoria mapeada, e o campo apagado = chave removida.
+
+### O contrato novo da receita `wordpress-conteudo`
 
 **Fixos (o admin, na tela)** — `.strict()`, tudo validado por regex:
 
 ```
 prefixo: string (default "wp_")
 post_type: string
-campos: { codigo?, preco?, aluguel?, condominio?, quartos?, suites?, banheiros?,
-          vagas?, area?, bairro?, cidade?, tipo?, finalidade? }   // TODOS opcionais
-taxonomias: {
-  bairro?:     { taxonomia: string, nivel?: "qualquer" | "filho" },  // "filho" = só termos com parent <> 0
-  cidade?:     { taxonomia: string, nivel?: "qualquer" | "raiz" },   // "raiz"  = só termos com parent = 0
-  tipo?:       { taxonomia: string },
-  finalidade?: { taxonomia: string },
-}
-situacao?: { campo: string, ocultar: string[] (1..10, default ["vendido","alugado"]) }
+campos: Array<{
+  chave: /^[a-z][a-z0-9_]{0,31}$/,
+  rotulo: string (1..40),
+  meta_key: /^[A-Za-z0-9_\-]{1,64}$/,
+  tipo: "texto" | "numero" | "preco",
+  filtro: "nenhum" | "contem" | "minimo" | "maximo"
+}> (1..15)
+categorias: Array<{
+  chave: /^[a-z][a-z0-9_]{0,31}$/,
+  rotulo: string (1..40),
+  taxonomia: /^[a-z0-9_-]{1,32}$/,
+  nivel: "qualquer" | "filho" | "raiz" (default "qualquer"),
+  filtro: "nenhum" | "contem" | "igual"
+}> (0..6)
+esconder?: { meta_key: (regex), valores: string[] (1..10) }
 ```
 
 Regras do Zod, com mensagem legível em português:
 
-- **pelo menos um entre `campos.preco` e `campos.aluguel`** — sem um deles a busca não sabe filtrar por preço;
-- **um dado tem UMA fonte**: bairro, cidade, tipo e finalidade não podem vir de `campos` E de `taxonomias` ao mesmo tempo;
-- **slug de taxonomia** `^[a-z0-9_-]{1,32}$` (o `taxonomy` do WordPress é `varchar(32)`);
-- **nível**: `bairro` aceita "qualquer"/"filho"; `cidade` aceita "qualquer"/"raiz"; `tipo` e `finalidade` não têm nível.
+- a **chave** é única entre campos e categorias, e diferente de `id`,
+  `titulo` e `link` — a saída já usa esses nomes;
+- a **chave nasce do rótulo** (sem acento, minúscula, `_`): quem opera não
+  digita a chave. Ela continua editável no "avançado" da tela, e um rótulo
+  repetido não vira o mesmo dado duas vezes (`preco`, `preco_2`);
+- filtro **`contém` só em `tipo: "texto"`**; **`mínimo`/`máximo` só em
+  `numero`/`preco`** — um número não casa por pedaço de texto, e um texto não
+  tem "mínimo";
+- a **categoria** casa por `contém` (o pedaço do texto) ou por **`igual`**
+  (o nome OU o slug, por igualdade — é o comportamento atual da finalidade);
+- `esconder`: o `not exists` sobre o campo, com os valores a esconder.
 
-**Busca (o agente)** — `.strict()`: `bairro?`, `cidade?`, `tipo?` (texto ≤60), `finalidade?` ("venda" | "aluguel"), `quartos_min?`, `vagas_min?` (0..20), `preco_max?`, `aluguel_max?` (≥0), `limite` (1..5; o teto continua 5).
+**Busca (o agente)** — `.strict()`: `{ filtros?: Record<string, string|number>, limite?: 1..5 }`.
+O teto continua 5.
 
-**O SQL.** `from posts p` + **LEFT JOIN** por `meta_key` mapeado (nenhum JOIN obrigatório — é o que faz o imóvel só de aluguel aparecer). A CATEGORIA entra por subconsulta escalar na SAÍDA (`group_concat`) e por `exists` no FILTRO; a finalidade compara o `lower(t.name)` **ou** o `lower(t.slug)` por **igualdade** (o slug é "venda"/"aluguel"), e bairro, cidade e tipo comparam pelo **pedaço** do texto. O preço e o aluguel usam a conversão robusta (`precoNumero`); quartos e vagas comparam com `CAST(... AS DECIMAL(10,2))`; a situação é um `not exists` sobre o campo da situação com os valores a esconder. Valor SEMPRE por `?`; identificador só por crase.
+O **conjunto de chaves depende da instância**, e essa é a parte nova:
 
-**As tabelas liberadas.** `posts` e `postmeta` sempre; `terms`, `term_taxonomy` e `term_relationships` **só quando há alguma categoria mapeada** — quem não usa categoria não precisa liberá-las.
+- um filtro que a instância **não tem** é **ERRO legível**
+  (`ErroDeFiltroDesconhecido`), nunca silêncio: devolver a lista inteira
+  como se o filtro tivesse sido aplicado entrega ao cliente o que ele pediu
+  para **não** ver;
+- um filtro que a instância tem mas **não filtra** (o dado está mapeado sem
+  filtro) também é erro — pelo mesmo motivo;
+- o valor tem de ser do **tipo que o filtro pede**: número para `mínimo` e
+  `máximo`, texto para `contém` e `igual`.
 
-**Limitações declaradas (medidas, não estimadas):**
+**Saída**: `id, titulo, <cada campo pela chave>, <cada categoria pela chave>,
+link`. Sem foto (a `imagem_url` é a R4, como na R1).
 
-- o filtro de um dado **não mapeado** não se aplica: a busca devolve o que tem, e o mapeamento incompleto é decisão do administrador (o Zod recusa a duplicidade de fonte, não a ausência);
-- `link` vem de `wp_posts.guid`, que o WordPress **não** atualiza quando o site muda de domínio: o link do imóvel continua apontando para o domínio antigo;
-- `meta_key` repetido no mesmo post (base migrada) **repete o imóvel** na lista: a receita faz uma junção por campo e não deduplica o post;
-- a finalidade por categoria casa por **igualdade** do nome ou do slug: o termo tem de se chamar exatamente "Venda"/"Aluguel" (ou ter o slug "venda"/"aluguel"). Um termo "Venda e Aluguel" **não** é "venda" nem "aluguel" — e um termo "Locação" também não. É de propósito: casar por pedaço de texto fazia o termo "Venda e Aluguel" entrar nas duas buscas, e o cliente recebia imóvel de finalidade errada.
+**Os filtros que a instância aceita** entram na listagem da tool
+`crm_consultar_receita`, derivados dos fixos: "filtros disponíveis: ano (Ano,
+mínimo); marca (Marca, contém)". Sem essa linha, o agente chuta o nome do
+filtro — e erra.
+
+### O modelo "Imóveis" (só dados)
+
+`lib/external-db/receitas/modelos-wordpress.ts` — o MODELO é **configuração**,
+não código: ele pré-preenche a tela e nada mais. O "Em branco" é o outro
+modelo (sem tipo de post sugerido: o site de cada pessoa o chama do jeito que
+chama).
+
+- **campos**: `codigo` (Código, texto, nenhum), `preco` (Preço de venda, preço,
+  máximo), `aluguel` (Aluguel, preço, máximo), `condominio` (Condomínio, preço,
+  nenhum), `quartos` (Quartos, número, mínimo), `suites` (Suítes, número,
+  mínimo), `banheiros` (Banheiros, número, nenhum), `vagas` (Vagas, número,
+  mínimo), `area` (Área, número, mínimo);
+- **categorias**: `bairro` (Bairro, `localizacao`, filho, contém), `cidade`
+  (Cidade, `localizacao`, raiz, contém), `tipo` (Tipo, `tipo_imovel`, qualquer,
+  contém), `finalidade` (Finalidade, `finalidade`, qualquer, igual);
+- **esconder**: `status_imovel` → vendido, alugado.
+
+Os `meta_key` e as taxonomias são **sugestão**: o site de cada pessoa nomeia as
+coisas do jeito dela, e o administrador ajusta na tela.
+
+### A tela
+
+`app/app/integracao-dados/[id]/_components/ReceitasProntas.tsx`:
+
+- **"Adicionar receita" ESCOLHE a receita** (rótulo + descrição curta). O
+  defeito era "adicionar" pegar a primeira da lista e criar sempre o
+  WooCommerce. Editar uma instância salva **não** troca a receita — e a
+  receita pode ter **várias** instâncias na mesma conexão (imóveis e veículos
+  no mesmo site), então a lista não esconde mais as receitas já cadastradas;
+- para a `wordpress-conteudo`: "Tipo de post", "Começar de um modelo"
+  (Imóveis e Em branco — trocar só com confirmação se já houver algo
+  digitado), a lista editável de **campos** (rótulo, campo no site, tipo,
+  filtro; adicionar e remover) e a de **categorias** (rótulo, categoria no
+  site, nível, filtro), e "Esconder itens" (campo + valores);
+- a chave nasce do rótulo e é editável no "avançado";
+- o 422 mostra o rótulo legível do caminho que falhou — agora com o **índice
+  da linha** ("campos.1.chave"), para a tela saber qual dado corrigir.
+
+### O que a R2 entrega (arquivos)
+
+- `lib/external-db/receitas/wordpress-conteudo.ts` — a receita: o SQL, o Zod
+  dos fixos e da busca, a validação dos filtros contra a instância e a
+  descrição dos filtros;
+- `lib/external-db/receitas/modelos-wordpress.ts` — o modelo "Imóveis" e o
+  "Em branco" (só dados);
+- `lib/external-db/receitas/erros.ts` — `ErroDeFiltroDesconhecido`;
+- `lib/external-db/receitas/taxonomia.ts` — deixa de conhecer o conjunto fixo
+  de categorias (a categoria passa a ser uma LISTA, com a chave e a taxonomia
+  de cada uma);
+- `lib/external-db/receitas/tipos.ts` — a família `wordpress` e o
+  `descreverFiltros`;
+- `lib/external-db/receitas/registro.ts` — a receita entra no registro;
+- `lib/external-db/receitas/instancias.ts` — o motivo do Zod no 422 passa a
+  trazer o índice da linha;
+- `lib/mcp/tools/receitas-externas.ts` — a listagem mostra os filtros de cada
+  instância, e um filtro inválido volta como erro legível;
+- `app/app/integracao-dados/[id]/_components/ReceitasProntas.tsx` — a tela;
+- `lib/i18n/dicionario.ts` — os textos novos em espanhol;
+- Testes: `wordpress-conteudo.unit.test.ts` (o SQL de imóveis **E** de
+  veículos, o Zod, os filtros, os erros), `instancias.unit.test.ts` (o caminho
+  com índice), `receitas-externas-listagem.test.ts` (os filtros na listagem),
+  `ReceitasProntas.wordpress.test.tsx` (a tela nova) e
+  `tests/mysql/receita-wordpress-conteudo.test.ts` (MySQL 8 de verdade: a
+  imobiliária e a loja de veículos, nos DOIS formatos — ACF com o par
+  `_campo` e JetEngine no modo padrão com outro `post_type`);
+- `.changes/banco-externo-receitas-wordpress-conteudo.md`.
+
+Destino: núcleo, dentro do módulo de banco externo, que nasce desligado.
+
+### A medição de 21/10/2026 (a que sustenta o contrato)
 
 > **C1 (ACF) medido em 21/10/2026** contra WordPress 6.x + **ACF 6.8.10 (gratuito)** + MySQL **8.0.45**,
 > tipo de post `imovel` e campos criados pela API do próprio ACF (`acf_import_post_type`,
@@ -259,20 +364,35 @@ Regras do Zod, com mensagem legível em português:
 > `imovel_jet` e 6 campos criados pela tela do JetEngine; um imóvel salvo pela tela de edição do WordPress
 > grava cada campo como linha simples em `wp_postmeta` (`preco` = `520000`, `imagem` = `17`, o id do anexo),
 > igual ao ACF menos o par `_campo`. A mesma receita, com `post_type` = `imovel_jet`, acertou os mesmos 8
-> casos (4 publicados, rascunho escondido). Por isso o rótulo é "Imóveis do WordPress (ACF ou JetEngine)";
-> o id `acf-imoveis` fica. A receita `jetengine-imoveis` (R3) passa a ser só para Custom Content Types (CCT).
-> Não medido: a opção "Custom Meta Storage (Beta)" do JetEngine, que guarda os campos numa tabela própria.
-> Para a R4: no JetEngine a foto costuma ficar num campo de mídia próprio (id do anexo), não na imagem
-> destacada — o campo da foto precisa ser escolhido pelo admin.
+> casos (4 publicados, rascunho escondido). Por isso o rótulo é "Conteúdo do WordPress (qualquer tipo de
+> post)": o id `wordpress-conteudo` cobre os dois. A receita `jetengine-imoveis` (R3) passa a ser só para
+> Custom Content Types (CCT). Não medido: a opção "Custom Meta Storage (Beta)" do JetEngine, que guarda os
+> campos numa tabela própria. Para a R4: no JetEngine a foto costuma ficar num campo de mídia próprio (id
+> do anexo), não na imagem destacada — o campo da foto precisa ser escolhido pelo admin.
 
 > **A C1 da CATEGORIA (21/10/2026)** foi medida no mesmo ambiente: as três tabelas de termo do WordPress
 > (`wp_terms`, `wp_term_taxonomy`, `wp_term_relationships`) com a taxonomia `localizacao` hierárquica
 > (Sorocaba › Centro; Votorantim › Centro). Com o bairro e a cidade lidos de CATEGORY, a receita acha o
 > imóvel pelo bairro (`exists` sobre `term_relationships`), pelo nível (bairro = termo que tem termo
 > acima; cidade = termo que não tem), e pela finalidade (nome **ou** slug do termo — a medição de 21/10
-> casou por pedaço de texto; a entrega casa por **igualdade**, e a diferença está na limitação acima). O
+> casou por pedaço de texto; a entrega casa por **igualdade**, e a diferença está na limitação abaixo). O
 > imóvel com DOIS termos na mesma taxonomia sai **uma** vez, com os dois nomes na mesma célula (`group_concat`).
 
-O que a R2 **não** traz (e continua nas fatias seguintes): foto/`imagem_url` (R4), JetEngine CCT e tabela
-direta (R3), ida ao funil e sugestão automática de campos (R5), runbook do leigo (R6).
+**Limitações declaradas (medidas, não estimadas):**
 
+- o filtro de um dado **não mapeado** não se aplica: a busca devolve o que tem,
+  e o mapeamento incompleto é decisão do administrador (o Zod recusa a
+  duplicidade de fonte, não a ausência);
+- `link` vem de `wp_posts.guid`, que o WordPress **não** atualiza quando o site
+  muda de domínio: o link do conteúdo continua apontando para o domínio antigo;
+- `meta_key` repetido no mesmo post (base migrada) **repete o conteúdo** na
+  lista: a receita faz uma junção por campo e não deduplica o post;
+- a finalidade por categoria casa por **igualdade** do nome ou do slug: o termo
+  tem de se chamar exatamente "Venda"/"Aluguel" (ou ter o slug "venda"/"aluguel").
+  Um termo "Venda e Aluguel" **não** é "venda" nem "aluguel" — e nem "Locação".
+  É de propósito: casar por pedaço de texto fazia o termo "Venda e Aluguel"
+  entrar nas duas buscas, e o cliente recebia imóvel de finalidade errada.
+
+O que a R2 **não** traz (e continua nas fatias seguintes): foto/`imagem_url`
+(R4), JetEngine CCT e tabela direta (R3), ida ao funil e sugestão automática
+de campos (R5), runbook do leigo (R6).
