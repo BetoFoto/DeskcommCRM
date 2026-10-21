@@ -378,7 +378,8 @@ function editorPadraoWordpress(): EditorDoWordpress {
  */
 function filtroQueCabe(tipo: TipoDeCampo, filtro: FiltroDeCampo): FiltroDeCampo {
   if (filtro === "nenhum") return "nenhum";
-  if (tipo === "texto") return filtro === "contem" ? "contem" : "nenhum";
+  if (tipo === "texto")
+    return filtro === "contem" || filtro === "igual" ? filtro : "nenhum";
   return filtro === "contem" ? "nenhum" : filtro;
 }
 
@@ -1266,7 +1267,10 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                                 >
                                   <option value="nenhum">{t("Nenhum")}</option>
                                   {campo.tipo === "texto" && (
-                                    <option value="contem">{t("Contém")}</option>
+                                    <>
+                                      <option value="contem">{t("Contém")}</option>
+                                      <option value="igual">{t("Igual")}</option>
+                                    </>
                                   )}
                                   {campo.tipo !== "texto" && (
                                     <>
@@ -1690,7 +1694,10 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                                 >
                                   <option value="nenhum">{t("Nenhum")}</option>
                                   {campo.tipo === "texto" && (
-                                    <option value="contem">{t("Contém")}</option>
+                                    <>
+                                      <option value="contem">{t("Contém")}</option>
+                                      <option value="igual">{t("Igual")}</option>
+                                    </>
                                   )}
                                   {campo.tipo !== "texto" && (
                                     <>
