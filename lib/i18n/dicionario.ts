@@ -1642,6 +1642,7 @@ export const DICIONARIO: Traducoes = {
   "Sem responsável": { es: "Sin responsable" },
   "Editar campos": { es: "Editar campos" },
   "Linha do tempo": { es: "Línea de tiempo" },
+  "Ver tudo": { es: "Ver todo" },
   "DADOS DO NEGÓCIO": { es: "DATOS DEL NEGOCIO" },
   Título: { es: "Título" },
   Descrição: { es: "Descripción" },
