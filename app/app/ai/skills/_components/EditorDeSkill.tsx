@@ -121,7 +121,7 @@ export function EditorDeSkill({ nome, aberto, aoMudarAberto }: Props) {
           <DialogTitle>{t("Editar skill")} “{nome}”</DialogTitle>
           <DialogDescription>
             {t(
-              "Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na conversa quando uma das palavras-chave aparece na mensagem do cliente.",
+              "Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na conversa quando uma das palavras-chave aparece na mensagem do cliente, ou quando a conversa ou o contato tem uma das etiquetas de ativação.",
             )}
           </DialogDescription>
         </DialogHeader>

@@ -40,6 +40,7 @@ import { auxModelArgs, type AuxModelArgs } from './aux-model-args';
 import type { ChannelAdapter, ChannelSendResult } from '../channel-adapter';
 
 import { withFields, type Logger } from '../obs/logger';
+import { etiquetasParaOMatcher } from './etiquetas-do-matcher';
 import {
   corpoDaMensagem,
   getLeadContext,
@@ -1924,35 +1925,6 @@ export function eTurnoDeResposta(job: Pick<JobRow, 'kind'>): boolean {
   return job.kind === 'inbound_turn' || job.kind === 'case_reply_turn';
 }
 
-/**
- * Etiquetas da CONVERSA e do CONTATO, para o matcher de skills (`any_tags`). O agente põe
- * essas etiquetas com `crm_manage_tags`. Sempre com organization_id: o pool é o da service
- * role, que ignora RLS, e o id da conversa vem do job, não do body. Falha de leitura não
- * derruba o turno: registra e segue sem etiquetas (a skill ainda casa pela palavra-chave).
- */
-async function lerEtiquetasDaConversa(
-  pool: pg.Pool,
-  tenantId: string,
-  conversationId: string,
-  log: Logger,
-): Promise<string[]> {
-  try {
-    const { rows } = await pool.query<{ tags: string[] | null }>(
-      `select coalesce(cv.tags,'{}') || coalesce(c.tags,'{}') as tags
-         from conversations cv
-         left join contacts c on c.id = cv.contact_id and c.organization_id = cv.organization_id
-        where cv.organization_id = $1 and cv.id = $2`,
-      [tenantId, conversationId],
-    );
-    return rows[0]?.tags ?? [];
-  } catch (erro) {
-    log.warn('etiquetas da conversa não lidas — a skill segue só pela palavra-chave', {
-      erro: erro instanceof Error ? erro.message : String(erro),
-    });
-    return [];
-  }
-}
-
 function turnoVaiFalarComOLead(job: JobRow): boolean {
   if (job.kind === 'inbound_turn' || job.kind === 'case_reply_turn') return true;
   if (job.kind !== 'followup_turn') return false;
@@ -3103,12 +3075,14 @@ async function executarTurnoDoAgente(
   // seguir marcando todo turno seguinte.
   const skillSignal = latestInboundSignal(effectiveContext.messages);
   const sinalDoMatcher = recentInboundSignal(effectiveContext.messages);
-  // Etiquetas só são lidas quando alguma skill carregada pede por etiqueta (`any_tags`).
-  // Preview não tem conversa real: segue sem etiquetas.
-  const etiquetasDoTurno =
-    !preview && skills.some((s) => (s.matcher.any_tags?.length ?? 0) > 0)
-      ? await lerEtiquetasDaConversa(pool, tenantId, input.conversationId, runLog)
-      : [];
+  const etiquetasDoTurno = await etiquetasParaOMatcher(
+    pool,
+    tenantId,
+    input.conversationId,
+    skills,
+    preview,
+    runLog,
+  );
   const skillMatch = matchSkills(skills, sinalDoMatcher, etiquetasDoTurno);
   // Skills que o roteiro puxa neste passo entram JUNTO do match por palavra
   // (o nó `skill` diz "puxe isto aqui"). O match vence o empate por nome.

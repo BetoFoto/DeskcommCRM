@@ -8673,7 +8673,7 @@
   "Linhas no corpo": "Lines in the body",
   "atualizada — já vale para os agentes.": "updated — it already applies to the agents.",
   "Editar skill": "Edit skill",
-  "Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na conversa quando uma das palavras-chave aparece na mensagem do cliente.": "Saving creates a new version (the old one stays in the history). The body only enters the conversation when one of the keywords appears in the client's message.",
+  "Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na conversa quando uma das palavras-chave aparece na mensagem do cliente, ou quando a conversa ou o contato tem uma das etiquetas de ativação.": "Saving creates a new version (the old one stays in the history). The body only enters the conversation when one of the keywords appears in the client's message, or when the conversation or the contact has one of the activation tags.",
   "Não foi possível carregar a skill.": "Could not load the skill.",
   "Esta skill veio de um pacote com arquivos. Para mudar o texto, edite o pacote e envie o .zip de novo.": "This skill came from a package with files. To change the text, edit the package and upload the .zip again.",
   "Descrição (aparece no índice do agente)": "Description (appears in the agent's index)",
