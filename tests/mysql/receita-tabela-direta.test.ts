@@ -24,16 +24,20 @@ let banco: string;
 
 async function criarTabelas(root: Root, banco: string): Promise<void> {
   const q = (sql: string) => root.query(sql);
+  // O MySQL 8 recusa DEFAULT em coluna TEXT ("BLOB, TEXT, GEOMETRY or JSON
+  // column can't have a default value"): texto curto e com default vai de
+  // varchar; os demais TEXT ficam sem default.
   // A tabela CCT real do JetEngine (medida na VPS).
   await q(`
     create table \`${banco}\`.\`wp_jet_cct_imovel\` (
       _ID bigint unsigned not null auto_increment,
-      cct_status text not null default 'publish',
-      titulo text not null default '',
+      cct_status varchar(20) not null default 'publish',
+      situacao text,
+      titulo text not null,
       preco bigint default null,
       quartos bigint default null,
-      bairro text default null,
-      cidade text default null,
+      bairro text,
+      cidade text,
       area bigint default null,
       imagem bigint default null,
       cct_author_id bigint default null,
@@ -46,12 +50,12 @@ async function criarTabelas(root: Root, banco: string): Promise<void> {
   await q(`
     create table \`${banco}\`.\`carros\` (
       id bigint unsigned not null auto_increment,
-      modelo text not null default '',
+      modelo text not null,
       ano bigint default null,
       km bigint default null,
-      preco text default null,
-      cambio text default null,
-      situacao text default null,
+      preco text,
+      cambio text,
+      situacao text,
       primary key (id)
     ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_520_ci;
   `);
