@@ -222,4 +222,48 @@ describe("receita tabela-direta contra MySQL 8 de verdade", () => {
     expect(titulos(novos)).not.toContain("Fiat Uno 2020");
     expect(titulos(novos)).not.toContain("Toyota Corolla 2023");
   });
+
+  it("sem só-mostrar, sem esconder e sem filtro não emite WHERE e traz tudo", async () => {
+    const fixosSemRegras = {
+      tabela: "wp_jet_cct_imovel",
+      coluna_id: "_ID",
+      coluna_titulo: "titulo",
+      campos: [
+        { chave: "bairro", rotulo: "Bairro", coluna: "bairro", tipo: "texto", filtro: "nenhum" },
+      ],
+    };
+    const linhas = await consultar(fixosSemRegras, {}, 20);
+    // Sem so_mostrar_quando, o rascunho (draft) aparece.
+    expect(titulos(linhas)).toContain("Rascunho Invisível");
+    expect(titulos(linhas).length).toBe(3);
+  });
+
+  it("filtro igual: bairro exatamente Centro", async () => {
+    const fixosComIgual = {
+      ...FIXOS_CCT,
+      campos: [
+        { chave: "bairro", rotulo: "Bairro", coluna: "bairro", tipo: "texto", filtro: "igual" },
+      ],
+      so_mostrar_quando: undefined,
+      esconder_quando: undefined,
+    };
+    const linhas = await consultar(fixosComIgual, { filtros: { bairro: "Centro" } }, 20);
+    expect(titulos(linhas)).toContain("Casa Centro Sorocaba");
+    expect(titulos(linhas)).toContain("Rascunho Invisível");
+    expect(titulos(linhas)).not.toContain("Apartamento Campolim");
+  });
+
+  it("LIKE escapa curingas: 100% não casa tudo", async () => {
+    const fixosComContem = {
+      ...FIXOS_CCT,
+      campos: [
+        { chave: "bairro", rotulo: "Bairro", coluna: "bairro", tipo: "texto", filtro: "contem" },
+      ],
+      so_mostrar_quando: undefined,
+      esconder_quando: undefined,
+    };
+    const linhas = await consultar(fixosComContem, { filtros: { bairro: "100%" } }, 20);
+    // % escapado: não casa nenhum bairro real.
+    expect(titulos(linhas)).toEqual([]);
+  });
 });

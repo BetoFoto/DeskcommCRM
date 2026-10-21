@@ -231,4 +231,52 @@ describe("Receitas prontas — tabela direta", () => {
     expect(screen.getByLabelText("Coluna do id")).toHaveValue("_ID");
     expect(screen.getByLabelText("Coluna do título")).toHaveValue("titulo");
   });
+
+  it("o filtro Igual aparece para campo de texto e não para número", async () => {
+    renderComQuery([], true);
+    await adicionarReceitaTabelaDireta();
+    await act(async () => {
+      fireEvent.input(screen.getByLabelText("Tabela"), {
+        target: { value: "wp_jet_cct_imovel" },
+      });
+    });
+    await act(async () => {
+      fireEvent.input(screen.getByLabelText("Coluna do id"), {
+        target: { value: "_ID" },
+      });
+    });
+    await act(async () => {
+      fireEvent.input(screen.getByLabelText("Coluna do título"), {
+        target: { value: "titulo" },
+      });
+    });
+    const grupo = screen.getAllByRole("group", { name: /Campo/ })[0];
+    await act(async () => {
+      fireEvent.input(within(grupo).getByLabelText("Rótulo"), {
+        target: { value: "Bairro" },
+      });
+    });
+    await act(async () => {
+      fireEvent.input(within(grupo).getByLabelText("Coluna na tabela"), {
+        target: { value: "bairro" },
+      });
+    });
+    // Tipo texto: Contém e Igual aparecem.
+    await act(async () => {
+      fireEvent.click(within(grupo).getByLabelText("Tipo"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("option", { name: /Texto/ }));
+    });
+    const filtro = within(grupo).getByLabelText("Filtro");
+    expect(filtro).toHaveValue("nenhum");
+    await act(async () => {
+      fireEvent.click(filtro);
+    });
+    expect(screen.getByRole("option", { name: /Igual/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Contém/ })).toBeInTheDocument();
+    // Não aparece Mínimo/Máximo para texto.
+    expect(screen.queryByRole("option", { name: /Mínimo/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Máximo/ })).not.toBeInTheDocument();
+  });
 });
