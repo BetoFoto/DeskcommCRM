@@ -7,7 +7,11 @@ import { useState, useSyncExternalStore } from "react";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useNotificationPermission } from "@/hooks/notifications/useNotificationPermission";
-import { encerrarPushDesteAparelho, syncPushSubscription } from "@/lib/notifications/push_client";
+import {
+  encerrarPushDesteAparelho,
+  syncPushSubscription,
+  type ResultadoDaInscricao,
+} from "@/lib/notifications/push_client";
 import {
   NOTIFY_UI_CATEGORIES,
   assinarPrefs,
@@ -34,8 +38,8 @@ export function NotificationPrefsClient() {
   const prefs = useSyncExternalStore(assinarPrefs, getPrefsSnapshot, getPrefsSnapshotDoServidor);
   const denied = permission === "denied";
   const unsupported = permission === "unsupported";
-  // A frase da recusa do servidor (issue #3116). `null` = nada a dizer.
-  const [recusaDoPush, setRecusaDoPush] = useState<string | null>(null);
+  // A inscrição que não pegou (issue #3116). `null` = nada a dizer.
+  const [recusaDoPush, setRecusaDoPush] = useState<ResultadoDaInscricao | null>(null);
 
   async function onToggle(category: NotifyCategory, channel: NotifyChannelPref, on: boolean) {
     if (channel === "push" && on) {
@@ -53,12 +57,12 @@ export function NotificationPrefsClient() {
         return;
       }
       const resultado = await syncPushSubscription();
-      if (resultado?.situacao === "recusado") {
+      if (resultado?.situacao === "recusado" || resultado?.situacao === "sem_rede") {
         // ⚠️ O INTERRUPTOR VOLTA A DESLIGAR, e é o estado honesto: o servidor
         // NÃO gravou a inscrição, então nenhum aviso chegaria com o site
         // fechado. Deixá-lo ligado era a mentira que a issue #3116 mede.
         gravarCanal("message", "push", false);
-        setRecusaDoPush(resultado.motivo || "");
+        setRecusaDoPush(resultado);
       } else {
         setRecusaDoPush(null);
       }
@@ -96,11 +100,15 @@ export function NotificationPrefsClient() {
                 {cat === "message" && recusaDoPush !== null ? (
                   <div className="mt-1 text-xs text-destructive" data-testid="push-recusado" role="alert">
                     <p>
-                      {t(
-                        "O servidor recusou a inscrição deste aparelho, então os avisos não vão chegar: o interruptor de Push voltou a ficar desligado.",
-                      )}
+                      {recusaDoPush.situacao === "sem_rede"
+                        ? t(
+                            "Não consegui falar com o servidor, então este aparelho não foi inscrito: confira a internet e ligue o Push de novo.",
+                          )
+                        : t(
+                            "O servidor recusou a inscrição deste aparelho, então os avisos não vão chegar: o interruptor de Push voltou a ficar desligado.",
+                          )}
                     </p>
-                    {recusaDoPush ? <p className="mt-0.5">{recusaDoPush}</p> : null}
+                    {recusaDoPush.motivo ? <p className="mt-0.5">{recusaDoPush.motivo}</p> : null}
                   </div>
                 ) : null}
               </td>

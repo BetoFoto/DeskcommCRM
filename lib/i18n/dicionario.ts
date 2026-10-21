@@ -16605,6 +16605,9 @@ export const DICIONARIO: Traducoes = {
   "O servidor recusou a inscrição deste aparelho, então os avisos não vão chegar: o interruptor de Push voltou a ficar desligado.": {
     es: "El servidor rechazó la inscripción de este dispositivo, así que los avisos no van a llegar: el interruptor de Push volvió a quedar desactivado.",
   },
+  "Não consegui falar com o servidor, então este aparelho não foi inscrito: confira a internet e ligue o Push de novo.": {
+    es: "No pude comunicarme con el servidor, así que este dispositivo no quedó inscrito: revisa la conexión a internet y vuelve a activar el Push.",
+  },
   // ─── app no celular (ADR-0006, F1; app/app/settings/aplicativo/_client.tsx) ───
   "App no celular": { es: "App en el celular" },
   "Instale o sistema na tela de início do celular e receba os avisos.": { es: "Instala el sistema en la pantalla de inicio del celular y recibe los avisos." },

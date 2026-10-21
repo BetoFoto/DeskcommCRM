@@ -28,13 +28,16 @@ function mesmosBytes(a: ArrayBuffer, b: Uint8Array): boolean {
  * poder desfazer o interruptor e dizer o porquê.
  *
  * - `ativo`    — o PUT foi aceito (2xx); a inscrição está de pé, como sempre.
- * - `recusado` — o servidor recusou (`!res.ok`) ou a rede falhou: NÃO está
- *                inscrito, e `motivo` carrega a frase do servidor quando veio.
+ * - `recusado` — o servidor recusou (`!res.ok`): NÃO está inscrito, e `motivo`
+ *                carrega a frase do servidor quando veio.
+ * - `sem_rede` — o PUT nem chegou ao servidor (o `fetch` lançou): também NÃO
+ *                está inscrito, mas dizer "o servidor recusou" a quem está sem
+ *                internet daria a causa errada — por isso é outro estado.
  * - `ignorado` — o caminho nem chegou ao servidor (sem permissão, sem service
  *                worker, sem VAPID, sem canal ligado): os mesmos `return` de
  *                antes, sem recusa a reportar.
  */
-export type SituacaoDaInscricao = "ativo" | "recusado" | "ignorado";
+export type SituacaoDaInscricao = "ativo" | "recusado" | "sem_rede" | "ignorado";
 
 export interface ResultadoDaInscricao {
   situacao: SituacaoDaInscricao;
@@ -116,8 +119,8 @@ export async function syncPushSubscription(): Promise<ResultadoDaInscricao> {
     });
   } catch {
     // Sem rede o PUT não chegou: o servidor não tem esta inscrição, e o
-    // interruptor ligado seria mentira. Recusa sem frase do servidor.
-    return { situacao: "recusado", motivo: "" };
+    // interruptor ligado seria mentira. Não é recusa: o servidor nem respondeu.
+    return { situacao: "sem_rede", motivo: "" };
   }
   if (!res.ok) return { situacao: "recusado", motivo: await motivoDaRecusa(res) };
   return { situacao: "ativo", motivo: "" };

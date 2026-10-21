@@ -215,6 +215,21 @@ describe("o interruptor de Push de mensagem liga e desliga a inscrição do apar
     expect(container.innerHTML).not.toContain('data-testid="alerts-toggle"');
   });
 
+  // Sem rede, a causa dita é a rede — nunca "o servidor recusou".
+  it("sem rede: diz que não falou com o servidor, não que ele recusou, e o interruptor desliga", async () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
+    pushClient.syncPushSubscription.mockResolvedValueOnce({ situacao: "sem_rede", motivo: "" });
+    const container = montar();
+
+    await clicar(container, "Nova mensagem via push");
+
+    expect(container.querySelector('[data-testid="push-recusado"]')).not.toBeNull();
+    expect(container.textContent).toContain("Não consegui falar com o servidor");
+    expect(container.textContent).not.toContain("O servidor recusou");
+    expect(container.innerHTML).toContain('data-testid="alerts-enable"');
+    expect(container.innerHTML).not.toContain('data-testid="alerts-toggle"');
+  });
+
   // CONTROLE: aceita (ativo), o interruptor segue ligado e nada é dito.
   it("inscrição aceita: o interruptor fica ligado e nenhuma recusa aparece (controle)", async () => {
     window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));

@@ -145,6 +145,20 @@ describe("syncPushSubscription", () => {
     expect(resultado.motivo).toBe("Campos inválidos.");
   });
 
+  // Sem rede o PUT LANÇA: não é recusa do servidor, e a tela não pode dizer que foi.
+  it("PUT sem rede (fetch lança): reporta sem_rede, não recusado", async () => {
+    fetchFalso.mockImplementation(async (...args: unknown[]) => {
+      const init = args[1] as RequestInit | undefined;
+      if (init?.method === "PUT") throw new TypeError("Failed to fetch");
+      return new Response(JSON.stringify({ data: { enabled: true, public_key: "AAAA" } }), { status: 200 });
+    });
+
+    const resultado = await syncPushSubscription();
+
+    expect(resultado.situacao).toBe("sem_rede");
+    expect(resultado.motivo).toBe("");
+  });
+
   // CONTROLE: o PUT aceito (200) segue igual ao que era — nada de recusa.
   it("PUT aceito (200): reporta ativo, sem recusa (controle)", async () => {
     const resultado = await syncPushSubscription();
