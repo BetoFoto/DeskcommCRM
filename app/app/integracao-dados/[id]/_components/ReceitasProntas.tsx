@@ -348,7 +348,20 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                               onChange={(e) => {
                                 const valor = e.target.value;
                                 if (valor !== "" && !META_KEY_REGEX.test(valor)) return;
-                                const proxCampos = { ...camposAcf, [campo.chave]: valor };
+                                const proxCampos = { ...camposAcf };
+                                // Campo OPCIONAL apagado na tela: a CHAVE sai do
+                                // mapeamento, em vez de ficar com "".
+                                // O Zod da receita é `.min(1).optional()`: "" não vale
+                                // como ausente, e o PUT voltava com 422
+                                // `fixos_invalidos` — a tela recusava o que a
+                                // pessoa podia fazer (não mapear o campo).
+                                // Campo OBRIGATÓRIO continua com "": quem recusa é o
+                                // servidor, com mensagem legível.
+                                if (valor === "" && !campo.obrigatorio) {
+                                  delete proxCampos[campo.chave];
+                                } else {
+                                  proxCampos[campo.chave] = valor;
+                                }
                                 const prox = {
                                   ...inst,
                                   fixos: { ...(inst.fixos as object), campos: proxCampos },

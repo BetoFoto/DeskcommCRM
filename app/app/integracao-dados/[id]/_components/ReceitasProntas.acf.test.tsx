@@ -7,6 +7,7 @@
  *   - os campos exigidos (Preço, Quartos, Bairro) vêm preenchidos e os
  *     opcionais (Cidade, Área) vêm vazios;
  *   - salvar envia os fixos completos do ACF (prefixo, post_type, campos);
+ *   - apagar um campo opcional tira a CHAVE do mapeamento (não manda "");
  *   - a receita que NÃO é ACF não recebe o formulário de ACF.
  *
  * Sem sugestão automática (é da R5) e sem foto (é da R4).
@@ -197,6 +198,41 @@ describe("Receitas prontas — caminho ACF", () => {
     };
     expect(fixos.prefixo).toBe("wp_");
     expect(fixos.post_type).toBe("apartamento");
+    expect(fixos.campos.preco).toBe("preco");
+    expect(fixos.campos.quartos).toBe("quartos");
+    expect(fixos.campos.bairro).toBe("bairro");
+  });
+
+  it("apagar um campo opcional tira a CHAVE do mapeamento (não grava vazio)", async () => {
+    renderComQuery([], true);
+
+    const botaoAdicionar = screen.getByRole("button", { name: /Adicionar receita/i })!;
+    await act(async () => {
+      fireEvent.click(botaoAdicionar);
+    });
+
+    // Preenche a cidade e apaga.
+    const inputCidade = screen.getByLabelText(/Cidade/i);
+    await act(async () => {
+      fireEvent.input(inputCidade, { target: { value: "Curitiba" } });
+    });
+    await act(async () => {
+      fireEvent.input(inputCidade, { target: { value: "" } });
+    });
+
+    const botaoSalvar = screen.getByRole("button", { name: /Salvar/i })!;
+    await act(async () => {
+      fireEvent.click(botaoSalvar);
+    });
+
+    const args = deps.salvarReceitas.mock.calls[0]![1] as InstanciaDeReceita[];
+    const fixos = args[0]!.fixos as { campos: Record<string, string> };
+    // A chave SAI: o Zod da receita é `.min(1).optional()`, e "" não vale como
+    // ausente — mandar "" no PUT voltava 422 `fixos_invalidos`.
+    expect("cidade" in fixos.campos).toBe(false);
+    // E nenhum valor vazio sobrou no mapeamento.
+    expect(Object.values(fixos.campos)).not.toContain("");
+    // Os obrigatórios continuam mapeados.
     expect(fixos.campos.preco).toBe("preco");
     expect(fixos.campos.quartos).toBe("quartos");
     expect(fixos.campos.bairro).toBe("bairro");
