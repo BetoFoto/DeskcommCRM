@@ -300,6 +300,7 @@ export const RECEITA_ACF_IMOVEIS: DefinicaoDeReceita = {
     "título, código, preço, aluguel, condomínio, quartos, suítes, banheiros, vagas, área e link. " +
     "O administrador diz o tipo de post e de onde vem cada dado: um campo do site ou uma categoria. " +
     "Filtros: bairro, cidade, tipo, finalidade (venda ou aluguel), quartos, vagas, preço máximo e aluguel máximo. " +
+    "Um filtro só prende quando o dado correspondente está mapeado pelo administrador. " +
     "Imóvel só de aluguel aparece; imóvel vendido ou alugado pode ser escondido. Sem foto nesta fatia.",
   parametrosFixos: PARAMETROS_FIXOS_ACF_IMOVEIS,
   parametrosDaBusca: PARAMETROS_DA_BUSCA_ACF_IMOVEIS,
