@@ -56618,6 +56618,7 @@ create index if not exists calendar_service_resource_reverse_idx on public.calen
 -- Links de pessoa/publicação também precisam pertencer à organização do serviço.
 create unique index if not exists calendar_service_appointment_org_id_idx on public.calendar_appointments(organization_id,id);
 alter table public.calendar_service_professionals drop constraint if exists calendar_service_professionals_user_id_fkey;
+alter table public.calendar_service_professionals drop constraint if exists calendar_service_professionals_organization_id_fkey;
 alter table public.calendar_service_blocks drop constraint if exists calendar_service_blocks_owner_user_id_fkey;
 alter table public.calendar_service_blocks drop constraint if exists calendar_service_blocks_publication_appointment_id_fkey;
 do $$ begin
@@ -60570,3 +60571,10 @@ create view public.external_db_connections_safe
 
 revoke all on public.external_db_connections_safe from anon;
 grant select on public.external_db_connections_safe to authenticated;
+
+-- ─── 0717: Desambiguação de calendar_service_professionals (#3219) ───────────
+-- Remove a FK redundante para organizations(id), preservando calendar_service_professional_member_fk
+-- que já referencia user_organizations(organization_id, user_id). Isso elimina a ambiguidade
+-- de relacionamento Many-to-Many detectada pelo PostgREST (PGRST201).
+alter table public.calendar_service_professionals 
+  drop constraint if exists calendar_service_professionals_organization_id_fkey;
