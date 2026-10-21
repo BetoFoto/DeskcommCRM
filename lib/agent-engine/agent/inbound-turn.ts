@@ -1946,17 +1946,23 @@ function turnoVaiFalarComOLead(job: JobRow): boolean {
  * É a chave do REUSO, não um veto: quem chama decide o que fazer com a resposta
  * (hoje, não gravar de novo nem reaplicar o destino do card). Erro de leitura
  * sobe para quem chamou — lá a falha degrada aberto e grava como antes.
+ *
+ * `desde` é a criação do job: a decisão do mesmo job nunca é anterior a ele.
+ * Não há índice com `job_id`: sem o limite, a consulta varre a tabela inteira
+ * em todo turno com roteador. Com ele, entra por índice com `created_at`
+ * (medido com 250 mil linhas: seq scan de 3.847 buffers vira 4 buffers).
  */
 async function decisaoDeRoteamentoDoJobJaGravada(
   pool: pg.Pool,
   organizationId: string,
   jobId: string,
+  desde: Date,
 ): Promise<boolean> {
   const { rows } = await pool.query(
     `select 1 from ai_router_decisions
-      where organization_id = $1 and job_id = $2
+      where organization_id = $1 and job_id = $2 and created_at >= $3
       limit 1`,
-    [organizationId, jobId],
+    [organizationId, jobId, desde],
   );
   return rows.length > 0;
 }
@@ -2263,7 +2269,12 @@ async function executarTurnoDoAgente(
   let decisaoJaGravada = false;
   if (!preview && routed.routerId !== null) {
     try {
-      decisaoJaGravada = await decisaoDeRoteamentoDoJobJaGravada(pool, tenantId, liveJob().id);
+      decisaoJaGravada = await decisaoDeRoteamentoDoJobJaGravada(
+        pool,
+        tenantId,
+        liveJob().id,
+        liveJob().created_at,
+      );
     } catch (err) {
       runLog.warn('não consegui conferir a decisão de roteamento deste job — gravando como antes', {
         error: (err instanceof Error ? err.message : String(err)).slice(0, 120),

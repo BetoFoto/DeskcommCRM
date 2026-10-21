@@ -145,6 +145,8 @@ const JOB_DO_TURNO = {
   attempts: 1,
   claimed_by: "w",
   claimed_at: TERCA_19H,
+  /** Enfileirado às 19h — a guarda só procura decisão a partir daqui. */
+  created_at: TERCA_19H,
 };
 
 interface Consulta {
@@ -268,7 +270,21 @@ describe("turno adiado pela janela do agente — o job grava UMA decisão", () =
     // acima poderia estar verde por o turno ter morrido antes da gravação.
     const guardas = consultasDaGuarda(banco);
     expect(guardas).toHaveLength(2);
-    expect(guardas[1]?.params).toEqual([ORG, JOB]);
+    expect(guardas[1]?.params).toEqual([ORG, JOB, TERCA_19H]);
+  });
+
+  it("a guarda limita a busca à criação do job (entra por índice com created_at)", async () => {
+    const banco = bancoFingido();
+
+    await passagem(banco, TERCA_19H, JANELA_8_18);
+
+    // Sem o limite a consulta varre a tabela: não há índice com `job_id`, e os
+    // que existem começam por `created_at` ou por (organization_id, created_at).
+    const [guarda] = consultasDaGuarda(banco);
+    expect(guarda?.sql).toContain("created_at >= $3");
+    expect(guarda?.params[2], "a guarda perdeu o limite pela criação do job").toBe(
+      JOB_DO_TURNO.created_at,
+    );
   });
 
   it("o destino do card não é aplicado duas vezes no turno reagendado", async () => {
