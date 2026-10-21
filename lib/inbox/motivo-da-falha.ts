@@ -13,7 +13,7 @@ import type { Message } from "@/lib/types/messaging";
  * histórias diferentes sobre a mesma linha `failed`.
  *
  * A precedência é a do dado: `error_message` (o que o canal disse, já gravado
- * pelo envio) vence `error_code` (o código do adaptador, ex.: `waha_error`),
+ * pelo envio) vence `error_code` (o código curto que o adaptador devolve),
  * que vence o genérico. Os textos passam por `t()` porque a mensagem pode vir
  * de um código do NOSSO dicionário; o que o provedor mandou em texto livre
  * atravessa `traduzir` como está — dado, não interface, e traduzir seria
