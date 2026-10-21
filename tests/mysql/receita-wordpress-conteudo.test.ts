@@ -713,8 +713,15 @@ describe("receita wordpress-conteudo contra MySQL 8 de verdade", () => {
     });
 
     it("a configuração de imóveis não acha veículo (o tipo de post manda)", async () => {
-      const linhas = await consultar({ filtros: { marca: "fiat" } }, 20);
-      expect(titulos(linhas)).toEqual([]);
+      // Sem filtro que a configuração de imóveis não tem: ela só lê o
+      // tipo de post "imovel", então nenhum veículo aparece — mas os
+      // imóveis aparecem, e a lista não é vazia.
+      const linhas = await consultar({}, 20);
+      const titulosVeiculos = VEICULOS.map((v) => v.titulo);
+      for (const linha of linhas) {
+        expect(titulosVeiculos).not.toContain(String(linha.titulo));
+      }
+      expect(titulos(linhas)).not.toHaveLength(0);
     });
   });
 
