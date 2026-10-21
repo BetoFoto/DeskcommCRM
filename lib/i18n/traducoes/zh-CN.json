@@ -5661,6 +5661,7 @@
   "Escondido, o campo não aparece no formulário nem é validado como obrigatório, e o valor já gravado continua no registro.": "隐藏时该字段不出现在表单中，也不作为必填校验，已保存的值仍保留在记录里。",
   "Mensagem para a equipe (resumo do negócio ganho)": "发给团队的消息（赢单摘要）",
   "Resumo do lead para a equipe": "发给团队的线索摘要",
+  "Resumo automático": "自动摘要",
   "Regra": "规则",
   "O que o lead pediu": "线索的诉求",
   "Pontuação": "评分",

@@ -40,6 +40,15 @@
  *
  * `Pontuação: ` vazio AFIRMARIA que há pontuação e que ela é nada. Omissão é a
  * verdade disponível (a mesma decisão de `texto-do-aviso.ts`).
+ *
+ * ─── A ÚLTIMA PORTA, no texto INTEIRO (#2642) ──────────────────────────────
+ *
+ * A limpeza por campo não cobre tudo: `Próxima ação` sai por `linha()` (um
+ * `trim`), o telefone e o nome da regra vão crus. Por isso o corpo montado
+ * passa por `sanitizarResumoParaAEquipe` antes de virar mensagem — o link sai,
+ * a instrução dirigida a quem lê sai, o texto entra com teto e é MARCADO como
+ * resumo automático. Quem consertar a limpeza por campo um dia não pode supor
+ * que esta porta deixou de existir.
  */
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
@@ -50,6 +59,7 @@ import {
   sanitizarTextoDoLead,
 } from "@/lib/escalacao/sanitizar-texto-do-lead";
 import { formatarMoeda } from "@/lib/propostas/moeda";
+import { sanitizarResumoParaAEquipe } from "./sanitizar-resumo-para-a-equipe";
 
 /** O que o motor já hidratou em `ctx.context` — a linha de `crm_leads`. */
 export interface LeadDoResumo {
@@ -171,5 +181,5 @@ export function montarResumoParaAEquipe(entrada: EntradaDoResumo): string {
     if (proxima) linhas.push(proxima);
   }
 
-  return linhas.join("\n");
+  return sanitizarResumoParaAEquipe(linhas.join("\n"), { marca: t("Resumo automático") });
 }

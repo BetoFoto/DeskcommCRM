@@ -477,6 +477,7 @@ export const DICIONARIO: Traducoes = {
   // resumo (WhatsApp) e do formulário da ação notify_team. O e-mail para uma
   // pessoa da equipe (recorte do PR #2834) usa os rótulos do `send_email`.
   "Resumo do lead para a equipe": { es: "Resumen del lead para el equipo" },
+  "Resumo automático": { es: "Resumen automático" },
   "Mensagem para a equipe (resumo do negócio ganho)": {
     es: "Mensaje al equipo (resumen del negocio ganado)",
   },

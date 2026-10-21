@@ -9148,6 +9148,7 @@
   "Escondido, o campo não aparece no formulário nem é validado como obrigatório, e o valor já gravado continua no registro.": "Hidden, the field does not appear in the form and is not validated as required; the value already saved stays in the record.",
   "Mensagem para a equipe (resumo do negócio ganho)": "Team message (won deal summary)",
   "Resumo do lead para a equipe": "Lead summary for the team",
+  "Resumo automático": "Automatic summary",
   "Regra": "Rule",
   "O que o lead pediu": "What the lead asked for",
   "Pontuação": "Score",
