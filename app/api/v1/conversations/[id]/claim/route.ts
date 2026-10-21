@@ -19,6 +19,7 @@ import { type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit";
 import { registrarTrocaDeComando } from "@/lib/inbox/atividade-de-comando";
+import { sincronizarNegocioAbertoDoContato } from "@/lib/inbox/negocio-aberto-do-contato";
 import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
@@ -81,6 +82,18 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   const conv = row as unknown as Conversation;
 
+  // #3177: assumir a conversa também assume o negócio ABERTO do contato — a
+  // sugestão 1 da issue vale para as duas portas de troca de dono ("ao
+  // transferir OU assumir"). Aqui a régua da RLS é a mais generosa possível: o
+  // dono novo é quem está assumindo, e o card sem dono é visível a ele em
+  // qualquer `visibility_mode`. Mesma doutrina da transferência: o cliente é o
+  // da SESSÃO, a conversa já é dele, e o motivo da recusa não derruba nada.
+  const sincronia = await sincronizarNegocioAbertoDoContato(supabase, {
+    organizationId: conv.organization_id,
+    contactId: conv.contact_id,
+    toUserId: user.id,
+  });
+
   await audit({
     action: "conversation.claimed",
     actorUserId: user.id,
@@ -88,6 +101,10 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     resourceType: "conversation",
     resourceId: conv.id,
     requestId,
+    metadata: {
+      negocio_aberto: sincronia.motivo,
+      ...(sincronia.leadId ? { negocio_id: sincronia.leadId } : {}),
+    },
   });
 
   await supabase
