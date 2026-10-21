@@ -188,7 +188,7 @@ export function ReplyReviewPanel({
         porque quando a sugestão sai da tela (enviada ou descartada) este bloco
         sai junto, e o aviso inline sairia com ele.
       */}
-      {notice && notice.draftId === draft.id && (
+      {draft && notice && notice.draftId === draft.id && (
         <p role="status" className="text-xs">
           {notice.message}
         </p>
