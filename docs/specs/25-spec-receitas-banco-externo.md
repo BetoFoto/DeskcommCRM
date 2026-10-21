@@ -199,6 +199,11 @@ A fatia R2 (receita `acf-imoveis`) entrega:
 > sozinho (não vira curinga: 1 linha), `limite` 2. O ACF Pro não é necessário: a receita só lê campos
 > simples.
 
+**Limitações conhecidas da R2 (medidas, não estimadas):**
+
+- `link` vem de `wp_posts.guid`, que o WordPress **não** atualiza quando o site muda de domínio: o link do imóvel continua apontando para o domínio antigo.
+- `meta_key` repetido no mesmo post (base migrada) **repete o imóvel** na lista: a receita faz uma junção por campo e não deduplica o post.
+
 O que a R2 **não** traz (e continua nas fatias seguintes): foto/`imagem_url` (R4), JetEngine e tabela
 direta (R3), ida ao funil e sugestão automática de campos (R5), runbook do leigo (R6).
 
