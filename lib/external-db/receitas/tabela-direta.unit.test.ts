@@ -112,4 +112,65 @@ describe("receita tabela-direta (unit, sem MySQL)", () => {
     const { sql } = RECEITA_TABELA_DIRETA.montar(FIXOS_CCT, {}, 5);
     expect(sql).toContain("limit ?");
   });
+
+  it("colunas() inclui as colunas de só-mostrar-quando e esconder-quando", () => {
+    const colunas = RECEITA_TABELA_DIRETA.colunas(FIXOS_CCT);
+    expect(colunas["wp_jet_cct_imovel"]).toContain("cct_status");
+    expect(colunas["wp_jet_cct_imovel"]).toContain("situacao");
+  });
+
+  it("sem só-mostrar, sem esconder e sem filtro não emite WHERE", () => {
+    const fixosSemRegras = {
+      tabela: "wp_jet_cct_imovel",
+      coluna_id: "_ID",
+      coluna_titulo: "titulo",
+      campos: [
+        { chave: "preco", rotulo: "Preço", coluna: "preco", tipo: "preco", filtro: "maximo" },
+      ],
+    };
+    const { sql } = RECEITA_TABELA_DIRETA.montar(fixosSemRegras, {}, 5);
+    expect(sql).not.toMatch(/\bwhere\b/i);
+    expect(sql).toContain("from `wp_jet_cct_imovel` t order by `_ID` limit ?");
+  });
+
+  it("filtro igual para campo de texto", () => {
+    const fixosComIgual = {
+      ...FIXOS_CCT,
+      campos: [
+        { chave: "bairro", rotulo: "Bairro", coluna: "bairro", tipo: "texto", filtro: "igual" },
+      ],
+      so_mostrar_quando: undefined,
+      esconder_quando: undefined,
+    };
+    const { sql, valores } = RECEITA_TABELA_DIRETA.montar(
+      fixosComIgual,
+      { filtros: { bairro: "Centro" } },
+      5,
+    );
+    expect(sql).toContain("`bairro` = ?");
+    expect(valores).toContain("Centro");
+    expect(sql).not.toContain("%");
+  });
+
+  it("LIKE escapa curingas do agente (% e _)", () => {
+    const fixosComContem = {
+      ...FIXOS_CCT,
+      campos: [
+        { chave: "bairro", rotulo: "Bairro", coluna: "bairro", tipo: "texto", filtro: "contem" },
+      ],
+      so_mostrar_quando: undefined,
+      esconder_quando: undefined,
+    };
+    const { sql, valores } = RECEITA_TABELA_DIRETA.montar(
+      fixosComContem,
+      { filtros: { bairro: "100% _centro_" } },
+      5,
+    );
+    // Curingas escapados com !, nunca crus no texto.
+    expect(sql).toContain("like ? escape '!'");
+    expect(valores[0]).toBe("!100!% !_centro_!");
+    // O texto do SQL não contém o curinga cru.
+    expect(sql).not.toContain("100%");
+    expect(sql).not.toContain("_centro_");
+  });
 });
