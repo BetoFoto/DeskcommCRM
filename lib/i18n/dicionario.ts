@@ -14462,6 +14462,79 @@ export const DICIONARIO: Traducoes = {
   "Suítes": { es: "Suites" },
   "Banheiros": { es: "Baños" },
   "Vagas": { es: "Plazas de garaje" },
+  // ─── Receitas prontas: conteúdo do WordPress, qualquer tipo de post (R2 genérica) ───
+  "Qual receita você quer usar?": { es: "¿Qué receta quieres usar?" },
+  "Nome da receita": { es: "Nombre de la receta" },
+  "Qual tipo de post do WordPress (por exemplo, imovel, veiculo, produto).": {
+    es: "Qué tipo de entrada de WordPress (por ejemplo, imovel, veiculo, producto).",
+  },
+  "Começar de um modelo": { es: "Empezar con un modelo" },
+  "O modelo só preenche esta tela com uma configuração que serve ao seu site.": {
+    es: "El modelo solo llena esta pantalla con una configuración que sirve para tu sitio.",
+  },
+  "Trocar de modelo apaga o que você preencheu. Quer continuar?": {
+    es: "Cambiar de modelo borra lo que llenaste. ¿Quieres continuar?",
+  },
+  "Campos do site": { es: "Campos del sitio" },
+  "O nome do campo no ACF ou no JetEngine, e o que ele guarda.": {
+    es: "El nombre del campo en ACF o en JetEngine, y lo que guarda.",
+  },
+  "Campo no site": { es: "Campo en el sitio" },
+  "Categoria no site": { es: "Categoría en el sitio" },
+  "Categorias do site": { es: "Categorías del sitio" },
+  "As categorias do WordPress: a taxonomia e o nome do termo.": {
+    es: "Las categorías de WordPress: la taxonomía y el nombre del término.",
+  },
+  "Tem categoria acima": { es: "Tiene categoría arriba" },
+  "Não tem categoria acima": { es: "No tiene categoría arriba" },
+  "Igual": { es: "Igual" },
+  "Adicionar campo": { es: "Agregar campo" },
+  "Adicionar categoria": { es: "Agregar categoría" },
+  "Remover campo": { es: "Quitar campo" },
+  "Remover categoria": { es: "Quitar categoría" },
+  "Chaves (avançado)": { es: "Claves (avanzado)" },
+  "Esconder as chaves": { es: "Ocultar las claves" },
+  "Esconder itens": { es: "Ocultar elementos" },
+  "Campo a esconder": { es: "Campo a ocultar" },
+  "Conteúdo com um desses valores no campo não aparece para o cliente.": {
+    es: "El contenido con uno de esos valores en el campo no aparece para el cliente.",
+  },
+  "Campos:": { es: "Campos:" },
+  "Categorias:": { es: "Categorías:" },
+  "Imóveis": { es: "Inmuebles" },
+  "Em branco": { es: "En blanco" },
+  // ─── As mensagens do Zod da receita genérica (o que a tela mostra no 422) ───
+  "Escreva o tipo de post do site.": { es: "Escribe el tipo de entrada del sitio." },
+  "Escreva o nome do campo no site.": { es: "Escribe el nombre del campo en el sitio." },
+  "Escreva o nome da categoria no site.": { es: "Escribe el nombre de la categoría en el sitio." },
+  "Escreva um rótulo para o dado.": { es: "Escribe una etiqueta para el dato." },
+  "O rótulo pode ter no máximo 40 caracteres.": {
+    es: "La etiqueta puede tener como máximo 40 caracteres.",
+  },
+  "Use apenas letras minúsculas, números e underscore na chave, começando por uma letra.": {
+    es: "Usa solo letras minúsculas, números y guion bajo en la clave, empezando por una letra.",
+  },
+  "O filtro de conteúdo só vale para um campo de texto.": {
+    es: "El filtro de contenido solo vale para un campo de texto.",
+  },
+  "O filtro de mínimo ou máximo só vale para um campo numérico ou de preço.": {
+    es: "El filtro de mínimo o máximo solo vale para un campo numérico o de precio.",
+  },
+  "Mapeie pelo menos um campo do site.": { es: "Asigna al menos un campo del sitio." },
+  "Mapeie no máximo 15 campos.": { es: "Asigna como máximo 15 campos." },
+  "Mapeie no máximo 6 categorias.": { es: "Asigna como máximo 6 categorías." },
+  "Cada dado tem uma chave só. Escolha outra chave para um deles.": {
+    es: "Cada dato tiene una sola clave. Elige otra clave para uno de ellos.",
+  },
+  "Esta chave é reservada: a saída da consulta já usa esse nome.": {
+    es: "Esta clave está reservada: la salida de la consulta ya usa ese nombre.",
+  },
+  "Preencha o rótulo e o nome do campo de todos os dados.": {
+    es: "Llena la etiqueta y el nombre del campo de todos los datos.",
+  },
+  "Preencha o rótulo e o nome da categoria de todos os dados.": {
+    es: "Llena la etiqueta y el nombre de la categoría de todos los datos.",
+  },
   // ─── O rótulo do caminho que falhou no 422 das receitas ───
   "Categoria do bairro": { es: "Categoría del barrio" },
   "Categoria da cidade": { es: "Categoría de la ciudad" },
