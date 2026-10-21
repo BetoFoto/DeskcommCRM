@@ -16947,6 +16947,105 @@ export const DICIONARIO: Traducoes = {
   "site com problemas": { es: "sitio con problemas" },
   "sem sinais positivos": { es: "sin señales positivas" },
   "verificação pendente": { es: "verificación pendiente" },
+  "Salve o lead antes de anexar arquivos.": {
+    es: "Guarda el negocio antes de adjuntar archivos.",
+  },
+  "Falha ao subir arquivo.": {
+    es: "Error al subir el archivo.",
+  },
+  "Arquivo anexado com sucesso!": {
+    es: "¡Archivo adjuntado con éxito!",
+  },
+  "{n} arquivos anexados com sucesso!": {
+    es: "¡{n} archivos adjuntados con éxito!",
+  },
+  "Falha ao remover arquivo.": {
+    es: "Error al eliminar el archivo.",
+  },
+  "Arquivo removido.": {
+    es: "Archivo eliminado.",
+  },
+  "Erro ao remover.": {
+    es: "Error al eliminar.",
+  },
+  "arquivo": {
+    es: "archivo",
+  },
+  "arquivos": {
+    es: "archivos",
+  },
+  "Visualizar documento": {
+    es: "Ver documento",
+  },
+  "Abrir em nova aba / Baixar": {
+    es: "Abrir en nueva pestaña / Descargar",
+  },
+  "Remover arquivo": {
+    es: "Eliminar archivo",
+  },
+  "Enviando arquivo(s)…": {
+    es: "Subiendo archivo(s)…",
+  },
+  "Solte os arquivos aqui para enviar": {
+    es: "Suelta los archivos aquí para subirlos",
+  },
+  "Arraste arquivos aqui ou clique para selecionar": {
+    es: "Arrastra archivos aquí o haz clic para seleccionar",
+  },
+  "PDF, PNG, JPG ou WebP (até 50 MB)": {
+    es: "PDF, PNG, JPG o WebP (hasta 50 MB)",
+  },
+  "Baixar arquivo": {
+    es: "Descargar archivo",
+  },
+  "Pré-visualização indisponível para este formato.": {
+    es: "Vista previa no disponible para este formato.",
+  },
+  "Baixar arquivo para visualizar": {
+    es: "Descargar archivo para visualizar",
+  },
+  "Requisição multipart inválida.": {
+    es: "Solicitud multipart no válida.",
+  },
+  "Arquivo não informado.": {
+    es: "Arquivo no informado.",
+  },
+  "O arquivo excede o limite de 50 MB.": {
+    es: "El archivo supera el límite de 50 MB.",
+  },
+  "Formato inválido. Envie PDF ou imagem (PNG, JPG, WebP).": {
+    es: "Formato no válido. Envía PDF o imagen (PNG, JPG, WebP).",
+  },
+  "Falha ao salvar arquivo no armazenamento.": {
+    es: "Error al guardar el archivo en el almacenamiento.",
+  },
+  "Falha ao registrar anexo no banco de dados.": {
+    es: "Error al registrar el archivo adjunto en la base de datos.",
+  },
+  "Falha ao buscar anexos.": {
+    es: "Error al buscar archivos adjuntos.",
+  },
+  "Anexo não encontrado.": {
+    es: "Archivo adjunto no encontrado.",
+  },
+  "Falha ao remover anexo.": {
+    es: "Error al eliminar archivo adjunto.",
+  },
+  "Erro ao gerar link do arquivo.": {
+    es: "Error al generar enlace del archivo.",
+  },
+  "Erro ao buscar negócio.": {
+    es: "Error al buscar negocio.",
+  },
+  "Erro ao buscar anexo.": {
+    es: "Error al buscar el archivo adjunto.",
+  },
+  "Corpo JSON inválido.": {
+    es: "Cuerpo JSON no válido.",
+  },
+  "Parâmetro inválido.": {
+    es: "Parámetro no válido.",
+  },
 };
 
 /**

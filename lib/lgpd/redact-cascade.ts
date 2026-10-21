@@ -200,6 +200,41 @@ export async function cascadeRedactContact(args: CascadeArgs): Promise<CascadeRe
     }
   }
 
+  // ANEXOS DE NEGÓCIOS / LEADS (crm_lead_attachments) — LGPD
+  const { data: leadsDoContato, error: leadsErro } = await admin
+    .from("crm_leads")
+    .select("id")
+    .eq("organization_id", args.organizationId)
+    .eq("contact_id", args.contactId);
+  if (leadsErro) {
+    throw new Error(`[lgpd-redact-cascade] leads do contato não lidos: ${leadsErro.message}`);
+  }
+  const idsDosLeads = (leadsDoContato ?? []).map((l) => l.id);
+  if (idsDosLeads.length > 0) {
+    const { data: anexosDosLeads, error: anexosErro } = await admin
+      .from("crm_lead_attachments")
+      .select("id, storage_path")
+      .eq("organization_id", args.organizationId)
+      .in("lead_id", idsDosLeads);
+    if (anexosErro) {
+      throw new Error(`[lgpd-redact-cascade] anexos dos leads não lidos: ${anexosErro.message}`);
+    }
+    for (const anexo of anexosDosLeads ?? []) {
+      if (!anexo.storage_path) continue;
+      await enfileirarMidiaNaFila(admin, {
+        organizationId: args.organizationId,
+        requestId: args.requestId,
+        bucket: "internal-media",
+        objectPath: anexo.storage_path,
+      });
+    }
+    await admin
+      .from("crm_lead_attachments")
+      .delete()
+      .eq("organization_id", args.organizationId)
+      .in("lead_id", idsDosLeads);
+  }
+
   const { data, error } = await admin.rpc("fn_lgpd_cascade_redact_contact" as never, {
     p_organization_id: args.organizationId,
     p_contact_id: args.contactId,

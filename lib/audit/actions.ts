@@ -1245,6 +1245,9 @@ export const AUDIT_ACTIONS = [
   "agenda.service_refresh",
   "agenda.service_resource",
   "agenda.service_unblock",
+  // Anexos de negócios / leads (#2829): upload e remoção de arquivo em campo customizado
+  "lead.attachment_uploaded",
+  "lead.attachment_deleted",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

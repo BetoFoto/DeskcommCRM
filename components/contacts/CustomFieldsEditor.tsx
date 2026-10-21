@@ -31,6 +31,8 @@ import { cn } from "@/lib/utils";
 import { camposVisiveis, type MostrarQuando } from "@/lib/schemas/mostrar-quando";
 import { mensagemDoCampo } from "@/lib/leads/padrao-do-campo";
 
+import { FileUploadCustomField } from "@/components/kanban/FileUploadCustomField";
+
 export type CustomFieldType =
   | "text"
   | "textarea"
@@ -43,7 +45,8 @@ export type CustomFieldType =
   | "boolean"
   | "email"
   | "phone"
-  | "url";
+  | "url"
+  | "file";
 
 export interface CustomFieldDef {
   key: string;
@@ -75,9 +78,10 @@ interface Props {
   mode: "lead" | "contact";
   disabled?: boolean;
   className?: string;
+  leadId?: string;
 }
 
-export function CustomFieldsEditor({ fields, value, onChange, disabled, className }: Props) {
+export function CustomFieldsEditor({ fields, value, onChange, disabled, className, leadId }: Props) {
   const t = useT();
   const [rascunhosDeMoeda, setRascunhosDeMoeda] = useState<Record<string, string>>({});
   // O rascunho do `searchable_select`: enquanto a pessoa digita, o input mostra
@@ -476,6 +480,19 @@ export function CustomFieldsEditor({ fields, value, onChange, disabled, classNam
                 />
                 <p className="text-xs text-muted-foreground">{t("Formato E.164")}</p>
               </div>
+            );
+          case "file":
+            return (
+              <FileUploadCustomField
+                key={f.key}
+                fieldKey={f.key}
+                label={f.label}
+                required={f.required}
+                leadId={leadId}
+                value={v}
+                onChange={(files) => set(f.key, files)}
+                disabled={disabled}
+              />
             );
           case "url":
             return (
