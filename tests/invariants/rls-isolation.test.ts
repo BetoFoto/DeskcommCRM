@@ -622,7 +622,7 @@ beforeAll(() => {
         -- exige job_id, e um job de verdade nao cabe numa semente que roda
         -- duas vezes. A leitura e org-scoped sem gate de papel -- o agent
         -- semeado e controle positivo legitimo (quem investiga o turno na tela
-        -- e a equipe) --, e a escrita e do motor, coberta pela policy for all.
+        -- e a equipe) --, e a escrita e so do motor: a sessao tem so select.
         if not exists (select 1 from public.agent_turn_traces where organization_id = v_org) then
           insert into public.agent_turn_traces
             (organization_id, preview_run_id, conversation_id, contact_id, is_dry_run, status, messages_sent)
@@ -819,7 +819,8 @@ export const TABLES = [
   // entrega ao vizinho o texto do erro e os ids das fontes de conhecimento do
   // outro. A LEITURA é org-scoped sem gate de papel (o `agent` semeado é
   // controle positivo legítimo: quem investiga o turno é a equipe); a ESCRITA é
-  // do motor, coberta pela policy `for all`.
+  // só do motor, e `authenticated` tem só `select` (o molde da 0692).
+  "agent_turn_traces",
   // ⚠️ `cobranca_assinaturas` (migration 0583) NÃO entra nesta lista, pelo mesmo
   // motivo de `webhook_lead_captures`: a leitura é só do `admin` e o usuário
   // semeado aqui é `agent`, então o controle positivo falharia por ACERTO. A

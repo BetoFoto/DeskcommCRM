@@ -99,15 +99,18 @@ create index if not exists idx_skill_activations_job
   on public.skill_activations (job_id) where job_id is not null;
 
 -- RLS: o traço é da organização e ninguém mais o lê. A leitura é do painel
--- (sessão do usuário, `authenticated`); a escrita é do worker, que passa por
--- fora do RLS — daí `revoke all ... from anon` e nada para `anon` em hipótese
--- alguma: um traço carrega o texto do erro e os ids das fontes de conhecimento.
+-- (sessão do usuário, `authenticated`), por uma policy só de `select`. A
+-- escrita é só do worker, que passa por fora do RLS: por isso `authenticated`
+-- perde o grant de escrita (o molde de `automation_rodizio_atribuicoes`, 0692),
+-- e `anon` não recebe nada em hipótese alguma: um traço carrega o texto do erro
+-- e os ids das fontes de conhecimento.
 alter table public.agent_turn_traces enable row level security;
 
 drop policy if exists tenant_isolation_agent_turn_traces_all on public.agent_turn_traces;
-create policy tenant_isolation_agent_turn_traces_all on public.agent_turn_traces
-  for all
-  using (organization_id in (select * from public.fn_user_org_ids()))
-  with check (organization_id in (select * from public.fn_user_org_ids()));
+drop policy if exists tenant_isolation_agent_turn_traces_select on public.agent_turn_traces;
+create policy tenant_isolation_agent_turn_traces_select on public.agent_turn_traces
+  for select using (organization_id in (select public.fn_user_org_ids()));
 
-revoke all on public.agent_turn_traces from anon;
+revoke all on public.agent_turn_traces from anon, authenticated;
+grant select on public.agent_turn_traces to authenticated;
+grant all on public.agent_turn_traces to service_role;

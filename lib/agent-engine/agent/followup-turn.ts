@@ -55,7 +55,7 @@ import { loadChannelKnobs } from '../pacing/store';
 import {
   JobSettledError,
   ritualBlocks,
-  runAgentTurnComTraco,
+  runAgentTurn,
   type InboundTurnDeps,
   type LeadCheckpointRow,
 } from './inbound-turn';
@@ -632,7 +632,7 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
       return;
     }
 
-    await runAgentTurnComTraco(deps, job, pool, ctx, {
+    await runAgentTurn(deps, job, pool, ctx, {
       channelSessionId: target.channelSessionId,
       conversationId: target.conversationId,
       buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta }) => {
@@ -806,7 +806,7 @@ async function runFlowDrivenTurn(
       });
       return;
     }
-    await runAgentTurnComTraco(deps, job, pool, ctx, {
+    await runAgentTurn(deps, job, pool, ctx, {
       channelSessionId: target.channelSessionId,
       conversationId: target.conversationId,
       buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta }) => {
