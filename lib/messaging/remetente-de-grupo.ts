@@ -28,8 +28,12 @@ export type RemetenteDeGrupo = z.infer<typeof remetenteDeGrupoSchema>;
  * (`LeadContextMessage.sender`) não o carrega. Exigir o `lid` aqui estreitava o
  * parâmetro sem motivo e obrigava o chamador a inventar um valor que não existe
  * no contexto.
+ *
+ * O registro COMPLETO (com `lid`) continua aceito: quem tem o dado de produção
+ * na mão passa como veio, sem recortar campo. Duas formas de chamar, um só
+ * rótulo — as duas foram medidas.
  */
-export type RemetenteRotulavel = Pick<RemetenteDeGrupo, "name" | "phone">;
+export type RemetenteRotulavel = Pick<RemetenteDeGrupo, "name" | "phone"> | RemetenteDeGrupo;
 
 export function lerRemetenteDeGrupo(metadata: unknown): RemetenteDeGrupo | null {
   if (!metadata || typeof metadata !== "object") return null;
