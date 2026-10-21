@@ -164,13 +164,14 @@ export type OpenCaseResult =
  * não nasce linha em `entregas_de_aviso_de_caso` — a única superfície desta
  * feature que avisa alguém. O cliente ficava esperando quem nunca foi chamado.
  *
- * A frase diz o que É verdade (o pedido ficou registrado no caso que a equipe já
- * acompanha) e não promete aviso novo, prazo, nem que uma pessoa vai responder
- * por causa dele.
+ * A frase diz só o que é verdade em QUALQUER caso: o pedido foi anotado na
+ * conversa. Ela não afirma o registro no caso aberto, porque o agente só consegue
+ * registrar quando tem a ferramenta `crm_add_case_note`; sem ela, a frase ainda
+ * seria verdadeira. Também não promete aviso novo, prazo, nem que uma pessoa vai
+ * responder por causa dele.
  */
 export const FRASE_AO_CLIENTE_EM_PEDIDO_SOBRE_CASO_ABERTO =
-  'anotei seu pedido aqui no atendimento, e ele fica registrado no caso que já está aberto com a nossa equipe; ' +
-  'por enquanto não consigo te dar um prazo.';
+  'anotei seu pedido aqui na nossa conversa; por enquanto não consigo te dar um prazo.';
 
 /**
  * A RECUSA da guarda de caso aberto — com a instrução que impede a promessa.
@@ -194,9 +195,13 @@ export const FRASE_AO_CLIENTE_EM_PEDIDO_SOBRE_CASO_ABERTO =
  * ouvir — para a mensagem ao cliente mudar junto, sem depender de o modelo
  * adivinhar o que é honesto dizer.
  *
- * O registro do pedido novo no caso aberto (`registrarNotaDoAgente`) é o destino
- * certo: a nota entra na linha do tempo que quem continuar o caso vai ler. O que
- * não pode é o cliente ouvir que alguém foi ACIONADO.
+ * O registro do pedido novo no caso aberto é o destino certo quando o agente tem
+ * a ferramenta `crm_add_case_note`: a nota entra na linha do tempo que quem
+ * continuar o caso vai ler. A recusa não traz o `case_id`, e a única ferramenta
+ * nativa que o recebe (`provide_case_update`, no caso `awaiting_lead`) trataria o
+ * pedido novo como a resposta que o caso esperava; por isso a instrução veta esse
+ * uso. O registro é condicional, e a frase ao cliente só afirma o registro se ele
+ * aconteceu. O que não pode é o cliente ouvir que alguém foi ACIONADO.
  *
  * Pura e exportada de propósito: é o texto exato que o modelo lê no resultado da
  * tool `open_human_case` (o caminho `if (!res.ok) return res`), e é ele que o
@@ -208,12 +213,14 @@ export function recusaDeCasoAberto(): OpenCaseResult {
     error: {
       code: 'case_already_open',
       message:
-        'já existe um caso humano aberto para esta conversa, e ele é de outro assunto: a equipe NÃO foi avisada ' +
-        'deste pedido novo — nada novo saiu para ninguém agora. NÃO diga ao cliente que a equipe foi acionada, ' +
-        'avisada ou que o pedido foi encaminhado, e não prometa prazo nem que alguém vai responder por causa ' +
-        'dele. Registre o pedido novo NO CASO ABERTO (a nota entra na linha do tempo que quem continuar o caso ' +
-        `vai ler) e responda ao cliente apenas neste espírito: "${FRASE_AO_CLIENTE_EM_PEDIDO_SOBRE_CASO_ABERTO}" ` +
-        'Aguarde a resposta do atendente antes de abrir outro caso.',
+        'já existe um caso humano aberto para esta conversa: a equipe NÃO foi avisada deste pedido novo, e ' +
+        'nada novo saiu para ninguém agora. NÃO diga ao cliente que a equipe foi acionada, avisada ou que o ' +
+        'pedido foi encaminhado, e não prometa prazo nem que alguém vai responder por causa dele. Se você ' +
+        'tiver a ferramenta crm_add_case_note, registre o pedido novo no caso aberto (a nota entra na linha do ' +
+        'tempo que quem continuar o caso vai ler). NÃO use provide_case_update para isso: ela é só para a ' +
+        'informação que o caso pediu ao cliente. Só diga ao cliente que o pedido ficou registrado no caso se ' +
+        'você registrou de fato. Responda ao cliente apenas neste espírito: ' +
+        `"${FRASE_AO_CLIENTE_EM_PEDIDO_SOBRE_CASO_ABERTO}" Aguarde a resposta do atendente antes de abrir outro caso.`,
     },
   };
 }

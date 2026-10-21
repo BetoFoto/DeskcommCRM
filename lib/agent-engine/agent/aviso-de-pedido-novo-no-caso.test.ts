@@ -241,10 +241,18 @@ describe("pedido novo num caso já aberto (#3097)", () => {
     // A proibição da promessa que o relato flagrou.
     expect(instrucao).toContain("NÃO diga ao cliente que a equipe foi acionada");
     expect(instrucao).toContain("não prometa prazo");
-    // E o que fazer no lugar: registrar no caso aberto — e a frase ao cliente,
-    // que muda junto (é ela que o modelo manda).
-    expect(instrucao).toContain("Registre o pedido novo NO CASO ABERTO");
+    // A guarda recusa QUALQUER caso aberto da conversa, sem comparar assunto:
+    // afirmar "outro assunto" seria falso quando o cliente insiste no mesmo.
+    expect(instrucao).not.toContain("outro assunto");
+    // E o que fazer no lugar: registrar no caso aberto SÓ com a ferramenta que
+    // registra de fato, vetando o desvio pela provide_case_update — e a frase ao
+    // cliente, que muda junto (é ela que o modelo manda).
+    expect(instrucao).toContain("Se você tiver a ferramenta crm_add_case_note");
+    expect(instrucao).toContain("NÃO use provide_case_update");
+    expect(instrucao).toContain("Só diga ao cliente que o pedido ficou registrado no caso se você registrou de fato");
     expect(instrucao).toContain(FRASE_AO_CLIENTE_EM_PEDIDO_SOBRE_CASO_ABERTO);
+    // A frase precisa ser verdadeira mesmo quando o registro NÃO aconteceu.
+    expect(FRASE_AO_CLIENTE_EM_PEDIDO_SOBRE_CASO_ABERTO).not.toContain("registrado no caso");
   });
 
   it("controle — o primeiro pedido continua igual: sem caso aberto, o caso abre, e nada carrega instrução", async () => {
