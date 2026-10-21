@@ -7,7 +7,8 @@
  *  - bairro e cidade são CATEGORIAS (taxonomia hierárquica `localizacao`:
  *    Sorocaba › Centro, Campolim, Jardim; Votorantim › Centro) — não campos;
  *  - `tipo_imovel` (Casa, Apartamento) e `finalidade` (Venda, Aluguel) também
- *    são categorias;
+ *    são categorias — mais um termo "Venda e Aluguel", o que um site usa para
+ *    o imóvel que serve para os dois;
  *  - o preço, o aluguel, os quartos e a situação são CAMPOS (meta_key);
  *  - há imóvel só de ALUGUEL (sem preço de venda) e imóvel VENDIDO;
  *  - os imóveis existem nos DOIS formatos: ACF (meta + par `_campo`) e
@@ -99,6 +100,9 @@ const TERMOS: { nome: string; slug: string; taxonomia: string; pai?: string }[] 
   { nome: "Apartamento", slug: "apartamento", taxonomia: "tipo_imovel" },
   { nome: "Venda", slug: "venda", taxonomia: "finalidade" },
   { nome: "Aluguel", slug: "aluguel", taxonomia: "finalidade" },
+  // O termo que serve para os DOIS: com o filtro por pedaço de texto, ele
+  // casava com "venda" e com "aluguel" ao mesmo tempo.
+  { nome: "Venda e Aluguel", slug: "venda-e-aluguel", taxonomia: "finalidade" },
 ];
 
 /**
@@ -222,6 +226,22 @@ const IMOVEIS: {
     acf: false,
     metas: { codigo: "IM-JET-001", preco: "300000", quartos: "2", area: "90", situacao: "disponivel" },
     termos: ["sorocaba-centro", "sorocaba", "casa", "venda"],
+  },
+  {
+    // O imóvel com o termo "Venda e Aluguel" (e só ele): a finalidade "venda"
+    // e a finalidade "aluguel" NÃO podem trazê-lo — o termo não é nenhum dos
+    // dois. Com o filtro por pedaço de texto, ele vinha nos dois.
+    titulo: "Loja Mista",
+    acf: true,
+    metas: { codigo: "IM-014", preco: "380000", quartos: "1", area: "55", situacao: "disponivel" },
+    termos: ["sorocaba-centro", "sorocaba", "apartamento", "venda-e-aluguel"],
+  },
+  {
+    // O mesmo, MAIS o termo "Aluguel": aqui a finalidade "aluguel" traz.
+    titulo: "Galpão Mista com Aluguel",
+    acf: true,
+    metas: { codigo: "IM-015", aluguel: "4.500,00", quartos: "1", area: "120", situacao: "disponivel" },
+    termos: ["sorocaba-centro", "sorocaba", "apartamento", "venda-e-aluguel", "aluguel"],
   },
 ];
 
@@ -434,6 +454,28 @@ describe("receita acf-imoveis contra MySQL 8 de verdade", () => {
     // A finalidade casa pelo SLUG do termo ("venda"), não só pelo nome.
     const porSlug = await consultar({ finalidade: "venda" }, 20);
     expect(titulos(porSlug)).toContain("Casa Centro Sorocaba");
+  });
+
+  it("a finalidade casa por IGUALDADE: o termo 'Venda e Aluguel' não é 'aluguel'", async () => {
+    const noAluguel = await consultar({ finalidade: "aluguel" }, 20);
+    registrar(
+      "C1-acf-imoveis-finalidade-igualdade",
+      `finalidade 'aluguel' → ${titulos(noAluguel).join(", ")}`,
+    );
+    // O imóvel com o termo "Venda e Aluguel" NÃO entra: o termo não é
+    // "aluguel". Com o filtro por PEDÇO do texto, ele entrava nos dois.
+    expect(titulos(noAluguel)).not.toContain("Loja Mista");
+    // O imóvel que tem o termo "Aluguel" (além do misto) entra.
+    expect(titulos(noAluguel)).toContain("Galpão Mista com Aluguel");
+
+    const naVenda = await consultar({ finalidade: "venda" }, 20);
+    registrar(
+      "C1-acf-imoveis-finalidade-igualdade-venda",
+      `finalidade 'venda' → ${titulos(naVenda).join(", ")}`,
+    );
+    // E o "Venda e Aluguel" também não é "venda".
+    expect(titulos(naVenda)).not.toContain("Loja Mista");
+    expect(titulos(naVenda)).not.toContain("Galpão Mista com Aluguel");
   });
 
   it("nível: o bairro acha o Centro de Sorocaba e o de Votorantim; a cidade, só o dela", async () => {

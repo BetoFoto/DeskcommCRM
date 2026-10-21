@@ -137,36 +137,59 @@ export function subqueryDeTermos(
 }
 
 /**
+ * Como o filtro casa com o termo da categoria.
+ *
+ *  - `contem`: pelo PEDÇO do texto — o bairro "Centro" casa com "centro". É o
+ *    que bairro, cidade e tipo usam: a pessoa digita "asa norte" e o termo
+ *    "Asa Norte" tem que aparecer.
+ *  - `igualdade`: o termo É o valor — a finalidade "venda" casa com o termo de
+ *    nome "Venda" ou de slug "venda", e com NADA mais. Um termo "Venda e
+ *    Aluguel" não é "aluguel": com pedaço de texto, ele casava com os dois e a
+ *    busca por finalidade devolvia imóvel errado.
+ */
+export type ModoDeTermo = "contem" | "igualdade";
+
+/**
  * O FILTRO de uma categoria: `exists (...)` com o mesmo encadeamento.
  *
  * `exists` (e não `join`) porque o filtro NÃO pode multiplicar a linha do
  * imóvel: quem tem dois termos que casam com o filtro continua saindo uma vez.
  *
- * `porSlug` compara também o SLUG do termo: a finalidade costuma ser o termo
- * "venda"/"aluguel", e o slug é exatamente isso — o NOME pode estar escrito
- * "Venda", "Venda de imóveis" ou "Aluguel".
+ * No modo `igualdade` (a finalidade) o termo casa pelo NOME ou pelo SLUG, por
+ * igualdade: o slug é exatamente "venda"/"aluguel" e o nome costuma ser
+ * "Venda"/"Aluguel". No modo `contem` (bairro, cidade e tipo) o nome casa pelo
+ * pedaço do texto, e o slug não entra: o slug é técnico ("sorocaba-centro") e
+ * ninguém digita ele.
  */
 export function clausulaDeTermo(
   ctx: ContextoDeTaxonomia,
   taxonomia: string,
   nivel: NivelDaTaxonomia | undefined,
-  alvo: string,
-  porSlug: boolean,
+  valor: string,
+  modo: ModoDeTermo,
 ): string {
   const { tr, tt, t } = encadeamento(ctx);
   // A ORDEM dos `marcador()` é a ORDEM dos `?` no texto: a taxonomia vem
   // primeiro, depois o nome e por último o slug. Calcular o texto antes de
   // computar os marcadores inverteria a lista de valores.
   const marcaTaxonomia = ctx.marcador(taxonomia);
-  const marcaNome = ctx.marcador(alvo);
-  const marcaSlug = porSlug ? ctx.marcador(alvo) : null;
-  const likeNome = `lower(t.name) like ${marcaNome} escape '!'`;
-  const likeSlug = marcaSlug ? ` or lower(t.slug) like ${marcaSlug} escape '!'` : "";
+  if (modo === "igualdade") {
+    const exato = valor.toLowerCase();
+    const marcaNome = ctx.marcador(exato);
+    const marcaSlug = ctx.marcador(exato);
+    return (
+      `exists (select 1 from ${tr} tr join ${tt} tt on tt.term_taxonomy_id = tr.term_taxonomy_id ` +
+      `join ${t} t on t.term_id = tt.term_id ` +
+      `where tr.object_id = ${ctx.objeto} and tt.taxonomy = ${marcaTaxonomia}${clausulaDeNivel(nivel)} ` +
+      `and (lower(t.name) = ${marcaNome} or lower(t.slug) = ${marcaSlug}))`
+    );
+  }
+  const marcaNome = ctx.marcador(alvoDeLike(valor));
   return (
     `exists (select 1 from ${tr} tr join ${tt} tt on tt.term_taxonomy_id = tr.term_taxonomy_id ` +
     `join ${t} t on t.term_id = tt.term_id ` +
     `where tr.object_id = ${ctx.objeto} and tt.taxonomy = ${marcaTaxonomia}${clausulaDeNivel(nivel)} ` +
-    `and (${likeNome}${likeSlug}))`
+    `and lower(t.name) like ${marcaNome} escape '!')`
   );
 }
 

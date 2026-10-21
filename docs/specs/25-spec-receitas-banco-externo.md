@@ -183,11 +183,11 @@ A fatia R2 (receita `acf-imoveis`) entrega:
 - `lib/external-db/receitas/tipos.ts` — `tabelas` e `colunas` passam a receber os **fixos** (e não o prefixo): a receita precisa saber se HÁ categoria mapeada para liberar as três tabelas de termos — quem não usa categoria não precisa liberá-las
 - `lib/external-db/receitas/registro.ts` + `tipos.ts` — a receita entra no registro (a lista de receitas é derivada do registro; nada é hard-coded no catálogo do MCP)
 - `app/app/integracao-dados/[id]/_components/ReceitasProntas.tsx` — no caminho ACF: "Tipo de post", "Campos do imóvel" (código, preço de venda, aluguel, condomínio, quartos, suítes, banheiros, vagas, área), "Categorias" (bairro, cidade, tipo e finalidade: **categoria**, **campo** ou **não usar**, com o nível da hierarquia) e "Esconder imóveis" (o campo da situação + os valores a esconder). Sem sugestão automática (R5), sem destino de funil (R5), sem foto (R4)
-- `lib/external-db/receitas/instancias.ts` — `validarFixosDaReceita` passou a devolver os motivos do Zod **por campo**, e a rota de gravação os manda no 422: a tela mostra a frase que explica o que falta, em vez de um "Campos inválidos." genérico
+- `lib/external-db/receitas/instancias.ts` — `validarFixosDaReceita` passou a devolver os motivos do Zod **pelo caminho do campo** (`taxonomias.bairro.taxonomia`, `situacao.campo`), e a rota de gravação os manda no 422: a tela mostra o rótulo legível do caminho ("Categoria do bairro", "Campo da situação") e a frase que explica o que falta, em vez de um "Campos inválidos." genérico
 - `lib/i18n/dicionario.ts` — entradas em espanhol dos textos novos de tela
 - `docs/architecture/banco-de-dados-externo.architecture.json` — a peça nova (`taxonomia.ts`) entra com ≥2 arestas
 - `.changes/banco-externo-receitas-acf-imoveis.md` — `impacto: capacidade_nova`, `secao: adicionado`
-- Testes: `acf-imoveis.unit.test.ts` (SQL montado nos três formatos (só campos, só categoria, misto), Zod dos fixos e da busca, alvos de tipo/categoria, guardas de foto e de tabela liberada), `preco.unit.test.ts` (forma do CASE do preço) e `tests/mysql/receita-acf-imoveis.test.ts` (MySQL 8 de verdade: seed de uma imobiliária pequena com as três tabelas de categoria, nos DOIS formatos — ACF com o par `_campo` e JetEngine no modo padrão com outro `post_type`)
+- Testes: `acf-imoveis.unit.test.ts` (SQL montado nos três formatos (só campos, só categoria, misto), Zod dos fixos e da busca, alvos de tipo/categoria, a finalidade por igualdade, guardas de foto e de tabela liberada), `instancias.unit.test.ts` (o motivo do Zod pelo caminho inteiro do campo), `preco.unit.test.ts` (forma do CASE do preço) e `tests/mysql/receita-acf-imoveis.test.ts` (MySQL 8 de verdade: seed de uma imobiliária pequena com as três tabelas de categoria, nos DOIS formatos — ACF com o par `_campo` e JetEngine no modo padrão com outro `post_type`)
 - Spec 25: esta seção e a medição C1 abaixo
 
 ### A decisão do dono (21/10/2026): a CATEGORIA entra na R2
@@ -232,7 +232,7 @@ Regras do Zod, com mensagem legível em português:
 
 **Busca (o agente)** — `.strict()`: `bairro?`, `cidade?`, `tipo?` (texto ≤60), `finalidade?` ("venda" | "aluguel"), `quartos_min?`, `vagas_min?` (0..20), `preco_max?`, `aluguel_max?` (≥0), `limite` (1..5; o teto continua 5).
 
-**O SQL.** `from posts p` + **LEFT JOIN** por `meta_key` mapeado (nenhum JOIN obrigatório — é o que faz o imóvel só de aluguel aparecer). A CATEGORIA entra por subconsulta escalar na SAÍDA (`group_concat`) e por `exists` no FILTRO; a finalidade compara o `lower(t.name)` **ou** o `lower(t.slug)` (o slug é "venda"/"aluguel"). O preço e o aluguel usam a conversão robusta (`precoNumero`); quartos e vagas comparam com `CAST(... AS DECIMAL(10,2))`; a situação é um `not exists` sobre o campo da situação com os valores a esconder. Valor SEMPRE por `?`; identificador só por crase.
+**O SQL.** `from posts p` + **LEFT JOIN** por `meta_key` mapeado (nenhum JOIN obrigatório — é o que faz o imóvel só de aluguel aparecer). A CATEGORIA entra por subconsulta escalar na SAÍDA (`group_concat`) e por `exists` no FILTRO; a finalidade compara o `lower(t.name)` **ou** o `lower(t.slug)` por **igualdade** (o slug é "venda"/"aluguel"), e bairro, cidade e tipo comparam pelo **pedaço** do texto. O preço e o aluguel usam a conversão robusta (`precoNumero`); quartos e vagas comparam com `CAST(... AS DECIMAL(10,2))`; a situação é um `not exists` sobre o campo da situação com os valores a esconder. Valor SEMPRE por `?`; identificador só por crase.
 
 **As tabelas liberadas.** `posts` e `postmeta` sempre; `terms`, `term_taxonomy` e `term_relationships` **só quando há alguma categoria mapeada** — quem não usa categoria não precisa liberá-las.
 
@@ -241,7 +241,7 @@ Regras do Zod, com mensagem legível em português:
 - o filtro de um dado **não mapeado** não se aplica: a busca devolve o que tem, e o mapeamento incompleto é decisão do administrador (o Zod recusa a duplicidade de fonte, não a ausência);
 - `link` vem de `wp_posts.guid`, que o WordPress **não** atualiza quando o site muda de domínio: o link do imóvel continua apontando para o domínio antigo;
 - `meta_key` repetido no mesmo post (base migrada) **repete o imóvel** na lista: a receita faz uma junção por campo e não deduplica o post;
-- a finalidade por categoria casa por **substring** do nome ou do slug: um termo chamado "Locação" não casa com "aluguel".
+- a finalidade por categoria casa por **igualdade** do nome ou do slug: o termo tem de se chamar exatamente "Venda"/"Aluguel" (ou ter o slug "venda"/"aluguel"). Um termo "Venda e Aluguel" **não** é "venda" nem "aluguel" — e um termo "Locação" também não. É de propósito: casar por pedaço de texto fazia o termo "Venda e Aluguel" entrar nas duas buscas, e o cliente recebia imóvel de finalidade errada.
 
 > **C1 (ACF) medido em 21/10/2026** contra WordPress 6.x + **ACF 6.8.10 (gratuito)** + MySQL **8.0.45**,
 > tipo de post `imovel` e campos criados pela API do próprio ACF (`acf_import_post_type`,
@@ -269,8 +269,9 @@ Regras do Zod, com mensagem legível em português:
 > (`wp_terms`, `wp_term_taxonomy`, `wp_term_relationships`) com a taxonomia `localizacao` hierárquica
 > (Sorocaba › Centro; Votorantim › Centro). Com o bairro e a cidade lidos de CATEGORY, a receita acha o
 > imóvel pelo bairro (`exists` sobre `term_relationships`), pelo nível (bairro = termo que tem termo
-> acima; cidade = termo que não tem), e pela finalidade (nome **ou** slug do termo). O imóvel com DOIS
-> termos na mesma taxonomia sai **uma** vez, com os dois nomes na mesma célula (`group_concat`).
+> acima; cidade = termo que não tem), e pela finalidade (nome **ou** slug do termo — a medição de 21/10
+> casou por pedaço de texto; a entrega casa por **igualdade**, e a diferença está na limitação acima). O
+> imóvel com DOIS termos na mesma taxonomia sai **uma** vez, com os dois nomes na mesma célula (`group_concat`).
 
 O que a R2 **não** traz (e continua nas fatias seguintes): foto/`imagem_url` (R4), JetEngine CCT e tabela
 direta (R3), ida ao funil e sugestão automática de campos (R5), runbook do leigo (R6).

@@ -425,17 +425,25 @@ export const RECEITA_ACF_IMOVEIS: DefinicaoDeReceita = {
      * Quando o dado é CAMPO, é o LIKE de sempre.
      * Quando o dado não foi mapeado, o filtro NÃO se aplica: a busca devolve
      * o que tem, e a receita avisa isso na descrição.
+     *
+     * A FINALIDADE casa por IGUALDADE (o termo é "venda" ou "aluguel", e nada
+     * mais); bairro, cidade e tipo casam pelo PEDÇO do texto.
      */
     const filtroDoDado = (dado: DadoDeCategoria, valor: string | undefined): string | null => {
       if (!valor) return null;
-      const alvo = alvoDeLike(valor);
       const categoria = categoriaDe(dado);
       if (categoria) {
-        return clausulaDeTermo(ctx, categoria.taxonomia, categoria.nivel, alvo, dado === "finalidade");
+        return clausulaDeTermo(
+          ctx,
+          categoria.taxonomia,
+          categoria.nivel,
+          valor,
+          dado === "finalidade" ? "igualdade" : "contem",
+        );
       }
       const alias = aliasDe(dado);
       if (!alias) return null;
-      return `lower(${alias}.meta_value) like ${marcador(alvo)} escape '!'`;
+      return `lower(${alias}.meta_value) like ${marcador(alvoDeLike(valor))} escape '!'`;
     };
 
     const filtroBairro = filtroDoDado("bairro", b.bairro);

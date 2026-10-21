@@ -11,6 +11,8 @@
  *    term_relationships) — e só as libera quando há categoria mapeada;
  *  - sai com `group_concat` (um imóvel com dois termos sai UMA vez);
  *  - filtra por categoria com `exists` (e pelo nível: filho/raiz);
+ *  - a finalidade casa por IGUALDADE (o termo É "venda"/"aluguel"), enquanto
+ *    bairro, cidade e tipo casam pelo pedaço do texto;
  *  - esconde o imóvel cuja situação está na lista de valores a esconder;
  *  - valida prefixo, post_type, meta_key e slug com regex (Zod recusa inválidos),
  *  - placeholders alinhados com valores na ordem do texto,
@@ -381,12 +383,24 @@ describe("receita acf-imoveis (unit, sem MySQL)", () => {
       );
       expect(sql).toContain("exists (select 1 from");
       expect(sql).toContain("tr.object_id = p.ID");
+      // Bairro e cidade casam pelo PEDÇO do texto (a pessoa digita "centro").
       expect(sql).toContain("lower(t.name) like ? escape '!'");
     });
 
-    it("a finalidade compara o NOME do termo ou o SLUG (o slug é venda/aluguel)", () => {
-      const { sql } = RECEITA_ACF_IMOVEIS.montar(FIXOS_SO_TAXONOMIA, { finalidade: "aluguel" }, 5);
-      expect(sql).toContain("lower(t.name) like ? escape '!' or lower(t.slug) like ? escape '!'");
+    it("a finalidade casa por IGUALDADE (o termo É venda/aluguel, não um pedaço)", () => {
+      const { sql, valores } = RECEITA_ACF_IMOVEIS.montar(
+        FIXOS_SO_TAXONOMIA,
+        { finalidade: "aluguel" },
+        5,
+      );
+      // Igualdade no NOME ou no SLUG: o slug é "venda"/"aluguel" e o nome
+      // costuma ser "Venda"/"Aluguel".
+      expect(sql).toContain("lower(t.name) = ? or lower(t.slug) = ?");
+      // SEM o "%": um termo "Venda e Aluguel" não é "aluguel", e com o LIKE
+      // ele casava com os dois.
+      expect(sql).not.toContain("%aluguel%");
+      expect(valores).toContain("aluguel");
+      expect(sql.split("?").length - 1).toBe(valores.length);
     });
 
     it("o filtro de um dado que é CAMPO é o LIKE de sempre", () => {
