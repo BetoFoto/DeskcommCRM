@@ -1,13 +1,17 @@
 /**
- * O `e2e` (check OBRIGATÓRIO) passou a aceitar `skipped` das partes em DOIS
- * casos declarados, e só:
+ * O `e2e` (check OBRIGATÓRIO) aceita `skipped` das partes em UM caso declarado,
+ * e só:
  *
  *  1. pull_request que não alcança nada que o e2e mede (`e2e-alcance` →
- *     `e2e=nao`, scripts/pr-alcanca-o-e2e.sh);
- *  2. run de head já superado (`e2e-alcance` → `head_velho=sim`, #2449): o
- *     passo inicial comparou o `head.sha` do evento com o head atual do PR e
- *     as partes pularam antes de disputar a vaga no grupo de concorrência —
- *     sem este ramo, o pulo do #2449 seria lido como reprovação pelo agregador.
+ *     `e2e=nao`, scripts/pr-alcanca-o-e2e.sh).
+ *
+ * O caso do run de head já superado (`head_velho=sim`, #2449) era um SEGUNDO
+ * caso declarado e foi REMOVIDO: o check daquele run está num SHA que já não é
+ * o head do PR, então o verde — ou o pulo lido como verde — ali não vale como
+ * medição. O ramo agora REPROVA com mensagem própria, e um rerun a partir do
+ * head atual resolve. Por isso o eixo `HEAD` da matriz abaixo continua: ele
+ * mede que NENHUMA combinação com `head=sim` passa (era a porta por onde o
+ * check obrigatório ficava verde sem ter medido).
  *
  * Toda porta que aceita `skipped` é uma porta por onde um desligamento passa
  * verde (issue #459, gatilho-dos-jobs-de-entrega.test.ts). Por isso o script do
@@ -89,16 +93,11 @@ describe("e2e só aceita o pulo declarado", () => {
         // escreve a saída); se acontecer, só passa com as partes MEDIDAS.
         "nao pull_request vazio success success",
         "nao push vazio success success",
-        // #2449: run de head superado — as partes pularam sem disputar a vaga.
-        // O evento e o alcance não decidem aqui: quem decide é o pulo, e só
-        // o pulo — `head=sim` com partes `success`/`failure` não passa, e
-        // `PORTAO` segue exigindo `success` antes de qualquer porta.
-        "sim pull_request sim success skipped",
-        "sim pull_request nao success skipped",
-        "sim pull_request vazio success skipped",
-        "sim push sim success skipped",
-        "sim push nao success skipped",
-        "sim push vazio success skipped",
+        // #2449: run de head superado NÃO passa em combinação nenhuma — nem
+        // com partes `success` (mediria outro head, não este) nem com partes
+        // `skipped` (o check está num SHA que já não é o head, então o pulo
+        // como verde é o defeito). Aqui ele REPROVA com mensagem própria, e é
+        // a ausência das linhas `sim ...` nesta lista que mede isso.
       ].sort(),
     );
   });

@@ -15,43 +15,52 @@
  * chegada ao grupo e não pela idade do head, e o PR ficou vermelho sem defeito
  * nenhum — testando o head velho.
  *
- * ## As duas metades do conserto, e por que uma não basta
+ * ## As duas direções da issue, e qual ficou
  *
- * (a) a chave da PRIMEIRA tentativa passa a levar `-head-<sha>`: heads
- *     diferentes nunca dividem grupo, então o run de um head superado não
- *     cancela (nem é cancelado pelo) run do head novo;
- * (b) o passo inicial do `e2e-alcance` compara o `head.sha` congelado no
- *     payload do evento com o head ATUAL do PR (API) e entrega
- *     `head_velho=sim` quando o run está velho — e o job das partes, que é
- *     quem pede vaga no grupo, é pulado por essa saída.
+ * (b) FICOU. O passo inicial do `e2e-alcance` compara o `head.sha` congelado no
+ *     payload do evento com o head ATUAL do PR (API) e entrega `head_velho=sim`
+ *     quando o run está velho — e o job das partes, que é quem pede vaga no
+ *     grupo, é pulado por essa saída. Ele resolve o caso medido sozinho: lá os
+ *     dois alcances foram liberados no mesmo segundo, depois do push novo, e o
+ *     run velho teria lido o head novo e pulado as partes ANTES de pedir vaga.
  *
- * Sem (b), (a) só trocava o prejuízo de lugar: o run velho continuaria com
- * grupo (só dele) e gastaria ~20 min de runner à toa. Sem (a), (b) não
- * alcançava o caso medido — o run velho já tinha o `e2e-alcance` decidido
- * ANTES do push novo, estava com as partes na fila do grupo, e nenhum passo
- * daquela altura enxerga o futuro.
+ * (a) NÃO entrou, e a decisão é medida. Pôr `-head-<sha>` na chave da PRIMEIRA
+ *     tentativa faz heads diferentes nunca dividirem grupo, mas o custo medido
+ *     (08 a 10/10/2026) é que, de 77 runs do e2e cancelados em PR, em **72** o
+ *     run seguinte nasceu DEPOIS de o alcance do run velho terminar, com as
+ *     partes já rodando: sem a chave por número do PR esses 72 deixariam de ser
+ *     cancelados pelo push novo e iriam até o fim, 6 partes cada — e o passo (b)
+ *     não alcança esses runs, porque o alcance deles já tinha decidido. Quem
+ *     cancela a rodada superada é o GRUPO, e ele só faz isso com a chave por
+ *     número do PR, como no `ci.yml` e no `perf.yml`. A outra metade da direção
+ *     (manter o SHA e cancelar o run velho pelo passo) não fecha em PR de fork:
+ *     lá o token é só leitura.
+ *
+ * E o agregador `e2e` REPROVA o run de head superado, com mensagem própria: o
+ * check daquele run está num SHA que já não é o head do PR, então o verde ali —
+ * ou o pulo lido como verde — não vale como medição de nada.
  *
  * ## Por que ler o YAML E executar o bash
  *
  * Um workflow não roda em teste unitário (a mesma razão de
  * `e2e-avisa-antes-do-teto.test.ts`). Mas o que dá para prender aqui é o
- * contrato: a chave conter o SHA na primeira tentativa, o passo de comparação
- * existir, ser o PRIMEIRO do job e SAIR (exit 0, sem travar ninguém) em cada
- * um dos caminhos — e para isso o bloco `run:` é EXTRAÍDO do workflow e
- * EXECUTADO com um `gh` de mentira no PATH, no mesmo formato de
- * `guarda-da-release-reconhece-o-corte.test.ts`. Reescrever a regra em
- * TypeScript criaria uma segunda verdade sobre o que o CI faz, e a segunda
- * envelhece sozinha.
+ * contrato: a chave ser a mesma forma do `ci.yml` (PR + reentrada), o passo de
+ * comparação existir, ser o PRIMEIRO do job e SAIR (exit 0, sem travar ninguém)
+ * em cada um dos caminhos, e o agregador reprovar o run velho — e para isso os
+ * blocos `run:` são EXTRAÍDOS do workflow e EXECUTADOS com um `gh` de mentira no
+ * PATH, no mesmo formato de `guarda-da-release-reconhece-o-corte.test.ts`.
+ * Reescrever a regra em TypeScript criaria uma segunda verdade sobre o que o CI
+ * faz, e a segunda envelhece sozinha.
  *
  * ## Vacuidade
  *
- * Todos os casos derrubam quando o mecanismo é REMOVIDO: a extração da chave
- * acha `undefined`, a extração do passo acha índice -1, e a saída
- * `head_velho=` deixa de existir. O que não dá é um destes testes passando
- * num workflow que não tem o conserto — é o caso que mede se eles ainda têm o
- * que guardar.
+ * Todos os casos derrubam quando o mecanismo é REMOVIDO: a extração do passo
+ * acha índice -1, a saída `head_velho=` deixa de existir, e o `exit 1` do ramo
+ * do head superado devolve o verde sem medição (#2449). O que não dá é um
+ * destes testes passando num workflow que não tem o conserto — é o caso que
+ * mede se eles ainda têm o que guardar.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -63,7 +72,7 @@ const CAMINHO = ".github/workflows/e2e.yml";
 const workflow = readFileSync(join(RAIZ, CAMINHO), "utf8");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// (a) A CHAVE DE CONCORRÊNCIA DO JOB `e2e-parte`
+// A CHAVE DE CONCORRÊNCIA DO JOB `e2e-parte` — POR NÚMERO DO PR (#2449)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** A linha `group:` do job que disputa a vaga — recorte pela indentação (sem parser YAML). */
@@ -73,41 +82,13 @@ const GRUPO = (() => {
 })();
 
 /**
- * Os dois segmentos condicionais da chave, na forma em que o Actions os
- * avalia. `.*?` até o `|| '' }}` de cada um: o corpo tem `format('-head-{0}', …)`
- * e um `[^}]*` pararia no meio do `{0}`.
+ * O segmento condicional da REENTRADA, na forma em que o Actions o avalia:
+ * `.*?` até o `|| '' }}` (um `[^}]*` pararia no meio do `{0}` do `format`). O
+ * segmento da primeira tentativa NÃO existe mais — é o que o #2449 decidiu, e o
+ * teste do grupo mede isso.
  */
-const SEGMENTO_PRIMEIRA_TENTATIVA =
-  /\$\{\{ github\.event_name == 'pull_request' && github\.run_attempt == '1' && (.*?) \|\| '' \}\}/.exec(GRUPO)?.[1] ?? "";
 const SEGMENTO_REENTRADA =
   /\$\{\{ github\.event_name == 'pull_request' && github\.run_attempt != '1' && (.*?) \|\| '' \}\}/.exec(GRUPO)?.[1] ?? "";
-
-/** O prefixo resolvido da chave para o PR 2437 — o mesmo prefixo da disputa medida. */
-const BASE = "e2e-e2e-parte1-2437";
-
-/**
- * A chave como o Actions monta, para um tentativa/head dados: o segmento
- * condicional avaliado com `evento=pull_request` coloca o SHA no `{0}` do
- * `format`. Não é uma reimplementação da regra — é a expressão EXTRAÍDA do
- * workflow sendo avaliada; se a forma do YAML mudar, os `expect` de extração
- * derrubam aqui antes de qualquer asserção passar errada.
- */
-function chave(tentativa: number, sha: string): string {
-  const segmento = tentativa === 1 ? SEGMENTO_PRIMEIRA_TENTATIVA : SEGMENTO_REENTRADA;
-  const m = /format\('([^']*)',\s*github\.event\.pull_request\.head\.sha\)/.exec(segmento);
-  if (!m) {
-    throw new Error(
-      `segmento da tentativa ${tentativa} não é mais um format(...) com o head.sha — o helper tem de ser reavaliado; segmento: ${segmento || "(vazio)"}`,
-    );
-  }
-  const formato = m[1] ?? "";
-  if (!formato) {
-    throw new Error(
-      `segmento da tentativa ${tentativa}: o format() saiu sem o placeholder do head.sha — o helper tem de ser reavaliado`,
-    );
-  }
-  return BASE + formato.replace("{0}", sha);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // (b) O PASSO INICIAL QUE COMPARA OS DOIS HEADS E SAI CEDO
@@ -204,41 +185,43 @@ afterAll(() => {
   if (stub) rmSync(stub, { recursive: true, force: true });
 });
 
-describe("a chave da concorrência leva o SHA do head já na primeira tentativa (#2449)", () => {
+/**
+ * A chave como o Actions a monta para o PR 2437 — a MESMA forma que o `ci.yml`
+ * (`verify-parte`) e o `perf.yml` (`build-and-size`) já usavam: o número do PR
+ * no grupo, e o SHA do head SÓ na reentrada. Fixada literal de propósito: o
+ * texto da chave É o contrato de cancelamento da rodada superada, e um
+ * `toContain` deixaria passar de volta o segmento `-head-<sha>` que a direção
+ * (a) do #2449 pedia e a medição recusou.
+ */
+const CHAVE_ESPERADA =
+  "${{ github.workflow }}-e2e-parte${{ matrix.parte }}-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}";
+
+describe("a chave da concorrência é por número do PR — sem o SHA do head (#2449)", () => {
   it("o grupo existe e continua nomeando o PR — guarda de vacuidade", () => {
     expect(GRUPO, "não achei a linha `group:` do job e2e-parte").not.toBe("");
     expect(GRUPO).toContain("github.event.pull_request.number || github.ref");
     expect(SEGMENTO_REENTRADA, "sumiu o segmento de reentrada da chave").not.toBe("");
   });
 
-  it("a PRIMEIRA tentativa tem um segmento condicionado a run_attempt == '1' que cola o head.sha", () => {
-    // Este é o caso que DERRUBA com a chave antiga: lá o SHA só aparecia no
-    // segmento de reentrada (`run_attempt != '1'`), e a primeira tentativa —
-    // exatamente a do run 37491737771 — disputava `e2e-e2e-parte1-2437` sem
-    // SHA nenhum.
-    expect(
-      GRUPO,
-      "a chave da primeira tentativa não leva o SHA do head: dois heads voltam a disputar o mesmo grupo (#2449)",
-    ).toMatch(/github\.run_attempt == '1' && format\(/);
-    expect(SEGMENTO_PRIMEIRA_TENTATIVA, "o segmento da primeira tentativa não referencia o head.sha").toMatch(
-      /github\.event\.pull_request\.head\.sha/,
+  it("a PRIMEIRA tentativa NÃO tem segmento por SHA — a rodada superada tem de continuar sendo cancelada", () => {
+    // Este é o caso que guarda a decisão do #2449. A direção (a) da issue
+    // punha `-head-<sha>` aqui, e ela foi MEDIDA antes de partir: de 77 runs
+    // do e2e cancelados em PR (08 a 10/10/2026), em 72 o run seguinte nasceu
+    // DEPOIS de o alcance do run velho terminar, com as partes já rodando —
+    // com o SHA na chave esses 72 deixariam de ser cancelados pelo push novo,
+    // e o passo (b) não os alcança.
+    expect(GRUPO, "o SHA do head voltou para a chave da primeira tentativa (#2449)").not.toMatch(
+      /github\.run_attempt == '1'/,
     );
+    expect(GRUPO, "a chave carrega um format('-head-…') de novo").not.toMatch(/-head-/);
   });
 
-  it("heads diferentes geram chaves diferentes na primeira tentativa", () => {
-    // O par medido no #2437: ba6a71d70 (velho) × 8321bc06d (novo). Antes do
-    // conserto as duas montavam `e2e-e2e-parte1-2437` e o Actions escolhia
-    // pela ordem de chegada ao grupo.
-    const doVelho = chave(1, "ba6a71d70");
-    const doNovo = chave(1, "8321bc06d");
-    expect(doNovo).toContain("8321bc06d");
-    expect(doVelho).not.toBe(doNovo);
-  });
-
-  it("a reentrada continua com chave própria — rerun não cancela o head atual (#1446)", () => {
-    // A saída da #1446/#1431 não pode se perder no conserto da #2449: o SHA
-    // entrou NA PRIMEIRA tentativa, e a reentrada mantém sufixo próprio.
-    expect(chave(2, "8321bc06d")).not.toBe(chave(1, "8321bc06d"));
+  it("a chave é a mesma forma do ci.yml/perf.yml — PR no grupo, SHA só na reentrada (#1446)", () => {
+    // A reentrada mantém sufixo próprio pela razão medida em d4c2b3f61
+    // (#1446, #1431): rerun e aprovação de `action_required` não cancelam o
+    // head atual de outro commit. O literal pinado também mede que o e2e.yml
+    // deixou de ser o único dos três com uma chave diferente.
+    expect(GRUPO).toBe(CHAVE_ESPERADA);
   });
 });
 
@@ -310,12 +293,92 @@ describe("a saída do passo chega onde decide — sem ela o passo é decoração
     );
   });
 
-  it("o agregador aceita skipped quando o run é de head velho, com mensagem própria", () => {
-    // Sem o ramo, o agregador reprovaria o run velho (partes `skipped` sem
-    // `e2e=nao`) ou — pior — imprimiria a frase do pulo por alcance de PR,
-    // que seria mentira sobre o motivo real.
+  it("o agregador REPROVA o run de head velho, com mensagem própria (#2449)", () => {
+    // O check obrigatório `e2e`, num run de head superado, fica num SHA que já
+    // não é o head do PR: o verde ali — ou o pulo lido como verde — não vale
+    // como medição de nada, e só pesa quando o sinal está errado (o PR entra
+    // com `e2e` satisfeito sem que parte nenhuma tenha rodado). Aqui o script
+    // do agregador é EXECUTADO, não lido: é a execução que devolve o `exit 1`.
     expect(workflow).toContain("HEAD_VELHO: ${{ needs.e2e-alcance.outputs.head_velho }}");
-    expect(workflow).toMatch(/if \[ "\$HEAD_VELHO" = "sim" \]; then\n {12}\[ "\$PARTES" = "skipped" \]/);
-    expect(workflow).toContain("run de head superado");
+
+    const velho = rodarAgregador({
+      EVENTO: "pull_request",
+      PORTAO: "success",
+      ALCANCE: "sim",
+      HEAD_VELHO: "sim",
+      PARTES: "skipped",
+    });
+    expect(
+      velho.rc,
+      `o agregador aceitou o run de head velho (rc=${velho.rc}) — é o verde sem medição que o #2449 fecha. Saída: ${velho.saida}`,
+    ).not.toBe(0);
+    expect(velho.saida, "o agregador reprovou sem dizer POR QUE — o motivo tem de estar no log").toMatch(
+      /head já superado|head superado/,
+    );
+    expect(velho.saida, "a mensagem não diz que o check está num SHA que já não é o head").toMatch(
+      /SHA que já não é o head/,
+    );
+  });
+
+  it("controle positivo: o MESMO script do agregador sai 0 no caminho normal", () => {
+    // Sem este controle, "sempre reprova" satisfaria o caso de cima — e um
+    // agregador que reprova todo PR é pior que o defeito que ele fecha.
+    expect(AGREGADOR, "o recorte do agregador veio vazio — o teste de cima passaria por vacuidade").toContain(
+      "HEAD_VELHO",
+    );
+    const atual = rodarAgregador({
+      EVENTO: "pull_request",
+      PORTAO: "success",
+      ALCANCE: "sim",
+      HEAD_VELHO: "nao",
+      PARTES: "success",
+    });
+    expect(atual.rc, `o agregador reprovou o run do head atual. Saída: ${atual.saida}`).toBe(0);
+
+    // E o único pulo que continua declarado segue aceito (e2e=nao em PR).
+    const naoAlcanca = rodarAgregador({
+      EVENTO: "pull_request",
+      PORTAO: "success",
+      ALCANCE: "nao",
+      HEAD_VELHO: "nao",
+      PARTES: "skipped",
+    });
+    expect(
+      naoAlcanca.rc,
+      `o agregador passou a reprovar o pulo por alcance (e2e=nao), que é declarado. Saída: ${naoAlcanca.saida}`,
+    ).toBe(0);
   });
 });
+
+/** O bloco `run:` do PRIMEIRO passo do job `e2e` — o mesmo recorte de `e2e-so-aceita-pulo-declarado.test.ts`. */
+function scriptDoAgregador(): string {
+  const linhas = workflow.split("\n");
+  const job = linhas.findIndex((l) => l === "  e2e:");
+  expect(job, "o job agregador `e2e` sumiu do workflow").toBeGreaterThan(-1);
+  const run = linhas.findIndex((l, i) => i > job && /^\s+run: \|$/.test(l));
+  expect(run, "o agregador não tem bloco `run: |`").toBeGreaterThan(-1);
+  const indent = (linhas[run + 1] ?? "").match(/^\s*/)![0].length;
+  const corpo: string[] = [];
+  for (const l of linhas.slice(run + 1)) {
+    if (l.trim() && l.match(/^\s*/)![0].length < indent) break;
+    corpo.push(l.slice(indent));
+  }
+  return corpo.join("\n");
+}
+
+const AGREGADOR = scriptDoAgregador();
+
+/**
+ * Roda o script do agregador com os `needs` que o job tem no CI. O script sai
+ * com `exit` próprio, então o código é lido FORA de `if` (`spawnSync`, não um
+ * `if` no bash): dentro da condição o `set -e` do subshell desligaria e a sonda
+ * aceitaria tudo — o falso verde que `e2e-so-aceita-pulo-declarado.test.ts`
+ * documenta em escala.
+ */
+function rodarAgregador(env: Record<string, string>): { rc: number; saida: string } {
+  const r = spawnSync("bash", ["-c", 'eval "$SCRIPT_DO_JOB"'], {
+    encoding: "utf-8",
+    env: { ...process.env, GITHUB_STEP_SUMMARY: "/dev/null", SCRIPT_DO_JOB: AGREGADOR, ...env },
+  });
+  return { rc: r.status ?? -1, saida: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+}
