@@ -232,7 +232,7 @@
       "id": "precoReceita",
       "lane": "nucleo",
       "label": "preco.ts",
-      "sublabel": "converte preço de texto (650.000,00 / 480000) em número no SQL da receita · sem preço vira NULL, nunca 0",
+      "sublabel": "converte preço de texto (650.000,00 / 650,000.00 / 480000) em número no SQL da receita · sem preço vira NULL, nunca 0",
       "type": "lib",
       "dot": "blue"
     },

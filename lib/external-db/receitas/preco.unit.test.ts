@@ -35,9 +35,36 @@ describe("precoNumero", () => {
     expect(sql).not.toMatch(/--|\/\*|#|;/);
   });
 
-  it("mantém os três formatos: vírgula decimal, ponto decimal de 1-2 dígitos, ponto de milhar", () => {
-    expect(sql).toContain("LIKE '%,%'");
-    expect(sql).toContain("REGEXP '[.][0-9]{1,2}$'");
-    expect(sql).toContain("ELSE CAST(REPLACE(");
+  /**
+   * A ORDEM dos ramos é a régua do formato: a vírgula decimal (BR) é
+   * decidida ANTES do ponto decimal (US). Sem esta guarda, trocar os dois
+   * ramos passa — e a leitura do preço americano sai errada.
+   */
+  it("o ramo de vírgula decimal vem ANTES do de ponto decimal", () => {
+    const iVirgula = sql.indexOf("REGEXP ',[0-9]{1,2}$'");
+    const iPonto = sql.indexOf("REGEXP '[.][0-9]{1,2}$'");
+    expect(iVirgula).toBeGreaterThan(-1);
+    expect(iPonto).toBeGreaterThan(-1);
+    expect(iVirgula).toBeLessThan(iPonto);
+  });
+
+  /**
+   * Cada ramo tem a SUA forma — a do decimal brasileiro tira o ponto e troca
+   * a vírgula por ponto, a do decimal americano tira a vírgula e mantém o
+   * ponto, e o resto (só milhar) tira os dois separadores.
+   */
+  it("cada ramo do CASE tem a forma da sua régua (vírgula decimal, ponto decimal, só milhar)", () => {
+    // (b) vírgula decimal (BR): o ponto é milhar e sai, a vírgula vira ponto.
+    expect(sql).toContain(
+      `WHEN ${LIMPO} REGEXP ',[0-9]{1,2}$' THEN CAST(REPLACE(REPLACE(${LIMPO}, '.', ''), ',', '.') AS DECIMAL(10,2))`,
+    );
+    // (c) ponto decimal (US): a vírgula é milhar e sai, o ponto fica.
+    expect(sql).toContain(
+      `WHEN ${LIMPO} REGEXP '[.][0-9]{1,2}$' THEN CAST(REPLACE(${LIMPO}, ',', '') AS DECIMAL(10,2))`,
+    );
+    // (d) só separadores de milhar: os dois saem.
+    expect(sql).toContain(
+      `ELSE CAST(REPLACE(REPLACE(${LIMPO}, '.', ''), ',', '') AS DECIMAL(10,2))`,
+    );
   });
 });

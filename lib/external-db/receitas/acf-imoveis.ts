@@ -88,7 +88,7 @@ export const PARAMETROS_DA_BUSCA_ACF_IMOVEIS = z
     bairro: z.string().max(60).optional(),
     /** Quartos mínimos (0..20). */
     quartos_min: z.number().int().min(0).max(20).optional(),
-    /** Preço máximo (≥ 0). O meta_value pode vir "650.000,00" ou "480000". */
+    /** Preço máximo (≥ 0). O meta_value pode vir "650.000,00", "650,000.00" ou "480000". */
     preco_max: z.number().nonnegative().optional(),
     /** Cidade (só se o campo cidade estiver mapeado). */
     cidade: z.string().max(60).optional(),
@@ -191,7 +191,7 @@ export const RECEITA_ACF_IMOVEIS: DefinicaoDeReceita = {
       );
     }
 
-    // Preço máximo: conversão robusta de "650.000,00" / "480000" para número.
+    // Preço máximo: conversão robusta de "650.000,00" / "650,000.00" / "480000" para número.
     const precoMax = b.preco_max;
     if (precoMax !== undefined) {
       clausulas.push(

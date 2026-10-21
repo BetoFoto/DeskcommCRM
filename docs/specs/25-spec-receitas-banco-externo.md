@@ -177,7 +177,7 @@ Destino: núcleo, dentro do módulo de banco externo, que nasce desligado (revis
 A fatia R2 (receita `acf-imoveis`) entrega:
 
 - `lib/external-db/receitas/acf-imoveis.ts` — receita `acf-imoveis` (JOIN `posts`+`postmeta`, uma junção por campo mapeado; parâmetros fixos `prefixo`/`post_type`/`campos`; parâmetros de busca `bairro`/`quartos_min`/`preco_max`/`cidade`/`limite`; teto = 5). **Sem foto** (a `imagem_url` é a R4, como na R1): a receita não junciona `_thumbnail_id` nem a tabela de anexos.
-- `lib/external-db/receitas/preco.ts` — `precoNumero`: converte o `meta_value` de preço (texto) em número dentro do SQL, sem novo `?` ("650.000,00", "480000", "650000.50", "1.200.000", "R$ 650.000,00"); preço sem nenhum dígito vira NULL, nunca 0
+- `lib/external-db/receitas/preco.ts` — `precoNumero`: converte o `meta_value` de preço (texto) em número dentro do SQL, sem novo `?` ("650.000,00", "650,000.00", "480000", "650000.50", "1.200.000", "R$ 650.000,00"); preço sem nenhum dígito vira NULL, nunca 0
 - `lib/external-db/receitas/sql-mysql.ts` — `quotarIdentificadorMysql` e `escaparLikeMysql` (já existentes desde a R1) reutilizados pela receita do ACF, em vez de cópia local
 - `lib/external-db/receitas/registro.ts` + `tipos.ts` — a receita entra no registro (a lista de receitas é derivada do registro; nada é hard-coded no catálogo do MCP)
 - `app/app/integracao-dados/[id]/_components/ReceitasProntas.tsx` — no caminho ACF, o formulário de "Tipo de post" e o mapeamento de `meta_key` de cada campo (Preço, Quartos, Bairro obrigatórios; Cidade e Área opcionais). Sem sugestão automática (R5), sem destino de funil (R5), sem foto (R4)

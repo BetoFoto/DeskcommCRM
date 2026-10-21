@@ -14,11 +14,14 @@
  *  6. bairro "Centro_ Norte" (underscore LITERAL no valor)
  *  7. bairro "100% Center" (sinal de porcentagem LITERAL no valor)
  *  Mais 1 post de outro tipo (`post`) com os mesmos campos — NUNCA aparece.
+ *  13. publicado, preço "650,000.00" (formato AMERICANO: vírgula = milhar,
+ *      ponto = decimal) — o mesmo valor do item 2 escrito do outro jeito.
  *
  * Casos: bairro (case-insensitive), bairro com `_`/`%` literais (não viram
- * coringa), quartos_min, preco_max (os formatos brasileiro, puro e decimal),
- * limite, rascunho invisível, outro post_type invisível, mapeamento com nomes
- * diferentes (valor/dormitorios), fonte_nao_liberada em modo `list`.
+ * coringa), quartos_min, preco_max (os formatos brasileiro, americano, puro
+ * e decimal), limite, rascunho invisível, outro post_type invisível,
+ * mapeamento com nomes diferentes (valor/dormitorios), fonte_nao_liberada em
+ * modo `list`.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -183,6 +186,17 @@ async function semeiaImoveis(root: Root, banco: string): Promise<void> {
     (extrairLinhas<{ id: number }>(await q(`select LAST_INSERT_ID() as id`))[0] as { id: number })?.id ?? 12,
   );
 
+  // 13. publicado, preço "650,000.00" (formato AMERICANO: vírgula = milhar,
+  // ponto = decimal). O MESMO valor do item 2 escrito do outro jeito: lido
+  // como 650 ele passaria em teto de 1.000 e o imóvel apareceria "de graça".
+  await q(
+    `insert into \`${banco}\`.\`${WP_PREFIXO}posts\` (post_title, post_type, post_status, guid) values ('Apartamento com preço americano', 'imovel', 'publish', 'http://imoveis.exemplo/?p=13')`,
+  );
+  const idAmericano = Number(
+    (extrairLinhas<{ id: number }>(await q(`select LAST_INSERT_ID() as id`))[0] as { id: number })
+      ?.id ?? 13,
+  );
+
   // metas ACF (par meta_key / _meta_key)
   await q(
     `insert into \`${banco}\`.\`${WP_PREFIXO}postmeta\` (post_id, meta_key, meta_value) values
@@ -257,7 +271,13 @@ async function semeiaImoveis(root: Root, banco: string): Promise<void> {
       (${idSobConsulta}, '_quartos', 'quartos_consulta'),
       (${idSobConsulta}, 'quartos', '2'),
       (${idSobConsulta}, '_bairro', 'bairro_consulta'),
-      (${idSobConsulta}, 'bairro', 'Bairro Consulta')`,
+      (${idSobConsulta}, 'bairro', 'Bairro Consulta'),
+      (${idAmericano}, '_preco', 'preco_americano'),
+      (${idAmericano}, 'preco', '650,000.00'),
+      (${idAmericano}, '_quartos', 'quartos_americano'),
+      (${idAmericano}, 'quartos', '2'),
+      (${idAmericano}, '_bairro', 'bairro_americano'),
+      (${idAmericano}, 'bairro', 'Americano')`,
   );
 }
 
@@ -412,6 +432,29 @@ describe("receita acf-imoveis contra MySQL 8 de verdade", () => {
       `preco_max=650001 → ${titulos2.join(", ")}`,
     );
     expect(titulos2).toEqual(["Cobertura com ponto decimal"]); // 650000.50 <= 650001
+  });
+
+  it("preco_max trata o formato americano '650,000.00' como 650000 (não como 650)", async () => {
+    // O bairro isola o imóvel: sem ele, o teto de 5 linhas cortaria a lista
+    // e o teste passaria pelo motivo errado.
+    // preco_max = 1000: NÃO pega o imóvel (650000 > 1000). Com a leitura
+    // errada (650.00) ele entrava e aparecia "de graça".
+    const ate1k = await consultar({ preco_max: 1000, bairro: "Americano" });
+    registrar(
+      "C1-acf-imoveis-preco_max_americano_1k",
+      `preco_max=1000 → ${ate1k.map((l) => l.titulo).join(", ")}`,
+    );
+    expect(ate1k.map((l) => l.titulo)).not.toContain("Apartamento com preço americano");
+
+    // preco_max = 700000: pega o imóvel (650000 <= 700000).
+    const ate700k = await consultar({ preco_max: 700000, bairro: "Americano" });
+    registrar(
+      "C1-acf-imoveis-preco_max_americano_700k",
+      `preco_max=700000 → ${ate700k.map((l) => l.titulo).join(", ")}`,
+    );
+    expect(ate700k.map((l) => l.titulo)).toEqual(["Apartamento com preço americano"]);
+    // A coluna preco devolvida vale 650000 (o MySQL devolve DECIMAL como texto).
+    expect(Number(ate700k[0]!.preco)).toBe(650000);
   });
 
   it("preco_max trata '1.200.000' como 1200000 (pontos milhar, sem vírgula)", async () => {
