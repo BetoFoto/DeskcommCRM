@@ -12,6 +12,10 @@ interface ThreadPosition {
   searching: boolean;
 }
 
+function viewportSize(scroller: HTMLDivElement) {
+  return `${scroller.scrollHeight}:${scroller.clientHeight}:${scroller.clientWidth}`;
+}
+
 /** Follow the previous viewport intention, never a distance measured after a new bubble grew. */
 export function useThreadAutoScroll(position: ThreadPosition) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -20,6 +24,7 @@ export function useThreadAutoScroll(position: ThreadPosition) {
   const following = useRef(true);
   const scrollingToEnd = useRef(false);
   const anchored = useRef(false);
+  const observedSize = useRef<string | null>(null);
   const previous = useRef<ThreadPosition | null>(null);
   const olderAnchor = useRef<{ top: number; height: number; pages: number } | null>(null);
   const [hasNewMessages, setHasNewMessages] = useState(false);
@@ -37,11 +42,16 @@ export function useThreadAutoScroll(position: ThreadPosition) {
     if (!scroller) return;
     const nearEnd = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 120;
     if (nearEnd) {
+      observedSize.current = viewportSize(scroller);
       following.current = true;
       scrollingToEnd.current = false;
       setHasNewMessages(false);
     } else if (!scrollingToEnd.current) {
-      following.current = false;
+      // Reflow can itself emit scroll before ResizeObserver (for example when
+      // a mobile breakpoint wraps the bubbles). It is not a history gesture.
+      const layoutChanged = observedSize.current !== null
+        && observedSize.current !== viewportSize(scroller);
+      if (!following.current || !layoutChanged) following.current = false;
     }
   }, []);
 
@@ -50,6 +60,7 @@ export function useThreadAutoScroll(position: ThreadPosition) {
   const interruptScroll = useCallback(() => {
     scrollingToEnd.current = false;
     const scroller = scrollerRef.current;
+    if (scroller) observedSize.current = viewportSize(scroller);
     following.current = !!scroller
       && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 120;
   }, []);
@@ -83,6 +94,7 @@ export function useThreadAutoScroll(position: ThreadPosition) {
       following.current = true;
       scrollingToEnd.current = false;
       olderAnchor.current = null;
+      observedSize.current = null;
       setHasNewMessages(false);
     }
     const next = { conversationId, ready, itemCount, lastItemKey, lastMessageId, lastMessageIsOwn, pages, searching };
@@ -119,7 +131,9 @@ export function useThreadAutoScroll(position: ThreadPosition) {
   useLayoutEffect(() => {
     const scroller = scrollerRef.current, content = contentRef.current;
     if (!ready || !scroller || !content || typeof ResizeObserver === "undefined") return;
+    observedSize.current = viewportSize(scroller);
     const observer = new ResizeObserver(() => {
+      observedSize.current = viewportSize(scroller);
       if (!following.current || previous.current?.searching) return;
       scroller.scrollTop = scroller.scrollHeight;
     });

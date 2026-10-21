@@ -130,6 +130,13 @@ describe("ChatThread: novas mensagens, histórico e viewport", () => {
     const { scroller, metrics } = mount();metrics.viewport = 240;resize();
     expect(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop).toBe(0);
   });
+  it("o scroll emitido pelo reflow antes do resize não é confundido com leitura do histórico", () => {
+    const { scroller, metrics } = mount();
+    metrics.height += 1500;metrics.viewport = 240;
+    fireEvent.scroll(scroller); // native viewport reflow, no wheel/touch/key gesture
+    resize();
+    expect(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop).toBe(0);
+  });
   it("redimensionar não arranca a leitura do histórico", () => {
     const { scroller, metrics } = mount();readingHistory(scroller, metrics);
     metrics.height += 600;metrics.viewport = 240;resize();expect(metrics.top).toBe(100);
