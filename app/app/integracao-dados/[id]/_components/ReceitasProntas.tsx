@@ -984,11 +984,20 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
               : PREFIXO_PADRAO;
           // Os fixos: o tipo de post e o mapeamento de meta_key por campo (WordPress)
           // ou a tabela, coluna do id, coluna do título e mapeamento de coluna (tabela direta).
-          const fixosInstancia = (inst.fixos as
-            | { post_type?: string; campos?: CampoMapeado[]; categorias?: CategoriaMapeada[] }
-            | { tabela?: string; coluna_id?: string; coluna_titulo?: string; campos?: CampoMapeadoTabelaDireta[] }
-            | undefined) ?? {};
-          const postType = fixosInstancia.post_type ?? "";
+          // As duas formas de fixos são exclusivas; a receita da instância
+          // estreita qual delas prevalece — ler a forma errada devolve undefined.
+          const fixosWordpress = ehWordpress
+            ? ((inst.fixos ?? {}) as { post_type?: string; campos?: CampoMapeado[]; categorias?: CategoriaMapeada[] })
+            : undefined;
+          const fixosTabelaDireta = ehTabelaDireta
+            ? ((inst.fixos ?? {}) as {
+                tabela?: string;
+                coluna_id?: string;
+                coluna_titulo?: string;
+                campos?: CampoMapeadoTabelaDireta[];
+              })
+            : undefined;
+          const postType = fixosWordpress?.post_type ?? "";
           // O editor é a fonte da verdade dos campos em edição; quando ele não
           // está na mão (ex.: recarregou a tela no meio da edição), ele é
           // reconstruído a partir dos "fixos" salvos — um formulário vazio
@@ -1080,7 +1089,7 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                       </Label>
                       <Input
                         id={`${idInputPrefixo}-tabela`}
-                        value={String((fixosInstancia as { tabela?: string }).tabela ?? "")}
+                        value={String(fixosTabelaDireta?.tabela ?? "")}
                         onChange={(e) => {
                           const valor = e.target.value;
                           if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
@@ -1103,7 +1112,7 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                       </Label>
                       <Input
                         id={`${idInputPostType}-coluna-id`}
-                        value={String((fixosInstancia as { coluna_id?: string }).coluna_id ?? "")}
+                        value={String(fixosTabelaDireta?.coluna_id ?? "")}
                         onChange={(e) => {
                           const valor = e.target.value;
                           if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
@@ -1126,9 +1135,7 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                       </Label>
                       <Input
                         id={`${idInputDescricao}-coluna-titulo`}
-                        value={String(
-                          (fixosInstancia as { coluna_titulo?: string }).coluna_titulo ?? "",
-                        )}
+                        value={String(fixosTabelaDireta?.coluna_titulo ?? "")}
                         onChange={(e) => {
                           const valor = e.target.value;
                           if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
@@ -1950,42 +1957,42 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                       {t("Tipo de post:")} <span className="font-mono">{postType}</span>
                     </p>
                   )}
-                  {ehWordpress && (fixosInstancia.campos ?? []).length > 0 && (
+                  {ehWordpress && (fixosWordpress?.campos ?? []).length > 0 && (
                     <p className="text-xs text-muted-foreground">
                       {t("Campos:")}{" "}
                       <span className="font-mono">
-                        {(fixosInstancia.campos ?? []).map((c) => c.rotulo).join(", ")}
+                        {(fixosWordpress?.campos ?? []).map((c) => c.rotulo).join(", ")}
                       </span>
                     </p>
                   )}
-                  {ehWordpress && (fixosInstancia.categorias ?? []).length > 0 && (
+                  {ehWordpress && (fixosWordpress?.categorias ?? []).length > 0 && (
                     <p className="text-xs text-muted-foreground">
                       {t("Categorias:")}{" "}
                       <span className="font-mono">
-                        {(fixosInstancia.categorias ?? []).map((c) => c.rotulo).join(", ")}
+                        {(fixosWordpress?.categorias ?? []).map((c) => c.rotulo).join(", ")}
                       </span>
                     </p>
                   )}
                   {ehTabelaDireta && (
                     <p className="text-xs text-muted-foreground">
-                      {t("Tabela:")} <span className="font-mono">{String((fixosInstancia as { tabela?: string }).tabela ?? "")}</span>
+                      {t("Tabela:")} <span className="font-mono">{String(fixosTabelaDireta?.tabela ?? "")}</span>
                     </p>
                   )}
                   {ehTabelaDireta && (
                     <p className="text-xs text-muted-foreground">
-                      {t("Coluna do id:")} <span className="font-mono">{String((fixosInstancia as { coluna_id?: string }).coluna_id ?? "")}</span>
+                      {t("Coluna do id:")} <span className="font-mono">{String(fixosTabelaDireta?.coluna_id ?? "")}</span>
                     </p>
                   )}
                   {ehTabelaDireta && (
                     <p className="text-xs text-muted-foreground">
-                      {t("Coluna do título:")} <span className="font-mono">{String((fixosInstancia as { coluna_titulo?: string }).coluna_titulo ?? "")}</span>
+                      {t("Coluna do título:")} <span className="font-mono">{String(fixosTabelaDireta?.coluna_titulo ?? "")}</span>
                     </p>
                   )}
-                  {ehTabelaDireta && (fixosInstancia as { campos?: CampoMapeadoTabelaDireta[] }).campos?.length > 0 && (
+                  {ehTabelaDireta && (fixosTabelaDireta?.campos?.length ?? 0) > 0 && (
                     <p className="text-xs text-muted-foreground">
                       {t("Campos:")}{" "}
                       <span className="font-mono">
-                        {(fixosInstancia as { campos?: CampoMapeadoTabelaDireta[] }).campos!.map((c) => c.rotulo).join(", ")}
+                        {(fixosTabelaDireta?.campos ?? []).map((c) => c.rotulo).join(", ")}
                       </span>
                     </p>
                   )}
