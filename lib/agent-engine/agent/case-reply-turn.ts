@@ -22,7 +22,12 @@ import type pg from 'pg';
 import { withFields } from '../obs/logger';
 import type { JobRow } from '../queue/queue';
 import type { LeadContext } from '../edge/crm/get-lead-context';
-import { ritualBlocks, runAgentTurn, type InboundTurnDeps, type LeadCheckpointRow } from './inbound-turn';
+import {
+  ritualBlocks,
+  runAgentTurnComTraco,
+  type InboundTurnDeps,
+  type LeadCheckpointRow,
+} from './inbound-turn';
 import type { LeadStateRow } from './lead-state';
 
 /**
@@ -166,7 +171,7 @@ export function createCaseReplyTurnHandler(deps: InboundTurnDeps) {
       return;
     }
 
-    await runAgentTurn(deps, job, pool, ctx, {
+    await runAgentTurnComTraco(deps, job, pool, ctx, {
       channelSessionId: caseConversation.channelSessionId,
       conversationId: caseConversation.conversationId,
       buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta }) =>
