@@ -549,6 +549,21 @@ export const updateWebhookSourceSchema = createWebhookSourceSchema.partial().ext
    * como antes do #2316, sem a integração poder reescrever edição manual.
    */
   update_existing_lead_on_capture: z.boolean().optional(),
+  /**
+   * A opção do #3101: quando o envio NÃO traz `external_id` e o contato casado
+   * já tem card ABERTO no mesmo funil, ATUALIZAR esse card (campos e etapa) em
+   * vez de abrir outro.
+   *
+   * Só entra no PATCH, como a opção irmã: nasce DESLIGADA por DEFAULT na coluna
+   * (migration 0722), e quem nunca mexer aqui segue exatamente como antes —
+   * cada envio vira um card novo.
+   *
+   * Diferente de `update_existing_lead_on_capture`, NÃO exige assinatura na
+   * fonte: a captação acha o card pelo CONTATO (telefone/e-mail), que é
+   * exatamente o que o formulário HTML público já traz — não é integração entre
+   * sistemas por `external_id`.
+   */
+  reuse_open_lead_on_capture: z.boolean().optional(),
 });
 
 export const createAutomationRuleSchema = z
