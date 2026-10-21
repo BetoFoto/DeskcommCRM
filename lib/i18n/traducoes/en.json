@@ -9322,5 +9322,9 @@
   "Lista de várias escolhas": "Multiple-choice list",
   "Lista pesquisável": "Searchable list",
   "Sim ou não": "Yes or no",
-  "Link (URL)": "Link (URL)"
+  "Link (URL)": "Link (URL)",
+  "Etiquetas de ativação": "Activation tags",
+  "Etiquetas que ativam (opcional)": "Tags that activate it (optional)",
+  "odonto, clínica": "dental, clinic",
+  "Se a conversa ou o contato tiver uma destas etiquetas, a skill entra mesmo sem a palavra-chave.": "If the conversation or the contact has one of these tags, the skill is used even without the keyword."
 }

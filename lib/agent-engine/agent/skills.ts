@@ -49,7 +49,8 @@ export const MAX_SKILL_BODY_LINES = 200;
 export const skillMatcherSchema = z.strictObject({
   any_keywords: z.array(z.string().min(1).max(120)).min(1).max(50),
   probe_keywords: z.array(z.string().min(1).max(120)).max(50).optional(),
-  any_tags: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  // 40 = TAMANHO_MAXIMO_DA_TAG: etiqueta gravada nunca passa disso, então mais longa não casaria nunca.
+  any_tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
 });
 export type SkillMatcher = z.infer<typeof skillMatcherSchema>;
 
