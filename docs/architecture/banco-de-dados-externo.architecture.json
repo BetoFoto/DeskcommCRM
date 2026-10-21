@@ -224,7 +224,7 @@
       "id": "instanciaReceita",
       "lane": "nucleo",
       "label": "receitas/*.ts",
-      "sublabel": "DefinicaoDeReceita, registro, validador, instancias (Zod central)",
+      "sublabel": "DefinicaoDeReceita, registro, validador, instancias (Zod central) · tabelas e colunas saem dos FIXOS (a receita só pede as tabelas de categoria quando há categoria mapeada)",
       "type": "lib",
       "dot": "blue"
     },
@@ -233,6 +233,14 @@
       "lane": "nucleo",
       "label": "preco.ts",
       "sublabel": "converte preço de texto (650.000,00 / 650,000.00 / 480000) em número no SQL da receita · sem preço vira NULL, nunca 0",
+      "type": "lib",
+      "dot": "blue"
+    },
+    {
+      "id": "taxonomiaReceita",
+      "lane": "nucleo",
+      "label": "taxonomia.ts",
+      "sublabel": "as 3 tabelas de categoria do WordPress (terms, term_taxonomy, term_relationships) · saída por group_concat (imóvel com 2 termos sai 1 vez) · filtro por exists · nível filho/raiz",
       "type": "lib",
       "dot": "blue"
     },
@@ -541,6 +549,18 @@
       "from": "precoReceita",
       "to": "instanciaReceita",
       "label": "o CASE entra no SQL da receita (sem novo placeholder)"
+    },
+    {
+      "id": "e63",
+      "from": "instanciaReceita",
+      "to": "taxonomiaReceita",
+      "label": "a receita acf-imoveis lê a categoria do site"
+    },
+    {
+      "id": "e64",
+      "from": "taxonomiaReceita",
+      "to": "instanciaReceita",
+      "label": "a subconsulta (group_concat) e o exists entram no SQL da receita"
     }
   ],
   "cards": [
