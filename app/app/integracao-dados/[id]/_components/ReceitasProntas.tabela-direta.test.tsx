@@ -162,7 +162,7 @@ describe("Receitas prontas — tabela direta", () => {
     // Remove o primeiro.
     await act(async () => {
       fireEvent.click(
-        within(grupos[0]).getByRole("button", { name: /Remover/i }),
+        within(grupos[0]!).getByRole("button", { name: /Remover/i }),
       );
     });
     const gruposDepois = screen.getAllByRole("group", { name: /Campo/ });
@@ -188,7 +188,7 @@ describe("Receitas prontas — tabela direta", () => {
       });
     });
     // Preenche o primeiro campo.
-    const grupo = screen.getAllByRole("group", { name: /Campo/ })[0];
+    const grupo = screen.getAllByRole("group", { name: /Campo/ })[0]!;
     await act(async () => {
       fireEvent.input(within(grupo).getByLabelText("Rótulo"), {
         target: { value: "Preço" },
@@ -250,7 +250,7 @@ describe("Receitas prontas — tabela direta", () => {
         target: { value: "titulo" },
       });
     });
-    const grupo = screen.getAllByRole("group", { name: /Campo/ })[0];
+    const grupo = screen.getAllByRole("group", { name: /Campo/ })[0]!;
     await act(async () => {
       fireEvent.input(within(grupo).getByLabelText("Rótulo"), {
         target: { value: "Bairro" },
