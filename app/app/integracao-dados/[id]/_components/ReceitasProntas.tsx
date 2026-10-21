@@ -46,7 +46,7 @@ import {
 import {
   MODELOS_TABELA_DIRETA,
   camposDoModelo as camposDoModeloTabelaDireta,
-  modeloDe as modeloDeTabelaDireta,
+  modeloTabelaDiretaDe,
 } from "@/lib/external-db/receitas/modelos-tabela-direta";
 import type { InstanciaDeReceita } from "@/lib/external-db/receitas/tipos";
 import type { DefinicaoDeReceita } from "@/lib/external-db/receitas/tipos";
@@ -756,20 +756,17 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
    */
   const aplicarModelo = (id: string) => {
     const ehTabelaDireta = rascunho?.receita === RECEITA_TABELA_DIRETA;
-    const modelo = ehTabelaDireta ? modeloDeTabelaDireta(id) : modeloDe(id);
-    if (!modelo) return;
-    const jaTemConteudo = ehTabelaDireta
-      ? temConteudoTabelaDireta(editorTabelaDireta)
-      : temConteudo(
-          editor,
-          String((rascunho?.fixos as { post_type?: string } | undefined)?.post_type ?? ""),
-        );
-    if (jaTemConteudo && confirmandoModelo !== id) {
-      setConfirmandoModelo(id);
-      return;
-    }
-    setConfirmandoModelo(null);
+    // Cada família tem o seu catálogo: o modelo da tabela direta não se
+    // mistura com o do WordPress (tipos e campos diferentes de propósito).
     if (ehTabelaDireta) {
+      const modelo = modeloTabelaDiretaDe(id);
+      if (!modelo) return;
+      const jaTemConteudo = temConteudoTabelaDireta(editorTabelaDireta);
+      if (jaTemConteudo && confirmandoModelo !== id) {
+        setConfirmandoModelo(id);
+        return;
+      }
+      setConfirmandoModelo(null);
       const campos = camposDoModeloTabelaDireta(modelo).map((c) => ({
         ...c,
         chaveManual: false,
@@ -799,6 +796,17 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
       mudarEditorTabelaDireta(novo);
       return;
     }
+    const modelo = modeloDe(id);
+    if (!modelo) return;
+    const jaTemConteudo = temConteudo(
+      editor,
+      String((rascunho?.fixos as { post_type?: string } | undefined)?.post_type ?? ""),
+    );
+    if (jaTemConteudo && confirmandoModelo !== id) {
+      setConfirmandoModelo(id);
+      return;
+    }
+    setConfirmandoModelo(null);
     const postTypeAtual = String(
       (rascunho?.fixos as { post_type?: string } | undefined)?.post_type ?? "",
     );

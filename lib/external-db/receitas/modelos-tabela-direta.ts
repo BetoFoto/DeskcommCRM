@@ -113,8 +113,8 @@ export const MODELOS_TABELA_DIRETA: readonly ModeloDeReceitaTabelaDireta[] = [
   MODELO_EM_BRANCO,
 ];
 
-/** O modelo pelo id, ou undefined. */
-export function modeloDe(id: string): ModeloDeReceitaTabelaDireta | undefined {
+/** O modelo da tabela direta pelo id, ou undefined. */
+export function modeloTabelaDiretaDe(id: string): ModeloDeReceitaTabelaDireta | undefined {
   return MODELOS_TABELA_DIRETA.find((m) => m.id === id);
 }
 
