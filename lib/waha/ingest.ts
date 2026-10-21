@@ -165,8 +165,13 @@ async function ehEcoDeEnvioNosso(
   // As formas que o id desta mensagem pode ter no banco: o composto que o webhook
   // entregou e a cauda que o envio grava (`marcarEnviada` → `canonicalExternalId`).
   // Mesmo par que a re-checagem pós-insert usa, algumas linhas acima.
-  const bare = bareWaMessageId(p.id);
-  const idsDaMensagem = bare === p.id ? [p.id] : [p.id, bare];
+  //
+  // Payload sem id (não é o caso deste caminho — `fromMe` traz o composto, e a
+  // re-checagem acima já depende disso) não casa ninguém: a lista fica vazia e a
+  // MARCA 2 não dispara.
+  const idDoEco = p.id ?? null;
+  const caudaDoEco = idDoEco === null ? null : bareWaMessageId(idDoEco);
+  const idsDaMensagem = idDoEco === null ? [] : caudaDoEco === idDoEco ? [idDoEco] : [idDoEco, caudaDoEco];
 
   for (const linha of data ?? []) {
     const l = linha as {
