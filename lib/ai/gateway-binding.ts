@@ -41,7 +41,27 @@ export interface ModeloResolvido {
   /** Para o log: qual modelo e de onde veio a decisão. */
   modelId: string;
   origem: "binding" | "credencial_da_organizacao" | "padrao";
+  /**
+   * O provedor EFETIVO do endereço desta chamada — o do binding quando há um,
+   * senão o da credencial ou do padrão que atendeu o ponto.
+   *
+   * Existe para quem chama pelo gateway ENTREGAR este valor ao log de invocação
+   * (issue #3098). Antes, quem logava só tinha o id do modelo, e o palpite por
+   * barra de `providerDoModelo` carimbava `openrouter` numa chamada ao provedor
+   * personalizado da empresa (`qwen/qwen3.8-27b` no Groq) — a divisão de custo
+   * por provedor ficava errada e a instalação parecia usar um provedor que ela
+   * tinha decidido não usar. É o MESMO valor que vai para o log estruturado da
+   * resolução (`logarResolucaoDeModelo`), e é `""` quando nem o binding nem a
+   * organização disseram de quem é o endereço.
+   */
+  provider: string;
 }
+
+/**
+ * O que os degraus internos montam antes de o provedor ser anexado: só
+ * `devolver` sabe o provedor do endereço, e é dele que o par sai completo.
+ */
+type ResolucaoSemProvedor = Omit<ModeloResolvido, "provider">;
 
 /**
  * Resolve o modelo de um ponto, honrando o painel quando há binding.
@@ -89,7 +109,7 @@ export async function resolverModeloDoPonto(
   const providerEfetivo = binding !== null ? binding.provider : daOrg?.provider ?? null;
 
   const devolver = (
-    resolvido: ModeloResolvido | null,
+    resolvido: ResolucaoSemProvedor | null,
     provider: string,
     model: string,
     origem: string,
@@ -106,7 +126,13 @@ export async function resolverModeloDoPonto(
       origem,
       motivo,
     });
-    return resolvido;
+    // O provedor EFETIVO entra aqui, e não em cada degrau (#3098): é o MESMO
+    // valor que acabou de ir para o log da resolução, que é o que o worker
+    // confirma ao operador ("provider: custom, origem_da_configuracao: binding").
+    // Quem chama pelo gateway entrega este campo ao log de invocação, e é ele
+    // que impede `llm_calls` de carimbar `openrouter` numa chamada ao provedor
+    // personalizado cujo id de modelo tem barra.
+    return resolvido === null ? null : { ...resolvido, provider };
   };
 
   // ── O DEFAULT DO PRODUTO NÃO CRUZA PROVEDOR ─────────────────────────────
@@ -547,7 +573,7 @@ async function padraoDaOrganizacao(
   organizationId: string,
   daOrg: { provider: string; apiKey: string | null } | null,
   purpose: string,
-): Promise<ModeloResolvido | null> {
+): Promise<ResolucaoSemProvedor | null> {
   const llm = await llmDaOrganizacao(organizationId);
   if (llm === null || llm.defaultModel === null) return null;
   const defaultModel = await modeloDoProvedor(organizationId, llm.provider, llm.defaultModel);
