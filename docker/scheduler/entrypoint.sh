@@ -103,7 +103,7 @@ CRONS="
 */10 * * * *|60|api/v1/cron/contact-names
 # O HISTÓRICO DO WHATSAPP (#999). A cada minuto: a importação anda em rodadas
 # curtas (3 conversas OU 300 mensagens OU 20 chamadas ao canal) e quem pediu
-# está olhando o andamento. Barato quando não há importação `rodando`: uma
+# está olhando o andamento. Barato quando não há importação rodando: uma
 # leitura e nada mais. A rota trava cada importação antes de rodar, então uma
 # rodada lenta que passe do minuto não roda em dobro.
 * * * * *|60|api/v1/cron/historico-import

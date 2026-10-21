@@ -109,7 +109,7 @@ export async function calcularPrevia(
   // 1. A lista de conversas inteira (ou até o teto).
   const naJanela: string[] = [];
   for (let offset = 0; ; ) {
-    if (!cabe()) return r;
+    if (!cabe()) break;
     chamadas += 1;
     const pagina = await canal.paginaDeConversas(nomeNoCanal, { limit: PAGINA_DE_CONVERSAS, offset });
     if (pagina.lidas === 0) break;
@@ -118,7 +118,9 @@ export async function calcularPrevia(
     }
     offset += pagina.lidas;
   }
+  // Conta ANTES de sair pelo teto: lista cortada ainda é "pelo menos N".
   r.conversas = naJanela.length;
+  if (r.parcial) return r;
 
   // 2. Mensagens, com o que sobrou do teto.
   for (const chatId of naJanela) {

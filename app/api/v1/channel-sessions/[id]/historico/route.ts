@@ -6,7 +6,7 @@ import { audit } from "@/lib/audit";
 import type { AuditAction } from "@/lib/audit/actions";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { calcularPrevia, lerSessaoDoHistorico } from "@/lib/channels/historico/previa";
+import { calcularPrevia, lerSessaoDoHistorico, type SessaoDoHistorico } from "@/lib/channels/historico/previa";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -37,6 +37,23 @@ type Context = { params: Promise<{ id: string }> };
 const TABELA = "importacoes_de_historico";
 const ACERVO_DESLIGADO = "Ligue 'Guardar o histórico' e conecte o número de novo";
 
+/** A sessão da org, ou a resposta de erro (404 sem sessão, 500 se o banco falhou). */
+async function sessaoOuFalha(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  id: string,
+  requestId: string,
+): Promise<{ sessao: SessaoDoHistorico } | { resposta: Response }> {
+  try {
+    const sessao = await lerSessaoDoHistorico(admin, orgId, id);
+    if (!sessao) return { resposta: fail("not_found", "Canal não encontrado.", 404, { requestId }) };
+    return { sessao };
+  } catch (err) {
+    logger.error("[historico] leitura da sessão falhou", { requestId, detail: err instanceof Error ? err.message : "erro" });
+    return { resposta: fail("internal_error", "Não foi possível ler o canal.", 500, { requestId }) };
+  }
+}
+
 const corpo = z.discriminatedUnion("acao", [
   z.object({ acao: z.literal("previa"), dias: z.union([z.literal(30), z.literal(90), z.literal(365)]) }),
   z.object({ acao: z.literal("importar"), importacaoId: z.uuid() }),
@@ -58,8 +75,9 @@ export async function GET(_req: NextRequest, { params }: Context): Promise<Respo
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) return fail("validation_failed", "Canal inválido.", 422, { requestId });
   const admin = createAdminClient();
-  const sessao = await lerSessaoDoHistorico(admin, auth.org.orgId, id);
-  if (!sessao) return fail("not_found", "Canal não encontrado.", 404, { requestId });
+  const lida = await sessaoOuFalha(admin, auth.org.orgId, id, requestId);
+  if ("resposta" in lida) return lida.resposta;
+  const { sessao } = lida;
   const { data, error } = await admin
     .from(TABELA)
     .select("*")
@@ -85,8 +103,9 @@ export async function POST(req: NextRequest, { params }: Context): Promise<Respo
 
   const orgId = auth.org.orgId;
   const admin = createAdminClient();
-  const sessao = await lerSessaoDoHistorico(admin, orgId, id);
-  if (!sessao) return fail("not_found", "Canal não encontrado.", 404, { requestId });
+  const lida = await sessaoOuFalha(admin, orgId, id, requestId);
+  if ("resposta" in lida) return lida.resposta;
+  const { sessao } = lida;
   const auditar = (action: AuditAction, metadata: Record<string, unknown>) =>
     void audit({
       action,

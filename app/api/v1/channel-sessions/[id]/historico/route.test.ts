@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
 import { fail } from "@/lib/api/wrappers";
+import { requireSupportWrite } from "@/lib/impersonate/support";
 import { calcularPrevia, lerSessaoDoHistorico } from "@/lib/channels/historico/previa";
 import { GET, POST } from "./route";
 
@@ -12,6 +13,7 @@ vi.mock("@/lib/auth/server", () => ({ loadAuthUser: vi.fn() }));
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
+vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn() }));
 vi.mock("@/lib/channels/historico/previa", () => ({ lerSessaoDoHistorico: vi.fn(), calcularPrevia: vi.fn() }));
 
 /**
@@ -85,6 +87,7 @@ beforeEach(() => {
   seq = 0;
   escritas.length = 0;
   vi.mocked(loadAuthUser).mockResolvedValue(null);
+  vi.mocked(requireSupportWrite).mockResolvedValue(null);
   comoAdmin();
   vi.mocked(lerSessaoDoHistorico).mockImplementation(async (_db, orgId, id) =>
     orgId === org && id === canal ? { guardarHistorico: true, nomeNoCanal: "sessao-1" } : null,
@@ -105,6 +108,37 @@ describe("importação do histórico: rotas (#999)", () => {
     expect((await POST(req({ acao: "previa", dias: 90 }), context())).status).toBe(403);
     expect(requireRole).toHaveBeenCalledWith("admin", expect.objectContaining({ resource: "channel_sessions", allowPlatformAdmin: true }));
     expect(createAdminClient).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("a porta é admin: POST com escrita (e suporte checado antes), GET só leitura para a plataforma", async () => {
+    const ordem: string[] = [];
+    vi.mocked(requireSupportWrite).mockImplementation(async () => { ordem.push("suporte"); return null; });
+    vi.mocked(requireRole).mockImplementation(async () => {
+      ordem.push("papel");
+      return { ok: true, user: { id: "u1" }, org: { orgId: org, role: "admin" } } as Awaited<ReturnType<typeof requireRole>>;
+    });
+    await POST(req({ acao: "previa", dias: 90 }), context());
+    expect(ordem).toEqual(["suporte", "papel"]);
+    expect(requireRole).toHaveBeenLastCalledWith("admin", expect.objectContaining({ resource: "channel_sessions", allowPlatformAdmin: true }));
+    await GET(req({}, "GET"), context());
+    expect(requireRole).toHaveBeenLastCalledWith("admin", expect.objectContaining({ resource: "channel_sessions", allowPlatformAdmin: "leitura" }));
+  });
+
+  it("suporte sem escrita é barrado antes do papel e do banco", async () => {
+    vi.mocked(requireSupportWrite).mockResolvedValue(fail("forbidden", "Somente leitura.", 403));
+    expect((await POST(req({ acao: "previa", dias: 90 }), context())).status).toBe(403);
+    expect(requireRole).not.toHaveBeenCalled();
+    expect(createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it("erro do banco ao ler a sessão responde 500, sem gravar nem auditar", async () => {
+    vi.mocked(lerSessaoDoHistorico).mockRejectedValue(new Error("sessao_leitura: timeout"));
+    expect((await GET(req({}, "GET"), context())).status).toBe(500);
+    const r = await POST(req({ acao: "previa", dias: 90 }), context());
+    expect(r.status).toBe(500);
+    expect((await r.json()).error.code).toBe("internal_error");
+    expect(escritas).toEqual([]);
     expect(audit).not.toHaveBeenCalled();
   });
 

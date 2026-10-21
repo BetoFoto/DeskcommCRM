@@ -83,6 +83,17 @@ describe("prévia da importação do histórico (#999)", () => {
     expect(p.mensagens).toBeLessThan(30);
   });
 
+  it("teto acabando DURANTE a lista de conversas devolve as conversas já contadas", async () => {
+    // 120 conversas = 3 páginas de 50; com teto 2, a terceira página não é pedida.
+    const chats = Array.from({ length: 120 }, (_, i) => ({ id: `${i}@c.us`, ts: desde90 + 10 }));
+    const canal = canalDeMentira(chats, {});
+    const p = await calcularPrevia("sessao", 90, { canal, agora: AGORA, tetoDeChamadas: 2 });
+    expect(canal.chamadas).toEqual(["chats@0", "chats@50"]);
+    expect(p.parcial).toBe(true);
+    expect(p.conversas).toBe(100);
+    expect(p.mensagens).toBe(0);
+  });
+
   it("o teto padrão é de 100 chamadas", () => {
     expect(TETO_DE_CHAMADAS_DA_PREVIA).toBe(100);
   });
