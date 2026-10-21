@@ -1084,7 +1084,7 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                   )}
                   {ehTabelaDireta && (
                     <div className="col-span-1 md:col-span-2">
-                      <Label htmlFor={idInputPrefixo} className="text-xs text-muted-foreground">
+                      <Label htmlFor={`${idInputPrefixo}-tabela`} className="text-xs text-muted-foreground">
                         {t("Tabela")}
                       </Label>
                       <Input
@@ -1107,7 +1107,7 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                   )}
                   {ehTabelaDireta && (
                     <div className="col-span-1 md:col-span-1">
-                      <Label htmlFor={idInputPostType} className="text-xs text-muted-foreground">
+                      <Label htmlFor={`${idInputPostType}-coluna-id`} className="text-xs text-muted-foreground">
                         {t("Coluna do id")}
                       </Label>
                       <Input
@@ -1130,7 +1130,7 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                   )}
                   {ehTabelaDireta && (
                     <div className="col-span-1 md:col-span-1">
-                      <Label htmlFor={idInputDescricao} className="text-xs text-muted-foreground">
+                      <Label htmlFor={`${idInputDescricao}-coluna-titulo`} className="text-xs text-muted-foreground">
                         {t("Coluna do título")}
                       </Label>
                       <Input
