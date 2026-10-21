@@ -19,7 +19,7 @@ import { createClient } from "@/lib/supabase/server";
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => ({ get: () => null })) }));
 vi.mock("@/lib/branding/saida", () => ({
-  marcaDaSaida: vi.fn(async () => ({ nome: "Deskcomm" })),
+  marcaDaSaida: vi.fn(async () => ({ nome: "Marca de Teste" })),
 }));
 vi.mock("@/lib/audit", () => ({
   audit: vi.fn(async () => undefined),
@@ -84,7 +84,7 @@ function provedor(opcoes: Opcoes) {
               type: "totp",
               totp: {
                 qr_code: "<svg/>",
-                uri: "otpauth://totp/Deskcomm:eu?secret=…",
+                uri: "otpauth://totp/Marca%20de%20Teste:eu?secret=…",
                 secret: opcoes.segredo ?? "SEGREDO-DE-TESTE",
               },
             },

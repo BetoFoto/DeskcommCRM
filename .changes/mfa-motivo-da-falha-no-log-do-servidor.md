@@ -5,9 +5,8 @@ titulo: A falha ao ativar a verificação em duas etapas deixa o motivo no log d
 ---
 
 Quando o cadastro do fator de verificação em duas etapas falhava — ou quando o
-código de 6 dígitos era recusado na confirmação — a tela mostrava uma frase
-genérica e o motivo que o provedor devolveu não ficava registrado em lugar
-nenhum. Quem opera a VPS via « não consegui ativar a verificação » e não tinha
+código de 6 dígitos era recusado na confirmação — o motivo que o provedor
+devolveu não ficava registrado no servidor. Quem opera a VPS via « não consegui ativar a verificação » e não tinha
 como saber se o problema era um fator antigo já cadastrado, o relógio do celular
 fora de sincronia ou o fator que ficou pela metade.
 
