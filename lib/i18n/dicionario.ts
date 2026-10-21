@@ -16593,7 +16593,8 @@ export const DICIONARIO: Traducoes = {
   "Ver opções": { es: "Ver opciones" },
   "Ver e editar a lista do campo": { es: "Ver y editar la lista del campo" },
   "Recolher a lista do campo": { es: "Contraer la lista del campo" },
-  "Importar CSV": { es: "Importar CSV" },
+  // (`Importar CSV` já tem entrada acima — não duplicar aqui: o dicionário é um
+  //  objeto literal, e chave repetida é erro de typecheck.)
   "Buscar opções": { es: "Buscar opciones" },
   "Nenhuma opção casa com a busca.": { es: "Ninguna opción coincide con la búsqueda." },
   "Mostrar mais opções": { es: "Mostrar más opciones" },
