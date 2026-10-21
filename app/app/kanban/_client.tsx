@@ -490,7 +490,17 @@ export function FunisClient({
 
           return (
             <li key={funil.id} className="flex flex-col gap-3 p-4" data-testid={`funil-${funil.id}`}>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              {/* `sm:flex-wrap`: a linha do funil QUEBRA em vez de espremer a
+                  coluna do nome. Em ~900px o grupo de ações (Renomear/Tornar
+                  padrão/Funil de clientes/Arquivar) e o `shrink-0` que ele
+                  tinha tomavam a largura toda, a coluna do nome (`flex-1`)
+                  colapsava para 0 e o nome sumia sob os selos — com os botões
+                  passando da borda do cartão. Deixando a linha quebrar, quando
+                  os botões não couberem eles descem para a linha de baixo,
+                  DENTRO do cartão; em janela cheia continuam ao lado, como
+                  sempre. Vale em qualquer largura: não há breakpoint novo, só
+                  a permissão de quebrar. */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                 {podeGerenciar && (
                   <div className="flex shrink-0 flex-wrap gap-1">
                     <Button
@@ -516,7 +526,13 @@ export function FunisClient({
                   </div>
                 )}
 
-                <div className="min-w-0 flex-1">
+                {/* `min-w-40` (10rem), e não mais `min-w-0`: a coluna do nome
+                    precisa de um PISO. Com `min-w-0 flex-1` ela encolhia até 0
+                    e o nome ia para baixo dos selos. O piso garante que nome e
+                    selos caibam inteiros; se o que sobra para os botões for
+                    pouco, é a LINHA que quebra (`sm:flex-wrap` acima), não a
+                    coluna que some. */}
+                <div className="min-w-40 flex-1">
                   {renomeandoAqui ? (
                     <div className="flex gap-2">
                       <Input
@@ -571,8 +587,16 @@ export function FunisClient({
 
                 <span className="shrink-0 text-xs text-muted-foreground">/{funil.slug}</span>
 
+                {/*
+                  SEM `shrink-0`, que era a CAUSA: com ele o grupo exigia a
+                  largura de todos os botões numa linha só (~419px de um cartão
+                  de ~556px) e empurrava tudo para fora; a coluna do nome é que
+                  encolhia. Agora o grupo pode encolher e, se ainda faltar
+                  espaço na linha, a própria linha quebra (`sm:flex-wrap`) e ele
+                  desce inteiro, dentro do cartão.
+                */}
                 {podeGerenciar && !renomeandoAqui && (
-                  <div className="flex shrink-0 flex-wrap gap-1">
+                  <div className="flex min-w-0 flex-wrap gap-1">
                     <Button
                       variant="ghost"
                       size="sm"
