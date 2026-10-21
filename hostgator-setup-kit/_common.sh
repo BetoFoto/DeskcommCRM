@@ -1812,6 +1812,57 @@ wait_app_healthy() {
   return 1
 }
 
+# ── #2945: a rota PÚBLICA do Supabase no proxy do operador ──────────────────
+#
+# A pergunta: com `REVERSE_PROXY=traefik`, as etiquetas do proxy da hospedagem
+# (#2099) entregam `/auth/v1/*` ao Envoy do Supabase — e não ao app?
+#
+# Até o #2933 quem respondia isso era, SEM QUERER, o `v_sb_key()` do install.sh:
+# a fase 2 batia em `${NEXT_PUBLIC_SUPABASE_URL}/auth/v1/settings`, a URL
+# PÚBLICA, e o 404 do app (Traefik sem as etiquetas) virava "chave inválida". O
+# #2933 corrigiu a pergunta da chave para o gateway INTERNO
+# (`SUPABASE_INTERNAL_URL`) — certo atrás de Cloudflare laranja, que é o padrão
+# do kit — e com isso a instalação perdeu a ÚNICA prova de que a rota pública
+# existe: sem as etiquetas, ela termina verde e o erro só aparece no primeiro
+# login. Esta sonda é a prova de volta, agora explícita e no FIM da instalação,
+# quando o app já está no ar e o domínio já responde.
+#
+# A distinção que faz a prova valer: 200 é o GoTrue respondendo (a rota
+# chegou); 404 é o APP atendendo — a assinatura exata de etiqueta que não
+# pegou. Quem chama mostra o diagnóstico devolvido aqui com `die`.
+#
+# Só o modo traefik a usa: no Caddy o `Caddyfile.single-server` já roteia as
+# seis prefixos do Supabase (o autor do #2945 registrou que ali não é urgente).
+#
+# 404 é DEFINITIVO — não se repete uma tentativa contra quem já respondeu; as
+# demais falhas (000, 5xx, o 521 do Cloudflare laranja) ganham novas tentativas,
+# porque o certificado de um domínio recém-apontado leva um ou dois minutos para
+# sair. O `curl` é o mesmo das outras provas HTTP do kit (a chave vai no
+# cabeçalho `apikey`, nunca no argv de outro processo).
+sondar_rota_publica_do_supabase() {  # <URL pública> <anon key> [tentativas] [intervalo_s]
+  local base="${1:-}" anon="${2:-}" tentativas="${3:-10}" intervalo="${4:-3}"
+  if [ -z "$base" ] || [ -z "$anon" ]; then
+    printf '%s' "$(t "Não sei sondar a rota pública do Supabase sem a URL do domínio e a anon key. Confira NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY no .env.")"
+    return 1
+  fi
+  local rota="${base%/}/auth/v1/settings" code i=0
+  while [ "$i" -lt "$tentativas" ]; do
+    code="$(curl -s -o /dev/null -w '%{http_code}' -m 20 -H "apikey: $anon" "$rota" 2>/dev/null)" || code=000
+    case "$code" in
+      2*) return 0 ;;
+      404) break ;;
+    esac
+    i=$((i+1))
+    [ "$i" -lt "$tentativas" ] && sleep "$intervalo"
+  done
+  if [ "$code" = "404" ]; then
+    printf '%s' "$(t "A rota pública do Supabase não pegou no Traefik: {1} devolveu 404, e quem respondeu foi o CRM, não o GoTrue do Supabase. As etiquetas de /auth/v1/* não chegaram ao Envoy (issue #2099) — sem elas a instalação termina verde e o login só falha no primeiro acesso. Confira REVERSE_PROXY=traefik no .env e as etiquetas de hostgator-setup-kit/supabase-single-server.override.yml, e rode a instalação de novo." "$rota")"
+  else
+    printf '%s' "$(t "Não consegui provar a rota pública do Supabase: {1} devolveu {2}, e o esperado era 200 do GoTrue. Pode ser a rota do Supabase no Traefik que não pegou (issue #2099), ou o domínio ainda sem certificado/DNS. Confira REVERSE_PROXY=traefik no .env, o cadeado de {3} e as etiquetas de hostgator-setup-kit/supabase-single-server.override.yml, e rode a instalação de novo." "$rota" "$code" "$base")"
+  fi
+  return 1
+}
+
 # Código de saída de quem RECUSOU antes de tocar em qualquer coisa — distinto
 # de "falhei no meio" (1). O agent.sh usa isso para não desfazer uma
 # atualização que nunca começou: reiniciar o container e reescrever o .env
