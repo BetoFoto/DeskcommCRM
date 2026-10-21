@@ -275,9 +275,10 @@ describe("receita acf-imoveis contra MySQL 8 de verdade", () => {
   });
 
   /** Executa o SQL montado pela receita contra o MySQL de verdade. */
-  async function consultar(busca: Record<string, unknown>, limite = 5): Promise<
-    { titulo: string; preco: unknown; bairro: string }[]
-  > {
+  async function consultar(
+    busca: Record<string, unknown>,
+    limite = 5,
+  ): Promise<{ titulo: string; preco: unknown; bairro: string }[]> {
     const pool = obterPoolMysql(conexaoDe(banco, { sslMode: "disable" }));
     const { sql, valores } = RECEITA_ACF_IMOVEIS.montar(FIXOS, busca, limite);
     const conexao = await pool.getConnection();

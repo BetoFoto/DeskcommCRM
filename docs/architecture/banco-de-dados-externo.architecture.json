@@ -229,6 +229,14 @@
       "dot": "blue"
     },
     {
+      "id": "precoReceita",
+      "lane": "nucleo",
+      "label": "preco.ts",
+      "sublabel": "converte preço de texto (650.000,00 / 480000) em número no SQL da receita · sem preço vira NULL, nunca 0",
+      "type": "lib",
+      "dot": "blue"
+    },
+    {
       "id": "toolReceita",
       "lane": "agente",
       "label": "crm_consultar_receita",
@@ -521,6 +529,18 @@
       "from": "apiReceitas",
       "to": "receitasCount",
       "label": "contagem exposta pela API"
+    },
+    {
+      "id": "e61",
+      "from": "instanciaReceita",
+      "to": "precoReceita",
+      "label": "a receita acf-imoveis monta o CASE do preço"
+    },
+    {
+      "id": "e62",
+      "from": "precoReceita",
+      "to": "instanciaReceita",
+      "label": "o CASE entra no SQL da receita (sem novo placeholder)"
     }
   ],
   "cards": [

@@ -171,3 +171,34 @@ A fatia R1 (receita `woocommerce` + instância + tool) entrega:
 - e2e: `tests/e2e/banco-externo-receitas.spec.ts` registrada em `SPECS_PARTE_1` do `.github/workflows/e2e.yml` (não rodada aqui — veredito do CI)
 
 Destino: núcleo, dentro do módulo de banco externo, que nasce desligado (revisão 1 da Spec 25, aceita pelo mantenedor).
+
+## R2 entregue: o que mudou
+
+A fatia R2 (receita `acf-imoveis`) entrega:
+
+- `lib/external-db/receitas/acf-imoveis.ts` — receita `acf-imoveis` (JOIN `posts`+`postmeta`, uma junção por campo mapeado; parâmetros fixos `prefixo`/`post_type`/`campos`; parâmetros de busca `bairro`/`quartos_min`/`preco_max`/`cidade`/`limite`; teto = 5). **Sem foto** (a `imagem_url` é a R4, como na R1): a receita não junciona `_thumbnail_id` nem a tabela de anexos.
+- `lib/external-db/receitas/preco.ts` — `precoNumero`: converte o `meta_value` de preço (texto) em número dentro do SQL, sem novo `?` ("650.000,00", "480000", "650000.50", "1.200.000", "R$ 650.000,00"); preço sem nenhum dígito vira NULL, nunca 0
+- `lib/external-db/receitas/sql-mysql.ts` — `quotarIdentificadorMysql` e `escaparLikeMysql` (já existentes desde a R1) reutilizados pela receita do ACF, em vez de cópia local
+- `lib/external-db/receitas/registro.ts` + `tipos.ts` — a receita entra no registro (a lista de receitas é derivada do registro; nada é hard-coded no catálogo do MCP)
+- `app/app/integracao-dados/[id]/_components/ReceitasProntas.tsx` — no caminho ACF, o formulário de "Tipo de post" e o mapeamento de `meta_key` de cada campo (Preço, Quartos, Bairro obrigatórios; Cidade e Área opcionais). Sem sugestão automática (R5), sem destino de funil (R5), sem foto (R4)
+- `lib/i18n/dicionario.ts` — entradas em espanhol dos textos novos de tela
+- `docs/architecture/banco-de-dados-externo.architecture.json` — a peça nova (`preco.ts`) entra com ≥2 arestas
+- `.changes/banco-externo-receitas-acf-imoveis.md` — `impacto: capacidade_nova`, `secao: adicionado`
+- Testes: `acf-imoveis.unit.test.ts` (SQL montado, Zod dos fixos, escape do LIKE, guarda de "sem foto"), `preco.unit.test.ts` (forma do CASE do preço) e `tests/mysql/receita-acf-imoveis.test.ts` (MySQL 8 de verdade: bairro, `_`/`%` literais, quartos, preço nos formatos brasileiro/puro/decimal/milhar, símbolo de moeda, limite, rascunho, outro `post_type`, mapeamento com nomes diferentes, `fonte_nao_liberada`)
+- Spec 25: esta seção e a medição C1 abaixo
+
+> **C1 (ACF) medido em 21/10/2026** contra WordPress 6.x + **ACF 6.8.10 (gratuito)** + MySQL **8.0.45**,
+> tipo de post `imovel` e campos criados pela API do próprio ACF (`acf_import_post_type`,
+> `acf_import_field_group`) e valores gravados com `update_field()` — o mesmo caminho da tela.
+> Gravação real: cada campo vira o par `wp_postmeta` (`preco` = `650000`, `_preco` = `field_preco`), campo
+> `number` guarda o número puro, `select` guarda a chave (`venda`). A receita do código foi executada pelo
+> caminho de produção (`montar` → `validarConsultaDeReceita` → `executarReceitaMysql`) com um usuário MySQL
+> com `SELECT` só em `wp_posts` e `wp_postmeta`, TLS `require`. 8 casos, todos com o resultado esperado:
+> sem filtro (5 publicados; o rascunho não aparece), bairro `centro` (acha `Centro` e `centro`),
+> `quartos_min` 3, `preco_max` 500000, cidade `votorantim`, bairro com `_` e `%` literais, bairro `_`
+> sozinho (não vira curinga: 1 linha), `limite` 2. O ACF Pro não é necessário: a receita só lê campos
+> simples.
+
+O que a R2 **não** traz (e continua nas fatias seguintes): foto/`imagem_url` (R4), JetEngine e tabela
+direta (R3), ida ao funil e sugestão automática de campos (R5), runbook do leigo (R6).
+
