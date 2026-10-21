@@ -49,7 +49,14 @@ describe("gravarMensagemDeGrupo", () => {
     const d = db(ligado({ subject: "Cliente A", contactId: null, conversationId: null }));
     await expect(gravarMensagemDeGrupo(d, entrada())).resolves.toBe("gravada");
     expect(d.criarContatoDoGrupo).toHaveBeenCalledWith(ORG, "1@g.us", "Cliente A");
-    expect(d.criarConversaDoGrupo).toHaveBeenCalledWith(ORG, SESS, "contato-g", "1@g.us");
+    // #2729 — a conversa nasce com o episódio datado na mensagem que a criou.
+    expect(d.criarConversaDoGrupo).toHaveBeenCalledWith(
+      ORG,
+      SESS,
+      "contato-g",
+      "1@g.us",
+      "2026-09-23T12:00:00.000Z",
+    );
     expect(d.vincular).toHaveBeenCalledWith(ORG, "g1", "contato-g", "conversa-g");
     const row = d.inserirMensagem.mock.calls[0]![0];
     expect(row).toMatchObject({
@@ -204,6 +211,7 @@ function adminDeMentira(cfg: {
       update: (linha: unknown) => { cmd.op = "update"; cmd.linha = linha; return q; },
       eq: (c: string, v: unknown) => { cmd.filtros.push([c, v]); return q; },
       in: (c: string, v: unknown) => { cmd.filtros.push([c, v]); return q; },
+      is: (c: string, v: unknown) => { cmd.filtros.push([c, v]); return q; },
       single: fim,
       maybeSingle: fim,
       then: (ok: (v: unknown) => unknown) => fim().then(ok),
@@ -320,6 +328,57 @@ describe("criarIngestDeGrupoDb — dois webhooks do mesmo grupo novo terminam nu
         ["status", ["closed", "resolved", "archived"]],
       ]),
     );
+  });
+
+  // ── #2729 — o episódio de serviço da conversa de grupo ────────────────────
+  it("#2729: a conversa de grupo nasce com service_started_at (sem ele toda enviada sai do histórico)", async () => {
+    const { admin, comandos } = adminDeMentira({});
+    await criarIngestDeGrupoDb(admin as never).criarConversaDoGrupo(
+      ORG,
+      SESS,
+      "c1",
+      "1@g.us",
+      "2026-09-23T12:00:00.000Z",
+    );
+    expect(comandos[0]!.linha).toMatchObject({
+      is_group: true,
+      service_started_at: "2026-09-23T12:00:00.000Z",
+    });
+  });
+
+  it("#2729: reabrir carimba a recebida com a revisão NOVA e datar o episódio nela", async () => {
+    const { admin, comandos } = adminDeMentira({
+      leitura: { conversations: { data: { service_revision: 7 }, error: null } },
+    });
+    await criarIngestDeGrupoDb(admin as never).reabrirSeFechada(
+      ORG,
+      "v",
+      "m1",
+      "2026-09-23T12:00:00.000Z",
+    );
+    expect(comandos[0]!.linha).toMatchObject({
+      status: "open",
+      service_started_at: "2026-09-23T12:00:00.000Z",
+    });
+    const carimbo = comandos.find((c) => c.tabela === "messages")!;
+    expect(carimbo.linha).toEqual({ service_revision: 7 });
+    expect(carimbo.filtros).toEqual(
+      expect.arrayContaining([
+        ["organization_id", ORG],
+        ["conversation_id", "v"],
+        ["id", "m1"],
+        ["direction", "inbound"],
+        ["service_revision", null],
+      ]),
+    );
+  });
+
+  it("#2729: conversa que NÃO estava fechada não carimba mensagem nenhuma", async () => {
+    const { admin, comandos } = adminDeMentira({
+      leitura: { conversations: { data: null, error: null } },
+    });
+    await criarIngestDeGrupoDb(admin as never).reabrirSeFechada(ORG, "v", "m1", "2026-09-23T12:00:00.000Z");
+    expect(comandos.filter((c) => c.tabela === "messages")).toHaveLength(0);
   });
 
   it("carimbo da conversa passa pela função compartilhada (fn_mark_conversation_message)", async () => {

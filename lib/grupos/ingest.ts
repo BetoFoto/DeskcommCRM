@@ -65,7 +65,20 @@ export interface IngestDeGrupoDb {
     } | null
   >;
   criarContatoDoGrupo(org: string, chatId: string, subject: string | null): Promise<string>;
-  criarConversaDoGrupo(org: string, session: string, contactId: string, chatId: string): Promise<string>;
+  /**
+   * `service_started_at` vai junto (#2729): a conversa de grupo nasce ABERTA e,
+   * sem ele, `getLeadContext` descarta toda mensagem enviada — a régua do
+   * histórico é `messages.sent_at >= c.service_started_at`. O instante é o da
+   * mensagem que criou a conversa, não o `now()` do ingest: um webhook atrasado
+   * não pode fazer o histórico começar depois da mensagem que o gerou.
+   */
+  criarConversaDoGrupo(
+    org: string,
+    session: string,
+    contactId: string,
+    chatId: string,
+    iniciadoEm: string,
+  ): Promise<string>;
   vincular(org: string, grupoId: string, contactId: string, conversationId: string): Promise<void>;
   /**
    * O id volta porque é ele que o pedido de turno do agente aponta
@@ -78,8 +91,17 @@ export interface IngestDeGrupoDb {
    * mensagem nova — o que a conversa individual faz em `fn_service_inbound`, que pula grupos.
    * Sem isto, um "resolver" num grupo esconde para sempre as mensagens seguintes em
    * "Fechadas". Não aciona roteamento: `fn_request_channel_routing` pula `is_group`.
+   *
+   * #2729 — `messageId`/`quando`: a reabertura começa um episódio NOVO, e a
+   * mensagem que a causou foi inserida ANTES dela (o insert é o que dispara o
+   * ingest). `fn_service_inbound` não carimba recebida de grupo em conversa
+   * encerrada — carimbaria no episódio velho —, então o carimbo com a revisão
+   * nova é feito aqui, junto com `service_started_at` no instante da mensagem
+   * (a 1:1 faz as duas coisas dentro da própria função, sob o mesmo lock).
+   * Sem isto, o primeiro turno depois de reabrir um grupo veria só a mensagem
+   * atual, e não o que veio antes no episódio novo.
    */
-  reabrirSeFechada(org: string, conversationId: string): Promise<void>;
+  reabrirSeFechada(org: string, conversationId: string, messageId?: string, quando?: string): Promise<void>;
   /**
    * `direction` vai no fim porque o carimbo compartilhado
    * (`fn_mark_conversation_message`) move `last_inbound_at` OU `last_outbound_at`
@@ -121,7 +143,13 @@ export async function gravarMensagemDeGrupo(
   let conversationId = grupo.conversationId;
   if (!contactId || !conversationId) {
     contactId ??= await db.criarContatoDoGrupo(e.organizationId, e.groupChatId, grupo.subject);
-    conversationId ??= await db.criarConversaDoGrupo(e.organizationId, e.channelSessionId, contactId, e.groupChatId);
+    conversationId ??= await db.criarConversaDoGrupo(
+      e.organizationId,
+      e.channelSessionId,
+      contactId,
+      e.groupChatId,
+      e.sentAt,
+    );
     await db.vincular(e.organizationId, grupo.id, contactId, conversationId);
   }
 
@@ -150,7 +178,9 @@ export async function gravarMensagemDeGrupo(
     },
   });
   if (resultado.status === "duplicada") return "duplicada";
-  if (e.direction === "inbound") await db.reabrirSeFechada(e.organizationId, conversationId);
+  if (e.direction === "inbound")
+    await db.reabrirSeFechada(e.organizationId, conversationId, resultado.messageId ?? undefined, e.sentAt);
+
   // Mesma prévia da conversa individual (`previewFromMessage`): a RÉGUA mora em
   // `lib/messaging/previa-da-mensagem.ts` — texto até 280, `[tipo]` sem texto, e
   // o vCard vira `Contato: <nome>` em vez do literal ou do cartão cru (#2742).
@@ -255,7 +285,7 @@ export function criarIngestDeGrupoDb(admin: SupabaseClient): IngestDeGrupoDb {
       return (existente as { id: string }).id;
     },
 
-    async criarConversaDoGrupo(org, session, contactId, chatId) {
+    async criarConversaDoGrupo(org, session, contactId, chatId, iniciadoEm) {
       const { data, error } = await admin
         .from("conversations")
         .insert({
@@ -266,6 +296,11 @@ export function criarIngestDeGrupoDb(admin: SupabaseClient): IngestDeGrupoDb {
           status: "open",
           is_group: true,
           group_chat_id: chatId,
+          // #2729 — o episódio de serviço começa com a mensagem que abriu a
+          // conversa. Sem isto o grupo nascia com `service_started_at` nulo e a
+          // régua do histórico (`messages.sent_at >= c.service_started_at`)
+          // descartava TODA mensagem enviada, porque compara com NULL.
+          service_started_at: iniciadoEm,
         })
         .select("id")
         .single();
@@ -336,22 +371,52 @@ export function criarIngestDeGrupoDb(admin: SupabaseClient): IngestDeGrupoDb {
       return { status: "ok", messageId: id };
     },
 
-    async reabrirSeFechada(org, conversationId) {
+    async reabrirSeFechada(org, conversationId, messageId, quando) {
       // `trg_service_stamp_status` carimba a revisão de serviço e limpa o dono,
       // como na reabertura da conversa individual. O filtro `is_group` garante
       // que este caminho nunca reabre uma conversa 1:1.
-      const { error } = await admin
+      const { data, error } = await admin
         .from("conversations")
-        .update({ status: "open", status_changed_at: new Date().toISOString() })
+        .update({
+          status: "open",
+          status_changed_at: new Date().toISOString(),
+          // #2729 — o episódio novo começa na mensagem que o reabriu, como na
+          // 1:1 (que usa `m.sent_at`). O gatilho respeita o valor: só troca por
+          // `clock_timestamp()` quando o campo não mudou.
+          ...(quando !== undefined ? { service_started_at: quando } : {}),
+        })
         .eq("organization_id", org)
         .eq("id", conversationId)
         .eq("is_group", true)
-        .in("status", ["closed", "resolved", "archived"]);
+        .in("status", ["closed", "resolved", "archived"])
+        .select("service_revision")
+        .maybeSingle();
       if (error) {
         logger.warn("[grupos.ingest] conversa de grupo fechada não reaberta", {
           organization_id: org,
           conversation_id: conversationId,
           causa: error.message,
+        });
+        return;
+      }
+      // Não reabriu (a conversa já estava aberta, ou outra corrida reabriu
+      // antes): não há episódio novo para carimbar.
+      const revisao = (data as { service_revision: number } | null)?.service_revision;
+      if (revisao === undefined || revisao === null || messageId === undefined) return;
+      const { error: erroCarimbo } = await admin
+        .from("messages")
+        .update({ service_revision: revisao })
+        .eq("organization_id", org)
+        .eq("conversation_id", conversationId)
+        .eq("id", messageId)
+        .eq("direction", "inbound")
+        .is("service_revision", null);
+      if (erroCarimbo) {
+        logger.warn("[grupos.ingest] recebida que reabriu o grupo ficou sem revisão", {
+          organization_id: org,
+          conversation_id: conversationId,
+          message_id: messageId,
+          causa: erroCarimbo.message,
         });
       }
     },
