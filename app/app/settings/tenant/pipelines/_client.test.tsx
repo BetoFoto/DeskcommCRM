@@ -673,9 +673,24 @@ describe("Configurações › Funis com listas longas (#3176)", () => {
     expect(aberto, `recolhido=${recolhido} aberto=${aberto}`).toBeGreaterThan(recolhido);
     expect(screen.getAllByLabelText(/^Tipo do campo 1/)).toHaveLength(1);
 
-    // Recolher de novo volta ao estado da abertura: nada ficou pendurado.
+    // Recolher ESCONDE o editor sem desmontá-lo: desmontar jogaria fora, sem
+    // aviso, o que foi editado e ainda não salvo (caso abaixo).
     fireEvent.click(screen.getByTestId(`abrir-editor-${VIAGENS_1.id}`));
-    expect(container.querySelectorAll("*")).toHaveLength(recolhido);
+    expect(screen.getByTestId(`area-do-editor-${VIAGENS_1.id}`).hidden).toBe(true);
+  });
+
+  it("recolher e reabrir o editor não perde o que foi editado e ainda não salvo", () => {
+    telaDeViagens();
+    const botao = () => screen.getByTestId(`abrir-editor-${VIAGENS_1.id}`);
+    fireEvent.click(botao());
+    const rotulo = () => screen.getByLabelText("Rótulo do campo 1") as HTMLInputElement;
+    const original = rotulo().value;
+    fireEvent.change(rotulo(), { target: { value: `${original} EDITADO` } });
+
+    fireEvent.click(botao()); // Recolher
+    fireEvent.click(botao()); // abrir de novo
+    expect(screen.getByTestId(`area-do-editor-${VIAGENS_1.id}`).hidden).toBe(false);
+    expect(rotulo().value).toBe(`${original} EDITADO`);
   });
 
   it("com centenas de opções em mais de um funil, as listas nascem RECOLHIDAS com o resumo", () => {

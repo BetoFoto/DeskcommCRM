@@ -323,6 +323,9 @@ function CardDoFunil({
 }) {
   const t = useT();
   const [editorAberto, setEditorAberto] = useState(false);
+  // Monta na primeira vez que abre e fica montado: recolher só ESCONDE. Desmontar
+  // apagaria em silêncio o que foi editado e ainda não salvo.
+  const [editorMontado, setEditorMontado] = useState(false);
   return (
     <Card className="space-y-6 p-6">
       <header>
@@ -346,7 +349,10 @@ function CardDoFunil({
             size="sm"
             aria-expanded={editorAberto}
             data-testid={`abrir-editor-${pipeline.id}`}
-            onClick={() => setEditorAberto((aberto) => !aberto)}
+            onClick={() => {
+              setEditorMontado(true);
+              setEditorAberto((aberto) => !aberto);
+            }}
           >
             <CaretDown
               size={14}
@@ -357,13 +363,15 @@ function CardDoFunil({
               ? t("Recolher")
               : t("Editar vocabulário e campos deste funil")}
           </Button>
-          {editorAberto && (
-            <PipelineEditor
-              pipeline={pipeline}
-              etapas={etapas}
-              comandaDisponivel={comandaDisponivel}
-              ehFunilPadrao={ehFunilPadrao}
-            />
+          {editorMontado && (
+            <div hidden={!editorAberto} data-testid={`area-do-editor-${pipeline.id}`}>
+              <PipelineEditor
+                pipeline={pipeline}
+                etapas={etapas}
+                comandaDisponivel={comandaDisponivel}
+                ehFunilPadrao={ehFunilPadrao}
+              />
+            </div>
           )}
         </div>
       )}
