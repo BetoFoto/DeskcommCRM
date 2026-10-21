@@ -22,7 +22,14 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { PERFIS_DO_PAIS, type PerfilDoPais } from "@/lib/legal/perfil-do-pais";
 
 const orgAtiva = vi.hoisted(() => ({ atual: null as { currency?: string | null; country?: string | null } | null }));
-vi.mock("@/hooks/auth/AuthProvider", () => ({ useActiveOrg: () => orgAtiva.atual }));
+vi.mock("@/hooks/auth/AuthProvider", () => ({
+  useActiveOrg: () => orgAtiva.atual,
+  // O ContactTagsEditor (renderizado dentro do formulário de negócio desde o
+  // #2979) lê o papel da organização por aqui. Sem o export, o mock estoura e
+  // derruba os casos deste arquivo. `null` desliga só a opção de definir cor,
+  // que é o que o teste da moeda não exercita.
+  useAuth: () => ({ activeOrg: null }),
+}));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ apiClient: api }));
@@ -228,7 +235,7 @@ describe("o documento e o exemplo de telefone seguem o país da organização", 
 describe("a organização ativa leva moeda e país ao cliente", () => {
   it("o embed da membership pede as duas colunas", () => {
     const fonte = readFileSync("lib/auth/server.ts", "utf8");
-    expect(fonte).toMatch(/organizations\(display_name, locale, timezone, currency, country, status, suspended_kind\)/);
+    expect(fonte).toMatch(/organizations!user_organizations_organization_id_fkey\(display_name, locale, timezone, currency, country, status, suspended_kind\)/);
     expect(fonte).toContain("currency: org?.currency ?? null");
     expect(fonte).toContain("country: org?.country ?? null");
   });
