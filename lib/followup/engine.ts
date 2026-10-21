@@ -281,6 +281,10 @@ export interface TickSummary {
  * índice recusa, e o genérico repetia com backoff até `dead`, com o aviso de
  * INCIDENTE "Um fluxo de follow-up parou de tentar … duplicate key" na Central —
  * para um estado que o próprio desenho do `dormente` produz.
+ *
+ * O tipo existe para o motor poder ADIAR em vez de falhar: enquanto a inscrição
+ * dorme, a vaga do contato é de quem chegou primeiro — e voltar depois é
+ * direito dela, não uma falha.
  */
 export class VagaDoContatoOcupadaError extends Error {
   constructor() {
@@ -293,7 +297,7 @@ export class VagaDoContatoOcupadaError extends Error {
  * Converte o erro do `fn_followup_patch` no erro que o motor sabe tratar.
  * Só o 23505 do índice de vaga vira `VagaDoContatoOcupadaError`: outro 23505
  * (outro índice único) continua erro comum, porque cada índice guarda uma regra
- * diferente e não há razão para supor que todos se resolvam cedendo.
+ * diferente e não há razão para supor que todos se resolvam adiando.
  */
 export function erroDoPatch(error: { code?: string; message: string }): Error {
   if (error.code === "23505" && error.message.includes("idx_followup_enrollments_one_live")) {
@@ -302,8 +306,21 @@ export function erroDoPatch(error: { code?: string; message: string }): Error {
   return new Error(error.message);
 }
 
-/** O motivo gravado quando a dormente cede a vaga — é o que o acompanhamento mostra. */
-export const MOTIVO_DA_VAGA_OCUPADA = "Outro acompanhamento já cuida deste contato";
+/**
+ * De quanto em quanto a dormente volta a tentar enquanto a vaga do contato está
+ * ocupada por outro acompanhamento: 1 hora.
+ */
+export const INTERVALO_DA_VAGA_OCUPADA_MS = 60 * 60 * 1000;
+
+/**
+ * Até quando a dormente espera a vaga: 7 dias. Passado o limite a inscrição
+ * desiste — COM aviso na Central, porque um cancelamento calado é a forma mais
+ * cara de perder um retorno.
+ */
+export const LIMITE_DA_VAGA_OCUPADA_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** O motivo gravado quando a espera pela vaga estoura o limite. */
+export const MOTIVO_DA_VAGA_OCUPADA_DEMAIS = "Outro acompanhamento ocupou o contato por 7 dias";
 
 function errorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
@@ -495,34 +512,106 @@ async function applyHandlerFailure(
 }
 
 /**
- * A dormente acordou e outra inscrição já ocupa a vaga do contato: ela CEDE.
+ * O instante em que a espera pela vaga começou.
  *
- * Quem já ocupa a vaga fica — o mesmo precedente de `gatilho-etapa.ts` e
- * `gatilho-caso.ts`, onde 23505 neste índice é caminho normal. Encerra como
- * `cancelled`, com o motivo legível e um evento na trilha; SEM item na Central:
- * nada quebrou, e o aviso de incidente é exatamente o ruído que isto elimina.
- * Não conta tentativa: repetir não muda nada enquanto o outro fluxo estiver vivo.
+ * Quem sabe é o EVENTO: o `desde` do primeiro adiamento é o começo da espera.
+ * Evento sem `desde` legível (ou evento que sumiu) é tratado como espera
+ * começando AGORA — assim um registro malformado adia em vez de desistir.
  */
-async function cederAVaga(
+function isoDoAdiamento(evento: EnrollmentEventRef | undefined, agora: Date): string {
+  const desde = evento?.payload?.desde;
+  if (typeof desde === "string" && !Number.isNaN(Date.parse(desde))) return desde;
+  return agora.toISOString();
+}
+
+/**
+ * A dormente acordou e outra inscrição já ocupa a vaga do contato: ela ADIA.
+ *
+ * Ceder a vaga seria jogar fora o retorno exatamente no caso para o qual a
+ * espera "imune à resposta" tirou a inscrição da vaga: a cliente fala com o
+ * estúdio várias vezes no período, e o retorno é para depois — "falar não é
+ * motivo para antecipar nem para desistir do retorno". Adiar custa uma hora de
+ * espera e devolve a chance.
+ *
+ * A inscrição CONTINUA `dormente`: não gasta tentativa, não mexe no
+ * `last_error` e não abre item na Central — nada quebrou, e o aviso de
+ * incidente é exatamente o ruído que isto elimina. Um evento na trilha conta a
+ * espera (só o primeiro: a chave é a trava, e o insert repetido é ignorado).
+ *
+ * O limite de 7 dias é o anti-morte: se o outro acompanhamento nunca terminar
+ * (pausado à mão, por exemplo), a espera não vira silêncio — a inscrição
+ * desiste COM aviso na Central, no mesmo padrão da fronteira vencida.
+ */
+async function adiarPelaVagaOcupada(
   deps: Pick<TickDeps, "db" | "clock">,
   enrollment: EnrollmentRow,
 ): Promise<void> {
   const { db, clock } = deps;
+  const agora = clock();
+  const chave = `${enrollment.current_node_id}:${enrollment.steps_taken}:vaga_ocupada`;
+  const reavaliarEm = new Date(agora.getTime() + INTERVALO_DA_VAGA_OCUPADA_MS);
+
+  // O `desde` mora no EVENTO, não no banco: quem mede a espera é a trilha, e
+  // ela é a única que sabe desde quando a espera começou.
+  const eventos = await db.loadEnrollmentEvents(enrollment.id);
+  const anterior = eventos.find(
+    (e) => e.node_id === enrollment.current_node_id && e.idempotency_key === chave,
+  );
+  const desdeISO = isoDoAdiamento(anterior, agora);
+  const esperouMs = agora.getTime() - Date.parse(desdeISO);
+
+  if (esperouMs >= LIMITE_DA_VAGA_OCUPADA_MS) {
+    // ⚠️ A ESPERA LONGA MORRE AQUI, E NÃO PODE MORRER CALADA.
+    //
+    // Mesma doutrina da fronteira vencida (`processEnrollment`): a dormente
+    // que espera a vaga além do limite é uma espera que NINGUÉM vai fechar, e
+    // um cancelamento sem aviso é a forma mais cara de perder um retorno.
+    const nome =
+      (await db.loadFlowPointerName(enrollment.organization_id, enrollment.pointer_id)) ??
+      enrollment.pointer_id;
+    await db.insertDeadInboxItem({
+      organization_id: enrollment.organization_id,
+      title: "Um retorno programado não pôde ser enviado",
+      body:
+        `O fluxo "${nome}" esperou 7 dias o outro acompanhamento deste contato terminar, ` +
+        `e o envio foi cancelado (enrollment ${enrollment.id}). ` +
+        `Fale com o contato por outro caminho se ainda fizer sentido.`,
+      ref_id: enrollment.id,
+    });
+    await db.insertEnrollmentEvent({
+      organization_id: enrollment.organization_id,
+      enrollment_id: enrollment.id,
+      node_id: enrollment.current_node_id,
+      event_type: "gave_up_taken_slot",
+      payload: { desde: desdeISO, reavaliar_em: reavaliarEm.toISOString() },
+      idempotency_key: `${chave}:desistiu`,
+    });
+    await db.updateEnrollment(enrollment.id, enrollment.organization_id, {
+      status: "cancelled",
+      cancel_reason: MOTIVO_DA_VAGA_OCUPADA_DEMAIS,
+      next_eval_at: null,
+      claimed_until: null,
+      completed_at: agora.toISOString(),
+      updated_at: agora.toISOString(),
+    });
+    return;
+  }
+
+  // O evento é o ÚNICO registro da espera. A chave é a trava: o insert repetido
+  // é ignorado, então o segundo adiamento não repete a linha — e o `desde` que
+  // ela carrega é o começo da espera, não a hora do último adiamento.
   await db.insertEnrollmentEvent({
     organization_id: enrollment.organization_id,
     enrollment_id: enrollment.id,
     node_id: enrollment.current_node_id,
-    event_type: "woke_into_taken_slot",
-    payload: { outro_fluxo_vivo: true },
-    idempotency_key: `${enrollment.current_node_id}:${enrollment.steps_taken}:vaga_ocupada`,
+    event_type: "waiting_for_taken_slot",
+    payload: { desde: desdeISO, reavaliar_em: reavaliarEm.toISOString() },
+    idempotency_key: chave,
   });
   await db.updateEnrollment(enrollment.id, enrollment.organization_id, {
-    status: "cancelled",
-    cancel_reason: MOTIVO_DA_VAGA_OCUPADA,
-    next_eval_at: null,
+    next_eval_at: reavaliarEm.toISOString(),
     claimed_until: null,
-    completed_at: clock().toISOString(),
-    updated_at: clock().toISOString(),
+    updated_at: agora.toISOString(),
   });
 }
 
@@ -1180,11 +1269,11 @@ export async function runFollowupTick(deps: TickDeps, opts?: { limit?: number })
       await processEnrollment(deps, enrollment, summary);
     } catch (err) {
       try {
-        // A dormente que acorda com a vaga tomada não FALHOU: cede (ver
-        // `cederAVaga`). Só ela — a mesma recusa numa inscrição que já estava
-        // viva é corrida de verdade e segue o caminho de falha.
+        // A dormente que acorda com a vaga tomada não FALHOU: ADIA (ver
+        // `adiarPelaVagaOcupada`). Só ela — a mesma recusa numa inscrição que já
+        // estava viva é corrida de verdade e segue o caminho de falha.
         if (err instanceof VagaDoContatoOcupadaError && enrollment.status === "dormente") {
-          await cederAVaga(deps, enrollment);
+          await adiarPelaVagaOcupada(deps, enrollment);
           continue;
         }
         // Nunca deixa uma falha de UM enrollment derrubar o tick inteiro.
