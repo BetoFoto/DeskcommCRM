@@ -43,9 +43,14 @@
  * 7. a ROTA aceita os campos: `createLeadSchema` não descarta `custom_fields`
  *    em silêncio — sem isto o formulário coletaria e o servidor recusaria.
  *
- * Sabotagem (previsto × medido no PR): revertido `NewLeadDialog.tsx` ao
- * pré-fix, caem os casos 1, 2, 3, 4 e 6 (5 de 7) e ficam verdes os dois
- * controles (5 e 7); revertido `lib/schemas/leads.ts`, cai só o caso 7.
+ * Sabotagem (previsto × medido): revertido `NewLeadDialog.tsx` ao pré-fix
+ * caem os casos 1, 2, 3, 4 e 6 — previsto 5 de 7, medido 5 de 7 — e ficam
+ * verdes os dois controles (5 e 7). Revertido `lib/schemas/leads.ts` era
+ * previsto só o caso 7 e a medição deu 5 (1, 2, 3, 4 e 7): o `NewLeadDialog`
+ * passa o payload por `createLeadSchema.safeParse` antes de enviar, e o zod
+ * DESCARTA em silêncio a chave que o schema não declara — o mesmo silêncio que
+ * o defeito relatava, agora medido. O caso 6 segue verde aí porque ele não olha
+ * o payload: ele prova que não houve ida à rede.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
