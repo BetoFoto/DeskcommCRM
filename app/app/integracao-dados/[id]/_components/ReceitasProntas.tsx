@@ -225,6 +225,56 @@ function receitasDisponiveis(motor: "mysql" | "postgres"): DefinicaoDeReceita[] 
   return [...RECEITAS.values()].filter((r) => r.motores.includes(motor));
 }
 
+/**
+ * O rótulo de cada caminho de erro do Zod, no idioma da tela.
+ *
+ * A chave é o CAMINHO INTEIRO do campo que falhou — "campos.preco",
+ * "taxonomias.bairro.taxonomia", "situacao.campo" —, nunca o último pedaço:
+ * com o pedaço, "taxonomia" e "campo" viravam o mesmo rótulo na tela, e
+ * ninguém sabia o que corrigir.
+ *
+ * Os caminhos vêm de dois Zod: o da INSTÂNCIA (rótulo e descrição) e o dos
+ * "fixos" da receita (o mapeamento do ACF).
+ */
+function rotulosDoErro(t: (texto: string) => string): Record<string, string> {
+  return {
+    // A instância.
+    descricao: t("Descrição"),
+    rotulo: t("Rótulo"),
+    // Os "fixos" da receita.
+    prefixo: t("Prefixo das tabelas"),
+    post_type: t("Tipo de post"),
+    campos: t("Campos do imóvel"),
+    taxonomias: t("Categorias"),
+    situacao: t("Esconder imóveis"),
+    "campos.codigo": t("Código"),
+    "campos.preco": t("Preço de venda"),
+    "campos.aluguel": t("Aluguel"),
+    "campos.condominio": t("Condomínio"),
+    "campos.quartos": t("Quartos"),
+    "campos.suites": t("Suítes"),
+    "campos.banheiros": t("Banheiros"),
+    "campos.vagas": t("Vagas"),
+    "campos.area": t("Área"),
+    "campos.bairro": t("Bairro"),
+    "campos.cidade": t("Cidade"),
+    "campos.tipo": t("Tipo"),
+    "campos.finalidade": t("Finalidade"),
+    "taxonomias.bairro": t("Categoria do bairro"),
+    "taxonomias.bairro.taxonomia": t("Categoria do bairro"),
+    "taxonomias.bairro.nivel": t("Nível do bairro"),
+    "taxonomias.cidade": t("Categoria da cidade"),
+    "taxonomias.cidade.taxonomia": t("Categoria da cidade"),
+    "taxonomias.cidade.nivel": t("Nível da cidade"),
+    "taxonomias.tipo": t("Categoria do tipo"),
+    "taxonomias.tipo.taxonomia": t("Categoria do tipo"),
+    "taxonomias.finalidade": t("Categoria da finalidade"),
+    "taxonomias.finalidade.taxonomia": t("Categoria da finalidade"),
+    "situacao.campo": t("Campo da situação"),
+    "situacao.ocultar": t("Valores a esconder"),
+  };
+}
+
 export default function ReceitasProntas({ connectionId, motor, canWrite }: Props) {
   const t = useT();
   const query = useReceitasDaConexao(connectionId);
@@ -283,22 +333,11 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
         const campo = fieldErrors ? Object.keys(fieldErrors)[0] : undefined;
         const motivo = fieldErrors && campo ? fieldErrors[campo]?.[0] : undefined;
         if (fieldErrors && campo) {
-          // O rótulo do campo que falhou, em português de leigo: o Zod da
-          // receita responde por "campos", "taxonomias", "bairro"…
-          const rotuloDoCampo: Record<string, string> = {
-            descricao: t("Descrição"),
-            rotulo: t("Rótulo"),
-            campos: t("Campos do imóvel"),
-            taxonomias: t("Categorias"),
-            situacao: t("Esconder imóveis"),
-            prefixo: t("Prefixo das tabelas"),
-            post_type: t("Tipo de post"),
-            bairro: t("Bairro"),
-            cidade: t("Cidade"),
-            tipo: t("Tipo"),
-            finalidade: t("Finalidade"),
-          };
-          const label = rotuloDoCampo[campo] ?? campo;
+          // O rótulo do CAMINHO que falhou, em português de leigo: o Zod da
+          // receita responde por "campos.preco", "situacao.campo"…
+          const rotulos = rotulosDoErro(t);
+          const primeiro = campo.split(".")[0] ?? campo;
+          const label = rotulos[campo] ?? rotulos[primeiro] ?? campo;
           toast.error(
             t("O campo {campo} não pôde ser salvo: {motivo}")
               .replace("{campo}", label)

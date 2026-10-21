@@ -165,12 +165,18 @@ const situacaoSchema = z
   })
   .strict();
 
-/** O nome do dado, em português, para as mensagens de erro do Zod. */
-const ROTULO_DO_DADO: Record<DadoDeCategoria, string> = {
-  bairro: "bairro",
-  cidade: "cidade",
-  tipo: "tipo",
-  finalidade: "finalidade",
+/**
+ * A mensagem de "duas fontes" — uma frase ESTÁTICA por dado.
+ *
+ * Estática porque a tela a traduz: uma frase montada em runtime ("Escolha
+ * uma fonte só para " + o nome do dado) não é chave de dicionário, e quem
+ * escolheu o espanhol leria a mensagem em português.
+ */
+const FONTE_DUPLA: Record<DadoDeCategoria, string> = {
+  bairro: "Escolha uma fonte só para o bairro: campo ou categoria.",
+  cidade: "Escolha uma fonte só para a cidade: campo ou categoria.",
+  tipo: "Escolha uma fonte só para o tipo: campo ou categoria.",
+  finalidade: "Escolha uma fonte só para a finalidade: campo ou categoria.",
 };
 
 /** O que o admin preenche na tela: prefixo, tipo de post, campos, categorias e situação. */
@@ -226,7 +232,7 @@ export const PARAMETROS_FIXOS_ACF_IMOVEIS = z
         ctx.addIssue({
           code: "custom",
           path: ["taxonomias", dado],
-          message: `Escolha uma fonte só para ${ROTULO_DO_DADO[dado]}: campo ou categoria.`,
+          message: FONTE_DUPLA[dado],
         });
       }
     }

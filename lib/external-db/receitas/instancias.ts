@@ -33,13 +33,17 @@ export const instanciaDeReceitaSchemaItem = z
 /**
  * Erro de "fixos" inválidos.
  *
- * Carrega os motivos POR CAMPO (`fieldErrors`), para a tela mostrar a
- * mensagem do Zod em português — legível por quem opera — em vez de um
+ * Carrega os motivos pelo CAMINHO do campo (`fieldErrors`), para a tela mostrar
+ * a mensagem do Zod em português — legível por quem opera — em vez de um
  * "Campos inválidos." genérico. A mensagem continua no `message` (com o
  * prefixo `fixos_invalidos:`) para o log e para quem lê o erro cru.
+ *
+ * O caminho é o INTEIRO ("taxonomias.bairro.taxonomia", "situacao.campo"), não
+ * o último pedaço: com o pedaço, "taxonomia" e "campo" viravam o mesmo rótulo
+ * na tela, e ninguém sabia o que corrigir.
  */
 export class ErroDeFixosInvalidos extends Error {
-  /** Os motivos por campo (o mesmo formato que a rota devolve no 422). */
+  /** Os motivos pelo caminho do campo (o mesmo formato que a rota devolve no 422). */
   readonly fieldErrors: Record<string, string[]>;
 
   constructor(receitaId: string, fieldErrors: Record<string, string[]>) {
@@ -65,7 +69,9 @@ export function validarFixosDaReceita(receitaId: string, fixos: unknown): void {
     const fieldErrors: Record<string, string[]> = {};
     for (const issue of parseado.error.issues) {
       const partes = issue.path.filter((p) => typeof p === "string");
-      const chave = partes.length > 0 ? partes[partes.length - 1]! : "fixos";
+      // O CAMINHO inteiro, com ponto: "taxonomias.bairro.taxonomia" diz ONDE
+      // falhou; "taxonomia" não diz nada.
+      const chave = partes.length > 0 ? partes.join(".") : "fixos";
       (fieldErrors[chave] ??= []).push(issue.message);
     }
     throw new ErroDeFixosInvalidos(receitaId, fieldErrors);

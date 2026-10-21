@@ -14462,6 +14462,43 @@ export const DICIONARIO: Traducoes = {
   "Suítes": { es: "Suites" },
   "Banheiros": { es: "Baños" },
   "Vagas": { es: "Plazas de garaje" },
+  // ─── O rótulo do caminho que falhou no 422 das receitas ───
+  "Categoria do bairro": { es: "Categoría del barrio" },
+  "Categoria da cidade": { es: "Categoría de la ciudad" },
+  "Categoria do tipo": { es: "Categoría del tipo" },
+  "Categoria da finalidade": { es: "Categoría de la finalidad" },
+  "Nível do bairro": { es: "Nivel del barrio" },
+  "Nível da cidade": { es: "Nivel de la ciudad" },
+  // ─── As mensagens do Zod das receitas (o que a tela mostra no 422) ───
+  "Use apenas letras, números e underscore no prefixo.": {
+    es: "Usa solo letras, números y guion bajo en el prefijo.",
+  },
+  "Use apenas letras minúsculas, números, underscore e hífen no tipo de post.": {
+    es: "Usa solo letras minúsculas, números, guion bajo y guion en el tipo de entrada.",
+  },
+  "Use apenas letras, números, underscore e hífen no nome do campo.": {
+    es: "Usa solo letras, números, guion bajo y guion en el nombre del campo.",
+  },
+  "Use apenas letras minúsculas, números, underscore e hífen no nome da categoria.": {
+    es: "Usa solo letras minúsculas, números, guion bajo y guion en el nombre de la categoría.",
+  },
+  "Escreva pelo menos um valor a esconder.": { es: "Escribe al menos un valor a ocultar." },
+  "Escreva no máximo 10 valores a esconder.": { es: "Escribe como máximo 10 valores a ocultar." },
+  "Informe o preço de venda, o aluguel, ou os dois. Sem um deles a busca não sabe filtrar por preço.": {
+    es: "Informa el precio de venta, el alquiler o los dos. Sin uno de ellos la búsqueda no sabe filtrar por precio.",
+  },
+  "Escolha uma fonte só para o bairro: campo ou categoria.": {
+    es: "Elige una sola fuente para el barrio: campo o categoría.",
+  },
+  "Escolha uma fonte só para a cidade: campo ou categoria.": {
+    es: "Elige una sola fuente para la ciudad: campo o categoría.",
+  },
+  "Escolha uma fonte só para o tipo: campo ou categoria.": {
+    es: "Elige una sola fuente para el tipo: campo o categoría.",
+  },
+  "Escolha uma fonte só para a finalidade: campo ou categoria.": {
+    es: "Elige una sola fuente para la finalidad: campo o categoría.",
+  },
   "linha": { es: "línea" },
   "O campo {campo} não pôde ser salvo: {motivo}": {
     es: "El campo {campo} no se pudo guardar: {motivo}",
