@@ -168,7 +168,7 @@ describe("receita tabela-direta (unit, sem MySQL)", () => {
     );
     // Curingas escapados com !, nunca crus no texto.
     expect(sql).toContain("like ? escape '!'");
-    expect(valores[0]).toBe("!100!% !_centro_!");
+    expect(valores[0]).toBe("%100!% !_centro!_%");
     // O texto do SQL não contém o curinga cru.
     expect(sql).not.toContain("100%");
     expect(sql).not.toContain("_centro_");
