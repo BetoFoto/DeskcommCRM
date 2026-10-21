@@ -214,9 +214,9 @@ describe('validateFlowForPublish', () => {
     // Pela matriz de capabilities, sem nomear provider (invariante 1 da restrição de canal).
     const semJanela = PROVIDERS_DE_MENSAGEM.filter((p) => CHANNEL_CAPABILITIES[p].freeformOutsideWindow);
     // Exigir o plano B só faz sentido em canal que fecha a janela E tem
-    // DEFINIÇÕES aprovadas para oferecer (#3109): o canal social do Zernio fecha a
-    // janela e não tem catálogo nenhum, então exigir por causa dele reprovava o
-    // publish da organização inteira sem oferecer saída.
+    // DEFINIÇÕES aprovadas para oferecer (#3109): o canal social de
+    // Instagram/Facebook fecha a janela e não tem catálogo nenhum, então exigir
+    // por causa dele reprovava o publish da organização inteira sem oferecer saída.
     const exigeModelo = PROVIDERS_DE_MENSAGEM.filter(
       (p) => !CHANNEL_CAPABILITIES[p].freeformOutsideWindow && CHANNEL_CAPABILITIES[p].requiresTemplates,
     );

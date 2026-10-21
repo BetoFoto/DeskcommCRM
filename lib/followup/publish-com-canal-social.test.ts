@@ -1,6 +1,6 @@
 /**
- * #3109 — a conta com WhatsApp por QR (WAHA) **e** Instagram/Facebook
- * (`zernio_social`) não conseguia publicar um fluxo que só roda no WhatsApp.
+ * #3109 — a conta com WhatsApp por QR **e** Instagram/Facebook conectados não
+ * conseguia publicar um fluxo que só roda no WhatsApp.
  *
  * O caminho 2 do relato, que é o que este arquivo prova: com o plano B tirado de
  * um passo de IA depois de ≥24 h de espera, o publish recusava com
@@ -13,18 +13,16 @@
  *
  * A régua nova conta só conexão que EXIGE modelo fora da janela **e** tem
  * catálogo aprovado para oferecer. O canal social deixa de exigir o plano B para
- * a organização inteira; quem tem catálogo (WAHA não tem janela; o oficial tem as
- * duas coisas) continua exigindo.
+ * a organização inteira; quem tem catálogo continua exigindo.
  *
- * Dublês puros: nada de banco, nada de stack. As capacidades vêm da matriz de
- * `lib/channels/capabilities` — o teste não nomeia provider, lê a matriz.
+ * Dublês puros: nada de banco, nada de stack. As conexões da conta vêm da matriz
+ * de `lib/channels/capabilities` — o teste não nomeia provider (invariante 1 da
+ * doutrina de restrição de canal), ele lê capacidades.
  */
 import { describe, it, expect } from 'vitest';
 import { algumCanalExigeModeloForaDaJanela, validateFlowForPublish } from './validate-publish';
 import {
   CHANNEL_CAPABILITIES,
-  CHANNEL_PROVIDER_SOCIAL,
-  CHANNEL_PROVIDER_WAHA,
   PROVIDERS_DE_MENSAGEM,
   capabilitiesOf,
   transportaMensagem,
@@ -90,36 +88,38 @@ function fluxoDoRelato(): FlowGraph {
 const regraAntiga = (providers: readonly (string | null)[]): boolean =>
   providers.some((p) => transportaMensagem(p) && !capabilitiesOf(p as ChannelProvider).freeformOutsideWindow);
 
-/** O canal que EXIGE modelo (janela fechada E catálogo aprovado), lido da matriz. */
-const CANAL_QUE_EXIGE = PROVIDERS_DE_MENSAGEM.find(
+/** Conexões da conta, lidas da matriz — sem nomear provider em lugar nenhum. */
+const CANAIS_SEM_JANELA = PROVIDERS_DE_MENSAGEM.filter((p) => CHANNEL_CAPABILITIES[p].freeformOutsideWindow);
+/** O canal que EXIGE modelo: fecha a janela E tem catálogo aprovado para oferecer. */
+const CANAIS_QUE_EXIGEM_MODELO = PROVIDERS_DE_MENSAGEM.filter(
   (p) => !CHANNEL_CAPABILITIES[p].freeformOutsideWindow && CHANNEL_CAPABILITIES[p].requiresTemplates,
-)!;
-
-/**
- * O canal que fecha a janela e NÃO tem catálogo aprovado — o social do Zernio, o
- * caso da issue. Lido da matriz, não nomeado.
- */
+);
+/** O caso da issue: fecha a janela e NÃO tem catálogo aprovado (Instagram/Facebook). */
 const CANAIS_SEM_CATALOGO = PROVIDERS_DE_MENSAGEM.filter(
   (p) => !CHANNEL_CAPABILITIES[p].freeformOutsideWindow && !CHANNEL_CAPABILITIES[p].requiresTemplates,
 );
+
+/** A conta do relato: WhatsApp por QR (sem janela) + o social (janela sem catálogo). */
+const CONTA_DO_RELATO: readonly (string | null)[] = [...CANAIS_SEM_JANELA, ...CANAIS_SEM_CATALOGO];
 
 function codigos(r: ReturnType<typeof validateFlowForPublish>): string[] {
   return r.ok ? [] : r.errors.map((e) => e.code);
 }
 
-describe('#3109 — publish com conta de WAHA + canal social (janela, sem modelo aprovado)', () => {
-  const contaDaIssue = [CHANNEL_PROVIDER_WAHA, CHANNEL_PROVIDER_SOCIAL] as const;
-
+describe('#3109 — publish numa conta de WhatsApp por QR + canal social (janela, sem modelo aprovado)', () => {
   it('a régua nova não conta o canal que fecha a janela sem ter catálogo aprovado', () => {
+    // Guarda de forma: sem estes dois lados a matriz deixaria de ter os casos que
+    // esta issue mediu, e o teste passaria a não provar nada sobre o cenário real.
     expect(CANAIS_SEM_CATALOGO.length).toBeGreaterThan(0);
-    expect(algumCanalExigeModeloForaDaJanela(contaDaIssue)).toBe(false);
-    // E o controle no sentido oposto: com o canal que tem janela E catálogo, exige.
-    expect(algumCanalExigeModeloForaDaJanela([CHANNEL_PROVIDER_WAHA, CANAL_QUE_EXIGE])).toBe(true);
+    expect(CANAIS_QUE_EXIGEM_MODELO.length).toBeGreaterThan(0);
+    expect(algumCanalExigeModeloForaDaJanela(CONTA_DO_RELATO)).toBe(false);
+    // Controle no sentido oposto: com canal que tem janela E catálogo, exige.
+    expect(algumCanalExigeModeloForaDaJanela([...CANAIS_SEM_JANELA, ...CANAIS_QUE_EXIGEM_MODELO])).toBe(true);
   });
 
   it('ANTES: o fluxo do relato recusava com long_wait_needs_template nos dois passos de IA', () => {
     const antes = validateFlowForPublish(fluxoDoRelato(), {
-      exigeModeloForaDaJanela: regraAntiga(contaDaIssue),
+      exigeModeloForaDaJanela: regraAntiga(CONTA_DO_RELATO),
     });
     expect(antes.ok).toBe(false);
     if (!antes.ok) {
@@ -133,7 +133,7 @@ describe('#3109 — publish com conta de WAHA + canal social (janela, sem modelo
 
   it('DEPOIS: o fluxo do relato publica, com o plano B fora', () => {
     const depois = validateFlowForPublish(fluxoDoRelato(), {
-      exigeModeloForaDaJanela: algumCanalExigeModeloForaDaJanela(contaDaIssue),
+      exigeModeloForaDaJanela: algumCanalExigeModeloForaDaJanela(CONTA_DO_RELATO),
     });
     expect(codigos(depois)).toEqual([]);
     expect(depois.ok).toBe(true);
@@ -141,20 +141,22 @@ describe('#3109 — publish com conta de WAHA + canal social (janela, sem modelo
 
   it('CONTROLE: conexão com janela E catálogo aprovado continua exigindo o plano B', () => {
     const r = validateFlowForPublish(fluxoDoRelato(), {
-      exigeModeloForaDaJanela: algumCanalExigeModeloForaDaJanela([CHANNEL_PROVIDER_WAHA, CANAL_QUE_EXIGE]),
+      exigeModeloForaDaJanela: algumCanalExigeModeloForaDaJanela([
+        ...CANAIS_SEM_JANELA,
+        ...CANAIS_QUE_EXIGEM_MODELO,
+      ]),
     });
     expect(codigos(r)).toEqual(['long_wait_needs_template', 'long_wait_needs_template']);
   });
 
-  it('CONTROLE: canal alcançado com janela e SEM modelo aprovado não exige plano B — e não se inventa aprovado nenhum', () => {
+  it('CONTROLE: canal com janela e SEM modelo aprovado não exige plano B — e não se inventa aprovado nenhum', () => {
     // Sem catálogo não há o que escolher: a lista do seletor é vazia de verdade
     // (`modelosQueOFluxoEnvia` só devolve `meta_templates` que disparam). Exigir o
     // plano B aqui seria exigir um modelo que a conta não tem como oferecer.
     for (const p of CANAIS_SEM_CATALOGO) {
       expect(algumCanalExigeModeloForaDaJanela([p])).toBe(false);
-      expect(algumCanalExigeModeloForaDaJanela([CHANNEL_PROVIDER_WAHA, p])).toBe(false);
+      expect(algumCanalExigeModeloForaDaJanela([...CANAIS_SEM_JANELA, p])).toBe(false);
     }
-    expect(CANAIS_SEM_CATALOGO).toContain(CHANNEL_PROVIDER_SOCIAL);
   });
 
   it('o caminho 1 do relato segue recusado: plano B que não é modelo aprovado do canal', () => {
@@ -166,11 +168,11 @@ describe('#3109 — publish com conta de WAHA + canal social (janela, sem modelo
     // plano B, e AÍ o publish passa (caso DEPOIS, acima).
     const doRelato = graph([trigger('t'), wait24h('w1'), iaComPlanoB('a1', TEMPLATE_ID), end('e')]);
     const r = validateFlowForPublish(doRelato, {
-      exigeModeloForaDaJanela: algumCanalExigeModeloForaDaJanela(contaDaIssue),
+      exigeModeloForaDaJanela: algumCanalExigeModeloForaDaJanela(CONTA_DO_RELATO),
       modelos: { prontos: new Set([TEMPLATE_ID]), doCanal: new Set() },
     });
     expect(codigos(r)).toEqual(['modelo_inexistente']);
-    // Nenhum canal da conta exige plano B: não há exigência a cobrar por cima.
+    // Nenhuma conexão da conta exige plano B: não há exigência a cobrar por cima.
     expect(codigos(r)).not.toContain('long_wait_needs_template');
   });
 
@@ -187,12 +189,12 @@ describe('#3109 — publish com conta de WAHA + canal social (janela, sem modelo
       cancel_on_reply: true,
     };
     const comGatilho = validateFlowForPublish(fluxoDoRelato(), {
-      exigeModeloForaDaJanela: regraAntiga(contaDaIssue),
+      exigeModeloForaDaJanela: regraAntiga(CONTA_DO_RELATO),
       trigger: gatilhoDoRelato,
     });
     expect(codigos(comGatilho)).toEqual(['long_wait_needs_template', 'long_wait_needs_template']);
     const comGatilhoEReguaNova = validateFlowForPublish(fluxoDoRelato(), {
-      exigeModeloForaDaJanela: algumCanalExigeModeloForaDaJanela(contaDaIssue),
+      exigeModeloForaDaJanela: algumCanalExigeModeloForaDaJanela(CONTA_DO_RELATO),
       trigger: gatilhoDoRelato,
     });
     expect(comGatilhoEReguaNova.ok).toBe(true);

@@ -123,9 +123,10 @@ export interface ContextoDoPublish {
    * plano B (`fallback_template_id`) de uma mensagem por IA depois de 24 h de
    * espera tem o que fazer — em runtime ele só sai com a janela fechada
    * (`janelaFechada` em followup-turn.ts). Num canal sem janela, ou num canal
-   * que fecha a janela mas não tem modelo aprovado nenhum (o social do Zernio),
-   * exigi-lo travaria o publish sem oferecer saída: o seletor do plano B só
-   * oferece modelos aprovados. Ausente = exige (o comportamento de antes).
+   * que fecha a janela mas não tem modelo aprovado nenhum (o canal social de
+   * Instagram/Facebook), exigi-lo travaria o publish sem oferecer saída: o
+   * seletor do plano B só oferece modelos aprovados. Ausente = exige (o
+   * comportamento de antes).
    */
   exigeModeloForaDaJanela?: boolean;
   /**
@@ -184,15 +185,15 @@ export function avisosDoGatilho(trigger: TriggerConfig | undefined): PublishVali
  *
  * ─── Não basta o canal ter janela (#3109) ─────────────────────────────────
  *
- * A versão anterior perguntava só `!freeformOutsideWindow`. O canal social do
- * Zernio fecha a janela (`freeformOutsideWindow: false`, MEDIDO: a Meta recusa a
- * ENTREGA com 131047) e mesmo assim NÃO tem catálogo de definições aprovadas
- * (`requiresTemplates: false` — não há WABA por trás dele). Nessa conta o seletor
- * do plano B nasce vazio: não existe modelo aprovado a escolher, e a exigência
- * fica impossível de cumprir. Como a conta era da ORGANIZAÇÃO INTEIRA, uma
- * conexão social reprovava o publish de um fluxo que só roda no WhatsApp por QR
- * (WAHA, sem janela) — e nem com plano B nem sem ele havia configuração válida
- * para publicar.
+ * A versão anterior perguntava só `!freeformOutsideWindow`. O canal social de
+ * Instagram/Facebook fecha a janela (`freeformOutsideWindow: false`, MEDIDO: a
+ * Meta recusa a ENTREGA com 131047) e mesmo assim NÃO tem catálogo de definições
+ * aprovadas (`requiresTemplates: false` — não há WABA por trás dele). Nessa conta
+ * o seletor do plano B nasce vazio: não existe modelo aprovado a escolher, e a
+ * exigência fica impossível de cumprir. Como a conta era da ORGANIZAÇÃO INTEIRA,
+ * uma conexão social reprovava o publish de um fluxo que só roda no WhatsApp por
+ * QR (canal sem janela) — e nem com plano B nem sem ele havia configuração
+ * válida para publicar.
  *
  * Então as duas perguntas entram juntas, e a segunda é a que faltava: o canal tem
  * a REGRA da janela E tem DEFINIÇÕES aprovadas para oferecer? Sem catálogo, o
