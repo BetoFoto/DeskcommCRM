@@ -14753,6 +14753,10 @@ export const DICIONARIO: Traducoes = {
   "Coluna do id": { es: "Columna del id" },
   "Coluna do título": { es: "Columna del título" },
   "Coluna na tabela": { es: "Columna en la tabla" },
+  "Coluna": { es: "Columna" },
+  "Tabela:": { es: "Tabla:" },
+  "Coluna do id:": { es: "Columna del id:" },
+  "Coluna do título:": { es: "Columna del título:" },
   // ─── O rótulo do caminho que falhou no 422 das receitas ───
   "Categoria do bairro": { es: "Categoría del barrio" },
   "Categoria da cidade": { es: "Categoría de la ciudad" },
