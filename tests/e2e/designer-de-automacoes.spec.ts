@@ -79,7 +79,7 @@ async function medirOCanvas(page: Page, estado: string) {
   const medida = await page.getByTestId("designer-canvas").evaluate((el) => {
     const container = el as HTMLElement;
     const caixa = document.querySelector<HTMLElement>('[data-testid="caixa-gatilho"]');
-    const retanguloDaCaixa = caixa?.getBoundingClientRect();
+    const retanguloDaCaixa = caixa === null ? null : caixa.getBoundingClientRect();
     const centro =
       retanguloDaCaixa && retanguloDaCaixa.width > 0 && retanguloDaCaixa.height > 0
         ? document.elementFromPoint(
@@ -95,11 +95,11 @@ async function medirOCanvas(page: Page, estado: string) {
       alturaDaColuna: Math.round(container.parentElement?.parentElement?.getBoundingClientRect().height ?? -1),
       alturaDaCaixa: retanguloDaCaixa ? Math.round(retanguloDaCaixa.height) : -1,
       caixasNoDom: document.querySelectorAll(".react-flow__node").length,
-      cliqueChegaNaCaixa: centro !== null && caixa !== undefined && caixa.contains(centro),
+      cliqueChegaNaCaixa: centro !== null && caixa !== null && caixa.contains(centro),
       quemRecebeOClique:
         centro === null
           ? "ninguém (a caixa não tem área na tela)"
-          : caixa?.contains(centro)
+          : caixa !== null && caixa.contains(centro)
             ? "a caixa do gatilho"
             : `${centro.tagName.toLowerCase()}[data-testid=${centro.getAttribute("data-testid") ?? "-"}]`,
       painelLateralNaTela: retanguloDoPainel !== undefined && retanguloDoPainel.width > 0,
