@@ -43,8 +43,9 @@
  *
  * ─── A ÚLTIMA PORTA, no texto INTEIRO (#2642) ──────────────────────────────
  *
- * A limpeza por campo não cobre tudo: `Próxima ação` sai por `linha()` (um
- * `trim`), o telefone e o nome da regra vão crus. Por isso o corpo montado
+ * A limpeza por campo cobre os campos que vêm da conversa (inclusive o nome do
+ * contato e a `Próxima ação`), mas o telefone e o nome da regra vão crus, e o
+ * campo de amanhã pode nascer sem ela. Por isso o corpo montado
  * passa por `sanitizarResumoParaAEquipe` antes de virar mensagem — o link sai,
  * a instrução dirigida a quem lê sai, o texto entra com teto e é MARCADO como
  * resumo automático. Quem consertar a limpeza por campo um dia não pode supor
@@ -142,7 +143,12 @@ export function montarResumoParaAEquipe(entrada: EntradaDoResumo): string {
   if (regra !== "") linhas.push(`${t("Regra")}: ${regra}`);
   linhas.push("");
 
-  const cliente = primeiroNome(nomeDoContato(entrada.contato ?? null));
+  // O nome vem do WhatsApp do cliente (quem escreve é ele): mesma régua dos
+  // outros campos, senão um nome com link ou marcação imita linha do sistema.
+  const cliente = sanitizarTextoDoLead(
+    primeiroNome(nomeDoContato(entrada.contato ?? null)),
+    TETOS_DO_TEXTO_DO_LEAD.title,
+  );
   const fone = linha(t("Telefone"), entrada.contato?.phone_number);
   const negocio = sanitizarTextoDoLead(entrada.lead.title, TETOS_DO_TEXTO_DO_LEAD.title);
   const valor =
@@ -175,7 +181,11 @@ export function montarResumoParaAEquipe(entrada: EntradaDoResumo): string {
   if (passagem) {
     const compromissos = lista(t("Compromissos"), passagem.compromissos);
     const objecoes = lista(t("Objeções"), passagem.objecoes);
-    const proxima = linha(t("Próxima ação"), passagem.proximaAcao);
+    // `next_action` é escrita pelo modelo a partir da conversa: passa pela
+    // mesma régua dos compromissos. Um `trim` deixava quebra de linha (linha
+    // forjada), marcação do WhatsApp e CPF/telefone atravessarem.
+    const acao = sanitizarTextoDoLead(passagem.proximaAcao, 160);
+    const proxima = acao === null ? null : `${t("Próxima ação")}: ${acao}`;
     if (compromissos) linhas.push(compromissos);
     if (objecoes) linhas.push(objecoes);
     if (proxima) linhas.push(proxima);

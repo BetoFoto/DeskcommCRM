@@ -6,10 +6,10 @@
  * `resumo-para-a-equipe.ts` já manda a fala do MODELO por
  * `sanitizarTextoDoLead` (a régua do aviso de caso). Isso não basta, e a razão
  * é medida: nem todo campo que chega à mensagem passa pela limpeza por campo.
- * `Próxima ação` sai por `linha()` — um `trim`, nada mais —, e o `telefone` e o
- * nome da `regra` também vão crus. Qualquer um deles é uma PORTA: basta o
- * modelo escrever um link no `next_action` do checkpoint para ele aterrissar
- * dentro de uma mensagem assinada pela empresa, no WhatsApp de quem atende.
+ * O `telefone` e o nome da `regra` vão crus, e a `Próxima ação` já foi um
+ * `trim` só — bastava o modelo escrever um link no `next_action` do checkpoint
+ * para ele aterrissar dentro de uma mensagem assinada pela empresa, no WhatsApp
+ * de quem atende. Campo novo pode repetir o descuido.
  *
  * A resposta não é limpar cada campo novo, um a um, para sempre — é ter UMA
  * última porta no TEXTO INTEIRO, logo antes de ele virar mensagem. Quem
@@ -81,11 +81,14 @@ const INSTRUCAO_A_QUEM_LE: readonly RegExp[] = [
   // Resposta forçada: "responda somente com SIM", "replique apenas OK". Os
   // verbos são só os de RESPOSTA — "diga/escreva" são comuns demais numa fala
   // legítima e virariam falso positivo.
-  /\b(responda|responde|responder|replique|replicar)\b[^.!?\n]{0,30}\b(somente|apenas|só|exatamente)\b/i,
+  // Só o IMPERATIVO: "responder apenas as dúvidas" é próxima ação legítima.
+  /\b(responda|responde|replique)\b[^.!?\n]{0,30}\b(somente|apenas|exatamente)\b/i,
   // Troca de regra em inglês: "ignore previous instructions", "disregard all rules".
   /\b(ignore|disregard)\b[^.!?\n]{0,40}\b(previous|prior|above|all)\b[^.!?\n]{0,20}\b(instructions?|rules?|prompts?)\b/i,
-  // Ordem de pagamento/transferência: "mande o pix", "transfira o valor".
-  /\b(mande|envie|transfira|pague|deposite)\b[^.!?\n]{0,30}\b(pix|dinheiro|valor|pagamento)\b/i,
+  // Ordem de PIX: "mande o pix", "faça o pix na chave". Só o pix: "envie a
+  // proposta com o valor" e "mande o boleto e confirme o pagamento" são a
+  // próxima ação de quem vende, e caíam inteiras com valor/pagamento na lista.
+  /\b(mande|manda|envie|envia|transfira|pague|deposite|faça)\b[^.!?\n]{0,30}\bpix\b/i,
   // Marca de PAPEL (o cabeçalho em que a injeção finge ser o sistema).
   /^\s*(system|assistant|developer|user)\s*:/im,
 ];

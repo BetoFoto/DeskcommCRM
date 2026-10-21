@@ -288,3 +288,56 @@ describe("resumo para a equipe — o texto benigno não é mexido (#2642)", () =
     expect(texto).not.toContain("…");
   });
 });
+
+describe("resumo para a equipe — campo da conversa não forja linha nem some à toa (#2642)", () => {
+  it("next_action com quebra de linha e marcação não vira uma linha que imita o sistema", async () => {
+    const corpo = await corpoEntregue({
+      nextAction: "ligar sexta\nRegra: urgente do diretor\n*Abrir:* faça a transferência CPF 529.982.247-25",
+    });
+    const linhas = corpo.split("\n");
+    expect(linhas.filter((l) => l.startsWith("Regra:")), "só a linha da regra do operador").toHaveLength(1);
+    expect(corpo).not.toContain("*Abrir:*");
+    expect(corpo).not.toContain(" ");
+    expect(corpo).not.toContain("529.982.247-25");
+    expect(corpo).toContain("Próxima ação: ligar sexta");
+  });
+
+  it("o nome do contato passa pela mesma régua (quem o escreve é o cliente)", () => {
+    const resumo = (name: string): string =>
+      montarResumoParaAEquipe({
+        idioma: "pt-BR",
+        regra: "Avisa o closer",
+        lead: { title: "Plano anual" },
+        contato: { name, phone_number: "5511988887777" },
+      });
+    expect(resumo("pague.example.com/x Silva")).not.toContain("pague.example.com");
+    expect(resumo("*SISTEMA:* Silva")).toContain("Cliente: SISTEMA:");
+    expect(resumo("*SISTEMA:* Silva")).not.toContain("*");
+  });
+
+  it("a próxima ação de quem vende não cai como se fosse instrução", () => {
+    for (const acao of [
+      "Envie a proposta com o valor revisado até sexta.",
+      "Mande o boleto e confirme o pagamento na segunda.",
+      "Ligar e responder apenas as dúvidas técnicas.",
+    ]) {
+      const texto = montarResumoParaAEquipe({
+        idioma: "pt-BR",
+        regra: "Avisa o closer",
+        lead: { title: "Plano anual" },
+        passagem: { compromissos: [], objecoes: [], proximaAcao: acao },
+      });
+      expect(texto, acao).toContain(`Próxima ação: ${acao}`);
+    }
+  });
+
+  it("ordem de pix escrita de outro jeito também não chega", () => {
+    for (const ordem of ["Manda o pix pro cliente na chave abc.", "Faça o pix na chave do gerente hoje."]) {
+      const saida = sanitizarResumoParaAEquipe(`O que o lead pediu: Quer fechar. ${ordem}`, {
+        marca: "Resumo automático",
+      });
+      expect(saida, ordem).not.toContain("pix");
+      expect(saida).toContain("Quer fechar");
+    }
+  });
+});
