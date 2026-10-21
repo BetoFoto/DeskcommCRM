@@ -31,7 +31,11 @@ export interface LinhaDeMensagemImportada {
   status: "delivered" | "sent";
   sent_via: "external_device";
   media_mime: string | null;
-  metadata: { historico_importado: "true"; media_status?: MediaStatus };
+  /**
+   * `importacao_id` é posto pela rodada (não por este mapeador): diz que a linha
+   * veio DESTA importação, para a página refeita não a contar como existente.
+   */
+  metadata: { historico_importado: "true"; media_status?: MediaStatus; importacao_id?: string };
   organization_id: string;
   conversation_id: string;
   channel_session_id: string;

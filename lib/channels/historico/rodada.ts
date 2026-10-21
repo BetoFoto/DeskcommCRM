@@ -38,7 +38,17 @@
  * termina com `lidas === 0`: página inteira recusada pelo schema não é fim.
  *
  * Refazer um pedaço (rodada interrompida antes de gravar o cursor) é seguro: a
- * mensagem já gravada é reconhecida pelo `external_id` e conta como existente.
+ * mensagem já gravada é reconhecida pelo `external_id` e não é inserida de novo.
+ *
+ * ─── O que cada contador conta ──────────────────────────────────────────────
+ *
+ * `mensagens_gravadas` conta no insert e nunca recua: a linha existe. A linha
+ * leva `metadata.importacao_id`, e a página refeita reconhece por ela o que ESTA
+ * importação já gravou: isso não é "existente" nem gravada de novo, não conta.
+ * `mensagens_existentes` é só o que já estava no CRM por outro caminho (o ao
+ * vivo, outra importação); ele e `mensagens_ignoradas` voltam ao valor do início
+ * da página quando a página é largada para ser refeita, senão a refeita os
+ * contaria de novo (medido na prova de 21/10: 77 "existentes" para ~72 ao vivo).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -265,8 +275,10 @@ export async function rodarUmaRodada(
           // Só `lidas === 0` é fim: página inteira recusada pelo schema não é.
           if (lidas === 0) break;
 
-          // O que o schema recusou também foi lido e não vira linha.
+          // O que o schema recusou também foi lido e não vira linha. Os dois
+          // contadores voltam a este ponto se a página for largada para ser refeita.
           const ignoradasAntes = desta.ignoradas;
+          const existentesAntes = desta.existentes;
           desta.ignoradas += lidas - mensagens.length;
           const validas: WahaPayload[] = [];
           for (const p of mensagens) {
@@ -294,6 +306,7 @@ export async function rodarUmaRodada(
                 // na próxima rodada, então o cursor fica no último ponto firme.
                 Object.assign(cursor, cursorFirme);
                 desta.ignoradas = ignoradasAntes;
+                desta.existentes = existentesAntes;
                 return await encerrar("rodando");
               }
             }
@@ -320,7 +333,8 @@ export async function rodarUmaRodada(
     }
   } catch (err) {
     Object.assign(cursor, cursorFirme);
-    Object.assign(desta, firmes);
+    // `gravadas` fica: o insert aconteceu, e a refeita não o conta de novo.
+    Object.assign(desta, { ...firmes, gravadas: desta.gravadas });
     return await encerrar("erro", { erro: mensagemDeErro(err).slice(0, 500) });
   }
 }
@@ -391,24 +405,36 @@ async function gravarMensagens(
   const { data: achadas, error: erroDaConsulta } = await buscaEmLotes(
     [...new Set(candidatos.flat())],
     (lote) =>
-      admin.from("messages").select("external_id").eq("organization_id", imp.organization_id).in("external_id", lote),
+      admin
+        .from("messages")
+        .select("external_id, metadata")
+        .eq("organization_id", imp.organization_id)
+        .in("external_id", lote),
     { bytesPorLote: BYTES_DE_CANDIDATOS_POR_CONSULTA },
   );
   if (erroDaConsulta) throw new Error(`messages_consulta: ${mensagemDeErro(erroDaConsulta)}`);
-  const ja = new Set(((achadas ?? []) as Array<{ external_id: string | null }>).map((m) => m.external_id));
+  const linhasAchadas = (achadas ?? []) as Array<{ external_id: string | null; metadata?: Record<string, unknown> | null }>;
+  const ja = new Set(linhasAchadas.map((m) => m.external_id));
+  // Gravadas por ESTA importação numa rodada anterior (página refeita): não contam.
+  const proprias = new Set(
+    linhasAchadas.filter((m) => m.metadata?.importacao_id === imp.id).map((m) => m.external_id),
+  );
 
   let existentes = 0;
   const novas: LinhaDeMensagemImportada[] = [];
   const vistos = new Set<string>();
   mensagens.forEach((p, i) => {
-    const linha = mapearMensagemDoAcervo(p, {
+    const mapeada = mapearMensagemDoAcervo(p, {
       orgId: imp.organization_id,
       sessionId: imp.channel_session_id,
       contactId: alvo.contactId,
       conversationId: alvo.conversationId,
     });
+    const linha = { ...mapeada, metadata: { ...mapeada.metadata, importacao_id: imp.id } };
+    const doCandidato = candidatos[i] ?? [];
+    if (doCandidato.some((c) => proprias.has(c))) return;
     // Repetida na própria página também é existente: o lote não pode colidir consigo.
-    if ((candidatos[i] ?? []).some((c) => ja.has(c)) || vistos.has(linha.external_id)) {
+    if (doCandidato.some((c) => ja.has(c)) || vistos.has(linha.external_id)) {
       existentes += 1;
       return;
     }

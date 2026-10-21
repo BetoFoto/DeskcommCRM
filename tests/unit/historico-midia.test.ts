@@ -8,6 +8,12 @@ const canal = vi.hoisted(() => ({
   /** id da mensagem no canal -> o que `baixarMidiaDaMensagem` devolve (ou lança). */
   midia: {} as Record<string, { url: string | null; erro: boolean } | "lanca">,
   baixadas: [] as Array<[string, string, string]>,
+  /** Opções que a rodada passou a cada download (o teto do download). */
+  opcoesDoDownload: [] as Array<{ tetoMs?: number } | undefined>,
+  /** Gancho a cada download (para o relógio de mentira andar). */
+  aoBaixar: null as null | (() => void),
+  /** Páginas de mensagens pedidas. */
+  paginas: 0,
 }));
 vi.mock("@/lib/waha/client", () => ({
   getWahaClient: () => ({
@@ -17,11 +23,14 @@ vi.mock("@/lib/waha/client", () => ({
       return { conversas: fatia, lidas: fatia.length };
     },
     async paginaDeMensagens(_s: string, _c: string, opts: { limit: number; offset: number }) {
+      canal.paginas += 1;
       const bruto = canal.mensagens.slice(opts.offset, opts.offset + opts.limit);
       return { mensagens: bruto, lidas: bruto.length };
     },
-    async baixarMidiaDaMensagem(sessao: string, chatId: string, messageId: string) {
+    async baixarMidiaDaMensagem(sessao: string, chatId: string, messageId: string, opcoes?: { tetoMs?: number }) {
       canal.baixadas.push([sessao, chatId, messageId]);
+      canal.opcoesDoDownload.push(opcoes);
+      canal.aoBaixar?.();
       const r = canal.midia[messageId];
       if (r === "lanca") throw new Error("waha_media_500");
       return r ?? { url: null, erro: false };
@@ -171,6 +180,9 @@ beforeEach(() => {
   canal.mensagens = [];
   canal.midia = {};
   canal.baixadas = [];
+  canal.opcoesDoDownload = [];
+  canal.aoBaixar = null;
+  canal.paginas = 0;
   auditEspiao.mockReset();
 });
 
@@ -210,7 +222,7 @@ describe("mídia do histórico", () => {
 
     expect(r.status).toBe("concluida");
     const a1 = db.messages.find((m) => m.external_id === idCanal("A1"))!;
-    expect(a1.metadata).toEqual({ historico_importado: "true", media_status: "indisponivel" });
+    expect(a1.metadata).toEqual({ historico_importado: "true", media_status: "indisponivel", importacao_id: IMP });
     expect(a1.media_url).toBeNull();
     expect(emits(db)).toHaveLength(1);
     expect(db.importacoes.get(IMP)).toMatchObject({ midias_baixadas: 1, midias_indisponiveis: 1 });
@@ -300,6 +312,8 @@ describe("mídia do histórico", () => {
     expect((await rodarUmaRodada(db.admin as never, IMP, SEM_TETO)).status).toBe("concluida");
     expect(db.messages[0]!.metadata).toMatchObject({ media_status: "solicitada", historico_importado: "true" });
     expect(emits(db)).toHaveLength(1);
+    // a gravação da rodada em erro conta; a refeita não a chama de existente
+    expect(db.importacoes.get(IMP)).toMatchObject({ mensagens_gravadas: 1, mensagens_existentes: 0 });
   });
 
   it("teto de chamadas no meio das mídias: cursor não passa da página; a refeita resolve só as pendentes", async () => {
@@ -326,6 +340,33 @@ describe("mídia do histórico", () => {
     expect(emits(db)).toHaveLength(3);
     expect(db.messages).toHaveLength(3);
     expect(db.importacoes.get(IMP)).toMatchObject({ midias_baixadas: 3, midias_indisponiveis: 0, status: "concluida" });
+    // a página refeita não conta como "já existente" o que ESTA importação gravou
+    expect(db.importacoes.get(IMP)).toMatchObject({ mensagens_gravadas: 3, mensagens_existentes: 0 });
+  });
+
+  it("página refeita: a mensagem que já estava no CRM conta UMA vez como existente", async () => {
+    const texto = (n: string, ts: number): Linha => ({
+      id: idCanal(n),
+      timestamp: ts,
+      from: TEL,
+      fromMe: false,
+      body: "oi",
+      hasMedia: false,
+    });
+    canal.mensagens = [texto("T1", agora - 95_000), imagem("P1", agora - 90_000), imagem("P2", agora - 80_000)];
+    for (const n of ["P1", "P2"]) canal.midia[idCanal(n)] = { url: `http://canal/files/${n}.jpg`, erro: false };
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    // o ao vivo já tinha gravado T1 antes da importação
+    db.messages.push({ id: "m-vivo", organization_id: ORG, external_id: idCanal("T1"), metadata: {} });
+    const teto = { conversas: 10, mensagens: 300, chamadas: 3 };
+    let ultima = await rodarUmaRodada(db.admin as never, IMP, teto);
+    for (let i = 0; i < 6 && ultima.status === "rodando"; i++) {
+      ultima = await rodarUmaRodada(db.admin as never, IMP, teto);
+    }
+    expect(ultima.status).toBe("concluida");
+    expect(db.messages).toHaveLength(3);
+    expect(db.importacoes.get(IMP)).toMatchObject({ mensagens_gravadas: 2, mensagens_existentes: 1 });
   });
 
   it("só emite persist_requested: nenhum outro evento, nem derivação", async () => {
