@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import { precoNumero } from "./preco";
 import { quotarIdentificadorMysql } from "./sql-mysql";
+import { alvoDeLike } from "./wordpress-conteudo";
 import { ErroDeFiltroDesconhecido } from "./erros";
 import type { DefinicaoDeReceita } from "./tipos";
 
@@ -47,8 +48,8 @@ export interface CampoMapeadoTabelaDireta {
   chave: string;
   rotulo: string;
   coluna: string;
-  tipo: TipoDeCampo;
-  filtro: FiltroDeCampo;
+  tipo: TipoDeCampoTabelaDireta;
+  filtro: FiltroDeCampoTabelaDireta;
 }
 
 /** O que fica de fora da lista: uma coluna e os valores que somem. */
@@ -99,7 +100,7 @@ const campoSchema = z
       .max(40, "O rótulo pode ter no máximo 40 caracteres."),
     coluna: colunaSchema,
     tipo: z.enum(["texto", "numero", "preco"]),
-    filtro: z.enum(["nenhum", "contem", "minimo", "maximo"]),
+    filtro: z.enum(["nenhum", "contem", "igual", "minimo", "maximo"]),
   })
   .strict()
   .superRefine((campo, ctx) => {
@@ -267,7 +268,7 @@ export function validarFiltrosDaBuscaTabelaDireta(fixos: unknown, busca: unknown
 export type TipoDeCampoTabelaDireta = "texto" | "numero" | "preco";
 
 /** O filtro que o agente pode pedir sobre um campo. */
-export type FiltroDeCampoTabelaDireta = "nenhum" | "contem" | "minimo" | "maximo";
+export type FiltroDeCampoTabelaDireta = "nenhum" | "contem" | "igual" | "minimo" | "maximo";
 
 /**
  * A comparação numérica de um campo: o valor é texto, e o filtro de
@@ -275,8 +276,10 @@ export type FiltroDeCampoTabelaDireta = "nenhum" | "contem" | "minimo" | "maximo
  * (o site grava "650.000,00"); os outros números usam CAST.
  */
 function comparacaoNumerica(campo: CampoMapeadoTabelaDireta, alias: string): string {
-  if (campo.tipo === "preco") return precoNumero(quotarIdentificadorMysql(`${alias}.${campo.coluna}`));
-  return `CAST(${quotarIdentificadorMysql(`${alias}.${campo.coluna}`)} AS DECIMAL(10,2))`;
+  if (campo.tipo === "preco") {
+    return precoNumero(`${alias}.${quotarIdentificadorMysql(campo.coluna)}`);
+  }
+  return `CAST(${alias}.${quotarIdentificadorMysql(campo.coluna)} AS DECIMAL(10,2))`;
 }
 
 export const RECEITA_TABELA_DIRETA: DefinicaoDeReceita = {
@@ -303,6 +306,8 @@ export const RECEITA_TABELA_DIRETA: DefinicaoDeReceita = {
     const f = (fixos ?? {}) as FixosDaReceita;
     const colunas: string[] = [f.colunaId ?? "", f.colunaTitulo ?? ""];
     for (const campo of f.campos ?? []) colunas.push(campo.coluna);
+    if (f.soMostrarQuando?.coluna) colunas.push(f.soMostrarQuando.coluna);
+    if (f.esconderQuando?.coluna) colunas.push(f.esconderQuando.coluna);
     return { [f.tabela ?? ""]: colunas };
   },
   montar: (fixos, busca, limite) => {
@@ -331,8 +336,8 @@ export const RECEITA_TABELA_DIRETA: DefinicaoDeReceita = {
       // O PREÇO é lido com a conversão robusta; os outros campos saem como o banco gravou.
       const expressao =
         campo.tipo === "preco"
-          ? precoNumero(quotarIdentificadorMysql(`t.${campo.coluna}`))
-          : quotarIdentificadorMysql(`t.${campo.coluna}`);
+          ? precoNumero(`t.${quotarIdentificadorMysql(campo.coluna)}`)
+          : `t.${quotarIdentificadorMysql(campo.coluna)}`;
       colunas.push(`${expressao} as ${quotarIdentificadorMysql(campo.chave)}`);
     }
 
@@ -372,11 +377,11 @@ export const RECEITA_TABELA_DIRETA: DefinicaoDeReceita = {
       if (valor === undefined) continue;
       if (campo.filtro === "contem") {
         clausulas.push(
-          `lower(${quotarIdentificadorMysql(`t.${campo.coluna}`)}) like ${marcador(`%${String(valor).toLowerCase()}%`)} escape '!'`,
+          `lower(t.${quotarIdentificadorMysql(campo.coluna)}) like ${marcador(alvoDeLike(String(valor)))} escape '!'`,
         );
       } else if (campo.filtro === "igual") {
         clausulas.push(
-          `${quotarIdentificadorMysql(`t.${campo.coluna}`)} = ${marcador(String(valor))}`,
+          `t.${quotarIdentificadorMysql(campo.coluna)} = ${marcador(String(valor))}`,
         );
       } else if (campo.filtro === "minimo") {
         clausulas.push(`(${comparacaoNumerica(campo, "t")}) >= ${marcador(valor)}`);
@@ -386,11 +391,12 @@ export const RECEITA_TABELA_DIRETA: DefinicaoDeReceita = {
     }
 
     // ─── 4. O SQL ────────────────────────────────────────────────────────────
+    const where = clausulas.length > 0 ? `where ${clausulas.join(" and ")} ` : "";
     const sql =
       `select ${colunas.join(", ")} ` +
       `from ${tabela} t ` +
       `${juncoes.join(" ")} ` +
-      `where ${clausulas.join(" and ")} ` +
+      `${where}` +
       `order by ${colunaId} ` +
       `limit ${marcador(limite ?? TETO_ITENS_TABELA_DIRETA)}`;
 

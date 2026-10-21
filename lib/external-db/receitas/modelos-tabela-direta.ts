@@ -20,9 +20,9 @@
 import type {
   CampoMapeadoTabelaDireta,
   EsconderQuandoTabelaDireta,
-  FiltroDeCampo,
+  FiltroDeCampoTabelaDireta,
   SoMostrarQuandoTabelaDireta,
-  TipoDeCampo,
+  TipoDeCampoTabelaDireta,
 } from "./tabela-direta";
 
 /** Um campo do modelo: a chave, o rótulo e a coluna sugerida. */
@@ -30,8 +30,8 @@ export interface CampoModeladoTabelaDireta {
   chave: string;
   rotulo: string;
   coluna: string;
-  tipo: TipoDeCampo;
-  filtro: FiltroDeCampo;
+  tipo: TipoDeCampoTabelaDireta;
+  filtro: FiltroDeCampoTabelaDireta;
 }
 
 /** Um modelo pronto para preencher a tela. */
