@@ -391,14 +391,20 @@ export const RECEITA_TABELA_DIRETA: DefinicaoDeReceita = {
     }
 
     // ─── 4. O SQL ────────────────────────────────────────────────────────────
-    const where = clausulas.length > 0 ? `where ${clausulas.join(" and ")} ` : "";
-    const sql =
-      `select ${colunas.join(", ")} ` +
-      `from ${tabela} t ` +
-      `${juncoes.join(" ")} ` +
-      `${where}` +
-      `order by ${colunaId} ` +
-      `limit ${marcador(limite ?? TETO_ITENS_TABELA_DIRETA)}`;
+    // Cada parte só entra quando tem texto, e sem espaço nas pontas: com a
+    // montagem intercalada de pedaços, sem junções nem filtros entrava um
+    // pedaço vazio entre espaços e saía "t  order by" com espaço duplo.
+    const where = clausulas.length > 0 ? `where ${clausulas.join(" and ")}` : "";
+    const sql = [
+      `select ${colunas.join(", ")}`,
+      `from ${tabela} t`,
+      ...juncoes,
+      where,
+      `order by ${colunaId}`,
+      `limit ${marcador(limite ?? TETO_ITENS_TABELA_DIRETA)}`,
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     return { sql, valores };
   },
