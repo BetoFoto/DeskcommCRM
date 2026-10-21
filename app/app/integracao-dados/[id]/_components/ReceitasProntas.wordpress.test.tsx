@@ -20,6 +20,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { toast } from "sonner";
+
 import ReceitasProntas from "./ReceitasProntas";
 import type { InstanciaDeReceita } from "@/lib/external-db/receitas/tipos";
 
@@ -36,6 +38,14 @@ vi.mock("@/hooks/external-db/useReceitasDaConexao", () => ({
 }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (chave: string) => chave }));
 vi.mock("@/lib/random-id", () => ({ randomId: () => "id-gerado" }));
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn(),
+  },
+}));
 
 const INSTANCIA_WORDPRESS: InstanciaDeReceita = {
   id: "inst-wp-1",
@@ -346,6 +356,8 @@ describe("Receitas prontas — o que vai para o PUT", () => {
     });
 
     expect(deps.salvarReceitas).not.toHaveBeenCalled();
+    // E a tela diz o que falta, em vez de falhar em silêncio.
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith("Escreva o tipo de post do site.");
   });
 
   it("campo apagado tira a CHAVE do mapeamento (não grava vazio)", async () => {

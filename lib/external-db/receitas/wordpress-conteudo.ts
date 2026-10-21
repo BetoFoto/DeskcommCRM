@@ -438,7 +438,7 @@ export const RECEITA_WORDPRESS_CONTEUDO: DefinicaoDeReceita = {
     "Lê o conteúdo publicado de um site WordPress (ACF, ou JetEngine no modo padrão de tipo de post): " +
     "título, os campos que o administrador mapear e o link. " +
     "O administrador diz o tipo de post e de onde vem cada dado: um campo do site (meta_key) ou uma categoria (taxonomia do WordPress). " +
-    "Cada dado mapped pelo administrador pode virar um filtro (contém, mínimo, máximo ou igual). " +
+    "Cada dado mapeado pelo administrador pode virar um filtro (contém, mínimo, máximo ou igual). " +
     "Um filtro só prende quando o dado correspondente está mapeado. " +
     "Conteúdo com um valor escondido (por exemplo, vendido) não aparece. Sem foto nesta fatia.",
   parametrosFixos: PARAMETROS_FIXOS_WORDPRESS_CONTEUDO,
@@ -476,7 +476,9 @@ export const RECEITA_WORDPRESS_CONTEUDO: DefinicaoDeReceita = {
     const esconder = f.esconder;
 
     // A busca bate com o mapeamento? Se não bater, é ERRO — nunca silêncio.
-    validarFiltrosDaBusca(f, busca);
+    // A validação olha os MESMOS campos e categorias que o SQL vai ler: um
+    // dado fora da lista não pode "filtrar" nada.
+    validarFiltrosDaBusca({ ...f, campos, categorias }, busca);
 
     const posts = quotarIdentificadorMysql(`${p}posts`);
     const postmeta = quotarIdentificadorMysql(`${p}postmeta`);
@@ -489,8 +491,15 @@ export const RECEITA_WORDPRESS_CONTEUDO: DefinicaoDeReceita = {
 
     const ctx: ContextoDeTaxonomia = { prefixo: p, objeto: "p.ID", marcador };
 
-    /** O apelido da junção de um campo (o nome do campo, com `m` na frente). */
-    const aliasDe = (campo: CampoMapeado): string => `m${campo.chave}`;
+    /**
+     * O apelido da junção de um campo (o nome do campo, com `m` na frente).
+     *
+     * O apelido é QUOTADO: ele sai da chave que a pessoa digitou (no
+     * "avançado" da tela), e identificador não vai cru no SQL. A chave já
+     * passa pela regex do Zod — e `chaveSegura` filtra o que escapa.
+     */
+    const aliasDe = (campo: CampoMapeado): string =>
+      quotarIdentificadorMysql(`m${campo.chave}`);
 
     // ─── 1. A SAÍDA ──────────────────────────────────────────────────────────
     // O SELECT vem PRIMEIRO no texto, então os `?` das categorias saem
@@ -560,6 +569,7 @@ export const RECEITA_WORDPRESS_CONTEUDO: DefinicaoDeReceita = {
     }
 
     // O que fica de fora: um `not exists` sobre o campo escondido.
+    const aliasEsconder = quotarIdentificadorMysql("mesconder");
     const campoEscondido = esconder?.meta_key?.trim() ?? "";
     const valoresEscondidos = (esconder?.valores ?? [])
       .map((v) => v.trim().toLowerCase())
@@ -570,8 +580,8 @@ export const RECEITA_WORDPRESS_CONTEUDO: DefinicaoDeReceita = {
       const marcaCampo = marcador(campoEscondido);
       const marcas = valoresEscondidos.map((v) => marcador(v)).join(", ");
       clausulas.push(
-        `not exists (select 1 from ${postmeta} mesconder where mesconder.post_id = p.ID ` +
-          `and mesconder.meta_key = ${marcaCampo} and lower(mesconder.meta_value) in (${marcas}))`,
+        `not exists (select 1 from ${postmeta} ${aliasEsconder} where ${aliasEsconder}.post_id = p.ID ` +
+          `and ${aliasEsconder}.meta_key = ${marcaCampo} and lower(${aliasEsconder}.meta_value) in (${marcas}))`,
       );
     }
 

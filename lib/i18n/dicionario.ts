@@ -14503,6 +14503,16 @@ export const DICIONARIO: Traducoes = {
   "Categorias:": { es: "Categorías:" },
   "Imóveis": { es: "Inmuebles" },
   "Em branco": { es: "En blanco" },
+  "Conteúdo do WordPress (qualquer tipo de post)": {
+    es: "Contenido de WordPress (cualquier tipo de entrada)",
+  },
+  "Qualquer conteúdo de um site WordPress: imóveis, veículos, cursos, cardápio. O administrador diz o tipo de post e de onde vem cada dado.": {
+    es: "Cualquier contenido de un sitio WordPress: inmuebles, vehículos, cursos, menús. El administrador indica el tipo de entrada y de dónde viene cada dato.",
+  },
+  "Produtos da loja WooCommerce": { es: "Productos de la tienda WooCommerce" },
+  "Os produtos publicados da loja: título, preço, SKU e estoque.": {
+    es: "Los productos publicados de la tienda: título, precio, SKU y stock.",
+  },
   // ─── As mensagens do Zod da receita genérica (o que a tela mostra no 422) ───
   "Escreva o tipo de post do site.": { es: "Escribe el tipo de entrada del sitio." },
   "Escreva o nome do campo no site.": { es: "Escribe el nombre del campo en el sitio." },

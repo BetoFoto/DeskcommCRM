@@ -232,9 +232,11 @@ function receitasDisponiveis(motor: "mysql" | "postgres"): DefinicaoDeReceita[] 
 /**
  * O rótulo de cada caminho de erro do Zod, no idioma da tela.
  *
- * A chave é o CAMINHO INTEIRO do campo que falhou — "campos", "categorias",
- * "esconder.meta_key" —, nunca o último pedaço: com o pedaço, "meta_key" e
- * "valores" viravam o mesmo rótulo na tela, e ninguém sabia o que corrigir.
+ * A chave é o CAMINHO do campo que falhou — "campos", "esconder.meta_key",
+ * "campos.1.chave" —, e a tela procura primeiro o caminho inteiro, depois o
+ * primeiro pedaço ("campos") e por último o ÚLTIMO ("chave"): com o pedaço
+ * sozinho, "meta_key" e "valores" viravam o mesmo rótulo, e ninguém sabia o
+ * que corrigir.
  */
 function rotulosDoErro(t: (texto: string) => string): Record<string, string> {
   return {
@@ -249,7 +251,25 @@ function rotulosDoErro(t: (texto: string) => string): Record<string, string> {
     esconder: t("Esconder itens"),
     "esconder.meta_key": t("Campo a esconder"),
     "esconder.valores": t("Valores a esconder"),
+    // Os últimos pedaços de um caminho com índice ("campos.1.chave").
+    chave: t("Chave"),
+    filtro: t("Filtro"),
+    meta_key: t("Campo no site"),
+    taxonomia: t("Categoria no site"),
+    nivel: t("Nível"),
+    tipo: t("Tipo"),
   };
+}
+
+/** O rótulo legível de um caminho de erro, do mais específico ao mais geral. */
+function rotuloDoCaminho(rotulos: Record<string, string>, caminho: string): string {
+  const partes = caminho.split(".");
+  return (
+    rotulos[caminho] ??
+    rotulos[partes[0] ?? caminho] ??
+    rotulos[partes[partes.length - 1] ?? caminho] ??
+    caminho
+  );
 }
 
 export default function ReceitasProntas({ connectionId, motor, canWrite }: Props) {
@@ -333,8 +353,7 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
           // O rótulo do CAMINHO que falhou, em português de leigo: o Zod da
           // receita responde por "campos", "esconder.meta_key"…
           const rotulos = rotulosDoErro(t);
-          const primeiro = campo.split(".")[0] ?? campo;
-          const label = rotulos[campo] ?? rotulos[primeiro] ?? campo;
+          const label = rotuloDoCaminho(rotulos, campo);
           toast.error(
             t("O campo {campo} não pôde ser salvo: {motivo}")
               .replace("{campo}", label)
@@ -609,9 +628,9 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                   onClick={() => escolherReceita(opcao)}
                   className="block w-full rounded-md border bg-background p-2 text-left text-sm hover:bg-accent"
                 >
-                  <span className="block font-medium">{opcao.rotulo}</span>
+                  <span className="block font-medium">{t(opcao.rotulo)}</span>
                   <span className="block text-xs text-muted-foreground">
-                    {opcao.resumo ?? opcao.descricao}
+                    {t(opcao.resumo ?? opcao.descricao)}
                   </span>
                 </button>
               ))}
@@ -1142,7 +1161,9 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
             <Card key={inst.id} className="border border-border p-3 mb-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm font-medium">{inst.rotulo || (receita?.rotulo ?? inst.receita)}</p>
+                  <p className="text-sm font-medium">
+                    {inst.rotulo || (receita ? t(receita.rotulo) : inst.receita)}
+                  </p>
                   <p className="text-xs text-muted-foreground min-w-0 break-words">{inst.descricao || (receita?.descricao ?? "")}</p>
                   <p className="text-xs text-muted-foreground">
                     {t("Prefixo:")} <span className="font-mono">{cols}</span>

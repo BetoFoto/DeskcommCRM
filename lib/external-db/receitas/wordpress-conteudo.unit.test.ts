@@ -367,7 +367,7 @@ describe("receita wordpress-conteudo (unit, sem MySQL)", () => {
     it("(c) veículos: o MESMO código monta o SQL de outro nicho", () => {
       const { sql, valores } = RECEITA_WORDPRESS_CONTEUDO.montar(FIXOS_VEICULOS, {}, 5);
       expect(valores).toContain("veiculo");
-      expect(sql).toContain("mpreco.meta_value");
+      expect(sql).toContain("`mpreco`.meta_value");
       expect(sql.split("?").length - 1).toBe(valores.length);
     });
 
@@ -451,8 +451,8 @@ describe("receita wordpress-conteudo (unit, sem MySQL)", () => {
         { filtros: { ano: 2020, km: 60000, preco: 90000 } },
         5,
       );
-      expect(sql).toContain("CAST(mano.meta_value AS DECIMAL(10,2)) >= ?");
-      expect(sql).toContain("CAST(mkm.meta_value AS DECIMAL(10,2)) <= ?");
+      expect(sql).toContain("CAST(`mano`.meta_value AS DECIMAL(10,2)) >= ?");
+      expect(sql).toContain("CAST(`mkm`.meta_value AS DECIMAL(10,2)) <= ?");
       expect(sql).toContain("CASE");
       expect(sql).toContain("REGEXP");
       expect(valores).toContain(2020);
@@ -466,14 +466,14 @@ describe("receita wordpress-conteudo (unit, sem MySQL)", () => {
         { filtros: { cambio: "manual" } },
         5,
       );
-      expect(sql).toContain("lower(mcambio.meta_value) like ? escape '!'");
+      expect(sql).toContain("lower(`mcambio`.meta_value) like ? escape '!'");
       expect(valores).toContain("%manual%");
     });
 
     it("o que fica de fora some: not exists sobre o campo escondido", () => {
       const { sql, valores } = RECEITA_WORDPRESS_CONTEUDO.montar(FIXOS_IMOVEIS, {}, 5);
       expect(sql).toContain("not exists (select 1 from");
-      expect(sql).toContain("lower(mesconder.meta_value) in (?, ?)");
+      expect(sql).toContain("lower(`mesconder`.meta_value) in (?, ?)");
       expect(valores).toContain("status_imovel");
       expect(valores).toContain("vendido");
       expect(valores).toContain("alugado");

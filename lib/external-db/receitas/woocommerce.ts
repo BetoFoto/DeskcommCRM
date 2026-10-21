@@ -72,7 +72,7 @@ export const RECEITA_WOOCOMMERCE_PRODUTOS: DefinicaoDeReceita = {
   familia: "woocommerce",
   motores: ["mysql"],
   rotulo: "Produtos da loja WooCommerce",
-  resumo: "Produtos publicados de uma loja WooCommerce: título, preço, SKU e estoque.",
+  resumo: "Os produtos publicados da loja: título, preço, SKU e estoque.",
   descricao:
     "Lê os produtos publicados do WordPress/WooCommerce: título, preço, SKU e estoque. " +
     "O prefixo é o que aparece antes de _posts no banco do WordPress (padrão wp_). " +
