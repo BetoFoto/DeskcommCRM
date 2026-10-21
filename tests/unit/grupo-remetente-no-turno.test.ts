@@ -7,7 +7,7 @@
  *
  * Este arquivo vigia a RENDERIZAÇÃO — o que o modelo lê, e não a consulta que
  * busca o dado (essa é medida contra o banco em
- * `tests/invariants/grupo-remetente-no-historico.test.ts`). Os dois lados
+ * `tests/invariants/historico-do-grupo-no-atendimento.test.ts`). Os dois lados
  * precisam existir: buscar e não renderizar é o mesmo que não buscar.
  *
  * Todos os casos têm CONTROLE 1:1 ao lado: numa conversa individual nada muda —

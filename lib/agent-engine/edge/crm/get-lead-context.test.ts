@@ -95,7 +95,7 @@ describe("getLeadContext — last_proposal (N7)", () => {
 // o turno simplesmente não o lia: num grupo de três pessoas o modelo recebia
 // todas as falas sem autor. Aqui a régua é o MAPEAMENTO (metadata → `sender`);
 // a consulta de verdade é medida contra o banco em
-// `tests/invariants/grupo-remetente-no-historico.test.ts`.
+// `tests/invariants/historico-do-grupo-no-atendimento.test.ts`.
 describe("getLeadContext — remetente do grupo (#2729)", () => {
   const linha = (o: Record<string, unknown>): Record<string, unknown> => ({
     type: "text",
@@ -127,14 +127,14 @@ describe("getLeadContext — remetente do grupo (#2729)", () => {
     const r = await getLeadContext(db as never, {} as never, INPUT, KNOBS);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.context.messages[0]).toMatchObject({
-      direction: "inbound",
-      sender: { name: "Dona", phone: "+5511999990000" },
-    });
+    // A ordem é a da consulta (mais nova primeiro, o chamador inverte); o que
+    // este caso mede é o MAPEAMENTO, então procura por direção.
+    const recebida = r.context.messages.find((m) => m.direction === "inbound");
+    expect(recebida).toMatchObject({ sender: { name: "Dona", phone: "+5511999990000" } });
     // `lid` é identificador interno do WhatsApp: não vai ao prompt.
     expect(JSON.stringify(r.context)).not.toContain("123456789012345");
     // A enviada é nossa — não tem autor participante para nomear.
-    expect(r.context.messages[1]).not.toHaveProperty("sender");
+    expect(r.context.messages.find((m) => m.direction === "outbound")).not.toHaveProperty("sender");
   });
 
   it("controle 1:1: sem group_sender, nenhuma mensagem ganha `sender`", async () => {

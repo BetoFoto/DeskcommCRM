@@ -115,7 +115,9 @@ describe("gravarMensagemDeGrupo", () => {
   it("I2: mensagem RECEBIDA reabre a conversa do grupo se ela estiver fechada, antes de carimbar", async () => {
     const d = db(ligado());
     await gravarMensagemDeGrupo(d, entrada());
-    expect(d.reabrirSeFechada).toHaveBeenCalledWith(ORG, "v");
+    // #2729 — a mensagem que reabriu vai junto: ela recebe a revisão NOVA do
+    // episódio e o episódio começa no instante dela (como na 1:1).
+    expect(d.reabrirSeFechada).toHaveBeenCalledWith(ORG, "v", "m1", "2026-09-23T12:00:00.000Z");
     expect(d.reabrirSeFechada.mock.invocationCallOrder[0]).toBeLessThan(d.marcarConversa.mock.invocationCallOrder[0]!);
   });
 
@@ -269,7 +271,7 @@ describe("criarIngestDeGrupoDb — dois webhooks do mesmo grupo novo terminam nu
       insercao: { conversations: DUP },
       leitura: { conversations: { data: { id: "conversa-do-outro" }, error: null } },
     });
-    const id = await criarIngestDeGrupoDb(admin as never).criarConversaDoGrupo(ORG, SESS, "c1", "1@g.us");
+    const id = await criarIngestDeGrupoDb(admin as never).criarConversaDoGrupo(ORG, SESS, "c1", "1@g.us", "2026-09-23T12:00:00.000Z");
     expect(id).toBe("conversa-do-outro");
     const releitura = comandos.find((c) => c.tabela === "conversations" && c.op === "select")!;
     expect(releitura.filtros).toEqual(

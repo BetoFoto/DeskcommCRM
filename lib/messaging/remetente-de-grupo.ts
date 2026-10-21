@@ -22,6 +22,15 @@ export const remetenteDeGrupoSchema = z.strictObject({
 
 export type RemetenteDeGrupo = z.infer<typeof remetenteDeGrupoSchema>;
 
+/**
+ * O que basta para ROTULAR quem falou: nome e telefone. `lid` fica de fora de
+ * propósito — é identificador interno do WhatsApp, e o perfil que vai ao prompt
+ * (`LeadContextMessage.sender`) não o carrega. Exigir o `lid` aqui estreitava o
+ * parâmetro sem motivo e obrigava o chamador a inventar um valor que não existe
+ * no contexto.
+ */
+export type RemetenteRotulavel = Pick<RemetenteDeGrupo, "name" | "phone">;
+
 export function lerRemetenteDeGrupo(metadata: unknown): RemetenteDeGrupo | null {
   if (!metadata || typeof metadata !== "object") return null;
   const bruto = (metadata as Record<string, unknown>).group_sender;
@@ -29,7 +38,7 @@ export function lerRemetenteDeGrupo(metadata: unknown): RemetenteDeGrupo | null 
   return r.success ? r.data : null;
 }
 
-export function rotuloDoRemetente(r: RemetenteDeGrupo): string {
+export function rotuloDoRemetente(r: RemetenteRotulavel): string {
   if (r.name && r.phone) return `${r.name} · ${r.phone}`;
   return r.name ?? r.phone ?? "Participante";
 }
