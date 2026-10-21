@@ -90,6 +90,8 @@ const PAGINA_DE_MENSAGENS = 100;
  * antiga são pulados sem nova chamada). */
 const PAGINA_DE_CONVERSAS = 50;
 const SEGUNDOS_POR_DIA = 86_400;
+/** Falhas de transporte do canal na mesma mídia antes de marcá-la indisponível. */
+const LIMITE_DE_TENTATIVAS_DE_MIDIA = 3;
 
 interface Importacao {
   id: string;
@@ -468,7 +470,26 @@ async function resolverMidias(
 
     if (ctl.noTeto()) return false;
     ctl.contarChamada();
-    const { url, erro } = await canal.baixarMidiaDaMensagem(nomeNoCanal, chatId, messageIdNoCanal);
+    let resposta: { url: string | null; erro: boolean };
+    try {
+      resposta = await canal.baixarMidiaDaMensagem(nomeNoCanal, chatId, messageIdNoCanal);
+    } catch (err) {
+      // Limite de 3 tentativas por mensagem: sem ele, uma mídia que o canal
+      // recusa SEMPRE (ex.: 500) derrubaria toda rodada na mesma página, e as
+      // mídias seguintes nunca seriam alcançadas. Nas duas primeiras a rodada
+      // para em erro (cursor firme anterior); na terceira desiste e segue.
+      const tentativas = (typeof meta.tentativas_midia === "number" ? meta.tentativas_midia : 0) + 1;
+      if (tentativas < LIMITE_DE_TENTATIVAS_DE_MIDIA) {
+        await atualizarMensagem(admin, imp, linha.id, { metadata: { ...meta, tentativas_midia: tentativas } });
+        throw err;
+      }
+      await atualizarMensagem(admin, imp, linha.id, {
+        metadata: { ...meta, tentativas_midia: tentativas, media_status: "indisponivel" },
+      });
+      ctl.midias.indisponiveis += 1;
+      continue;
+    }
+    const { url, erro } = resposta;
 
     if (!url) {
       // `erro: true` é "indisponível, não tente de novo". Sem URL e sem erro o

@@ -262,6 +262,46 @@ describe("mídia do histórico", () => {
     expect(db.messages[0]!.media_url).toBe("http://canal/files/i3.jpg");
   });
 
+  it("download que lança sempre: rodadas 1 e 2 em erro (tentativas 1 e 2), a 3 desiste e segue", async () => {
+    canal.mensagens = [imagem("Q1", agora - 90_000), imagem("Q2", agora - 80_000)];
+    canal.midia[idCanal("Q1")] = "lanca";
+    canal.midia[idCanal("Q2")] = { url: "http://canal/files/q2.jpg", erro: false };
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    const q1 = () => db.messages.find((m) => m.external_id === idCanal("Q1"))!;
+    const religar = () => db.importacoes.set(IMP, { ...db.importacoes.get(IMP)!, status: "rodando" });
+
+    for (const n of [1, 2]) {
+      const r = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+      expect(r.status).toBe("erro");
+      expect((q1().metadata as Linha).tentativas_midia).toBe(n);
+      expect((q1().metadata as Linha).media_status).toBe("pendente");
+      expect((q1().metadata as Linha).historico_importado).toBe("true");
+      expect(db.importacoes.get(IMP)!.cursor).toMatchObject({ indiceConversa: 0, offsetMensagens: 0 });
+      religar();
+    }
+    const r3 = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(r3.status).toBe("concluida");
+    expect((q1().metadata as Linha).media_status).toBe("indisponivel");
+    expect(q1().media_url).toBeNull();
+    // a mídia seguinte foi alcançada
+    expect(db.messages.find((m) => m.external_id === idCanal("Q2"))!.media_url).toBe("http://canal/files/q2.jpg");
+    expect(db.importacoes.get(IMP)).toMatchObject({ midias_indisponiveis: 1, midias_baixadas: 1 });
+  });
+
+  it("falha uma vez e depois funciona: termina solicitada e emitida", async () => {
+    canal.mensagens = [imagem("R1", agora - 86_400)];
+    canal.midia[idCanal("R1")] = "lanca";
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    expect((await rodarUmaRodada(db.admin as never, IMP, SEM_TETO)).status).toBe("erro");
+    canal.midia[idCanal("R1")] = { url: "http://canal/files/r1.jpg", erro: false };
+    db.importacoes.set(IMP, { ...db.importacoes.get(IMP)!, status: "rodando" });
+    expect((await rodarUmaRodada(db.admin as never, IMP, SEM_TETO)).status).toBe("concluida");
+    expect(db.messages[0]!.metadata).toMatchObject({ media_status: "solicitada", historico_importado: "true" });
+    expect(emits(db)).toHaveLength(1);
+  });
+
   it("teto de chamadas no meio das mídias: cursor não passa da página; a refeita resolve só as pendentes", async () => {
     canal.mensagens = [imagem("P1", agora - 90_000), imagem("P2", agora - 80_000), imagem("P3", agora - 70_000)];
     for (const n of ["P1", "P2", "P3"]) canal.midia[idCanal(n)] = { url: `http://canal/files/${n}.jpg`, erro: false };
