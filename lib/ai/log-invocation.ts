@@ -185,12 +185,12 @@ export function codigoDoErro(payload: Record<string, unknown>): string {
  * `providerDoModelo`, que continua existindo como ÚLTIMO recurso para não
  * quebrar quem de fato usa OpenRouter.
  *
- * Existe porque os dois escritores da tabela (`logInvocation` e o irmão
- * `registrarChamadaDeIa`) tinham a mesma cópia do `??` — e a cópia era
- * justamente o defeito: com `provider` ausente, um id de modelo com barra mas
- * de provedor personalizado (`qwen/qwen3.8-27b` no Groq) saía gravado como
- * `openrouter`, e a divisão de custo por provedor mentia. Uma régua só, num
- * lugar só, para os dois caminhos não voltarem a divergir.
+ * Existe porque os escritores da tabela (`logInvocation`, o irmão
+ * `registrarChamadaDeIa` e a mídia, `registrarChamadaDeMidia`) tinham cópias do
+ * mesmo `??` — e a cópia era justamente o defeito: com `provider` ausente, um id
+ * de modelo com barra mas de provedor personalizado (`qwen/qwen3.8-27b` no Groq)
+ * saía gravado como `openrouter`, e a divisão de custo por provedor mentia. Uma
+ * régua só, num lugar só, para os caminhos não voltarem a divergir.
  *
  * `""` e espaço contam como NÃO informado: a coluna do binding é texto e uma
  * linha vazia carimbada de vazio é pior que o palpite declarado — a tela de Uso
