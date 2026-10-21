@@ -141,14 +141,14 @@ const esconderQuandoSchema = z
 export const PARAMETROS_FIXOS_TABELA_DIRETA = z
   .object({
     tabela: tabelaSchema,
-    colunaId: colunaSchema,
-    colunaTitulo: colunaSchema,
+    coluna_id: colunaSchema,
+    coluna_titulo: colunaSchema,
     campos: z
       .array(campoSchema)
       .min(1, "Mapeie pelo menos um dado da tabela.")
       .max(MAX_CAMPOS_TABELA_DIRETA, "Mapeie no máximo 15 dados."),
-    soMostrarQuando: soMostrarQuandoSchema.optional(),
-    esconderQuando: esconderQuandoSchema.optional(),
+    so_mostrar_quando: soMostrarQuandoSchema.optional(),
+    esconder_quando: esconderQuandoSchema.optional(),
   })
   .strict()
   .superRefine((fixos, ctx) => {
@@ -190,14 +190,14 @@ export const PARAMETROS_DA_BUSCA_TABELA_DIRETA = z
 
 type BuscaTabelaDireta = z.output<typeof PARAMETROS_DA_BUSCA_TABELA_DIRETA>;
 
-/** Os fixos como a receita os lê (o que chegou da tela, já validado pelo Zod). */
+/** Os fixos como a receita os lê (o que chegou da tela/banco, já validado pelo Zod). */
 interface FixosDaReceita {
   tabela?: string;
-  colunaId?: string;
-  colunaTitulo?: string;
+  coluna_id?: string;
+  coluna_titulo?: string;
   campos?: CampoMapeadoTabelaDireta[];
-  soMostrarQuando?: SoMostrarQuandoTabelaDireta;
-  esconderQuando?: EsconderQuandoTabelaDireta;
+  so_mostrar_quando?: SoMostrarQuandoTabelaDireta;
+  esconder_quando?: EsconderQuandoTabelaDireta;
 }
 
 /**
@@ -304,20 +304,20 @@ export const RECEITA_TABELA_DIRETA: DefinicaoDeReceita = {
   },
   colunas: (fixos) => {
     const f = (fixos ?? {}) as FixosDaReceita;
-    const colunas: string[] = [f.colunaId ?? "", f.colunaTitulo ?? ""];
+    const colunas: string[] = [f.coluna_id ?? "", f.coluna_titulo ?? ""];
     for (const campo of f.campos ?? []) colunas.push(campo.coluna);
-    if (f.soMostrarQuando?.coluna) colunas.push(f.soMostrarQuando.coluna);
-    if (f.esconderQuando?.coluna) colunas.push(f.esconderQuando.coluna);
+    if (f.so_mostrar_quando?.coluna) colunas.push(f.so_mostrar_quando.coluna);
+    if (f.esconder_quando?.coluna) colunas.push(f.esconder_quando.coluna);
     return { [f.tabela ?? ""]: colunas };
   },
   montar: (fixos, busca, limite) => {
     const f = (fixos ?? {}) as FixosDaReceita;
     const tabela = quotarIdentificadorMysql(f.tabela ?? "");
-    const colunaId = quotarIdentificadorMysql(f.colunaId ?? "");
-    const colunaTitulo = quotarIdentificadorMysql(f.colunaTitulo ?? "");
+    const colunaId = quotarIdentificadorMysql(f.coluna_id ?? "");
+    const colunaTitulo = quotarIdentificadorMysql(f.coluna_titulo ?? "");
     const campos = (f.campos ?? []).filter((c) => /^[a-z][a-z0-9_]{0,31}$/.test(c.chave));
-    const soMostrar = f.soMostrarQuando;
-    const esconder = f.esconderQuando;
+    const soMostrar = f.so_mostrar_quando;
+    const esconder = f.esconder_quando;
 
     // A busca bate com o mapeamento? Se não bater, é ERRO — nunca silêncio.
     validarFiltrosDaBuscaTabelaDireta({ ...f }, busca);
