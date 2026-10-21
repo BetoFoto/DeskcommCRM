@@ -21,7 +21,10 @@
  *      não mostra gatilho de cor;
  *   8. a ficha entrega a paleta ao campo quando quem edita pode mexer no
  *      vocabulário — e o POST sai com o corpo que a rota espera;
- *   9. e não entrega para quem é `agent` (a rota exigiria manager + MFA).
+ *   9. e não entrega para quem é `agent` (a rota exigiria manager + MFA);
+ *  10. o diálogo de NOVO contato deixou o campo "separadas por vírgula" e usa o
+ *      MESMO seletor: a etiqueta escolhida entra no payload da criação e a cor
+ *      vai para o vocabulário.
  *
  * ─── Por que o mapa de cores entra pelo PROVEDOR, e não por um dublê ────────
  *
@@ -41,7 +44,11 @@ import { apiClient } from "@/lib/api/client";
 import { ProvedorDeCoresDasEtiquetas } from "@/components/tags/CoresDasEtiquetas";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 import { EtiquetasDoContato } from "@/components/contacts/EtiquetasDoContato";
+import { NewContactDialog } from "@/components/contacts/NewContactDialog";
 import type { Contact } from "@/lib/types/contacts";
+
+/** O que o diálogo de novo contato entrega à criação (o payload da rota). */
+const mutateCriar = vi.hoisted(() => vi.fn(async () => ({ data: { contact: null } })));
 
 /** O papel de quem edita — lido pelos dois hooks de auth que a ficha usa. */
 const estado = vi.hoisted(() => ({ papel: "manager" as string }));
@@ -61,16 +68,24 @@ vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), err
 vi.mock("@/hooks/contacts/useUpdateContact", () => ({
   useUpdateContact: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
+vi.mock("@/hooks/contacts/useCreateContact", () => ({
+  useCreateContact: () => ({ mutateAsync: mutateCriar, isPending: false }),
+}));
 vi.mock("@/lib/api/client", () => ({
   apiClient: {
-    // A forma da resposta de `GET /api/v1/tags/cores` (issue #1271): o cliente
-    // devolve o CORPO já parseado (`{ data: [...] }`), e o provider lê `.data`.
-    get: vi.fn(async () => ({
-      data: [
-        { tag: "vip", cor: "#0091ff" },
-        { tag: "fornecedor", cor: "#cf3716" },
-      ],
-    })),
+    // O cliente devolve o CORPO já parseado, e cada rota tem a sua forma: o
+    // vocabulário de sugestões sai lista crua, a de cores sai `{tag, cor}`.
+    get: vi.fn(async (url: unknown) => {
+      if (String(url).includes("/api/v1/tags/cores")) {
+        return {
+          data: [
+            { tag: "vip", cor: "#0091ff" },
+            { tag: "fornecedor", cor: "#cf3716" },
+          ],
+        };
+      }
+      return { data: ["vip", "fornecedor"] };
+    }),
     post: vi.fn().mockResolvedValue({}),
     patch: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue({}),
@@ -304,5 +319,31 @@ describe("EditContactDialog — a ficha entrega a paleta a quem pode mexer no vo
     expect(await screen.findByRole("button", { name: "Remover etiqueta VIP" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adicionar tag" })).toBeNull();
     expect(apiClient.post).not.toHaveBeenCalled();
+  });
+});
+
+describe("NewContactDialog — o contato novo também nasce com etiqueta colorida", () => {
+  it("a sugestão sai pintada e a etiqueta escolhida entra no payload da criação", async () => {
+    const user = userEvent.setup();
+    envolver(<NewContactDialog open onOpenChange={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Email"), "joana@exemplo.com");
+    const sugestao = await screen.findByTestId("sugestao-vip");
+    await waitFor(() => expect(mesmaCor(sugestao, AZUL)).toBe(true));
+
+    await user.click(sugestao);
+    await user.click(await screen.findByRole("button", { name: "Roxo" }));
+    await user.click(confirmarPaleta());
+    await user.click(screen.getByRole("button", { name: "Criar contato" }));
+
+    await waitFor(() =>
+      expect(mutateCriar).toHaveBeenCalledWith(expect.objectContaining({ tags: ["vip"] })),
+    );
+    expect(apiClient.post).toHaveBeenCalledWith("/api/v1/tags/vocabulario", {
+      acao: "definir_cor",
+      tag: "vip",
+      destino: null,
+      cor: ROXO,
+    });
   });
 });

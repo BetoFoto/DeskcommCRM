@@ -1,9 +1,10 @@
 "use client";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
+import { roleAtLeast } from "@/lib/auth/types";
 import { perfilDoPais } from "@/lib/legal/perfil-do-pais";
 import {
   Dialog,
@@ -20,13 +21,17 @@ import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { contactCreateSchemaDoPais, type ContactCreate } from "@/lib/schemas/contacts";
 import type { Contact } from "@/lib/types/contacts";
 import { useCreateContact } from "@/hooks/contacts/useCreateContact";
+import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
+import { useDefinirCorDaEtiqueta } from "@/hooks/tags/useDefinirCorDaEtiqueta";
+import { EtiquetasDoContato } from "@/components/contacts/EtiquetasDoContato";
 
 interface FormShape {
   name?: string;
   email?: string;
   phone_number?: string;
   cpf?: string;
-  tagsRaw?: string;
+  /** As etiquetas do contato novo — o seletor grava esta lista. */
+  tags?: string[];
 }
 
 interface Props {
@@ -50,19 +55,35 @@ interface Props {
 
 export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: Props) {
   const t = useT();
-  const perfil = perfilDoPais(useActiveOrg()?.country);
+  const org = useActiveOrg();
+  const perfil = perfilDoPais(org?.country);
   const create = useCreateContact();
+  // O MESMO vocabulário de sugestões da ficha (#2732): a chave do react-query é
+  // a mesma, então quem já leu na lista de contatos não paga outra requisição.
+  const vocabulario = useContactTagVocabulary(org?.orgId ?? null);
+  const { definirCor } = useDefinirCorDaEtiqueta();
+  // A cor da etiqueta é VOCABULÁRIO e a rota exige manager + MFA: para os outros
+  // papéis a paleta nem chega ao campo, como na ficha e no editor do Inbox.
+  const podeDefinirCor = roleAtLeast(org?.role, "manager");
   const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm<FormShape>({
-    defaultValues: { name: nomeInicial ?? "", email: "", phone_number: "", cpf: "", tagsRaw: "" },
+    defaultValues: {
+      name: nomeInicial ?? "",
+      email: "",
+      phone_number: "",
+      cpf: "",
+      tags: [],
+    },
   });
+
+  const tags = useWatch({ control: form.control, name: "tags" }) ?? [];
 
   async function onSubmit(values: FormShape) {
     setServerError(null);
     // A MESMA normalização da API (lib/contacts/tag-normalizada): o que a ficha
     // grava é o que o filtro `?tag=` casa (issue #1224).
-    const tags = normalizarTags((values.tagsRaw ?? "").split(","));
+    const tags = normalizarTags(values.tags ?? []);
 
     const payload: Record<string, unknown> = { source: "manual" };
     if (values.name?.trim()) payload.name = values.name.trim();
@@ -131,8 +152,21 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
             <Input id="cpf" placeholder={perfil.documento.exemplo} {...form.register("cpf")} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tagsRaw">{t("Tags (separadas por vírgula)")}</Label>
-            <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
+            {/* Era um campo de texto livre "separadas por vírgula" — o formato
+                que a ficha deixou na #2732 e o funil na #2979. Aqui o mesmo
+                seletor da ficha: sugere o que já existe, reusa a grafia gravada
+                e colore com o tom do vocabulário. */}
+            <Label htmlFor="new-tags">{t("Tags")}</Label>
+            <EtiquetasDoContato
+              inputId="new-tags"
+              value={tags}
+              onChange={(next) => form.setValue("tags", next, { shouldDirty: true })}
+              vocabulario={vocabulario.data}
+              disabled={create.isPending}
+              onDefinirCor={
+                podeDefinirCor ? (tag, cor) => void definirCor(tag, cor) : undefined
+              }
+            />
           </div>
           {serverError && (
             <p className="text-sm text-error-fg">{serverError}</p>

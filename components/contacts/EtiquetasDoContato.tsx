@@ -43,6 +43,12 @@
  * consulta — fora do provider o chip sai cinza, que é o estado de quem nunca
  * escolheu cor. Nada aqui pergunta por etiqueta nem toca em rede.
  *
+ * E a SUGESTÃO é o próprio `ChipDeEtiqueta`, com papel de botão e Enter/Espaço:
+ * o produto tem um caminho único de pintura — a régua mora em
+ * `lib/tags/cor-da-etiqueta` e só o chip a importa —, então pintar um botão por
+ * fora seria a segunda cópia da regra que a cerca existe para impedir. O
+ * tracejado segue dizendo "esta ainda não está no contato".
+ *
  * A ESCRITA chega por `onDefinirCor`, e AUSENTE é o padrão: quem monta a ficha
  * só a passa quando a rota não vai recusar (`POST /api/v1/tags/vocabulario` exige
  * `manager` + MFA) — a mesma régua do `SeletorDeCorDaEtiqueta` e do
@@ -90,7 +96,8 @@ import {
   etiquetasConhecidas,
   sugestoesDeEtiqueta,
 } from "@/lib/contacts/etiquetas";
-import { chaveDaEtiqueta, estiloDoChip } from "@/lib/tags/cor-da-etiqueta";
+import { chaveDaEtiqueta } from "@/lib/tags/cor-da-etiqueta";
+import { cn } from "@/lib/utils";
 import { Plus, X } from "@/lib/ui/icons";
 
 interface Props {
@@ -204,8 +211,12 @@ export function EtiquetasDoContato({
    * O clique numa sugestão. Com a paleta disponível ela abre com o tom que a
    * etiqueta JÁ tem marcado (#2789) — abrir como se ela não tivesse cor faria
    * "Confirmar" apagar o que estava lá (#2771).
+   *
+   * Desabilitado (salvando) ou no teto, o clique não faz nada: a peça existe
+   * para o gesto que vai gravar, e o botão de antes também era inerte ali.
    */
   function escolherSugestao(tag: string) {
+    if (disabled || noTeto) return;
     if (!onDefinirCor) {
       adicionar(tag);
       return;
@@ -300,24 +311,36 @@ export function EtiquetasDoContato({
           className="flex flex-wrap gap-1"
         >
           {sugestoes.map((tag) => (
-            /* A sugestão sai PINTADA com o tom da etiqueta e continua TRACEJADA:
-               o fundo e a frente saem da MESMA régua do chip (`estiloDoChip`, com
-               o texto escolhido por `escolheAFrente` e o piso de contraste da
-               #2373), e o tracejado diz o que o chip sólido de cima já diz por
-               si — esta ainda não está no contato. Sem cor, nada disso aparece e
-               o botão é exatamente o de antes. */
-            <button
+            /* A sugestão É o chip (issue #3235). O produto tem UM caminho de
+               pintura — a régua de cor só é importada pelo `ChipDeEtiqueta`,
+               guardado por `tests/unit/chip-contraste-da-etiqueta.test.ts` —,
+               então pintar um botão por fora seria a segunda cópia da regra que
+               a cerca existe para impedir. O chip recebe o papel de botão, com
+               Enter e Espaço: `role` sem teclado seria menos acessível do que o
+               botão sem cor que estava aqui. O tracejado continua sendo o que
+               distingue a sugestão do chip sólido de quem já está no contato. */
+            <ChipDeEtiqueta
               key={tag}
-              type="button"
-              onClick={() => escolherSugestao(tag)}
-              disabled={disabled || noTeto}
+              tag={tag}
+              role="button"
+              tabIndex={0}
+              aria-label={`${t("Adicionar etiqueta")}: ${tag}`}
+              aria-disabled={disabled || noTeto}
               data-testid={`sugestao-${chaveDeComparacaoDeEtiqueta(tag)}`}
-              style={estiloDoChip(corDe(tag))}
-              className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
+              onClick={() => escolherSugestao(tag)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  escolherSugestao(tag);
+                }
+              }}
+              className={cn(
+                "border-dashed px-2 py-0.5 text-[10px]",
+                disabled || noTeto ? "opacity-50" : "cursor-pointer hover:border-solid",
+              )}
             >
               <Plus size={10} weight="bold" aria-hidden />
-              {tag}
-            </button>
+            </ChipDeEtiqueta>
           ))}
           {textoNovo && (
             <button
