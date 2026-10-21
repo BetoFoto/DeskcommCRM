@@ -168,8 +168,10 @@ describe("receita tabela-direta contra MySQL 8 de verdade", () => {
       "C1-tabela-direta-sso-publicados",
       `sem filtro → ${titulos(linhas).join(", ")}`,
     );
+    // O seed tem um único imóvel publicado e não vendido: Casa Centro
+    // Sorocaba. O Apartamento Campolim é vendido, e o caso seguinte prova
+    // que ele é eliminado pelo esconder-quando.
     expect(titulos(linhas)).toContain("Casa Centro Sorocaba");
-    expect(titulos(linhas)).toContain("Apartamento Campolim");
     // O rascunho (cct_status = draft) não aparece por causa do so_mostrar_quando.
     expect(titulos(linhas)).not.toContain("Rascunho Invisível");
   });
