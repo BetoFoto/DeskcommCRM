@@ -54,7 +54,7 @@ vi.mock("@/hooks/notifications/useNotificationPermission", () => ({
 
 const pushClient = vi.hoisted(() => ({
   encerrarPushDesteAparelho: vi.fn(async () => {}),
-  syncPushSubscription: vi.fn(async () => {}),
+  syncPushSubscription: vi.fn(async () => ({ situacao: "ativo", motivo: "" })),
 }));
 vi.mock("@/lib/notifications/push_client", () => pushClient);
 
@@ -184,6 +184,46 @@ describe("o interruptor de Push de mensagem liga e desliga a inscrição do apar
     await clicar(container, "Nova mensagem via push");
     expect(pushClient.syncPushSubscription).toHaveBeenCalledTimes(1);
     expect(pushClient.encerrarPushDesteAparelho).not.toHaveBeenCalled();
+  });
+
+  /**
+   * ISSUE #3116 — a recusa tem de CHEGAR À TELA, e o interruptor não mente.
+   *
+   * O servidor recusou (422) a inscrição; `syncPushSubscription` reporta
+   * `recusado`. A tela mostra a frase e o interruptor volta a desligar, porque
+   * nenhum aviso chegaria com o site fechado. No código antigo nada disso
+   * acontecia: o interruptor ficava ligado em silêncio.
+   */
+  it("inscrição recusada pelo servidor: a mensagem aparece e o interruptor NÃO fica ligado", async () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
+    pushClient.syncPushSubscription.mockResolvedValueOnce({
+      situacao: "recusado",
+      motivo: "Campos inválidos.",
+    });
+    const container = montar();
+
+    await clicar(container, "Nova mensagem via push");
+
+    expect(container.querySelector('[data-testid="push-recusado"]')).not.toBeNull();
+    expect(container.textContent).toContain(
+      "O servidor recusou a inscrição deste aparelho, então os avisos não vão chegar: o interruptor de Push voltou a ficar desligado.",
+    );
+    // A frase do servidor também chega — é o que a rota já devolve.
+    expect(container.textContent).toContain("Campos inválidos.");
+    // E o interruptor voltou a desligar: `alerts-enable`, nunca `alerts-toggle`.
+    expect(container.innerHTML).toContain('data-testid="alerts-enable"');
+    expect(container.innerHTML).not.toContain('data-testid="alerts-toggle"');
+  });
+
+  // CONTROLE: aceita (ativo), o interruptor segue ligado e nada é dito.
+  it("inscrição aceita: o interruptor fica ligado e nenhuma recusa aparece (controle)", async () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
+    const container = montar();
+
+    await clicar(container, "Nova mensagem via push");
+
+    expect(container.querySelector('[data-testid="push-recusado"]')).toBeNull();
+    expect(container.innerHTML).toContain('data-testid="alerts-toggle"');
   });
 
   it("outras categorias e o in-app não mexem na inscrição", async () => {

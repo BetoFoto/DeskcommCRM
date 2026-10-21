@@ -17,17 +17,70 @@ function mesmosBytes(a: ArrayBuffer, b: Uint8Array): boolean {
   return x.every((v, i) => v === b[i]);
 }
 
-/** Liga a inscrição Web Push depois da permissão. Sem VAPID no servidor, no-op. */
-export async function syncPushSubscription(): Promise<void> {
-  if (typeof window === "undefined") return;
+/**
+ * O QUE A INSCRIÇÃO DESTE APARELHO DEU (issue #3116).
+ *
+ * `syncPushSubscription` devolvia `void` e não olhava a resposta do PUT: a
+ * recusa 422 da rota (`app/api/v1/notifications/push/route.ts:60`, o serviço de
+ * push fora da lista de `servicos-de-push.ts`) era invisível. A tela ligava o
+ * interruptor e nenhum aviso chegava — o pior silêncio, porque a pessoa acha
+ * que está inscrita. Agora a função devolve o que aconteceu para quem a chama
+ * poder desfazer o interruptor e dizer o porquê.
+ *
+ * - `ativo`    — o PUT foi aceito (2xx); a inscrição está de pé, como sempre.
+ * - `recusado` — o servidor recusou (`!res.ok`) ou a rede falhou: NÃO está
+ *                inscrito, e `motivo` carrega a frase do servidor quando veio.
+ * - `ignorado` — o caminho nem chegou ao servidor (sem permissão, sem service
+ *                worker, sem VAPID, sem canal ligado): os mesmos `return` de
+ *                antes, sem recusa a reportar.
+ */
+export type SituacaoDaInscricao = "ativo" | "recusado" | "ignorado";
+
+export interface ResultadoDaInscricao {
+  situacao: SituacaoDaInscricao;
+  /** Frase da recusa (`error.message` da rota), quando o servidor mandou uma. */
+  motivo: string;
+}
+
+const IGNORADO: ResultadoDaInscricao = { situacao: "ignorado", motivo: "" };
+
+/**
+ * A frase que a rota JÁ devolve na recusa — `fail(...)` responde
+ * `{ error: { code, message } }` (`lib/api/wrappers.ts`). Não inventa contrato
+ * novo: lê o corpo e devolve "" quando não é JSON ou não traz mensagem.
+ */
+async function motivoDaRecusa(res: Response): Promise<string> {
+  try {
+    const corpo = (await res.json()) as { error?: { message?: unknown } };
+    const mensagem = corpo?.error?.message;
+    return typeof mensagem === "string" ? mensagem : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Liga a inscrição Web Push depois da permissão. Sem VAPID no servidor, no-op.
+ *
+ * ⚠️ QUEM MAIS CHAMA — e por que eles ignoram o resultado: o interruptor da tela
+ * (`app/app/settings/notifications/_client.tsx`) é o único que mostra a recusa.
+ * `hooks/notifications/useNotificationPermission.ts` (ao conceder a permissão) e
+ * `hooks/notifications/useInboundMessageAlerts.ts` (ao abrir o app) re-sincronizam
+ * em segundo plano e seguem com `void`: não há interruptor para desfazer nem
+ * recusa para mostrar naquele instante — a tela de Notificações é quem responde
+ * por isso. Mudar a assinatura aqui não os quebra: eles descartam o retorno.
+ */
+export async function syncPushSubscription(): Promise<ResultadoDaInscricao> {
+  if (typeof window === "undefined") return IGNORADO;
   // A preferência é a fonte: `alerts.enabled` é espelho que `request()` regrava.
-  if (getPermission() !== "granted" || !areAlertsEnabled() || !canalLigado("message", "push")) return;
+  if (getPermission() !== "granted" || !areAlertsEnabled() || !canalLigado("message", "push"))
+    return IGNORADO;
   const reg = await ensureNotifyServiceWorker();
-  if (!reg?.pushManager) return;
+  if (!reg?.pushManager) return IGNORADO;
 
   const cfg = await fetch("/api/v1/notifications/push").then((r) => r.json()).catch(() => null);
   const publicKey = cfg?.data?.public_key as string | undefined;
-  if (!cfg?.data?.enabled || !publicKey) return;
+  if (!cfg?.data?.enabled || !publicKey) return IGNORADO;
 
   const chave = urlBase64ToUint8Array(publicKey);
   let sub = await reg.pushManager.getSubscription();
@@ -49,16 +102,25 @@ export async function syncPushSubscription(): Promise<void> {
   }
 
   const json = sub.toJSON();
-  if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return IGNORADO;
 
-  await fetch("/api/v1/notifications/push", {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      endpoint: json.endpoint,
-      keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/v1/notifications/push", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        endpoint: json.endpoint,
+        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      }),
+    });
+  } catch {
+    // Sem rede o PUT não chegou: o servidor não tem esta inscrição, e o
+    // interruptor ligado seria mentira. Recusa sem frase do servidor.
+    return { situacao: "recusado", motivo: "" };
+  }
+  if (!res.ok) return { situacao: "recusado", motivo: await motivoDaRecusa(res) };
+  return { situacao: "ativo", motivo: "" };
 }
 
 /**

@@ -119,4 +119,37 @@ describe("syncPushSubscription", () => {
     expect(subscribe).toHaveBeenCalledTimes(1);
     expect(fetchFalso.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "PUT")).toBe(true);
   });
+
+  /**
+   * ISSUE #3116 — a recusa 422 da rota não pode ser engolida.
+   *
+   * O PUT responde `{ error: { code: "validation_failed" } }` com 422 (o
+   * serviço de push fora da lista de `servicos-de-push.ts`). No código ANTIGO
+   * a função não olhava `res.ok` e devolvia `void`: a tela ligava o interruptor
+   * e nada avisava. Este caso é o que fica VERMELHO se o tratamento de
+   * `!res.ok` sair — a sabotagem do PR exercita exatamente isto.
+   */
+  it("PUT recusado (422): a função REPORTA a recusa com a frase do servidor", async () => {
+    fetchFalso.mockImplementation(async (...args: unknown[]) => {
+      const init = args[1] as RequestInit | undefined;
+      return init?.method === "PUT"
+        ? new Response(JSON.stringify({ error: { code: "validation_failed", message: "Campos inválidos." } }), {
+            status: 422,
+          })
+        : new Response(JSON.stringify({ data: { enabled: true, public_key: "AAAA" } }), { status: 200 });
+    });
+
+    const resultado = await syncPushSubscription();
+
+    expect(resultado.situacao).toBe("recusado");
+    expect(resultado.motivo).toBe("Campos inválidos.");
+  });
+
+  // CONTROLE: o PUT aceito (200) segue igual ao que era — nada de recusa.
+  it("PUT aceito (200): reporta ativo, sem recusa (controle)", async () => {
+    const resultado = await syncPushSubscription();
+
+    expect(resultado.situacao).toBe("ativo");
+    expect(resultado.motivo).toBe("");
+  });
 });

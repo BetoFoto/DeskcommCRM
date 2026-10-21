@@ -2,7 +2,7 @@
 
 import { useT } from "@/hooks/i18n/useT";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -34,6 +34,8 @@ export function NotificationPrefsClient() {
   const prefs = useSyncExternalStore(assinarPrefs, getPrefsSnapshot, getPrefsSnapshotDoServidor);
   const denied = permission === "denied";
   const unsupported = permission === "unsupported";
+  // A frase da recusa do servidor (issue #3116). `null` = nada a dizer.
+  const [recusaDoPush, setRecusaDoPush] = useState<string | null>(null);
 
   async function onToggle(category: NotifyCategory, channel: NotifyChannelPref, on: boolean) {
     if (channel === "push" && on) {
@@ -45,7 +47,21 @@ export function NotificationPrefsClient() {
     gravarCanal(category, channel, on);
     // O push de mensagem é o interruptor do aparelho (`pushEfetivo`).
     if (category === "message" && channel === "push") {
-      void (on ? syncPushSubscription() : encerrarPushDesteAparelho());
+      if (!on) {
+        setRecusaDoPush(null);
+        await encerrarPushDesteAparelho();
+        return;
+      }
+      const resultado = await syncPushSubscription();
+      if (resultado?.situacao === "recusado") {
+        // ⚠️ O INTERRUPTOR VOLTA A DESLIGAR, e é o estado honesto: o servidor
+        // NÃO gravou a inscrição, então nenhum aviso chegaria com o site
+        // fechado. Deixá-lo ligado era a mentira que a issue #3116 mede.
+        gravarCanal("message", "push", false);
+        setRecusaDoPush(resultado.motivo || "");
+      } else {
+        setRecusaDoPush(null);
+      }
     }
   }
 
@@ -76,6 +92,16 @@ export function NotificationPrefsClient() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t("Desligar o push de mensagem desliga todos os avisos deste aparelho fora do app.")}
                   </p>
+                ) : null}
+                {cat === "message" && recusaDoPush !== null ? (
+                  <div className="mt-1 text-xs text-destructive" data-testid="push-recusado" role="alert">
+                    <p>
+                      {t(
+                        "O servidor recusou a inscrição deste aparelho, então os avisos não vão chegar: o interruptor de Push voltou a ficar desligado.",
+                      )}
+                    </p>
+                    {recusaDoPush ? <p className="mt-0.5">{recusaDoPush}</p> : null}
+                  </div>
                 ) : null}
               </td>
               <td className="px-4 py-3 text-center">
