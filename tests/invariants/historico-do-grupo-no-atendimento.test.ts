@@ -75,9 +75,17 @@ async function cenario(isGroup: boolean) {
         direction === "inbound" ? "delivered" : "sent",
         body,
         segundosAtras,
-        // O ingest grava `group_sender` SÓ em recebida (o eco do celular é a
-        // operação humana) — a fixture segue a mesma régua.
-        { raw_type: "chat", ...(remetente !== null ? { group_sender: remetente } : {}) },
+        // O ingest grava `group_sender` sob DUAS condições, e a fixture segue
+        // as duas: conversa de GRUPO e mensagem RECEBIDA (o eco do celular é a
+        // operação humana). Carimbar o campo numa 1:1 seria medir uma conversa
+        // que o ingest nunca produz — e é justamente isso que o controle 1:1
+        // reprova.
+        {
+          raw_type: "chat",
+          ...(isGroup && direction === "inbound" && remetente !== null
+            ? { group_sender: remetente }
+            : {}),
+        },
       ],
     );
   };
