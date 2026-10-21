@@ -6324,6 +6324,8 @@
   "Funil não encontrado.": "Pipeline not found.",
   "Informe o novo horário.": "Enter the new time.",
   "Já existe um fluxo com este nome.": "A flow with this name already exists.",
+  "Já existe um contato com este CPF.": "A contact with this CPF already exists.",
+  "Já existe um contato com este e-mail.": "A contact with this email already exists.",
   "Já existe um contato com este telefone.": "A contact with this phone number already exists.",
   "Janela inválida.": "Invalid window.",
   "Janela inválida: 'from' deve ser anterior a 'to'.": "Invalid window: 'from' must be before 'to'.",
