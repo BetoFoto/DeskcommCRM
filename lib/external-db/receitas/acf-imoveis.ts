@@ -420,7 +420,7 @@ export const RECEITA_ACF_IMOVEIS: DefinicaoDeReceita = {
      * Quando o dado não foi mapeado, o filtro NÃO se aplica: a busca devolve
      * o que tem, e a receita avisa isso na descrição.
      */
-    const filtroDoDado = (dado: DadoDoCategoria, valor: string | undefined): string | null => {
+    const filtroDoDado = (dado: DadoDeCategoria, valor: string | undefined): string | null => {
       if (!valor) return null;
       const alvo = alvoDeLike(valor);
       const categoria = categoriaDe(dado);
