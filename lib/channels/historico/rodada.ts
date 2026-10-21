@@ -311,9 +311,9 @@ export async function rodarUmaRodada(
               // Chat que não é endereçável (nem telefone nem @lid): nada a gravar nele.
               desta.ignoradas += validas.length;
             } else {
-              const r = await gravarMensagens(admin, imp, alvo, validas);
-              desta.gravadas += r.gravadas;
-              desta.existentes += r.existentes;
+              // Soma direto em `desta`: um erro no meio do linha a linha não perde
+              // do contador as linhas que já entraram.
+              await gravarMensagens(admin, imp, alvo, validas, desta);
               const completa = await resolverMidias(admin, imp, canal, nomeNoCanal, conversa.chatId, alvo.conversationId, validas, {
                 noTeto,
                 contarChamada: () => {
@@ -420,7 +420,8 @@ async function gravarMensagens(
   imp: Importacao,
   alvo: { contactId: string; conversationId: string },
   mensagens: WahaPayload[],
-): Promise<{ gravadas: number; existentes: number }> {
+  conta: { gravadas: number; existentes: number },
+): Promise<void> {
   const candidatos = mensagens.map(candidatosDeExternalId);
   const { data: achadas, error: erroDaConsulta } = await buscaEmLotes(
     [...new Set(candidatos.flat())],
@@ -440,7 +441,6 @@ async function gravarMensagens(
     linhasAchadas.filter((m) => m.metadata?.importacao_id === imp.id).map((m) => m.external_id),
   );
 
-  let existentes = 0;
   const novas: LinhaDeMensagemImportada[] = [];
   const vistos = new Set<string>();
   mensagens.forEach((p, i) => {
@@ -455,28 +455,29 @@ async function gravarMensagens(
     if (doCandidato.some((c) => proprias.has(c))) return;
     // Repetida na própria página também é existente: o lote não pode colidir consigo.
     if (doCandidato.some((c) => ja.has(c)) || vistos.has(linha.external_id)) {
-      existentes += 1;
+      conta.existentes += 1;
       return;
     }
     vistos.add(linha.external_id);
     novas.push(linha);
   });
-  if (novas.length === 0) return { gravadas: 0, existentes };
+  if (novas.length === 0) return;
 
   const { error: erroDoLote } = await admin.from("messages").insert(novas as never);
-  if (!erroDoLote) return { gravadas: novas.length, existentes };
+  if (!erroDoLote) {
+    conta.gravadas += novas.length;
+    return;
+  }
   if ((erroDoLote as { code?: string }).code !== "23505") {
     throw new Error(`messages_insert: ${mensagemDeErro(erroDoLote)}`);
   }
 
-  let gravadas = 0;
   for (const linha of novas) {
     const { error } = await admin.from("messages").insert(linha as never);
-    if (!error) gravadas += 1;
-    else if ((error as { code?: string }).code === "23505") existentes += 1;
+    if (!error) conta.gravadas += 1;
+    else if ((error as { code?: string }).code === "23505") conta.existentes += 1;
     else throw new Error(`messages_insert: ${mensagemDeErro(error)}`);
   }
-  return { gravadas, existentes };
 }
 
 /** Cliente do canal, só com o que `resolverMidias` usa. */

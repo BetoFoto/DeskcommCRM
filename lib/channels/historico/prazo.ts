@@ -26,5 +26,8 @@ export const TETO_DO_DOWNLOAD_MS = 15_000;
  * Tempo mínimo pela frente para começar uma chamada ao canal. Igual ao
  * `TETO_PADRAO_MS` do cliente do WAHA (página de conversas ou de mensagens) e
  * não menor que `TETO_DO_DOWNLOAD_MS`: a chamada que começa termina no prazo.
+ * Literal, e não importado de `lib/waha/client`, porque os testes da rodada
+ * dublam o cliente inteiro; a igualdade é cobrada em
+ * `tests/unit/historico-cron.test.ts`.
  */
 export const MARGEM_PARA_CHAMADA_MS = 15_000;

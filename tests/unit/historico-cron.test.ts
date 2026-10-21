@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type * as ClienteWaha from "@/lib/waha/client";
 
 /**
  * O cron da importação do histórico (#999): uma rodada por importação
@@ -135,6 +136,13 @@ describe("cron da importação do histórico (#999)", () => {
     await chamar();
     expect(h.rodadas.map((x) => x.id)).toEqual(["a"]);
     expect(h.updates.map((u) => u.filtros.id)).toEqual(["a"]);
+  });
+
+  it("a margem para uma chamada é o teto padrão do cliente do WAHA, e cabe o download", async () => {
+    const { TETO_PADRAO_MS } = await vi.importActual<typeof ClienteWaha>("@/lib/waha/client");
+    const { TETO_DO_DOWNLOAD_MS } = await import("@/lib/channels/historico/prazo");
+    expect(MARGEM_PARA_CHAMADA_MS).toBe(TETO_PADRAO_MS);
+    expect(TETO_DO_DOWNLOAD_MS).toBeLessThanOrEqual(MARGEM_PARA_CHAMADA_MS);
   });
 
   it("trava antes de rodar: update condicional no updated_at lido, com trava_ate no cursor", async () => {

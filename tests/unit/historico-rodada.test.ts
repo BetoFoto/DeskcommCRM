@@ -73,6 +73,8 @@ function bancoDeMentira() {
   const rpcs: Array<{ fn: string; args: Record<string, unknown> }> = [];
   const tabelasTocadas: string[] = [];
   let antesDoInsert: (() => void) | null = null;
+  /** Força a resposta de um insert (lote ou linha); `null` deixa seguir. */
+  let forcarInsert: ((linhas: Linha | Linha[]) => Linha | null) | null = null;
 
   const colide = (l: Linha, contra: Linha[]) =>
     contra.some((m) => m.organization_id === l.organization_id && m.external_id === l.external_id);
@@ -159,6 +161,8 @@ function bancoDeMentira() {
               antesDoInsert = null;
               f();
             }
+            const forcado = forcarInsert?.(linhas) ?? null;
+            if (forcado) return { error: forcado };
             const lote = Array.isArray(linhas) ? linhas : [linhas];
             const aceitas: Linha[] = [];
             for (const l of lote) {
@@ -185,6 +189,9 @@ function bancoDeMentira() {
     tabelasTocadas,
     webhookAntesDoInsert(l: Linha) {
       antesDoInsert = () => messages.push(l);
+    },
+    forcarInsert(f: (linhas: Linha | Linha[]) => Linha | null) {
+      forcarInsert = f;
     },
   };
 }
@@ -365,6 +372,20 @@ describe("rodarUmaRodada", () => {
     expect(r).toEqual({ status: "concluida", gravadas: 3, existentes: 1 });
     expect(db.messages.filter((m) => m.external_id === `false_${TEL}_A1`)).toHaveLength(1);
     expect(db.messages.map((m) => m.external_id)).toEqual(expect.arrayContaining(["A2", `false_${LID}_B1`, "B2"]));
+  });
+
+  it("linha a linha depois do 23505: erro no meio não perde do contador as linhas já gravadas", async () => {
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    db.forcarInsert((l) =>
+      Array.isArray(l) ? { code: "23505", message: "duplicate key" }
+      : l.external_id === "A2" ? { code: "XX000", message: "caiu" }
+      : null,
+    );
+    const r = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(r.status).toBe("erro");
+    expect(db.messages.map((m) => m.external_id)).toEqual([`false_${TEL}_A1`]);
+    expect(db.importacoes.get(IMP)).toMatchObject({ mensagens_gravadas: 1 });
   });
 
   it("Foco 3: conversa aberta já existente recebe as antigas sem mudar estado, dono, carimbo nem não lidas", async () => {
