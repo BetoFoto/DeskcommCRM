@@ -68,11 +68,11 @@ export function validarFixosDaReceita(receitaId: string, fixos: unknown): void {
     // Motivo legível (as mensagens do Zod da receita já são em português), não o JSON cru do Zod.
     const fieldErrors: Record<string, string[]> = {};
     for (const issue of parseado.error.issues) {
-      const partes = issue.path.filter((p) => typeof p === "string");
-      // O CAMINHO inteiro, com ponto: "taxonomias.bairro.taxonomia" diz ONDE
-      // falhou; "taxonomia" não diz nada.
-      const chave = partes.length > 0 ? partes.join(".") : "fixos";
-      (fieldErrors[chave] ??= []).push(issue.message);
+      // O CAMINHO inteiro, com ponto: "categorias.0.taxonomia" diz ONDE
+      // falhou; "taxonomia" não diz nada. O ÍNDICE da lista entra também:
+      // sem ele, dois campos da mesma lista caíam no mesmo rótulo.
+      const chave = issue.path.map((p) => String(p)).join(".");
+      (fieldErrors[chave || "fixos"] ??= []).push(issue.message);
     }
     throw new ErroDeFixosInvalidos(receitaId, fieldErrors);
   }

@@ -8,21 +8,25 @@
  * termo `Centro` (pai = Sorocaba) — e o bairro do imóvel é o TERMO, não uma
  * meta_key.
  *
- * Por isso a receita `acf-imoveis` precisa destas tabelas. E por isso elas
- * só entram na lista de tabelas liberadas quando o administrador mapeou
+ * Por isso a receita `wordpress-conteudo` precisa destas tabelas. E por isso
+ * elas só entram na lista de tabelas liberadas quando o administrador mapeou
  * ALGUMA categoria: quem não usa categoria não precisa liberá-las.
  *
  * **Três coisas que este arquivo resolve e a receita não:**
  *
- *  1. A SAÍDA: um imóvel pode ter DOIS termos na mesma taxonomia. A saída usa
- *     `group_concat`, que junta os nomes numa única célula — o imóvel aparece
+ *  1. A SAÍDA: um post pode ter DOIS termos na mesma taxonomia. A saída usa
+ *     `group_concat`, que junta os nomes numa única célula — o post aparece
  *     UMA vez na lista, com "Centro, Jardim" no lugar do bairro, e não duas
  *     linhas.
  *  2. O FILTRO: `exists (...)` com o mesmo encadeamento de tabelas, para não
- *     duplicar a linha do imóvel no resultado.
+ *     duplicar a linha do post no resultado.
  *  3. O NÍVEL: "bairro" costuma ser o termo que TEM cidade acima (`parent <> 0`)
  *     e "cidade" o termo que NÃO tem (`parent = 0`). Sem o nível, o filtro por
  *     bairro acharia também a cidade, e o filtro por cidade acharia o bairro.
+ *
+ * A receita mapeia as categorias por LISTA (cada uma com a sua chave, a sua
+ * taxonomia e o seu nível) — não por um conjunto fixo de nomes: o conjunto
+ * fixo era o que prendia a receita a um nicho.
  *
  * Identificadores (nomes de tabela) entram no SQL por crase, depois de validados
  * pela regex do prefixo; TODO valor (o slug da taxonomia, o texto do filtro)
@@ -56,40 +60,9 @@ export function colunasDaTaxonomia(prefixo: string): Record<string, string[]> {
   };
 }
 
-/** As quatro categorias que a receita `acf-imoveis` sabe ler. */
-export const DADOS_DE_CATEGORIA = ["bairro", "cidade", "tipo", "finalidade"] as const;
-
-export type DadoDeCategoria = (typeof DADOS_DE_CATEGORIA)[number];
-
-/** O mapeamento de categoria: a taxonomia do site e o nível lido dela. */
-export interface TaxonomiaMapeada {
-  taxonomia: string;
-  nivel?: NivelDaTaxonomia;
-}
-
-/** O mapa inteiro de categorias (as quatro) — o que o administrador preenche. */
-export type TaxonomiasMapeadas = Partial<Record<DadoDeCategoria, TaxonomiaMapeada>>;
-
 /**
- * A categoria mapeada de um dado — `undefined` quando não há categoria, ou
- * quando o slug está vazio (categoria sem nome não é categoria).
+ * O contexto que as duas montagens de SQL precisam: prefixo, o post e o placeholder.
  */
-export function categoriaMapeada(
-  taxonomias: TaxonomiasMapeadas | undefined,
-  dado: DadoDeCategoria,
-): TaxonomiaMapeada | undefined {
-  const tax = taxonomias?.[dado];
-  if (!tax || typeof tax.taxonomia !== "string") return undefined;
-  if (tax.taxonomia.trim().length === 0) return undefined;
-  return tax;
-}
-
-/** Há alguma categoria mapeada? (se não, as tabelas de termos nem entram no SQL) */
-export function temCategoriaMapeada(taxonomias: TaxonomiasMapeadas | undefined): boolean {
-  return DADOS_DE_CATEGORIA.some((dado) => categoriaMapeada(taxonomias, dado) !== undefined);
-}
-
-/** O contexto que as duas montagens de SQL precisam: prefixo, o post e o placeholder. */
 export interface ContextoDeTaxonomia {
   /** O prefixo das tabelas do WordPress (ex.: "wp_"). */
   prefixo: string;

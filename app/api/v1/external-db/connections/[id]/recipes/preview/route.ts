@@ -130,10 +130,27 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     termos: (buscaValidada as { termos?: unknown[] })?.termos,
   });
 
-  const { sql, valores } = receita.montar(instancia.fixos, buscaValidada, limiteItens);
+  // A montagem valida a busca contra o mapeamento da instância: um filtro que
+  // a instância não filtra é ERRO, nunca a lista inteira como se tivesse sido
+  // aplicado.
+  let sql = "";
+  let valores: unknown[] = [];
+  try {
+    const montada = receita.montar(instancia.fixos, buscaValidada, limiteItens);
+    sql = montada.sql;
+    valores = montada.valores;
+  } catch (err) {
+    if (err instanceof Error && err.name === "ErroDeFiltroDesconhecido") {
+      return fail("validation_failed", t("Parâmetros de busca inválidos."), 422, {
+        requestId,
+        details: err.message,
+      });
+    }
+    return fail("falha_na_leitura", t("Não foi possível consultar o banco de origem agora."), 500, { requestId });
+  }
 
-  // As tabelas e colunas da receita saem dos FIXOS: a `acf-imoveis` só pede as
-  // tabelas de categoria quando o administrador mapeou alguma.
+  // As tabelas e colunas da receita saem dos FIXOS: a receita do WordPress só
+  // pede as tabelas de categoria quando o administrador mapeou alguma.
   const tabelasPermitidas = receita.tabelas(instancia.fixos);
 
   const acesso = await abrirAcesso(admin, activeOrg.orgId, id);

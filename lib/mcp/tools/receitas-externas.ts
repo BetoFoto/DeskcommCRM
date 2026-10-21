@@ -153,11 +153,18 @@ export const crmConsultarReceita: McpToolDefinition<typeof consultaReceitaShape>
         conexao: { id: conexoes.id, motor: conexoes.db_type },
         receitas: ativas.map((i) => {
           const receita = receitaDe(i.receita);
+          // Os FILTROS que ESTA instância aceita, derivados dos fixos dela. A
+          // receita genérica do WordPress filtra por chave, e o conjunto de
+          // chaves depende do que a pessoa mapeou: o mesmo id de receita filtra
+          // "ano" numa instância de veículos e "bairro" numa de imóveis. Sem
+          // esta linha o agente chuta o nome do filtro.
+          const filtros = receita?.descreverFiltros?.(i.fixos);
           return {
             id: i.id,
             rotulo: i.rotulo,
             descricao: i.descricao,
             receita: i.receita,
+            ...(filtros ? { filtros } : {}),
             parametrosDaBusca: receita
               ? {
                   rotulo: receita.rotulo,
@@ -219,7 +226,21 @@ export const crmConsultarReceita: McpToolDefinition<typeof consultaReceitaShape>
       termos: (buscaValidada as { termos?: unknown[] })?.termos,
     });
 
-    const { sql, valores } = receita.montar(instancia.fixos, buscaValidada, limiteItens);
+    let sql = "";
+    let valores: unknown[] = [];
+    try {
+      const montada = receita.montar(instancia.fixos, buscaValidada, limiteItens);
+      sql = montada.sql;
+      valores = montada.valores;
+    } catch (err) {
+      // A busca bate com o mapeamento da instância? Se não bater, é ERRO
+      // LEGÍVEL — devolver a lista inteira como se o filtro tivesse sido
+      // aplicado entrega ao cliente o que ele pediu para NÃO ver.
+      if (err instanceof Error && err.name === "ErroDeFiltroDesconhecido") {
+        return { erro: "filtro_invalido", mensagem: err.message };
+      }
+      return { erro: "falha_na_leitura", mensagem: "não foi possível consultar o banco de origem agora." };
+    }
 
     let resultado;
     try {
@@ -227,8 +248,8 @@ export const crmConsultarReceita: McpToolDefinition<typeof consultaReceitaShape>
         {
           sql,
           valores,
-          // As tabelas e colunas saem dos FIXOS: a `acf-imoveis` só pede as
-          // tabelas de categoria quando o administrador mapeou alguma.
+          // As tabelas e colunas saem dos FIXOS: a receita do WordPress só pede
+          // as tabelas de categoria quando o administrador mapeou alguma.
           tabelas: receita.tabelas(instancia.fixos),
           colunasPorTabela: receita.colunas(instancia.fixos),
         },
