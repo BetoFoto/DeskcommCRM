@@ -6,9 +6,9 @@
  * deve sumir.
  *
  * E o 422 da gravação: a rota devolve `details.fieldErrors` com o CAMINHO do
- * campo que falhou ("taxonomias.bairro.taxonomia", "situacao.ocultar"), e a
- * tela mostra o RÓTULO legível desse caminho ("Categoria do bairro", "Valores
- * a esconder") — nunca o caminho cru, que não diz nada para quem opera.
+ * campo que falhou ("esconder.meta_key", "esconder.valores"), e a tela mostra
+ * o RÓTULO legível desse caminho ("Campo a esconder", "Valores a esconder") —
+ * nunca o caminho cru, que não diz nada para quem opera.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -39,22 +39,28 @@ import type { InstanciaDeReceita } from "@/lib/external-db/receitas/tipos";
 const mockUseReceitas = useReceitasDaConexao as ReturnType<typeof vi.fn>;
 const mockSalvar = salvarReceitas as ReturnType<typeof vi.fn>;
 
-const INSTANCIA_ACF: InstanciaDeReceita = {
-  id: "inst-acf-1",
-  receita: "acf-imoveis",
+const INSTANCIA_WORDPRESS: InstanciaDeReceita = {
+  id: "inst-wp-1",
+  receita: "wordpress-conteudo",
   rotulo: "Meus imóveis",
   descricao: "Imóveis publicados",
   fixos: {
     prefixo: "wp_",
     post_type: "imovel",
-    campos: { preco: "preco", quartos: "quartos" },
-    taxonomias: { bairro: { taxonomia: "localizacao", nivel: "filho" } },
-    situacao: { campo: "situacao", ocultar: ["vendido", "alugado"] },
+    campos: [
+      { chave: "preco", rotulo: "Preço de venda", meta_key: "preco", tipo: "preco", filtro: "maximo" },
+    ],
+    categorias: [],
+    esconder: { meta_key: "status_imovel", valores: ["vendido"] },
   },
   ativa: true,
 };
 
-function renderReceitasProntas(query: { isError: boolean; data: unknown; refetch: () => void }) {
+function renderReceitasProntas(query: {
+  isError: boolean;
+  data: { receitas: InstanciaDeReceita[] } | undefined;
+  refetch: () => void;
+}) {
   mockUseReceitas.mockReturnValue(query);
   return render(<ReceitasProntas connectionId="conn-1" motor="mysql" canWrite={true} />);
 }
@@ -82,7 +88,7 @@ describe("ReceitasProntas — erro na leitura", () => {
 describe("ReceitasProntas — o 422 da gravação", () => {
   it("mostra o rótulo legível do caminho que falhou (não o caminho cru)", async () => {
     mockUseReceitas.mockReturnValue({
-      data: { receitas: [INSTANCIA_ACF] },
+      data: { receitas: [INSTANCIA_WORDPRESS] },
       isError: false,
       refetch: vi.fn(),
     });
@@ -92,8 +98,8 @@ describe("ReceitasProntas — o 422 da gravação", () => {
         "validation_failed",
         {
           fieldErrors: {
-            "taxonomias.bairro.taxonomia": [
-              "Use apenas letras minúsculas, números, underscore e hífen no nome da categoria.",
+            "esconder.meta_key": [
+              "Use apenas letras, números, underscore e hífen no nome do campo.",
             ],
           },
         },
@@ -117,14 +123,14 @@ describe("ReceitasProntas — o 422 da gravação", () => {
 
     expect(vi.mocked(toast.error)).toHaveBeenCalledTimes(1);
     const texto = vi.mocked(toast.error).mock.calls[0]![0] as string;
-    expect(texto).toContain("Categoria do bairro");
+    expect(texto).toContain("Campo a esconder");
     // E o caminho cru NÃO vaza para a tela.
-    expect(texto).not.toContain("taxonomias.bairro.taxonomia");
+    expect(texto).not.toContain("esconder.meta_key");
   });
 
-  it("a situação mostra 'Valores a esconder' (não o caminho cru)", async () => {
+  it("os valores a esconder mostram 'Valores a esconder' (não o caminho cru)", async () => {
     mockUseReceitas.mockReturnValue({
-      data: { receitas: [INSTANCIA_ACF] },
+      data: { receitas: [INSTANCIA_WORDPRESS] },
       isError: false,
       refetch: vi.fn(),
     });
@@ -132,7 +138,7 @@ describe("ReceitasProntas — o 422 da gravação", () => {
       new ApiError(
         422,
         "validation_failed",
-        { fieldErrors: { "situacao.ocultar": ["Escreva pelo menos um valor a esconder."] } },
+        { fieldErrors: { "esconder.valores": ["Escreva pelo menos um valor a esconder."] } },
         "req-1",
         "Campos inválidos.",
       ),
@@ -153,6 +159,6 @@ describe("ReceitasProntas — o 422 da gravação", () => {
 
     const texto = vi.mocked(toast.error).mock.calls[0]![0] as string;
     expect(texto).toContain("Valores a esconder");
-    expect(texto).not.toContain("situacao.ocultar");
+    expect(texto).not.toContain("esconder.valores");
   });
 });

@@ -230,13 +230,13 @@ describe("PUT /connections/:id/recipes", () => {
   });
 
   it("fixos inválidos: o 422 traz o CAMINHO do campo em details.fieldErrors", async () => {
-    // O que `validarFixosDaReceita` lança hoje: o caminho inteiro ("taxonomias.
-    // bairro.taxonomia"), não o último pedaço. A tela usa o caminho para
-    // mostrar o rótulo legível.
+    // O que `validarFixosDaReceita` lança hoje: o caminho inteiro ("esconder.
+    // meta_key"), não o último pedaço. A tela usa o caminho para mostrar o
+    // rótulo legível.
     deps.validarFixos.mockImplementation(() => {
-      throw new ErroDeFixosInvalidos("acf-imoveis", {
-        "taxonomias.bairro.taxonomia": [
-          "Use apenas letras minúsculas, números, underscore e hífen no nome da categoria.",
+      throw new ErroDeFixosInvalidos("wordpress-conteudo", {
+        "esconder.meta_key": [
+          "Use apenas letras, números, underscore e hífen no nome do campo.",
         ],
       });
     });
@@ -247,8 +247,8 @@ describe("PUT /connections/:id/recipes", () => {
     const corpo = (await res.json()) as {
       error: { details: { fieldErrors: Record<string, string[]> } };
     };
-    expect(corpo.error.details.fieldErrors["taxonomias.bairro.taxonomia"]?.[0]).toContain(
-      "nome da categoria",
+    expect(corpo.error.details.fieldErrors["esconder.meta_key"]?.[0]).toContain(
+      "nome do campo",
     );
     expect(deps.audit).not.toHaveBeenCalled();
     expect(deps.admin.mock.calls).toHaveLength(0);

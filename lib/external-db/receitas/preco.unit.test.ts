@@ -1,7 +1,7 @@
 /**
  * `precoNumero`: o SQL que converte texto de preço em número no MySQL.
  * O que se prova aqui é a FORMA do SQL (o MySQL de verdade roda em
- * `tests/mysql/receita-acf-imoveis.test.ts`): o símbolo sai ANTES do CAST e preço
+ * `tests/mysql/receita-wordpress-conteudo.test.ts`): o símbolo sai ANTES do CAST e preço
  * sem dígito vira NULL, não 0.
  */
 import { describe, expect, it } from "vitest";
