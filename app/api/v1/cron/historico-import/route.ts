@@ -1,0 +1,128 @@
+/**
+ * historico-import — anda as importações do histórico do WhatsApp (#999).
+ *
+ * As rotas da tela só mudam o ESTADO (`app/api/v1/channel-sessions/[id]/historico`):
+ * quem lê o acervo e grava é este cron, UMA rodada por importação `rodando` a
+ * cada chamada, com o teto padrão da rodada (3 conversas OU 300 mensagens OU
+ * 20 chamadas ao canal). O teto não vem de fora: com menos de 3 chamadas a
+ * rodada não avança.
+ *
+ * ─── Uma execução por importação ────────────────────────────────────────────
+ *
+ * O agendador chama a cada minuto e corta o `curl` em 60 s, mas o servidor
+ * segue com o pedido; uma rodada lenta (canal no teto de 15 s por chamada)
+ * pode se sobrepor à chamada seguinte. A rodada NÃO serializa execuções
+ * simultâneas da mesma importação (ver `rodada.ts`): isso é daqui. A trava é
+ * `cursor.trava_ate`, gravada por update condicional no `updated_at` que esta
+ * chamada leu: quem perde a corrida não roda. A rodada apaga a trava sozinha,
+ * porque grava o cursor dela inteiro (só `indiceConversa`, `offsetMensagens`,
+ * `desde`). Se o processo morrer no meio, a trava vence em `TRAVA_MS`. Sem
+ * migration: a chave mora no jsonb que já existe.
+ *
+ * Empresa parada fica de fora (a rodada gasta chamada ao canal e escreve).
+ * Auditoria é das rotas (início, cancelamento, retomada); a rodada não audita.
+ *
+ * Auth: Bearer INTERNAL_SECRET (fail-closed), igual aos demais crons.
+ */
+import { randomUUID } from "node:crypto";
+import type { NextRequest } from "next/server";
+
+import { fail, ok } from "@/lib/api/wrappers";
+import { autorizaCron } from "@/lib/auth/cron-auth";
+import { rodarUmaRodada, TETO_PADRAO } from "@/lib/channels/historico/rodada";
+import { logger } from "@/lib/logger";
+import { STATUS_OPERANTE, ehOperante, statusDaOrgEmbutida } from "@/lib/organizacao/operante";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+export const dynamic = "force-dynamic";
+
+/** Importações por chamada; as mais antigas (por `updated_at`) primeiro. */
+const LOTE = 10;
+/** Passado isto, não começa outra rodada: o resto fica para o próximo minuto. */
+const PRAZO_DA_CHAMADA_MS = 45_000;
+/** Validade da trava: bem acima de uma rodada lenta, para não rodar em dobro. */
+const TRAVA_MS = 5 * 60_000;
+
+interface Linha {
+  id: string;
+  organization_id: string;
+  cursor: Record<string, unknown> | null;
+  updated_at: string;
+  organizations?: { status?: string | null } | Array<{ status?: string | null }> | null;
+}
+
+function travada(cursor: Record<string, unknown> | null, agora: number): boolean {
+  const ate = cursor?.trava_ate;
+  return typeof ate === "string" && Date.parse(ate) > agora;
+}
+
+async function handle(req: NextRequest): Promise<Response> {
+  const requestId = randomUUID();
+  if (!autorizaCron(req)) {
+    return fail("forbidden", "Cron secret missing or invalid.", 403, { requestId });
+  }
+
+  const admin = createAdminClient();
+  const prazo = Date.now() + PRAZO_DA_CHAMADA_MS;
+  const { data, error } = await admin
+    .from("importacoes_de_historico")
+    .select("id, organization_id, cursor, updated_at, organizations:organization_id!inner(status)")
+    .eq("status", "rodando")
+    .eq("organizations.status", STATUS_OPERANTE)
+    .order("updated_at", { ascending: true })
+    .limit(LOTE);
+  if (error) {
+    logger.error("[historico-import] leitura falhou", { detail: error.message, requestId });
+    return fail("internal_error", error.message, 500, { requestId });
+  }
+
+  const linhas = ((data ?? []) as Linha[]).filter((l) => ehOperante(statusDaOrgEmbutida(l.organizations)));
+  let rodadas = 0;
+  let puladas = 0;
+  let falhas = 0;
+  const status: Record<string, number> = {};
+
+  for (const l of linhas) {
+    if (Date.now() > prazo) break;
+    if (travada(l.cursor, Date.now())) {
+      puladas++;
+      continue;
+    }
+    const agora = new Date();
+    const { data: travou, error: erroDaTrava } = await admin
+      .from("importacoes_de_historico")
+      .update({
+        cursor: { ...(l.cursor ?? {}), trava_ate: new Date(agora.getTime() + TRAVA_MS).toISOString() },
+        updated_at: agora.toISOString(),
+      } as never)
+      .eq("id", l.id)
+      .eq("organization_id", l.organization_id)
+      .eq("status", "rodando")
+      .eq("updated_at", l.updated_at)
+      .select("id");
+    if (erroDaTrava || (travou ?? []).length === 0) {
+      puladas++;
+      continue;
+    }
+
+    rodadas++;
+    try {
+      const r = await rodarUmaRodada(admin, l.id, TETO_PADRAO);
+      status[r.status] = (status[r.status] ?? 0) + 1;
+    } catch (err) {
+      // A rodada guarda o próprio erro na linha; o que chega aqui é o que ela
+      // não conseguiu nem ler/gravar. A trava vence sozinha em TRAVA_MS.
+      falhas++;
+      logger.warn("[historico-import] rodada falhou", {
+        importacaoId: l.id,
+        detail: err instanceof Error ? err.message : "erro",
+        requestId,
+      });
+    }
+  }
+
+  return ok({ encontradas: linhas.length, rodadas, puladas, falhas, status }, { requestId });
+}
+
+export const GET = handle;
+export const POST = handle;

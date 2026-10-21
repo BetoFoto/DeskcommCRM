@@ -274,6 +274,12 @@ export const AUDIT_ACTIONS = [
   "channel.social_webhook_ressincronizado",
   "channel.ai_access_updated",
   "channel.acervo_updated",
+  // A importação do histórico do número (#999): prévia, início, cancelamento e
+  // retomada depois de erro. As rodadas em si são do cron e não auditam.
+  "channel.historico_previa",
+  "channel.historico_import_started",
+  "channel.historico_import_cancelled",
+  "channel.historico_import_resumed",
   "channel.reconnected",
   // Duas ações distintas de propósito: `deleted` apagou a linha (canal virgem),
   // `archived` só a escondeu porque conversas/mensagens ainda a referenciam.
