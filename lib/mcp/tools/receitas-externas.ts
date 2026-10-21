@@ -211,8 +211,6 @@ export const crmConsultarReceita: McpToolDefinition<typeof consultaReceitaShape>
       };
     }
 
-    const prefixo = (instancia.fixos as { prefixo?: string }).prefixo ?? "wp_";
-
     // Limite igual à prévia — mesma conta em lib/external-db/receitas/limite.
     const { limiteItens, limiteMax } = limiteDaReceita({
       buscaLimite: (buscaValidada as { limite?: number }).limite,
@@ -229,8 +227,10 @@ export const crmConsultarReceita: McpToolDefinition<typeof consultaReceitaShape>
         {
           sql,
           valores,
-          tabelas: receita.tabelas(prefixo),
-          colunasPorTabela: receita.colunas(prefixo),
+          // As tabelas e colunas saem dos FIXOS: a `acf-imoveis` só pede as
+          // tabelas de categoria quando o administrador mapeou alguma.
+          tabelas: receita.tabelas(instancia.fixos),
+          colunasPorTabela: receita.colunas(instancia.fixos),
         },
         { limiteMax },
       );

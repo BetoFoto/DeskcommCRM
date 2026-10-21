@@ -29,10 +29,17 @@ export interface DefinicaoDeReceita {
   parametrosFixos: z.ZodTypeAny;
   /** O que o agente preenche na conversa (ex.: busca, preço máximo). Strict. */
   parametrosDaBusca: z.ZodTypeAny;
-  /** As tabelas que o JOIN lê, com o prefixo aplicado. */
-  tabelas: (prefixo: string) => string[];
+  /**
+   * As tabelas que o JOIN lê, com os FIXOS já validados.
+   *
+   * Recebe os fixos (e não o prefixo) porque a receita pode precisar de mais do
+   * que o prefixo: a `acf-imoveis` só libera as tabelas de taxonomia
+   * (`terms`, `term_taxonomy`, `term_relationships`) quando o administrador
+   * mapeou ALGUMA categoria — quem não usa categoria não precisa liberá-las.
+   */
+  tabelas: (fixos: unknown) => string[];
   /** Por tabela, as colunas que o JOIN usa — entra na lista de fontes liberadas. */
-  colunas: (prefixo: string) => Record<string, string[]>;
+  colunas: (fixos: unknown) => Record<string, string[]>;
   /** Monta `{ sql, valores }` a partir de fixos + busca + limite. Valor só por `?`. */
   montar: (fixos: unknown, busca: unknown, limite: number) => { sql: string; valores: unknown[] };
   /** Teto absoluto de itens desta fatia (5: o C2 de tokens não foi medido). */

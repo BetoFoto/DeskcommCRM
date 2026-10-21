@@ -132,8 +132,9 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
 
   const { sql, valores } = receita.montar(instancia.fixos, buscaValidada, limiteItens);
 
-  const prefixo = (instancia.fixos as { prefixo?: string }).prefixo ?? "wp_";
-  const tabelasPermitidas = receita.tabelas(prefixo);
+  // As tabelas e colunas da receita saem dos FIXOS: a `acf-imoveis` só pede as
+  // tabelas de categoria quando o administrador mapeou alguma.
+  const tabelasPermitidas = receita.tabelas(instancia.fixos);
 
   const acesso = await abrirAcesso(admin, activeOrg.orgId, id);
   if (!acesso.ok) {
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   let resultado;
   try {
     resultado = await acesso.dialeto.executarReceita(
-      { sql, valores, tabelas: tabelasPermitidas, colunasPorTabela: receita.colunas(prefixo) },
+      { sql, valores, tabelas: tabelasPermitidas, colunasPorTabela: receita.colunas(instancia.fixos) },
       { limiteMax },
     );
   } catch (err) {

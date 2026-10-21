@@ -83,11 +83,17 @@ export const RECEITA_WOOCOMMERCE_PRODUTOS: DefinicaoDeReceita = {
     "Se um termo não trouxer nada, tente um sinônimo numa nova chamada.",
   parametrosFixos: PARAMETROS_FIXOS_WOOCOMMERCE,
   parametrosDaBusca: PARAMETROS_DA_BUSCA_WOOCOMMERCE,
-  tabelas: (prefixo) => [`${prefixo}posts`, `${prefixo}postmeta`],
-  colunas: (prefixo) => ({
-    [`${prefixo}posts`]: ["ID", "post_title", "post_status", "post_type", "guid", "post_excerpt"],
-    [`${prefixo}postmeta`]: ["post_id", "meta_key", "meta_value"],
-  }),
+  tabelas: (fixos) => {
+    const p = (fixos as { prefixo?: string }).prefixo ?? PREFIXO_PADRAO;
+    return [`${p}posts`, `${p}postmeta`];
+  },
+  colunas: (fixos) => {
+    const p = (fixos as { prefixo?: string }).prefixo ?? PREFIXO_PADRAO;
+    return {
+      [`${p}posts`]: ["ID", "post_title", "post_status", "post_type", "guid", "post_excerpt"],
+      [`${p}postmeta`]: ["post_id", "meta_key", "meta_value"],
+    };
+  },
   montar: (fixos, busca, limite) => {
     const p = (fixos as { prefixo: string }).prefixo ?? PREFIXO_PADRAO;
     const posts = quotarIdentificadorMysql(`${p}posts`);
