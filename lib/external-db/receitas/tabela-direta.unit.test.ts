@@ -101,7 +101,8 @@ describe("receita tabela-direta (unit, sem MySQL)", () => {
   });
 
   it("descreverFiltros lista os filtros configurados", () => {
-    const descricao = RECEITA_TABELA_DIRETA.descreverFiltros(FIXOS_CCT);
+    expect(RECEITA_TABELA_DIRETA.descreverFiltros).toBeDefined();
+    const descricao = RECEITA_TABELA_DIRETA.descreverFiltros!(FIXOS_CCT);
     expect(descricao).toContain("preco (Preço de venda, maximo)");
     expect(descricao).toContain("quartos (Quartos, minimo)");
     expect(descricao).toContain("bairro (Bairro, contem)");
