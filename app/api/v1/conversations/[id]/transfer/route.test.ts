@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { registrarTrocaDeComando } from "@/lib/inbox/atividade-de-comando";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -70,8 +71,13 @@ interface Estado {
   escritasDeLead: Linha[];
   /** A leitura dos negócios estoura (banco fora do ar no meio da sincronia). */
   leituraExplode: boolean;
-  /** O UPDATE do lead volta sem linha — é a RLS recusando o dono novo. */
+  /**
+   * O UPDATE do lead volta com o ERRO 42501 do WITH CHECK — a forma que o
+   * Postgres dá à RLS recusando o dono novo (não zero linhas).
+   */
   rlsRecusa: boolean;
+  /** O card é ganho entre a leitura e a escrita: o UPDATE volta sem linha. */
+  ganhoNoMeio: boolean;
 }
 
 function conversa(extra: Linha = {}): Linha {
@@ -134,7 +140,18 @@ function clienteFalso(estado: Estado, rotulo: "sessao" | "admin") {
       limit: () => q,
       maybeSingle: async () => {
         if (patch) {
-          if (tabela === "crm_leads" && estado.rlsRecusa) return { data: null, error: null };
+          if (tabela === "crm_leads" && estado.rlsRecusa) {
+            return {
+              data: null,
+              error: {
+                code: "42501",
+                message: 'new row violates row-level security policy for table "crm_leads"',
+              },
+            };
+          }
+          if (tabela === "crm_leads" && estado.ganhoNoMeio) {
+            for (const l of estado.leads) l.status = "won";
+          }
           const alvos = linhas().filter(casa);
           if (alvos.length > 0) estado.escritasDeLead.push({ ...patch });
           for (const l of alvos) Object.assign(l, patch);
@@ -214,6 +231,7 @@ beforeEach(() => {
     escritasDeLead: [],
     leituraExplode: false,
     rlsRecusa: false,
+    ganhoNoMeio: false,
   };
   vi.mocked(createClient).mockResolvedValue(clienteFalso(estado, "sessao") as unknown as SupabaseClient);
   vi.mocked(createAdminClient).mockReturnValue(
@@ -334,9 +352,11 @@ describe("POST /api/v1/conversations/[id]/transfer — o negócio aberto segue (
 
   it("o banco recusando o dono novo (RLS) não derruba a transferência da conversa", async () => {
     // Em `visibility_mode = 'own'`/'own_and_unassigned'`, um `agent` não
-    // atribui o card a um colega (#2556): o UPDATE volta sem linha. A conversa
-    // já é do destino — o 200 permanece — e o card fica como estava.
+    // atribui o card a um colega (#2556): o WITH CHECK da `crm_leads_update`
+    // devolve 42501. A conversa já é do destino — o 200 permanece — e o card
+    // fica como estava. É a régua funcionando, não falha: nada vai ao log.
     estado.rlsRecusa = true;
+    const aviso = vi.spyOn(logger, "warn");
 
     const res = await transferir();
 
@@ -345,6 +365,21 @@ describe("POST /api/v1/conversations/[id]/transfer — o negócio aberto segue (
     expect(linhaDe(estado.leads, LEAD_ABERTO).owner_user_id).toBe(ANTIGO);
     expect(estado.escritasDeLead).toHaveLength(0);
     expect(metadataDaTransferencia()).toMatchObject({ negocio_aberto: "recusado_pelo_banco" });
+    expect(aviso).not.toHaveBeenCalled();
+  });
+
+  it("o card ganho entre a leitura e a escrita é a corrida, não a recusa do banco", async () => {
+    estado.ganhoNoMeio = true;
+
+    const res = await transferir();
+
+    expect(res.status).toBe(200);
+    expect(linhaDe(estado.conversas, CONV_A).assigned_to_user_id).toBe(DESTINO);
+    expect(linhaDe(estado.leads, LEAD_ABERTO)).toMatchObject({ status: "won", owner_user_id: ANTIGO });
+    expect(estado.escritasDeLead).toHaveLength(0);
+    expect(metadataDaTransferencia()).toMatchObject({
+      negocio_aberto: "mudou_entre_leitura_e_escrita",
+    });
   });
 
   it("leitura do funil estourando também não vira 500: a transferência é o pedido", async () => {

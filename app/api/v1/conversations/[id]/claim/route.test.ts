@@ -48,6 +48,8 @@ interface Estado {
   escritasDeLead: Linha[];
   /** Tabelas tocadas pelo cliente de SESSÃO. */
   tabelasDaSessao: string[];
+  /** O UPDATE do lead volta com o 42501 do WITH CHECK (a forma da recusa da RLS). */
+  rlsRecusa: boolean;
 }
 
 function lead(id: string, status: string, owner: string | null): Linha {
@@ -83,6 +85,15 @@ function clienteFalso(estado: Estado) {
       limit: () => q,
       maybeSingle: async () => {
         if (patch) {
+          if (tabela === "crm_leads" && estado.rlsRecusa) {
+            return {
+              data: null,
+              error: {
+                code: "42501",
+                message: 'new row violates row-level security policy for table "crm_leads"',
+              },
+            };
+          }
           const alvos = linhas().filter(casa);
           if (alvos.length > 0) estado.escritasDeLead.push({ ...patch });
           for (const l of alvos) Object.assign(l, patch);
@@ -142,6 +153,7 @@ beforeEach(() => {
     rpcs: [],
     escritasDeLead: [],
     tabelasDaSessao: [],
+    rlsRecusa: false,
   };
   vi.mocked(createClient).mockResolvedValue(clienteFalso(estado) as unknown as SupabaseClient);
   vi.mocked(requireSupportWrite).mockResolvedValue(
@@ -203,6 +215,21 @@ describe("POST /api/v1/conversations/[id]/claim — o negócio aberto segue (#31
     expect(res.status).toBe(200);
     expect(estado.escritasDeLead).toHaveLength(0);
     expect(linhaDe(estado.leads, LEAD_ABERTO).assigned_at).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("o banco recusando (42501) não derruba o assumir e o motivo é a recusa", async () => {
+    estado.rlsRecusa = true;
+
+    const res = await POST(req(), params);
+
+    expect(res.status).toBe(200);
+    expect(linhaDe(estado.leads, LEAD_ABERTO).owner_user_id).toBeNull();
+    expect(estado.escritasDeLead).toHaveLength(0);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ negocio_aberto: "recusado_pelo_banco" }),
+      }),
+    );
   });
 
   it("a rota de assumir não inventa evento de automação novo", async () => {

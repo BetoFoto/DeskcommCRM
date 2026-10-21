@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { resolveOwnerPatch } from "@/lib/leads/owner-patch";
+import { ehRecusaDaVisibilidadeDoFunil } from "@/lib/leads/recusa-da-visibilidade";
 import { logger } from "@/lib/logger";
 
 /**
@@ -38,8 +39,11 @@ import { logger } from "@/lib/logger";
  * de visibilidade dele — em `own`/`own_and_unassigned` um agente não atribui o
  * card a um colega (#2556). É a régua certa e ela permanece: a rota que
  * transfere a conversa não ganha, por aqui, nenhuma permissão que a rota de
- * negócios já não dê. Quando o banco recusa, a transferência continua de pé (o
- * fato da conversa já está gravado) e a leitura diz o porquê em `motivo`.
+ * negócios já não dê. Quando o banco recusa (erro 42501 do WITH CHECK, não
+ * zero linhas), a transferência continua de pé (o fato da conversa já está
+ * gravado) e o `motivo` é `recusado_pelo_banco`. Na visibilidade padrão
+ * (`own_and_unassigned`) é o que acontece quando um `agent` transfere para
+ * outro: o card não vai junto.
  *
  * ─── Por que NUNCA derruba quem chamou ──────────────────────────────────────
  *
@@ -56,6 +60,7 @@ export type MotivoDaSincronia =
   | "sem_negocio_aberto"
   | "varios_negocios_abertos"
   | "recusado_pelo_banco"
+  | "mudou_entre_leitura_e_escrita"
   | "falha";
 
 export interface ResultadoDaSincronia {
@@ -160,6 +165,11 @@ export async function sincronizarNegocioAbertoDoContato(
       .maybeSingle();
 
     if (erroDeEscrita) {
+      // A visibilidade do funil recusando o dono novo é a régua funcionando,
+      // não defeito: sem aviso no log.
+      if (ehRecusaDaVisibilidadeDoFunil(erroDeEscrita)) {
+        return { gravou: false, motivo: "recusado_pelo_banco", abertos: 1, leadId: negocio.id };
+      }
       logger.warn("[inbox.negocio-aberto] escrita do responsável falhou", {
         motivo: erroDeEscrita.message,
         organizationId,
@@ -168,10 +178,16 @@ export async function sincronizarNegocioAbertoDoContato(
       return { gravou: false, motivo: "falha", abertos: 1, leadId: negocio.id };
     }
 
-    // Zero linhas com o filtro fechado (org + id + aberto) é a RLS recusando —
-    // não existe outro caminho para "não achou" aqui.
+    // Zero linhas com o filtro fechado (org + id + aberto) é a corrida: o card
+    // foi ganho, perdido ou apagado entre a leitura e a escrita. A recusa da RLS
+    // não chega aqui — ela é erro 42501, tratado acima.
     if (!gravado) {
-      return { gravou: false, motivo: "recusado_pelo_banco", abertos: 1, leadId: negocio.id };
+      return {
+        gravou: false,
+        motivo: "mudou_entre_leitura_e_escrita",
+        abertos: 1,
+        leadId: negocio.id,
+      };
     }
 
     return { gravou: true, motivo: "sincronizado", abertos: 1, leadId: negocio.id };
