@@ -1,13 +1,15 @@
 /**
- * Receitas prontas — caminho ACF (fatia R2).
+ * Receitas prontas — caminho ACF (fatia R2, com categorias).
  * Prova:
- *   - quando a receita é acf-imoveis, mostra Tipo de post e o mapeamento de
- *     meta_key de cada campo;
+ *   - quando a receita é acf-imoveis, mostra Tipo de post, os Campos do
+ *     imóvel, as Categorias e o bloco "Esconder imóveis";
  *   - rótulos ligados aos inputs (useId + htmlFor);
- *   - os campos exigidos (Preço, Quartos, Bairro) vêm preenchidos e os
- *     opcionais (Cidade, Área) vêm vazios;
- *   - salvar envia os fixos completos do ACF (prefixo, post_type, campos);
+ *   - escolher "categoria" para o bairro grava `taxonomias.bairro` (com o
+ *     nível escolhido) e tira o dado de `campos`;
+ *   - trocar para "não usar" remove a chave;
  *   - apagar um campo opcional tira a CHAVE do mapeamento (não manda "");
+ *   - salvar envia os fixos completos do ACF (prefixo, post_type, campos,
+ *     taxonomias, situacao);
  *   - a receita que NÃO é ACF não recebe o formulário de ACF.
  *
  * Sem sugestão automática (é da R5) e sem foto (é da R4).
@@ -70,7 +72,9 @@ const INSTANCIA_ACF: InstanciaDeReceita = {
   fixos: {
     prefixo: "wp_",
     post_type: "imovel",
-    campos: { preco: "preco", quartos: "quartos", bairro: "bairro" },
+    campos: { preco: "preco", quartos: "quartos" },
+    taxonomias: { bairro: { taxonomia: "localizacao", nivel: "filho" } },
+    situacao: { campo: "situacao", ocultar: ["vendido", "alugado"] },
   },
   ativa: true,
 };
@@ -108,45 +112,145 @@ function renderComQuery(receitas: InstanciaDeReceita[], canWrite = true) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+/** Abre a edição de uma receita nova (o caminho "Adicionar receita"). */
+async function abrirNovaReceita() {
+  const botaoAdicionar = screen.getByRole("button", { name: /Adicionar receita/i })!;
+  await act(async () => {
+    fireEvent.click(botaoAdicionar);
+  });
+}
+
+/** Salva e devolve os "fixos" que foram para o PUT. */
+async function salvarEObterFixos(): Promise<Record<string, unknown>> {
+  const botaoSalvar = screen.getByRole("button", { name: /Salvar/i })!;
+  await act(async () => {
+    fireEvent.click(botaoSalvar);
+  });
+  const args = deps.salvarReceitas.mock.calls[0]![1] as InstanciaDeReceita[];
+  return (args[0]!.fixos ?? {}) as Record<string, unknown>;
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 
 describe("Receitas prontas — caminho ACF", () => {
-  it("adicionar acf-imoveis mostra Tipo de post e mapeamento de campos", async () => {
+  it("adicionar acf-imoveis mostra Tipo de post, Campos do imóvel, Categorias e Esconder imóveis", async () => {
     renderComQuery([], true);
+    await abrirNovaReceita();
 
-    const botaoAdicionar = screen.getByRole("button", { name: /Adicionar receita/i })!;
-    await act(async () => {
-      fireEvent.click(botaoAdicionar);
-    });
-
-    // Tipo de post
     expect(screen.getByLabelText(/Tipo de post/i)).toBeInTheDocument();
-    // Mapeamento de campos obrigatórios
-    expect(screen.getByLabelText(/Preço \*/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Quartos \*/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Bairro \*/i)).toBeInTheDocument();
-    // Opcionais
-    expect(screen.getByLabelText(/Cidade/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Área/i)).toBeInTheDocument();
+    expect(screen.getByText("Campos do imóvel")).toBeInTheDocument();
+    expect(screen.getByText("Categorias")).toBeInTheDocument();
+    expect(screen.getByText("Esconder imóveis")).toBeInTheDocument();
   });
 
-  it("labels estão ligados aos inputs (htmlFor/id) — getByLabelText acha cada campo", async () => {
+  it("os campos do imóvel têm um campo de texto cada, com a dica do ACF/JetEngine", async () => {
     renderComQuery([], true);
+    await abrirNovaReceita();
 
-    const botaoAdicionar = screen.getByRole("button", { name: /Adicionar receita/i })!;
+    expect(screen.getByLabelText("Código")).toBeInTheDocument();
+    expect(screen.getByLabelText("Preço de venda")).toBeInTheDocument();
+    expect(screen.getByLabelText("Aluguel")).toBeInTheDocument();
+    expect(screen.getByLabelText("Condomínio")).toBeInTheDocument();
+    expect(screen.getByLabelText("Quartos")).toBeInTheDocument();
+    expect(screen.getByLabelText("Suítes")).toBeInTheDocument();
+    expect(screen.getByLabelText("Banheiros")).toBeInTheDocument();
+    expect(screen.getByLabelText("Vagas")).toBeInTheDocument();
+    expect(screen.getByLabelText("Área")).toBeInTheDocument();
+    expect(screen.getByText(/O nome do campo no ACF ou no JetEngine/)).toBeInTheDocument();
+  });
+
+  it("as quatro categorias têm escolha de onde vem o dado", async () => {
+    renderComQuery([], true);
+    await abrirNovaReceita();
+
+    for (const rotulo of ["Bairro", "Cidade", "Tipo", "Finalidade"]) {
+      const escolha = screen.getByLabelText(rotulo);
+      expect(escolha).toBeInTheDocument();
+      expect(escolha).toHaveValue("nao-usar");
+    }
+    // As três opções: não usar, campo, categoria.
+    expect(screen.getByRole("option", { name: "Não usar" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Campo" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Categoria" })).toBeInTheDocument();
+  });
+
+  it("escolher Categoria para o bairro grava taxonomias.bairro (e tira o dado de campos)", async () => {
+    renderComQuery([], true);
+    await abrirNovaReceita();
+
+    // Primeiro como campo: o bairro vira um meta_key.
+    const escolhaBairro = screen.getByLabelText("Bairro");
     await act(async () => {
-      fireEvent.click(botaoAdicionar);
+      fireEvent.change(escolhaBairro, { target: { value: "campo" } });
+    });
+    const campoBairro = screen.getByLabelText("Nome do campo");
+    await act(async () => {
+      fireEvent.input(campoBairro, { target: { value: "bairro" } });
     });
 
-    // Cada input de mapeamento tem label ligado.
-    expect(screen.getByLabelText(/Preço \*/i)).toHaveValue("preco");
-    expect(screen.getByLabelText(/Quartos \*/i)).toHaveValue("quartos");
-    expect(screen.getByLabelText(/Bairro \*/i)).toHaveValue("bairro");
-    expect(screen.getByLabelText(/Cidade/i)).toHaveValue("");
-    expect(screen.getByLabelText(/Área/i)).toHaveValue("");
+    // Agora como categoria: o campo some e a taxonomia entra.
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "categoria" } });
+    });
+    expect(screen.queryByLabelText("Nome do campo")).toBeNull();
+    const slug = screen.getByLabelText("Nome da categoria");
+    await act(async () => {
+      fireEvent.input(slug, { target: { value: "localizacao" } });
+    });
+
+    const fixos = await salvarEObterFixos();
+    const taxonomias = fixos.taxonomias as Record<string, { taxonomia: string; nivel: string }>;
+    expect(taxonomias.bairro?.taxonomia).toBe("localizacao");
+    const campos = fixos.campos as Record<string, string>;
+    expect("bairro" in campos).toBe(false);
+  });
+
+  it("o nível da categoria (bairro = filho) vai para o PUT", async () => {
+    renderComQuery([], true);
+    await abrirNovaReceita();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "categoria" } });
+    });
+    await act(async () => {
+      fireEvent.input(screen.getByLabelText("Nome da categoria"), {
+        target: { value: "localizacao" },
+      });
+    });
+    const nivel = screen.getByLabelText("Nível");
+    await act(async () => {
+      fireEvent.change(nivel, { target: { value: "filho" } });
+    });
+
+    const fixos = await salvarEObterFixos();
+    const taxonomias = fixos.taxonomias as Record<string, { taxonomia: string; nivel: string }>;
+    expect(taxonomias.bairro).toEqual({ taxonomia: "localizacao", nivel: "filho" });
+  });
+
+  it("trocar para NÃO USAR remove a chave", async () => {
+    renderComQuery([], true);
+    await abrirNovaReceita();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "categoria" } });
+    });
+    await act(async () => {
+      fireEvent.input(screen.getByLabelText("Nome da categoria"), {
+        target: { value: "localizacao" },
+      });
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "nao-usar" } });
+    });
+
+    const fixos = await salvarEObterFixos();
+    const taxonomias = fixos.taxonomias as Record<string, unknown>;
+    expect("bairro" in taxonomias).toBe(false);
+    const campos = fixos.campos as Record<string, string>;
+    expect("bairro" in campos).toBe(false);
   });
 
   it("editar uma instância ACF mostra o tipo de post e o mapeamento gravados", async () => {
@@ -158,9 +262,15 @@ describe("Receitas prontas — caminho ACF", () => {
     });
 
     expect(screen.getByLabelText(/Tipo de post/i)).toHaveValue("imovel");
-    expect(screen.getByLabelText(/Preço \*/i)).toHaveValue("preco");
-    expect(screen.getByLabelText(/Quartos \*/i)).toHaveValue("quartos");
-    expect(screen.getByLabelText(/Bairro \*/i)).toHaveValue("bairro");
+    expect(screen.getByLabelText("Preço de venda")).toHaveValue("preco");
+    expect(screen.getByLabelText("Quartos")).toHaveValue("quartos");
+    // A categoria gravada volta como "categoria", com o slug e o nível.
+    expect(screen.getByLabelText("Bairro")).toHaveValue("categoria");
+    expect(screen.getByLabelText("Nome da categoria")).toHaveValue("localizacao");
+    expect(screen.getByLabelText("Nível")).toHaveValue("filho");
+    // E a situação volta com o campo e os valores a esconder.
+    expect(screen.getByLabelText("Campo da situação")).toHaveValue("situacao");
+    expect(screen.getByLabelText("Valores a esconder")).toHaveValue("vendido, alugado");
   });
 
   it("o card de leitura da instância ACF mostra o tipo de post", () => {
@@ -169,73 +279,46 @@ describe("Receitas prontas — caminho ACF", () => {
     expect(screen.getByText(/Tipo de post:/i)).toBeInTheDocument();
   });
 
-  it("salvar acf-imoveis envia fixos completos (prefixo, post_type, campos)", async () => {
+  it("salvar acf-imoveis envia fixos completos (prefixo, post_type, campos, taxonomias, situacao)", async () => {
     renderComQuery([], true);
+    await abrirNovaReceita();
 
-    const botaoAdicionar = screen.getByRole("button", { name: /Adicionar receita/i })!;
-    await act(async () => {
-      fireEvent.click(botaoAdicionar);
-    });
-
-    // Mudar tipo de post
     const inputPostType = screen.getByLabelText(/Tipo de post/i);
     await act(async () => {
       fireEvent.input(inputPostType, { target: { value: "apartamento" } });
     });
 
-    const botaoSalvar = screen.getByRole("button", { name: /Salvar/i })!;
-    await act(async () => {
-      fireEvent.click(botaoSalvar);
-    });
-
-    const args = deps.salvarReceitas.mock.calls[0]![1] as InstanciaDeReceita[];
-    expect(args).toHaveLength(1);
-    expect(args[0]!.receita).toBe("acf-imoveis");
-    const fixos = args[0]!.fixos as {
-      prefixo: string;
-      post_type: string;
-      campos: Record<string, string>;
-    };
+    const fixos = await salvarEObterFixos();
     expect(fixos.prefixo).toBe("wp_");
     expect(fixos.post_type).toBe("apartamento");
-    expect(fixos.campos.preco).toBe("preco");
-    expect(fixos.campos.quartos).toBe("quartos");
-    expect(fixos.campos.bairro).toBe("bairro");
+    const campos = fixos.campos as Record<string, string>;
+    expect(campos.preco).toBe("preco");
+    expect(campos.quartos).toBe("quartos");
+    // A situação vai com o campo e os valores a esconder (padrão da receita).
+    expect(fixos.situacao).toEqual({ campo: "situacao", ocultar: ["vendido", "alugado"] });
   });
 
   it("apagar um campo opcional tira a CHAVE do mapeamento (não grava vazio)", async () => {
     renderComQuery([], true);
+    await abrirNovaReceita();
 
-    const botaoAdicionar = screen.getByRole("button", { name: /Adicionar receita/i })!;
+    const inputArea = screen.getByLabelText("Área");
     await act(async () => {
-      fireEvent.click(botaoAdicionar);
-    });
-
-    // Preenche a cidade e apaga.
-    const inputCidade = screen.getByLabelText(/Cidade/i);
-    await act(async () => {
-      fireEvent.input(inputCidade, { target: { value: "Curitiba" } });
+      fireEvent.input(inputArea, { target: { value: "120" } });
     });
     await act(async () => {
-      fireEvent.input(inputCidade, { target: { value: "" } });
+      fireEvent.input(inputArea, { target: { value: "" } });
     });
 
-    const botaoSalvar = screen.getByRole("button", { name: /Salvar/i })!;
-    await act(async () => {
-      fireEvent.click(botaoSalvar);
-    });
-
-    const args = deps.salvarReceitas.mock.calls[0]![1] as InstanciaDeReceita[];
-    const fixos = args[0]!.fixos as { campos: Record<string, string> };
+    const fixos = await salvarEObterFixos();
+    const campos = fixos.campos as Record<string, string>;
     // A chave SAI: o Zod da receita é `.min(1).optional()`, e "" não vale como
     // ausente — mandar "" no PUT voltava 422 `fixos_invalidos`.
-    expect("cidade" in fixos.campos).toBe(false);
-    // E nenhum valor vazio sobrou no mapeamento.
-    expect(Object.values(fixos.campos)).not.toContain("");
-    // Os obrigatórios continuam mapeados.
-    expect(fixos.campos.preco).toBe("preco");
-    expect(fixos.campos.quartos).toBe("quartos");
-    expect(fixos.campos.bairro).toBe("bairro");
+    expect("area" in campos).toBe(false);
+    expect(Object.values(campos)).not.toContain("");
+    // E os outros continuam mapeados.
+    expect(campos.preco).toBe("preco");
+    expect(campos.quartos).toBe("quartos");
   });
 
   it("a receita que não é ACF não recebe o formulário de ACF", async () => {
@@ -255,8 +338,9 @@ describe("Receitas prontas — caminho ACF", () => {
     });
 
     expect(screen.queryByLabelText(/Tipo de post/i)).toBeNull();
-    expect(screen.queryByLabelText(/Preço \*/i)).toBeNull();
-    expect(screen.queryByText(/Mapeamento de campos/i)).toBeNull();
+    expect(screen.queryByText("Campos do imóvel")).toBeNull();
+    expect(screen.queryByText("Categorias")).toBeNull();
+    expect(screen.queryByText("Esconder imóveis")).toBeNull();
   });
 
   it("canWrite=false → nenhum botão de mudar", () => {
