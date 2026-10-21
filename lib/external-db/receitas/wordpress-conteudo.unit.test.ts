@@ -348,8 +348,32 @@ describe("receita wordpress-conteudo (unit, sem MySQL)", () => {
       // Nenhuma junção obrigatória: todo campo mapeado entra por LEFT JOIN.
       // As categorias saem por subconsulta (group_concat) com join interno;
       // essas subconsultas saem do texto antes de conferir que sobrou só
-      // left join no nível de fora.
-      const sqlSemSubconsultas = sql.replace(/\(select[^)]*\)/gi, "");
+      // left join no nível de fora. O group_concat tem parênteses aninhados,
+      // então a remoção conta a profundidade em vez de usar regex.
+      const removeSubconsultas = (s: string): string => {
+        const out: string[] = [];
+        let i = 0;
+        while (i < s.length) {
+          if (/^\(select\b/i.test(s.slice(i))) {
+            let prof = 0;
+            let j = i;
+            while (j < s.length) {
+              if (s[j] === "(") prof += 1;
+              else if (s[j] === ")") {
+                prof -= 1;
+                if (prof === 0) { j += 1; break; }
+              }
+              j += 1;
+            }
+            i = j;
+            continue;
+          }
+          out.push(s[i]);
+          i += 1;
+        }
+        return out.join("");
+      };
+      const sqlSemSubconsultas = removeSubconsultas(sql);
       expect(sqlSemSubconsultas.replace(/left join/gi, "")).not.toMatch(/\bjoin\b/i);
       expect(sql.match(/left join/gi)?.length).toBe(FIXOS_IMOVEIS.campos.length);
       expect(sql.split("?").length - 1).toBe(valores.length);
