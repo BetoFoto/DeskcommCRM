@@ -14468,7 +14468,6 @@ export const DICIONARIO: Traducoes = {
   "Qual tipo de post do WordPress (por exemplo, imovel, veiculo, produto).": {
     es: "Qué tipo de entrada de WordPress (por ejemplo, imovel, veiculo, producto).",
   },
-  "Começar de um modelo": { es: "Empezar con un modelo" },
   "O modelo só preenche esta tela com uma configuração que serve ao seu site.": {
     es: "El modelo solo llena esta pantalla con una configuración que sirve para tu sitio.",
   },
@@ -14488,9 +14487,7 @@ export const DICIONARIO: Traducoes = {
   "Tem categoria acima": { es: "Tiene categoría arriba" },
   "Não tem categoria acima": { es: "No tiene categoría arriba" },
   "Igual": { es: "Igual" },
-  "Adicionar campo": { es: "Agregar campo" },
   "Adicionar categoria": { es: "Agregar categoría" },
-  "Remover campo": { es: "Quitar campo" },
   "Remover categoria": { es: "Quitar categoría" },
   "Chaves (avançado)": { es: "Claves (avanzado)" },
   "Esconder as chaves": { es: "Ocultar las claves" },
