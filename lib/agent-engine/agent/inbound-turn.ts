@@ -1517,8 +1517,8 @@ export interface AgentTurnInput {
   /**
    * Traço do turno (issue #2869): o coletor de ferramentas e o desfecho que a
    * execução preenche enquanto roda. OPCIONAL de propósito — quem chama o turno
-   * sem traço (invariantes antigos, caminhos internos) não paga nada, e quem
-   * instala é `runAgentTurnComTraco`, que é também quem grava a linha.
+   * sem traço (a prévia antiga, caminhos internos) não paga nada, e quem
+   * instala é `runAgentTurn` (e `runAgentPreview`), que é também quem grava a linha.
    */
   tracoDoTurno?: {
     coletor: ColetorDeFerramentas;
@@ -1863,59 +1863,92 @@ export async function runAgentTurn(
   job: JobRow,
   pool: pg.Pool,
   ctx: { workerId: string },
-  input: AgentTurnInput,
+  entradaDoChamador: AgentTurnInput,
 ): Promise<void> {
   const leadIdDoJob = job.contact_id;
   if (leadIdDoJob === null) {
     throw new Error('job de turno sem contact_id — o CHECK da fila deveria impedir');
   }
+  // Traço do turno (#2869): o coletor e o desfecho nascem aqui, o turno os
+  // preenche, e o `finally` grava UMA linha em `agent_turn_traces` — inclusive
+  // quando o turno falha ou é devolvido à fila. Mora AQUI, e não num envoltório
+  // por fora, para que os quatro call sites (e os dublês que os testes fazem
+  // de `runAgentTurn`) sigam iguais. A gravação nunca lança.
+  const coletor = criarColetorDeFerramentas();
+  const desfecho: DesfechoDoTurno = {};
+  const input: AgentTurnInput = { ...entradaDoChamador, tracoDoTurno: { coletor, desfecho } };
   const logDaEscolta = withFields(deps.log, {
     job_id: job.id,
     tenant_id: job.organization_id,
     lead_id: leadIdDoJob,
   });
-  await comHandoffSeOrcamentoAcabar(
-    {
-      pool,
-      tenantId: job.organization_id,
-      leadId: leadIdDoJob,
+  let status: StatusDoTurno = 'completed';
+  let erro: unknown = null;
+  try {
+    await comHandoffSeOrcamentoAcabar(
+      {
+        pool,
+        tenantId: job.organization_id,
+        leadId: leadIdDoJob,
+        conversationId: input.conversationId,
+        briefingDoCheckpoint: () =>
+          briefingDoCheckpointDuravel(pool, job.organization_id, leadIdDoJob, logDaEscolta),
+        // O canal nasce DENTRO da closure: instanciá-lo aqui faria todo turno feliz
+        // pagar por um adapter que só o caminho de erro usa. Sem `agentActorId` de
+        // propósito — quando o teto estoura antes da primeira chamada, não houve
+        // agente resolvido para creditar.
+        avisarLead: () =>
+          avisarLeadLendoOContato(
+            pool,
+            {
+              tenantId: job.organization_id,
+              leadId: leadIdDoJob,
+              conversationId: input.conversationId,
+              channelSessionId: input.channelSessionId,
+              jobId: job.id,
+            },
+            {
+              motivo: 'orcamento_de_ia',
+              channel: (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(
+                pool,
+              ),
+              // #2112: a escolta roda no turno INTEIRO, inclusive num follow-up —
+              // o tipo do turno é o que diz qual janela o gate do aviso avalia.
+              origem: tipoDeEnvio(eTurnoDeResposta(job)),
+              now: deps.clock?.() ?? new Date(),
+              log: logDaEscolta,
+              ...(deps.knobs.disclosureMode !== undefined
+                ? { disclosureMode: deps.knobs.disclosureMode }
+                : {}),
+              ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+            },
+          ),
+        log: logDaEscolta,
+      },
+      () => executarTurnoDoAgente(deps, job, pool, ctx, input),
+    );
+  } catch (e) {
+    erro = e;
+    // Job devolvido à fila (cap de envio, janela horária, handoff) não é falha
+    // do turno: é um turno que não devia acontecer agora, e o motivo fica no
+    // registro para quem for ler depois.
+    status = e instanceof JobSettledError ? 'aborted' : 'failed';
+    throw e;
+  } finally {
+    await gravarTracoDoTurno(deps.log, pool, {
+      organizationId: job.organization_id,
+      jobId: job.id,
+      previewRunId: null,
       conversationId: input.conversationId,
-      briefingDoCheckpoint: () =>
-        briefingDoCheckpointDuravel(pool, job.organization_id, leadIdDoJob, logDaEscolta),
-      // O canal nasce DENTRO da closure: instanciá-lo aqui faria todo turno feliz
-      // pagar por um adapter que só o caminho de erro usa. Sem `agentActorId` de
-      // propósito — quando o teto estoura antes da primeira chamada, não houve
-      // agente resolvido para creditar.
-      avisarLead: () =>
-        avisarLeadLendoOContato(
-          pool,
-          {
-            tenantId: job.organization_id,
-            leadId: leadIdDoJob,
-            conversationId: input.conversationId,
-            channelSessionId: input.channelSessionId,
-            jobId: job.id,
-          },
-          {
-            motivo: 'orcamento_de_ia',
-            channel: (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(
-              pool,
-            ),
-            // #2112: a escolta roda no turno INTEIRO, inclusive num follow-up —
-            // o tipo do turno é o que diz qual janela o gate do aviso avalia.
-            origem: tipoDeEnvio(eTurnoDeResposta(job)),
-            now: deps.clock?.() ?? new Date(),
-            log: logDaEscolta,
-            ...(deps.knobs.disclosureMode !== undefined
-              ? { disclosureMode: deps.knobs.disclosureMode }
-              : {}),
-            ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
-          },
-        ),
-      log: logDaEscolta,
-    },
-    () => executarTurnoDoAgente(deps, job, pool, ctx, input),
-  );
+      contactId: job.contact_id,
+      config: input.resolvedAgent?.config ?? null,
+      isDryRun: false,
+      status,
+      erro,
+      desfecho,
+      coletor,
+    });
+  }
 }
 
 /** Monta e grava a linha do traço — o único lugar do turno que fala com a tabela. */
@@ -1936,6 +1969,9 @@ async function gravarTracoDoTurno(
     coletor: ColetorDeFerramentas;
   },
 ): Promise<void> {
+  // O agente que o turno resolveu vence o que o chamador passou (que falta no
+  // follow-up e na resposta de caso).
+  const config = dados.desfecho.config ?? dados.config;
   await registrarTracoDoTurno(
     pool,
     montarTracoDoTurno({
@@ -1944,8 +1980,8 @@ async function gravarTracoDoTurno(
       previewRunId: dados.previewRunId,
       conversationId: dados.conversationId,
       contactId: dados.contactId,
-      agentId: dados.config?.agentId ?? null,
-      agentVersionId: dados.config?.versionId ?? null,
+      agentId: config?.agentId ?? null,
+      agentVersionId: config?.versionId ?? null,
       isDryRun: dados.isDryRun,
       status: dados.status,
       // O motivo do aborto é do turno quando ele sabe (`desfecho`); o erro, do
@@ -1959,72 +1995,19 @@ async function gravarTracoDoTurno(
           : dados.erro instanceof Error
             ? dados.erro.message
             : String(dados.erro),
-      provider: dados.desfecho.provider ?? dados.config?.provider ?? null,
-      model: dados.desfecho.model ?? dados.config?.model ?? null,
+      provider: dados.desfecho.provider ?? config?.provider ?? null,
+      model: dados.desfecho.model ?? config?.model ?? null,
       messagesSent: dados.desfecho.messagesSent ?? 0,
       // A janela REALMENTE carregada ainda não é medida (ver o cabeçalho da
       // migration 0721): `null` diz "não se sabe", e a janela PEDIDA não entra
       // aqui para não passar por medição.
       historicoMensagens: null,
-      knowledgeSourceIds: dados.config?.knowledgeSourceIds ?? [],
+      knowledgeSourceIds: config?.knowledgeSourceIds ?? [],
       ferramentas: dados.coletor.listar(),
+      ferramentasTruncadas: dados.coletor.truncado(),
     }),
     log,
   );
-}
-
-/**
- * ═══ O TURNO REAL, COM O TRAÇO GRAVADO NO FIM (issue #2869) ═══
- *
- * Envolve `runAgentTurn` e grava UMA linha em `agent_turn_traces` quando o turno
- * termina — inclusive quando falha ou é abortado. É aqui, e não dentro do turno,
- * por duas razões:
- *
- *   1. a falha aparece na linha: o erro que sobe para a fila é o mesmo que fica
- *      registrado, e o turno não precisa de try/catch só para isso;
- *   2. a gravação é melhor-esforço e mora FORA do caminho do atendimento —
- *      `registrarTracoDoTurno` nunca lança.
- *
- * Os três tipos de turno (inbound, resposta de caso e follow-up) entram por
- * aqui: é isso que torna o traço comparável entre eles.
- */
-export async function runAgentTurnComTraco(
-  deps: InboundTurnDeps,
-  job: JobRow,
-  pool: pg.Pool,
-  ctx: { workerId: string },
-  input: AgentTurnInput,
-): Promise<void> {
-  const coletor = criarColetorDeFerramentas();
-  const desfecho: DesfechoDoTurno = {};
-  const entrada: AgentTurnInput = { ...input, tracoDoTurno: { coletor, desfecho } };
-
-  let status: StatusDoTurno = 'completed';
-  let erro: unknown = null;
-  try {
-    await runAgentTurn(deps, job, pool, ctx, entrada);
-  } catch (e) {
-    erro = e;
-    // Job devolvido à fila (cap de envio, janela horária, handoff) não é falha
-    // do turno: é um turno que não devia acontecer agora, e o motivo fica no
-    // registro para quem for ler depois.
-    status = e instanceof JobSettledError ? 'aborted' : 'failed';
-    throw e;
-  } finally {
-    await gravarTracoDoTurno(deps.log, pool, {
-      organizationId: job.organization_id,
-      jobId: job.id,
-      previewRunId: null,
-      conversationId: entrada.conversationId,
-      contactId: job.contact_id,
-      config: entrada.resolvedAgent?.config ?? null,
-      isDryRun: false,
-      status,
-      erro,
-      desfecho,
-      coletor,
-    });
-  }
 }
 
 
@@ -2265,6 +2248,9 @@ async function executarTurnoDoAgente(
         inbound: liveJob().kind === 'inbound_turn',
       }, { log: runLog, jev: deps.jev });
   const agentConfig = routed.config;
+  // O traço grava o agente que o turno RESOLVEU: follow-up e resposta de caso
+  // não passam `resolvedAgent`, e sem isto a linha ficaria sem agente nem fontes.
+  if (input.tracoDoTurno !== undefined) input.tracoDoTurno.desfecho.config = agentConfig;
   // #2155 — o destino do card. `in` porque o ramo de preview/campanha devolve um
   // objeto literal SEM estes campos: sem a guarda, o tipo da união recusa a leitura.
   const destinoPipelineId = 'destinationPipelineId' in routed ? (routed.destinationPipelineId ?? null) : null;
@@ -5986,7 +5972,7 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       return;
     }
     await anotarUltimaInboundVista(pool, alvo);
-    await runAgentTurnComTraco(deps, job, pool, ctx, {
+    await runAgentTurn(deps, job, pool, ctx, {
       resolvedAgent,
       channelSessionId: payload.channel_session_id,
       conversationId: payload.conversation_id,

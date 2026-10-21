@@ -222,6 +222,16 @@ describe("montarTracoDoTurno", () => {
     expect(linha.ferramentas_truncadas).toBe(true);
   });
 
+  it("o corte feito pelo COLETOR chega à linha: a lista já vem cortada, a bandeira não", () => {
+    const linha = montarTracoDoTurno({
+      ...base,
+      ferramentas: [{ nome: "x", estado: "ok", erro: null, duracao_ms: 1 }],
+      ferramentasTruncadas: true,
+    });
+
+    expect(linha.ferramentas_truncadas).toBe(true);
+  });
+
   it("a prévia tem chave própria: sem job, o run id é quem identifica a linha", () => {
     const linha = montarTracoDoTurno({
       ...base,

@@ -39,6 +39,7 @@
 import type pg from "pg";
 import type { ToolSet } from "../edge/llm/run-model-call";
 import type { Logger } from "../obs/logger";
+import type { TurnAgentResolution } from "./resolve-turn-agent";
 
 /** Como a chamada de uma ferramenta terminou, do ponto de vista de quem lê o traço. */
 export type EstadoDaFerramenta = "ok" | "falhou" | "bloqueada";
@@ -75,6 +76,8 @@ export interface DesfechoDoTurno {
   provider?: string | null;
   model?: string | null;
   abortReason?: string | null;
+  /** O agente que o turno RESOLVEU (follow-up e caso não o recebem do chamador). */
+  config?: TurnAgentResolution["config"] | null;
 }
 
 export interface EntradaDoTraco {
@@ -100,6 +103,8 @@ export interface EntradaDoTraco {
   /** Ids das fontes de conhecimento ligadas ao agente neste turno. */
   knowledgeSourceIds: readonly string[];
   ferramentas: readonly FerramentaNoTraco[];
+  /** O coletor descartou chamadas pelo teto (ele já entrega a lista cortada). */
+  ferramentasTruncadas?: boolean;
 }
 
 /** A linha, já normalizada — o que vai para o banco. */
@@ -303,7 +308,8 @@ export function montarTracoDoTurno(entrada: EntradaDoTraco): TracoDoTurno {
       erro: f.erro === null ? null : f.erro.slice(0, limiteDoErro),
       duracao_ms: Math.max(0, Math.round(f.duracao_ms)),
     })),
-    ferramentas_truncadas: entrada.ferramentas.length > LIMITE_DE_FERRAMENTAS,
+    ferramentas_truncadas:
+      entrada.ferramentasTruncadas === true || entrada.ferramentas.length > LIMITE_DE_FERRAMENTAS,
   };
 }
 
@@ -376,6 +382,10 @@ export async function registrarTracoDoTurno(
               skills.lista, $18::jsonb, fontes.lista, $19
          from chamadas, skills, fontes
        on conflict (job_id) where job_id is not null do update set
+         agent_id = excluded.agent_id,
+         agent_version_id = excluded.agent_version_id,
+         provider = excluded.provider,
+         model = excluded.model,
          status = excluded.status,
          abort_reason = excluded.abort_reason,
          error_code = excluded.error_code,
@@ -405,8 +415,8 @@ export async function registrarTracoDoTurno(
         traco.abort_reason,
         traco.error_code,
         traco.error_message,
-        null,
-        null,
+        traco.provider,
+        traco.model,
         traco.messages_sent,
         traco.historico_mensagens,
         JSON.stringify(traco.ferramentas),
