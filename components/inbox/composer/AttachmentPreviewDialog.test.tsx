@@ -1,11 +1,9 @@
 /**
  * O DIÁLOGO PEDE LEGENDA SÓ ONDE A LEGENDA CHEGA (#3151).
  *
- * O defeito medido na main: o campo "Legenda" aparecia SEMPRE, mas nenhum canal
- * leva legenda em áudio — o WAHA manda `sendVoice { file, convert }`
- * (`lib/waha/media-send.ts`) e a Cloud API manda `audio { link, voice: true }`
- * (`lib/channels/adapters/meta-cloud.ts`), os dois sem `caption`. O atendente
- * escrevia um texto que nunca chegava.
+ * O defeito medido na main: o campo "Legenda" aparecia SEMPRE, mas os dois
+ * adaptadores de WhatsApp de envio direto em `lib/channels/` mandam a nota de
+ * voz sem `caption`. O atendente escrevia um texto que nunca chegava.
  *
  * O que cada caso prova, e por que nesta forma:
  *

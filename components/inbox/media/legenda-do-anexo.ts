@@ -1,10 +1,9 @@
 /**
  * A LEGENDA SÓ EXISTE ONDE O CANAL A LEVA (#3151).
  *
- * Áudio é o ÚNICO tipo que não leva texto em canal nenhum: o WAHA manda
- * `sendVoice { file, convert }` (`lib/waha/media-send.ts`) e a Cloud API manda
- * `audio { link, voice: true }` (`lib/channels/adapters/meta-cloud.ts`), os dois
- * SEM `caption` — ao contrário de imagem, vídeo e documento, que levam. Pedir
+ * Áudio é o ÚNICO tipo que não leva texto: os dois adaptadores de WhatsApp de
+ * envio direto em `lib/channels/` mandam a nota de voz SEM `caption` — ao contrário de imagem,
+ * vídeo e documento, que levam. Pedir
  * legenda de um áudio é escrever um texto que nunca chega.
  *
  * A régua mora aqui, num módulo puro, porque DOIS lugares precisam da MESMA

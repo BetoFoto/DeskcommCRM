@@ -19,7 +19,8 @@ interface Props {
    * enviar — o operador aprova antes de qualquer byte sair.
    *
    * A LEGENDA só aparece quando ALGUM anexo da fila a leva (#3151): áudio não
-   * leva legenda em canal nenhum (ver `anexoLevaLegenda`), então pedir o texto
+   * leva legenda nos dois adaptadores de WhatsApp de envio direto (ver
+   * `anexoLevaLegenda`), então pedir o texto
    * é escrever algo que nunca chega. Fila mista mantém o campo — a legenda vai
    * com a imagem.
    */
@@ -87,7 +88,7 @@ export function AttachmentPreviewDialog({
   /**
    * A fila leva legenda se ALGUM anexo dela leva (#3151). Com fila só de
    * áudio não há campo: o texto que o atendente escrevesse não teria por onde
-   * sair — nem no WAHA nem na Cloud API o áudio viaja com `caption`.
+   * sair — os adaptadores de WhatsApp de envio direto mandam o áudio sem `caption`.
    */
   const levaLegenda = files.some(anexoLevaLegenda);
   /**
@@ -160,8 +161,8 @@ export function AttachmentPreviewDialog({
         )}
         {/*
           O CAMPO DE LEGENDA SÓ APARECE ONDE A LEGENDA CHEGA (#3151). Numa fila
-          só de áudio ele não é renderizado: nenhum canal manda `caption` em
-          áudio, e o atendente escrevia um texto que nunca saía. Na fila MISTA
+          só de áudio ele não é renderizado: os dois adaptadores de WhatsApp de
+          envio direto não mandam `caption` em áudio, e o atendente escrevia um texto que nunca saía. Na fila MISTA
           ele continua — a legenda viaja com o primeiro anexo que a aceita.
         */}
         {levaLegenda && (

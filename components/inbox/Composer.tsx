@@ -505,7 +505,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       );
       setPendingEm("reply");
       setPendingFiles(arquivos);
-      // Áudio NÃO leva legenda em canal nenhum (#3151): sem anexo na fila que a
+      // Áudio NÃO leva legenda nos dois adaptadores de WhatsApp de envio direto
+      // (#3151): sem anexo na fila que a
       // leve, o corpo volta para o CAMPO em vez de virar legenda de um áudio
       // que a descarta — o texto continua na tela, para o operador mandar como
       // mensagem. Com anexo que a leve (imagem, vídeo, documento), o texto sai
