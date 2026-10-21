@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { FileText, X } from "@/lib/ui/icons";
 import { formatBytes } from "@/components/inbox/media/media-utils";
+import { anexoLevaLegenda } from "@/components/inbox/media/legenda-do-anexo";
 
 interface Props {
   /**
@@ -16,6 +17,11 @@ interface Props {
    * várias que o operador carregou no template. As duas continuam no MESMO
    * diálogo porque é o mesmo contrato: preview, legenda, remover e só então
    * enviar — o operador aprova antes de qualquer byte sair.
+   *
+   * A LEGENDA só aparece quando ALGUM anexo da fila a leva (#3151): áudio não
+   * leva legenda em canal nenhum (ver `anexoLevaLegenda`), então pedir o texto
+   * é escrever algo que nunca chega. Fila mista mantém o campo — a legenda vai
+   * com a imagem.
    */
   files: File[];
   /**
@@ -78,6 +84,18 @@ export function AttachmentPreviewDialog({
   const demais = itens.slice(1);
   const isImage = capa.file.type.startsWith("image/");
   const isVideo = capa.file.type.startsWith("video/");
+  /**
+   * A fila leva legenda se ALGUM anexo dela leva (#3151). Com fila só de
+   * áudio não há campo: o texto que o atendente escrevesse não teria por onde
+   * sair — nem no WAHA nem na Cloud API o áudio viaja com `caption`.
+   */
+  const levaLegenda = files.some(anexoLevaLegenda);
+  /**
+   * A saída do diálogo é UMA: sem anexo que leve legenda, o envio não leva
+   * texto nenhum — o `caption` do momento só vale onde algum anexo o leva, e
+   * mandá-lo junto do áudio é entregá-lo a quem o descarta.
+   */
+  const enviar = () => onSend(levaLegenda ? caption.trim() : "");
 
   const remover = (indice: number) =>
     onRemove && (
@@ -140,18 +158,26 @@ export function AttachmentPreviewDialog({
             ))}
           </ul>
         )}
-        <Input
-          value={caption}
-          onChange={(e) => setCaption(e.target.value)}
-          placeholder={t("Legenda (opcional)")}
-          aria-label={t("Legenda")}
-          onKeyDown={(e) => e.key === "Enter" && !sending && onSend(caption.trim())}
-        />
+        {/*
+          O CAMPO DE LEGENDA SÓ APARECE ONDE A LEGENDA CHEGA (#3151). Numa fila
+          só de áudio ele não é renderizado: nenhum canal manda `caption` em
+          áudio, e o atendente escrevia um texto que nunca saía. Na fila MISTA
+          ele continua — a legenda viaja com o primeiro anexo que a aceita.
+        */}
+        {levaLegenda && (
+          <Input
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            placeholder={t("Legenda (opcional)")}
+            aria-label={t("Legenda")}
+            onKeyDown={(e) => e.key === "Enter" && !sending && enviar()}
+          />
+        )}
         <DialogFooter>
           <Button variant="ghost" onClick={onCancel} disabled={sending}>
             {t("Cancelar")}
           </Button>
-          <Button onClick={() => onSend(caption.trim())} disabled={sending}>
+          <Button onClick={enviar} disabled={sending}>
             {t("Enviar")}
           </Button>
         </DialogFooter>
