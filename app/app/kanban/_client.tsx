@@ -526,13 +526,15 @@ export function FunisClient({
                   </div>
                 )}
 
-                {/* `min-w-40` (10rem), e não mais `min-w-0`: a coluna do nome
-                    precisa de um PISO. Com `min-w-0 flex-1` ela encolhia até 0
-                    e o nome ia para baixo dos selos. O piso garante que nome e
-                    selos caibam inteiros; se o que sobra para os botões for
-                    pouco, é a LINHA que quebra (`sm:flex-wrap` acima), não a
-                    coluna que some. */}
-                <div className="min-w-40 flex-1">
+                {/* SEM `min-w-*`: o piso da coluna do nome é o PRÓPRIO conteúdo
+                    (min-width automático = palavra mais longa do nome + selos).
+                    Com `min-w-0` ela encolhia até 0 e o nome ia para baixo dos
+                    selos; um piso fixo (`min-w-40`, 160px) também não basta,
+                    porque «Padrão» + «Clientes» com os espaços já ocupam ~139px
+                    e «Predeterminado» (es) passa sozinho dos 160px. Com o piso
+                    no conteúdo, quando não cabe é a LINHA que quebra
+                    (`sm:flex-wrap` acima), não o selo que cruza o slug. */}
+                <div className="flex-1">
                   {renomeandoAqui ? (
                     <div className="flex gap-2">
                       <Input

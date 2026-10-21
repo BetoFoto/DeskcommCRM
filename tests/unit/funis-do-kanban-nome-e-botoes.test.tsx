@@ -24,8 +24,11 @@
  *
  *   1. a linha do funil pode QUEBRAR em `sm` (`sm:flex-wrap`) — sem isso os
  *      botões nunca descem, empurram a linha e a coluna do nome colapsa;
- *   2. a coluna do nome tem PISO de largura (`min-w-40`), e não mais `min-w-0`
- *      — o piso é o que impede o nome de ir a 0 sob os selos;
+ *   2. a coluna do nome NÃO tem `min-w-*` nenhum: o piso dela é o próprio
+ *      conteúdo (min-width automático = palavra mais longa + selos). `min-w-0`
+ *      deixava o nome ir a 0 sob os selos; um piso fixo (`min-w-40`, 160px)
+ *      deixava uma faixa de larguras em que os selos cruzavam o slug, porque
+ *      «Padrão» + «Clientes» com os espaços já ocupam ~139px dos 160;
  *   3. o grupo de ações NÃO tem `shrink-0` (a causa) e mantém `flex-wrap` —
  *      pode encolher e quebrar por dentro;
  *   4. o nome, os selos e os QUATRO botões existem, e os botões estão DENTRO
@@ -33,7 +36,7 @@
  *
  * Cada metade destas asserções cai com a sabotagem correspondente (ver o PR):
  * devolver `shrink-0` derruba o item 3; tirar `sm:flex-wrap` derruba o 1;
- * voltar a coluna do nome para `min-w-0` derruba o 2.
+ * voltar a coluna do nome para `min-w-0` (ou para `min-w-40`) derruba o 2.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -143,14 +146,14 @@ describe("linha do funil — o nome não some e os botões não vazam (#3127)", 
     }
   });
 
-  it("a coluna do nome tem PISO de largura — não volta a poder encolher até 0", () => {
+  it("o piso da coluna do nome é o CONTEÚDO — nenhum `min-w-*` o substitui", () => {
     abrir();
     for (const id of [PADRAO.id, SIMPLES.id]) {
       const coluna = classes(colunaDoNome(id));
-      // O piso (10rem) que garante nome e selos inteiros.
-      expect(coluna).toContain("min-w-40");
-      // E o `min-w-0` que CAUSAVA o colapso não pode reaparecer aqui.
-      expect(coluna).not.toContain("min-w-0");
+      // Nenhuma largura mínima explícita: nem o `min-w-0` que CAUSAVA o
+      // colapso, nem um piso fixo como `min-w-40`, menor que nome + selos.
+      // Sem override, o min-width volta a ser automático (o conteúdo).
+      expect(coluna.filter((c) => /(^|:)min-w-/.test(c)), `coluna do nome do ${id}`).toEqual([]);
       // A coluna ainda cresce para ocupar o que sobra.
       expect(coluna).toContain("flex-1");
     }
