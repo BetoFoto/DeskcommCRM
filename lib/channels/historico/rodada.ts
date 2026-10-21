@@ -41,6 +41,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
+import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 import { getWahaClient } from "@/lib/waha/client";
 import { ehReacao, notifyNameOf, type WahaPayload } from "@/lib/waha/ingest";
 import {
@@ -92,6 +93,13 @@ const PAGINA_DE_CONVERSAS = 50;
 const SEGUNDOS_POR_DIA = 86_400;
 /** Falhas de transporte do canal na mesma mídia antes de marcá-la indisponível. */
 const LIMITE_DE_TENTATIVAS_DE_MIDIA = 3;
+/**
+ * Orçamento, em bytes codificados, dos `external_id` de UMA consulta de
+ * deduplicação. Uma página de 100 mensagens de chat `@s.whatsapp.net` dá 300
+ * candidatos de até ~70 B cada (13 a 19 KB de URL), e o Kong 2.8.1 devolve 414
+ * acima de 8.192 B. Com 4 KB de valores, a URL inteira fica perto de 4,3 KB.
+ */
+const BYTES_DE_CANDIDATOS_POR_CONSULTA = 4096;
 
 interface Importacao {
   id: string;
@@ -369,11 +377,12 @@ async function gravarMensagens(
   mensagens: WahaPayload[],
 ): Promise<{ gravadas: number; existentes: number }> {
   const candidatos = mensagens.map(candidatosDeExternalId);
-  const { data: achadas, error: erroDaConsulta } = await admin
-    .from("messages")
-    .select("external_id")
-    .eq("organization_id", imp.organization_id)
-    .in("external_id", [...new Set(candidatos.flat())]);
+  const { data: achadas, error: erroDaConsulta } = await buscaEmLotes(
+    [...new Set(candidatos.flat())],
+    (lote) =>
+      admin.from("messages").select("external_id").eq("organization_id", imp.organization_id).in("external_id", lote),
+    { bytesPorLote: BYTES_DE_CANDIDATOS_POR_CONSULTA },
+  );
   if (erroDaConsulta) throw new Error(`messages_consulta: ${mensagemDeErro(erroDaConsulta)}`);
   const ja = new Set(((achadas ?? []) as Array<{ external_id: string | null }>).map((m) => m.external_id));
 
@@ -453,11 +462,16 @@ async function resolverMidias(
   }
   if (idNoCanal.size === 0) return true;
 
-  const { data, error } = await admin
-    .from("messages")
-    .select("id, external_id, metadata")
-    .eq("organization_id", imp.organization_id)
-    .in("external_id", [...idNoCanal.keys()]);
+  const { data, error } = await buscaEmLotes(
+    [...idNoCanal.keys()],
+    (lote) =>
+      admin
+        .from("messages")
+        .select("id, external_id, metadata")
+        .eq("organization_id", imp.organization_id)
+        .in("external_id", lote),
+    { bytesPorLote: BYTES_DE_CANDIDATOS_POR_CONSULTA },
+  );
   if (error) throw new Error(`messages_consulta_midia: ${mensagemDeErro(error)}`);
 
   const linhas = (data ?? []) as Array<{ id: string; external_id: string; metadata: Record<string, unknown> | null }>;
