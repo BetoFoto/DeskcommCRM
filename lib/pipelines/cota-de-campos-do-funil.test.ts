@@ -66,7 +66,7 @@ describe("cota de campos do funil (#3111)", () => {
     const r = validar(doNegocio(MAX_CAMPOS_DO_NEGOCIO + 1));
     expect(r.success).toBe(false);
     expect(mensagens(r)).toContain(MENSAGEM_DO_TETO_DE_CAMPOS_DO_NEGOCIO);
-    // A frase diz o número e o que não entra na conta — é ela que a tela mostra.
+    // A frase diz o número e o que não entra na conta — é ela que o servidor devolve.
     expect(mensagens(r)).toContain("50");
     expect(mensagens(r)).toMatch(/negócio/i);
     expect(mensagens(r)).toContain("contato");
