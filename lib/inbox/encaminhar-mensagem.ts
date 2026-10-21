@@ -23,7 +23,7 @@
  *
  * O comentário anterior aqui afirmava que a `media_url` da mensagem recebida era
  * "a URL do CDN público do WhatsApp" e que bastava repassá-la. NÃO É, e foi essa
- * premissa que gerou o defeito: no WAHA da instalação padrão ela é
+ * premissa que gerou o defeito: no provedor de canal padrão da instalação ela é
  * `http://localhost:3000/api/files/...` e na Meta é `meta-media:<id>` — as duas
  * RECUSADAS pela guarda anti-SSRF do envio, com 422 `unsafe_media_url` e o texto
  * técnico "media_url recusada" na cara de quem tentou encaminhar uma imagem.
@@ -117,6 +117,7 @@ export type MotivoNaoEncaminhavel =
   | "apagada"
   | "midia_aguardando"
   | "midia_falhou"
+  | "midia_indisponivel"
   | "sem_conteudo";
 
 export function motivoParaNaoEncaminhar(origem: MensagemDeOrigem): MotivoNaoEncaminhavel | null {
@@ -146,6 +147,10 @@ export function mensagemDoMotivo(
       return t(
         "Não consegui preparar a mídia desta mensagem para o encaminhamento. Tente de novo em instantes.",
       );
+    // Sem "tente de novo": esta mídia nunca vai poder ser copiada (ex.: a
+    // proposta em PDF, que mora fora da pasta da conversa).
+    case "midia_indisponivel":
+      return t("Esta mídia não pode ser encaminhada.");
     case "sem_conteudo":
       return t("Só é possível encaminhar mensagens de texto ou mídia.");
   }
@@ -320,14 +325,14 @@ export async function encaminharMensagem(
   await validarDestino(supabase, ctx, params.conversationIdDestino);
 
   const midia = await resolverMidiaDoEncaminhamento(origem, params.conversationIdDestino);
-  if (midia.tipo === "aguardando" || midia.tipo === "falhou") {
-    throw new ApiError(
-      422,
-      "nao_encaminhavel",
-      undefined,
-      ctx.requestId,
-      mensagemDoMotivo(midia.tipo === "aguardando" ? "midia_aguardando" : "midia_falhou", t),
-    );
+  if (midia.tipo === "aguardando" || midia.tipo === "falhou" || midia.tipo === "fora_da_conversa") {
+    const motivoDaMidia: MotivoNaoEncaminhavel =
+      midia.tipo === "aguardando"
+        ? "midia_aguardando"
+        : midia.tipo === "falhou"
+          ? "midia_falhou"
+          : "midia_indisponivel";
+    throw new ApiError(422, "nao_encaminhavel", undefined, ctx.requestId, mensagemDoMotivo(motivoDaMidia, t));
   }
 
   const message = await sendMessageHandler(

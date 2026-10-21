@@ -210,4 +210,31 @@ describe("encaminhar mídia recebida — objeto copiado, nunca a media_url crua"
     ).rejects.toMatchObject({ status: 422, code: "nao_encaminhavel" });
     expect(copias).toEqual([]);
   });
+
+  it("proposta em PDF (objeto fora da pasta da conversa): recusa sem 'tente de novo'", async () => {
+    vi.stubEnv("WAHA_API_BASE_URL", WAHA_BASE);
+    vi.stubEnv("WAHA_API_KEY", "hash123");
+    vi.stubGlobal("fetch", vi.fn());
+    const { supabase } = dubleCom(
+      // O path que `proposals/[id]/send` grava: `{org}/{proposta}.pdf`, no bucket
+      // `propostas`. Tentar de novo nunca vai copiá-lo.
+      origemRecebida({
+        media_storage_path: `${ORG}/88888888-8888-4888-8888-888888888888.pdf`,
+        type: "document",
+      }),
+    );
+
+    await expect(
+      encaminharMensagem(supabase, ctx, {
+        messageId: ORIGEM_ID,
+        conversationIdDestino: DESTINO_CONV,
+        via: "session",
+      }),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "nao_encaminhavel",
+      message: "Esta mídia não pode ser encaminhada.",
+    });
+    expect(copias).toEqual([]);
+  });
 });

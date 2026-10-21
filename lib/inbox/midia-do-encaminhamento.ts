@@ -6,8 +6,8 @@
  * O encaminhamento nascia com uma premissa errada escrita no cabeçalho:
  * a `media_url` da mensagem RECEBIDA seria "a URL do CDN público do WhatsApp", e
  * bastaria repassá-la ao `sendMessageHandler`. Medido no que o inbound grava de
- * verdade: no WAHA da instalação padrão é
- * `http://localhost:3000/api/files/...` (o endereço que o WAHA manda, porque o
+ * verdade: no provedor de canal padrão da instalação é
+ * `http://localhost:3000/api/files/...` (o endereço que o provedor de canal manda, porque o
  * compose não define URL pública) e na Meta é `meta-media:<id>`.
  *
  * O `sendMessageHandler` passa toda `media_url` SEM `media_storage_path` pela
@@ -67,8 +67,9 @@ export interface MidiaDaOrigem {
 /**
  * O desfecho da resolução da mídia.
  *
- * `copia` e `externa` são os dois enviáveis; `aguardando` e `falhou` são recusas
- * com motivo próprio, e `sem_midia` é a mensagem que só tem texto.
+ * `copia` e `externa` são os dois enviáveis; `aguardando`, `falhou` e
+ * `fora_da_conversa` são recusas com motivo próprio, e `sem_midia` é a mensagem
+ * que só tem texto.
  */
 export type MidiaParaEncaminhar =
   /** Objeto nosso, já copiado para a pasta do destino. */
@@ -79,6 +80,12 @@ export type MidiaParaEncaminhar =
   | { tipo: "aguardando" }
   /** Objeto nosso que não copiou: Storage indisponível ou objeto ausente. */
   | { tipo: "falhou" }
+  /**
+   * Objeto fora da pasta da conversa de origem — a proposta em PDF, que mora no
+   * bucket `propostas` (`{org}/{proposta}.pdf`). Nunca vai poder ser copiado,
+   * então a recusa não pode dizer "tente de novo".
+   */
+  | { tipo: "fora_da_conversa" }
   | { tipo: "sem_midia" };
 
 /** Copia um objeto dentro do bucket da mídia. `true` = o arquivo está no destino. */
@@ -121,7 +128,7 @@ export async function resolverMidiaDoEncaminhamento(
     // Só caminho desta organização E desta conversa: um path de fora copiaria o
     // arquivo de outro cliente para dentro desta conversa.
     if (!isMediaPathOwnedBy(origem.media_storage_path, origem.organization_id, origem.conversation_id)) {
-      return { tipo: "falhou" };
+      return { tipo: "fora_da_conversa" };
     }
     const nome = origem.media_storage_path.split("/").pop() ?? "";
     if (!nome) return { tipo: "falhou" };
