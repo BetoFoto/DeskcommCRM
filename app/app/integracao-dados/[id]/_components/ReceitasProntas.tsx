@@ -188,8 +188,13 @@ function editorDoAcf(fixos: unknown): EditorDoAcf {
     escolhas,
     taxonomias,
     niveis,
-    situacaoCampo: f.situacao?.campo ?? "situacao",
-    situacaoOcultar: (f.situacao?.ocultar ?? ["vendido", "alugado"]).join(", "),
+    // A situação que NÃO foi salva abre VAZIA. A instância gravada antes do
+    // bloco "Esconder imóveis" não tem `situacao` — e abrir o editor com o
+    // padrão ("situacao", "vendido, alugado") ligaria um filtro que ninguém
+    // pediu, que passaria a valer no salvamento seguinte. O padrão é do
+    // editor de instância NOVA (`editorPadraoAcf`).
+    situacaoCampo: f.situacao?.campo ?? "",
+    situacaoOcultar: (f.situacao?.ocultar ?? []).join(", "),
   };
 }
 

@@ -10,7 +10,12 @@
  *   - apagar um campo opcional tira a CHAVE do mapeamento (não manda "");
  *   - salvar envia os fixos completos do ACF (prefixo, post_type, campos,
  *     taxonomias, situacao);
+ *   - uma instância que NÃO tem situação abre o bloco VAZIO — editar não
+ *     liga um filtro que ninguém pediu;
  *   - a receita que NÃO é ACF não recebe o formulário de ACF.
+ *
+ * O 422 (o erro de validação com o rótulo do caminho) é provado em
+ * `ReceitasProntas.erro.test.tsx`.
  *
  * Sem sugestão automática (é da R5) e sem foto (é da R4).
  */
@@ -319,6 +324,83 @@ describe("Receitas prontas — caminho ACF", () => {
     // E os outros continuam mapeados.
     expect(campos.preco).toBe("preco");
     expect(campos.quartos).toBe("quartos");
+  });
+
+  it("editar uma instância SEM situação abre o bloco VAZIO (não liga um filtro que ninguém pediu)", async () => {
+    const semSituacao: InstanciaDeReceita = {
+      ...INSTANCIA_ACF,
+      id: "inst-acf-sem-situacao",
+      fixos: {
+        prefixo: "wp_",
+        post_type: "imovel",
+        campos: { preco: "preco", quartos: "quartos" },
+        taxonomias: { bairro: { taxonomia: "localizacao", nivel: "filho" } },
+      },
+    };
+    renderComQuery([semSituacao], true);
+
+    const botaoEditar = screen.getByRole("button", { name: /Editar/i })!;
+    await act(async () => {
+      fireEvent.click(botaoEditar);
+    });
+
+    // O bloco "Esconder imóveis" abre VAZIO: a instância não tem `situacao`.
+    expect(screen.getByLabelText("Campo da situação")).toHaveValue("");
+    expect(screen.getByLabelText("Valores a esconder")).toHaveValue("");
+  });
+
+  it("mudar só o rótulo e salvar NÃO leva a situação que a instância não tinha", async () => {
+    const semSituacao: InstanciaDeReceita = {
+      ...INSTANCIA_ACF,
+      id: "inst-acf-sem-situacao",
+      fixos: {
+        prefixo: "wp_",
+        post_type: "imovel",
+        campos: { preco: "preco", quartos: "quartos" },
+        taxonomias: { bairro: { taxonomia: "localizacao", nivel: "filho" } },
+      },
+    };
+    renderComQuery([semSituacao], true);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Editar/i })!);
+    });
+    await act(async () => {
+      fireEvent.input(screen.getByLabelText(/Rótulo/i), { target: { value: "Meus imóveis (novo nome)" } });
+    });
+
+    const fixos = await salvarEObterFixos();
+    expect("situacao" in fixos).toBe(false);
+  });
+
+  it("mexer no formulário do ACF recalcula os fixos e a situação continua fora", async () => {
+    const semSituacao: InstanciaDeReceita = {
+      ...INSTANCIA_ACF,
+      id: "inst-acf-sem-situacao",
+      fixos: {
+        prefixo: "wp_",
+        post_type: "imovel",
+        campos: { preco: "preco", quartos: "quartos" },
+        taxonomias: { bairro: { taxonomia: "localizacao", nivel: "filho" } },
+      },
+    };
+    renderComQuery([semSituacao], true);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Editar/i })!);
+    });
+    // Mexer no formulário RECALCULA os "fixos" a partir do editor — e o
+    // editor está vazio na situação. Com o editor abrindo com o padrão
+    // ("situacao", "vendido, alugado"), este salvamento ligaria um filtro
+    // que ninguém pediu.
+    await act(async () => {
+      fireEvent.input(screen.getByLabelText("Área"), { target: { value: "120" } });
+    });
+
+    const fixos = await salvarEObterFixos();
+    expect("situacao" in fixos).toBe(false);
+    const campos = fixos.campos as Record<string, string>;
+    expect(campos.area).toBe("120");
   });
 
   it("a receita que não é ACF não recebe o formulário de ACF", async () => {
