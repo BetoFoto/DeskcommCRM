@@ -1626,12 +1626,35 @@ vigia_encerrar() {
 # navegador, e ele é do app OU do proxy na frente dele; os dois são "o sistema
 # está fora". `--max-time` fecha o outro buraco medido (#1955): um `docker`
 # travado no resolver segurava o diagnóstico para sempre, e um agente preso
-# não vigia nada. 200 = saudável ou degradado (a rota responde 503 quando
-# algum check está down, e a distinção entre as duas não muda a decisão).
+# não vigia nada.
+#
+# ─── Quem decide é o CORPO, não o código HTTP (#2757) ────────────────────────
+# A rota responde **503** sempre que um dos serviços que ela vigia está `down`
+# (WAHA, Redis, Supabase) — é o diagnóstico dela, não sinal de que o site caiu.
+# Com `curl -f` esse 503 contava como falha, e uma queda do WhatsApp de ~10
+# minutos depois de uma atualização que deu certo fazia o sistema voltar de
+# versão: backup, migration e ~2 min fora do ar para consertar nada. Pior: a
+# mensagem que o mantenedor mediu é que `curl -f` também reprova qualquer
+# 5xx/4xx — e o 503 do PROXY (Traefik sem rota) e o 404 `page not found` dele
+# têm significados opostos ao 503 da rota com o mesmo código.
+#
+# Então: **no ar** = a resposta veio do próprio sistema, o que se reconhece
+# pela forma que só ele produz — o JSON `{"data":{"status":"healthy|degraded|
+# unhealthy","version":...}}`. Vale para qualquer código HTTP (200, 503).
+# **Fora** = conexão recusada, tempo esgotado, ou resposta que não tem esse
+# JSON: 502/504 do proxy, `404 page not found` do Traefik, 503 do proxy.
+# Sem `jq`, que pode não existir na VPS: são duas buscas de texto ancoradas na
+# chave, e `status` só casa com o vocabulário da rota (`ok`/`down` dos checks
+# não casam) — um HTML de proxy não tem nenhuma das duas.
 app_esta_no_ar() {
-  local url="${NEXT_PUBLIC_APP_URL:-}"
+  local url="${NEXT_PUBLIC_APP_URL:-}" corpo
   [ -n "$url" ] || return 1
-  curl -sS -f -o /dev/null --max-time 20 "${url%/}/api/v1/health" >/dev/null 2>&1
+  # Sem `-f` de propósito: ele converteria o 503 da própria rota em falha, que
+  # é exatamente o defeito acima. O `--max-time` segue sendo o prazo.
+  corpo="$(curl -sS --max-time 20 "${url%/}/api/v1/health" 2>/dev/null)" || return 1
+  printf '%s' "$corpo" \
+    | grep -Eq '"status"[[:space:]]*:[[:space:]]*"(healthy|degraded|unhealthy)"' || return 1
+  printf '%s' "$corpo" | grep -Eq '"version"[[:space:]]*:'
 }
 
 # ── O diagnóstico que TODO run deixa para trás (#1955, critério 5) ──────────

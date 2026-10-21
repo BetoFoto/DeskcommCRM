@@ -64,7 +64,27 @@ const runResult = z.object({
   passada_do_banco: z.number().int().min(1).optional(),
 });
 
-const body = z.discriminatedUnion("kind", [heartbeat, runProgress, runResult]);
+/**
+ * A volta que ninguém pediu (#2757).
+ *
+ * Quando o app não responde duas vezes seguidas nas 2 h depois de uma
+ * atualização, o `agent.sh` volta a versão sozinho e manda este recado. Sem
+ * ele, a volta ficava registrada só no `.update-agent.log` do servidor: quem
+ * abre o painel vê a versão mudar e não tem como saber o que houve — o defeito
+ * que o mantenedor apontou como o terceiro ajuste.
+ *
+ * `returned_to` é a versão em que o sistema ESTÁ agora; `failed_version` é a
+ * que não respondeu. Os dois nomes são explícitos de propósito: "de/para" é
+ * ambíguo numa volta (de qual lado?), e foi assim que esta rota já errou antes.
+ */
+const rollback = z.object({
+  kind: z.literal("rollback"),
+  returned_to: z.string().min(1).max(64),
+  failed_version: z.string().min(1).max(64),
+  reason: z.string().max(2_000),
+});
+
+const body = z.discriminatedUnion("kind", [heartbeat, runProgress, runResult, rollback]);
 
 /**
  * As três colunas da rodada do banco, numa escrita própria e best-effort.
@@ -196,6 +216,50 @@ export async function POST(req: NextRequest): Promise<Response> {
       // `to_version`): o agente cai no de sempre, a última release publicada.
       to_version: run?.to_version ?? "",
     });
+  }
+
+  // ── A volta automática (#2757) ────────────────────────────────────────────
+  // Ela não tem `run_id`: ninguém pediu pela tela, então não existe run em
+  // `dispatched` para fechar. O recado VIRA uma linha de run já fechada, com o
+  // mesmo vocabulário das outras (`failed_rolled_back`, `from_version` = onde
+  // o sistema ficou, `to_version` = a versão que falhou), porque é isso que a
+  // tela de Atualização já sabe ler — e `requested_by` fica NULO, que é a
+  // marca de "ninguém pediu isto" usada pela tela para dizer "sozinho".
+  //
+  // Antes do lookup de run pendente de propósito: esta mensagem não pergunta
+  // nada, só conta um fato.
+  if (payload.kind === "rollback") {
+    const agora = new Date().toISOString();
+    const { error } = await db.from("system_update_runs").insert({
+      from_version: payload.returned_to,
+      to_version: payload.failed_version,
+      status: "failed_rolled_back",
+      requested_by: null,
+      dispatched_at: agora,
+      finished_at: agora,
+      log_tail: payload.reason,
+    });
+    if (error) {
+      // Fatal para ESTA mensagem, e só para ela: sem a linha, a volta some do
+      // painel e o agente não tem como saber (recebe 500 e anota no log dele).
+      logger.error("[system/agent] a volta automática não foi registrada", {
+        error: error.message,
+      });
+      return fail("internal_error", "Não consegui registrar a volta automática.", 500);
+    }
+    await audit({
+      action: "system.update_finished",
+      resourceType: "system_update_run",
+      // Sem id: a linha não foi pedida por ninguém e o insert não a devolve.
+      metadata: {
+        status: "failed_rolled_back",
+        volta_automatica: true,
+        de: payload.failed_version,
+        para: payload.returned_to,
+      },
+      actingAsPlatformAdmin: true,
+    });
+    return ok({ update_requested: false });
   }
 
   // Erro de leitura ≠ "não existe": sem checar, uma falha de banco viraria 404

@@ -65,7 +65,7 @@ export async function GET(_req: NextRequest): Promise<Response> {
   const { data: run, error: runError } = await db
     .from("system_update_runs")
     .select(
-      "id, status, last_step, dispatched_at, finished_at, from_version, to_version, log_tail, disputa_de_banco, retentativas_do_banco, passada_do_banco",
+      "id, status, last_step, dispatched_at, finished_at, from_version, to_version, log_tail, disputa_de_banco, retentativas_do_banco, passada_do_banco, requested_by",
     )
     .order("dispatched_at", { ascending: false })
     .limit(1)
@@ -262,6 +262,14 @@ export async function GET(_req: NextRequest): Promise<Response> {
           last_step: (run.last_step as RunStep | null) ?? null,
           from_version: run.from_version ?? "",
           to_version: run.to_version ?? "",
+          // Quando o run fechou — é a hora que o aviso da volta automática
+          // mostra ("às 14h10"). Nulo enquanto o run ainda está em curso.
+          finished_at: run.finished_at ?? null,
+          // "Ninguém pediu isto": o run da volta automática nasce sem autor
+          // (o `agent.sh` manda o fato, não um pedido). A tela usa isso para
+          // dizer "voltou sozinho" em vez de "voltei" — a diferença importa
+          // para quem lê, porque um houve clique e o outro não.
+          volta_automatica: run.requested_by === null,
           log_tail: run.log_tail ?? "",
           superseded: falhaSuperada,
           // O que a rodada contou sobre o banco — disputa, retentativas e em

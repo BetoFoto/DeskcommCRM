@@ -85,6 +85,27 @@ post() {  # post <json> → corpo da resposta em 2xx; VAZIO em qualquer falha
   esac
 }
 
+# A volta sozinha contada ao painel (#2757).
+#
+# O agente já fala com o app por esta rota (heartbeat e run_result); este é o
+# terceiro recado, e existe porque a volta automática era invisível para quem
+# usa a tela: o registro ficava só no `.update-agent.log` da VPS, e quem abria
+# o painel via a versão mudar sem explicação. O corpo não leva comando nenhum —
+# só o fato (de qual versão para qual, por quê) —, pela mesma regra do resto da
+# rota: o que atravessa a fronteira é informação, nunca instrução.
+#
+# Falha aqui NÃO derruba nada: a volta já aconteceu, e o pior desfecho de um
+# aviso que não passa é o `.update-agent.log` de sempre.
+avisar_volta_no_painel() {  # avisar_volta_no_painel <para onde voltou> <versão que não respondeu> <falhas> <rc da volta>
+  local para="${1:-}" falhou="${2:-}" falhas="${3:-}" rc="${4:-0}" motivo corpo
+  [ -n "$para" ] || return 0
+  motivo="o site não respondeu em ${falhas:-2} healthchecks seguidos logo depois da atualização"
+  [ "${rc:-0}" = "0" ] || motivo="$motivo (a volta terminou com código $rc)"
+  corpo="{\"kind\":\"rollback\",\"returned_to\":\"$(esc "$para")\",\"failed_version\":\"$(esc "$falhou")\",\"reason\":\"$(esc "$motivo")\"}"
+  post "$corpo" >/dev/null 2>&1 || true
+  return 0
+}
+
 json_field() {  # json_field <corpo> <campo> — sem jq, que pode não existir no VPS
   printf '%s' "$1" | tr ',' '\n' | grep -o "\"$2\":[^,}]*" | head -1 | cut -d: -f2- | tr -d '" '
 }
@@ -318,12 +339,21 @@ if [ -n "$DE_VOLTA" ]; then
       # a cada 5 minutos viraria laço de atualização num app que não sobe
       # nem na versão anterior.
       vigia_encerrar
+      # A versão que NÃO respondeu, lida ANTES da volta: depois do
+      # `update.sh --to`, o código em disco já é o da versão anterior, e o
+      # aviso do painel diria que a volta foi para ela mesma.
+      VERSAO_QUE_FALHOU="$CURRENT"
       log_err "voltando sozinho para a $DE_VOLTA: o app ficou fora do ar em $FALHAS healthchecks seguidos logo após a atualização"
       set +e
       bash "$(dirname "$0")/update.sh" --to "$DE_VOLTA" --force >>"$LOG" 2>&1
       RC_VOLTA=$?
       set -e
       log_err "volta para a $DE_VOLTA terminou com código $RC_VOLTA — a saída completa está em .update.log"
+      # A volta sozinha é a única troca de versão que ninguém pediu pela tela:
+      # sem este aviso, quem abre o painel vê a versão mudar sem explicação (o
+      # registro ficava só no `.update-agent.log` da VPS). O canal é o mesmo
+      # que o agente já usa — ver `avisar_volta_no_painel`.
+      avisar_volta_no_painel "$DE_VOLTA" "$VERSAO_QUE_FALHOU" "$FALHAS" "$RC_VOLTA"
       # O fim desta passada: seguir para um pedido de atualização (ou sondar
       # de novo) com o app no meio da troca só mistura as duas histórias. O
       # próximo ciclo volta a contar com tudo.
