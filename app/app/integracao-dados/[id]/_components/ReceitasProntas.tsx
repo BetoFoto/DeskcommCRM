@@ -16,7 +16,11 @@ import { previewReceita, salvarReceitas, useReceitasDaConexao } from "@/hooks/ex
 import { randomId } from "@/lib/random-id";
 import { ApiError } from "@/lib/api/types";
 import { useT } from "@/hooks/i18n/useT";
-import { POST_TYPE_PADRAO, POST_TYPE_REGEX } from "@/lib/external-db/receitas/acf-imoveis";
+import {
+  DADOS_DE_CAMPO_IMOVEL,
+  POST_TYPE_PADRAO,
+  POST_TYPE_REGEX,
+} from "@/lib/external-db/receitas/acf-imoveis";
 import { RECEITAS, receitaDe } from "@/lib/external-db/receitas/registro";
 import type { InstanciaDeReceita } from "@/lib/external-db/receitas/tipos";
 import type { DefinicaoDeReceita } from "@/lib/external-db/receitas/tipos";
@@ -33,30 +37,184 @@ const PREFIXO_PADRAO = "wp_";
 const PREFIXO_REGEX = /^[A-Za-z0-9_]{1,20}$/;
 const BUSCA_PADRAO = { limite: 5 };
 
+/** O rótulo de cada dado do imóvel (campo do site). */
+const ROTULO_DO_CAMPO: Record<(typeof DADOS_DE_CAMPO_IMOVEL)[number], string> = {
+  codigo: "Código",
+  preco: "Preço de venda",
+  aluguel: "Aluguel",
+  condominio: "Condomínio",
+  quartos: "Quartos",
+  suites: "Suítes",
+  banheiros: "Banheiros",
+  vagas: "Vagas",
+  area: "Área",
+};
+
 /**
- * Os campos que o administrador mapeia por `meta_key` na receita `acf-imoveis`
- * (Spec 25 R2). Os três primeiros são obrigatórios: a receita faz JOIN
- * interno neles, então imóvel sem o campo nem entra na busca.
+ * As quatro categorias que podem ser CATEGORIA (taxonomia) ou CAMPO do site.
+ *
+ * O `nivel` é o que a receita sabe ler de hierarquia: "filho" = só os termos
+ * que têm um termo acima (o bairro, quando a cidade é o pai); "raiz" = só os
+ * que não têm (a cidade). `null` = a categoria não tem hierarquia.
  */
-const CAMPOS_ACF: { chave: string; rotulo: string; obrigatorio: boolean }[] = [
-  { chave: "preco", rotulo: "Preço", obrigatorio: true },
-  { chave: "quartos", rotulo: "Quartos", obrigatorio: true },
-  { chave: "bairro", rotulo: "Bairro", obrigatorio: true },
-  { chave: "cidade", rotulo: "Cidade", obrigatorio: false },
-  { chave: "area", rotulo: "Área", obrigatorio: false },
-];
+const CATEGORIAS_IMOVEL = [
+  { chave: "bairro", nivel: "filho" },
+  { chave: "cidade", nivel: "raiz" },
+  { chave: "tipo", nivel: null },
+  { chave: "finalidade", nivel: null },
+] as const;
+
+/** O rótulo de cada categoria. */
+const ROTULO_DA_CATEGORIA: Record<(typeof CATEGORIAS_IMOVEL)[number]["chave"], string> = {
+  bairro: "Bairro",
+  cidade: "Cidade",
+  tipo: "Tipo",
+  finalidade: "Finalidade",
+};
+
+/** De onde o dado vem: não se usa, campo do site ou categoria do site. */
+type EscolhaDaCategoria = "nao-usar" | "campo" | "categoria";
+
+/**
+ * O que a tela está editando do ACF.
+ *
+ * O editor é a FONTE da verdade enquanto a edição está aberta: os "fixos" que
+ * vão para o banco são DERIVADOS dele. Isso resolve o caso em que a pessoa
+ * escolhe "categoria" e ainda não digitou o nome — uma chave vazia seria
+ * recusada pelo servidor, e o texto meio escrito se perderia a cada tecla.
+ */
+interface EditorDoAcf {
+  /** O texto cru de cada campo mapeado (vazio = não mapeado). */
+  campos: Record<string, string>;
+  /** A escolha de cada categoria. */
+  escolhas: Record<string, EscolhaDaCategoria>;
+  /** O texto cru do slug da categoria de cada uma. */
+  taxonomias: Record<string, string>;
+  /** O nível escolhido de cada categoria com hierarquia. */
+  niveis: Record<string, string>;
+  /** O campo da situação do imóvel. */
+  situacaoCampo: string;
+  /** Os valores a esconder, separados por vírgula. */
+  situacaoOcultar: string;
+}
+
+/** Os valores a esconder, já separados e limpos. */
+function valoresOcultos(texto: string): string[] {
+  return texto
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0)
+    .slice(0, 10);
+}
+
+/**
+ * Os "fixos" que a tela grava, DERIVADOS do editor.
+ *
+ * Regras que valem para todo dado: campo apagado = chave removida (nunca
+ * vazio, que o servidor recusa); categoria escolhida mas sem nome = ainda não
+ * mapeada; e um dado tem UMA fonte (campo OU categoria).
+ */
+function fixosDoEditor(
+  editor: EditorDoAcf,
+  prefixo: string,
+  postType: string,
+): Record<string, unknown> {
+  const campos: Record<string, string> = {};
+
+  for (const chave of DADOS_DE_CAMPO_IMOVEL) {
+    const valor = (editor.campos[chave] ?? "").trim();
+    if (valor.length > 0) campos[chave] = valor;
+  }
+
+  const taxonomias: Record<string, { taxonomia: string; nivel?: string }> = {};
+  for (const categoria of CATEGORIAS_IMOVEL) {
+    const escolha = editor.escolhas[categoria.chave] ?? "nao-usar";
+    if (escolha === "campo") {
+      const valor = (editor.campos[categoria.chave] ?? "").trim();
+      if (valor.length > 0) campos[categoria.chave] = valor;
+    } else if (escolha === "categoria") {
+      const slug = (editor.taxonomias[categoria.chave] ?? "").trim();
+      if (slug.length === 0) continue;
+      taxonomias[categoria.chave] = categoria.nivel
+        ? { taxonomia: slug, nivel: editor.niveis[categoria.chave] ?? "qualquer" }
+        : { taxonomia: slug };
+    }
+  }
+
+  const fixos: Record<string, unknown> = { prefixo, post_type: postType, campos, taxonomias };
+
+  const campoSituacao = editor.situacaoCampo.trim();
+  const ocultar = valoresOcultos(editor.situacaoOcultar);
+  if (campoSituacao.length > 0 && ocultar.length > 0) {
+    fixos.situacao = { campo: campoSituacao, ocultar };
+  }
+
+  return fixos;
+}
+
+/** O editor a partir dos "fixos" gravados (o que a pessoa tinha salvo). */
+function editorDoAcf(fixos: unknown): EditorDoAcf {
+  const f = (fixos ?? {}) as {
+    campos?: Record<string, string>;
+    taxonomias?: Record<string, { taxonomia?: string; nivel?: string }>;
+    situacao?: { campo?: string; ocultar?: string[] };
+  };
+
+  const campos: Record<string, string> = {};
+  for (const chave of DADOS_DE_CAMPO_IMOVEL) {
+    const valor = f.campos?.[chave];
+    if (valor) campos[chave] = valor;
+  }
+
+  const escolhas: Record<string, EscolhaDaCategoria> = {};
+  const taxonomias: Record<string, string> = {};
+  const niveis: Record<string, string> = {};
+  for (const categoria of CATEGORIAS_IMOVEL) {
+    const taxonomia = f.taxonomias?.[categoria.chave];
+    if (taxonomia?.taxonomia) {
+      escolhas[categoria.chave] = "categoria";
+      taxonomias[categoria.chave] = taxonomia.taxonomia;
+      niveis[categoria.chave] = taxonomia.nivel ?? "qualquer";
+    } else if (f.campos?.[categoria.chave]) {
+      escolhas[categoria.chave] = "campo";
+      campos[categoria.chave] = f.campos[categoria.chave]!;
+    } else {
+      escolhas[categoria.chave] = "nao-usar";
+    }
+  }
+
+  return {
+    campos,
+    escolhas,
+    taxonomias,
+    niveis,
+    situacaoCampo: f.situacao?.campo ?? "situacao",
+    situacaoOcultar: (f.situacao?.ocultar ?? ["vendido", "alugado"]).join(", "),
+  };
+}
+
+/** O editor de uma instância nova: o mínimo que já serve. */
+function editorPadraoAcf(): EditorDoAcf {
+  return {
+    campos: { preco: "preco", quartos: "quartos" },
+    escolhas: {
+      bairro: "nao-usar",
+      cidade: "nao-usar",
+      tipo: "nao-usar",
+      finalidade: "nao-usar",
+    },
+    taxonomias: {},
+    niveis: { bairro: "qualquer", cidade: "qualquer" },
+    situacaoCampo: "situacao",
+    situacaoOcultar: "vendido, alugado",
+  };
+}
 
 /** A regex do `meta_key`: mesma da receita (`acf-imoveis.ts`), aqui para o campo da tela. */
 const META_KEY_REGEX = /^[A-Za-z0-9_\-]{1,64}$/;
 
-/** Os fixos que a receita `acf-imoveis` precisa: prefixo, tipo de post e o mapeamento. */
-function fixosPadraoAcf(): InstanciaDeReceita["fixos"] {
-  return {
-    prefixo: PREFIXO_PADRAO,
-    post_type: POST_TYPE_PADRAO,
-    campos: { preco: "preco", quartos: "quartos", bairro: "bairro" },
-  };
-}
+/** A regex do slug da taxonomia: mesma da receita, aqui para o campo da tela. */
+const TAXONOMIA_REGEX = /^[a-z0-9_-]{1,32}$/;
 
 function receitasDisponiveis(motor: "mysql" | "postgres"): DefinicaoDeReceita[] {
   return [...RECEITAS.values()].filter((r) => r.motores.includes(motor));
@@ -75,6 +233,8 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
   // sempre deriva do servidor (query.data) + o rascunho em edição, então
   // acompanha o servidor após cada refetch sem setState síncrono em efeito.
   const [rascunho, setRascunho] = useState<InstanciaDeReceita | null>(null);
+  // O que a tela está editando do ACF (a fonte da verdade dos "fixos" em edição).
+  const [editorAcf, setEditorAcf] = useState<EditorDoAcf | null>(null);
   const [confirmandoRemocao, setConfirmandoRemocao] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
     instancia: { id: string; receita: string; rotulo: string };
@@ -105,6 +265,7 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
       await salvarReceitas(connectionId, lista);
       toast.success(t("Salvo."));
       setRascunho(null);
+      setEditorAcf(null);
       await query.refetch();
     } catch (err) {
       // 422 de validação do Zod: a rota devolve `details.fieldErrors` com o
@@ -117,9 +278,20 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
         const campo = fieldErrors ? Object.keys(fieldErrors)[0] : undefined;
         const motivo = fieldErrors && campo ? fieldErrors[campo]?.[0] : undefined;
         if (fieldErrors && campo) {
+          // O rótulo do campo que falhou, em português de leigo: o Zod da
+          // receita responde por "campos", "taxonomias", "bairro"…
           const rotuloDoCampo: Record<string, string> = {
             descricao: t("Descrição"),
             rotulo: t("Rótulo"),
+            campos: t("Campos do imóvel"),
+            taxonomias: t("Categorias"),
+            situacao: t("Esconder imóveis"),
+            prefixo: t("Prefixo das tabelas"),
+            post_type: t("Tipo de post"),
+            bairro: t("Bairro"),
+            cidade: t("Cidade"),
+            tipo: t("Tipo"),
+            finalidade: t("Finalidade"),
           };
           const label = rotuloDoCampo[campo] ?? campo;
           toast.error(
@@ -139,14 +311,20 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
     const primeira = opcoes[0];
     if (!primeira) return;
     const receita = receitaDe(primeira.id);
+    const ehAcf = primeira.id === "acf-imoveis";
+    const editor = ehAcf ? editorPadraoAcf() : null;
+    setEditorAcf(editor);
     const nova: InstanciaDeReceita = {
       id: randomId(),
       receita: primeira.id,
       rotulo: receita?.rotulo ?? primeira.id,
       descricao: "",
       // A receita `acf-imoveis` precisa de prefixo + tipo de post + o mapeamento
-      // de meta_key: sem os fixos certos, o SQL montado não acha as tabelas.
-      fixos: primeira.id === "acf-imoveis" ? fixosPadraoAcf() : { prefixo: PREFIXO_PADRAO },
+      // de onde vem cada dado: sem os fixos certos, o SQL montado não acha as
+      // tabelas.
+      fixos: ehAcf
+        ? fixosDoEditor(editor!, PREFIXO_PADRAO, POST_TYPE_PADRAO)
+        : { prefixo: PREFIXO_PADRAO },
       ativa: true,
     };
     setRascunho(nova);
@@ -154,7 +332,20 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
 
   const editar = (inst: InstanciaDeReceita) => {
     if (!canWrite) return;
+    setEditorAcf(inst.receita === "acf-imoveis" ? editorDoAcf(inst.fixos) : null);
     setRascunho(inst);
+  };
+
+  /** Troca um campo do editor e recalcula os "fixos" que vão para o banco. */
+  const mudarEditor = (novo: EditorDoAcf) => {
+    setEditorAcf(novo);
+    if (!rascunho) return;
+    const f = (rascunho.fixos ?? {}) as { prefixo?: string; post_type?: string };
+    const prox = {
+      ...rascunho,
+      fixos: fixosDoEditor(novo, f.prefixo ?? PREFIXO_PADRAO, f.post_type ?? POST_TYPE_PADRAO),
+    };
+    setRascunho(prox);
   };
 
   const remover = async (id: string) => {
@@ -235,11 +426,16 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
               ? String((inst.fixos as { prefixo?: string }).prefixo ?? PREFIXO_PADRAO)
               : PREFIXO_PADRAO;
           // Os fixos do ACF: tipo de post e o mapeamento de meta_key por campo.
-          const fixosAcf: { post_type?: string; campos?: Record<string, string> } = (inst.fixos as
-            | { post_type?: string; campos?: Record<string, string> }
+          const fixosAcf: { post_type?: string } = (inst.fixos as
+            | { post_type?: string }
             | undefined) ?? {};
           const postType = fixosAcf.post_type ?? POST_TYPE_PADRAO;
-          const camposAcf = fixosAcf.campos ?? {};
+          // O editor é a fonte da verdade dos campos em edição; quando ele não
+          // está na mão (ex.: recarregou a tela no meio da edição), ele é
+          // reconstruído a partir dos "fixos" salvos — um formulário vazio
+          // faria a pessoa salvar o mapeamento apagado sem querer.
+          const editor =
+            editandoEsta && ehAcf ? (editorAcf ?? editorDoAcf(inst.fixos)) : null;
 
           if (editandoEsta && canWrite) {
             return (
@@ -325,53 +521,216 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                     <Label className="text-xs ml-2 text-muted-foreground">{t("Ativa")}</Label>
                   </div>
                 </div>
-                {ehAcf && (
-                  <div className="mt-2 border-t pt-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">
-                      {t("Mapeamento de campos (meta_key)")}
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {CAMPOS_ACF.map((campo) => {
-                        const idCampo = `${idInputAcf}-${campo.chave}`;
-                        return (
-                          <div key={campo.chave}>
-                            <Label
-                              htmlFor={idCampo}
-                              className={`text-xs text-muted-foreground ${campo.obrigatorio ? "font-medium" : ""}`}
+                {ehAcf && editor && (
+                  <div className="mt-2 space-y-4 border-t pt-3">
+                    {/* ── Campos do imóvel ───────────────────────────────────── */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        {t("Campos do imóvel")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {t("O nome do campo no ACF ou no JetEngine. Deixe vazio o que o site não usa.")}
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {DADOS_DE_CAMPO_IMOVEL.map((chave) => {
+                          const idCampo = `${idInputAcf}-campo-${chave}`;
+                          return (
+                            <div key={chave}>
+                              <Label htmlFor={idCampo} className="text-xs text-muted-foreground">
+                                {t(ROTULO_DO_CAMPO[chave])}
+                              </Label>
+                              <Input
+                                id={idCampo}
+                                value={editor.campos[chave] ?? ""}
+                                onChange={(e) => {
+                                  const valor = e.target.value;
+                                  if (valor !== "" && !META_KEY_REGEX.test(valor)) return;
+                                  mudarEditor({
+                                    ...editor,
+                                    campos: { ...editor.campos, [chave]: valor },
+                                  });
+                                }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ── Categorias ──────────────────────────────────────────── */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">{t("Categorias")}</p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {t("Bairro, cidade, tipo e finalidade podem estar no site como categoria ou como campo.")}
+                      </p>
+                      <div className="space-y-3">
+                        {CATEGORIAS_IMOVEL.map((categoria) => {
+                          const idFonte = `${idInputAcf}-${categoria.chave}-fonte`;
+                          const idValor = `${idInputAcf}-${categoria.chave}-valor`;
+                          const idNivel = `${idInputAcf}-${categoria.chave}-nivel`;
+                          const escolha = editor.escolhas[categoria.chave] ?? "nao-usar";
+                          return (
+                            <div
+                              key={categoria.chave}
+                              className="grid grid-cols-1 sm:grid-cols-3 gap-2"
                             >
-                              {t(campo.rotulo)}
-                              {campo.obrigatorio ? " *" : ""}
-                            </Label>
-                            <Input
-                              id={idCampo}
-                              value={camposAcf[campo.chave] ?? ""}
-                              onChange={(e) => {
-                                const valor = e.target.value;
-                                if (valor !== "" && !META_KEY_REGEX.test(valor)) return;
-                                const proxCampos = { ...camposAcf };
-                                // Campo OPCIONAL apagado na tela: a CHAVE sai do
-                                // mapeamento, em vez de ficar com "".
-                                // O Zod da receita é `.min(1).optional()`: "" não vale
-                                // como ausente, e o PUT voltava com 422
-                                // `fixos_invalidos` — a tela recusava o que a
-                                // pessoa podia fazer (não mapear o campo).
-                                // Campo OBRIGATÓRIO continua com "": quem recusa é o
-                                // servidor, com mensagem legível.
-                                if (valor === "" && !campo.obrigatorio) {
-                                  delete proxCampos[campo.chave];
-                                } else {
-                                  proxCampos[campo.chave] = valor;
-                                }
-                                const prox = {
-                                  ...inst,
-                                  fixos: { ...(inst.fixos as object), campos: proxCampos },
-                                };
-                                setRascunho(prox);
-                              }}
-                            />
-                          </div>
-                        );
-                      })}
+                              <div>
+                                <Label
+                                  htmlFor={idFonte}
+                                  className="text-xs text-muted-foreground"
+                                >
+                                  {t(ROTULO_DA_CATEGORIA[categoria.chave])}
+                                </Label>
+                                <select
+                                  id={idFonte}
+                                  value={escolha}
+                                  onChange={(e) => {
+                                    const nova = e.target.value as EscolhaDaCategoria;
+                                    const campos = { ...editor.campos };
+                                    const taxonomias = { ...editor.taxonomias };
+                                    // Trocar de fonte limpa o texto da outra:
+                                    // o que ficou para trás não pode voltar.
+                                    if (nova === "campo") delete taxonomias[categoria.chave];
+                                    if (nova === "categoria") delete campos[categoria.chave];
+                                    if (nova === "nao-usar") {
+                                      delete taxonomias[categoria.chave];
+                                      delete campos[categoria.chave];
+                                    }
+                                    mudarEditor({
+                                      ...editor,
+                                      campos,
+                                      taxonomias,
+                                      escolhas: { ...editor.escolhas, [categoria.chave]: nova },
+                                    });
+                                  }}
+                                  className="mt-1 block w-full rounded-md border bg-background p-2 text-sm"
+                                >
+                                  <option value="nao-usar">{t("Não usar")}</option>
+                                  <option value="campo">{t("Campo")}</option>
+                                  <option value="categoria">{t("Categoria")}</option>
+                                </select>
+                              </div>
+
+                              {escolha === "campo" && (
+                                <div>
+                                  <Label htmlFor={idValor} className="text-xs text-muted-foreground">
+                                    {t("Nome do campo")}
+                                  </Label>
+                                  <Input
+                                    id={idValor}
+                                    value={editor.campos[categoria.chave] ?? ""}
+                                    onChange={(e) => {
+                                      const valor = e.target.value;
+                                      if (valor !== "" && !META_KEY_REGEX.test(valor)) return;
+                                      mudarEditor({
+                                        ...editor,
+                                        campos: { ...editor.campos, [categoria.chave]: valor },
+                                      });
+                                    }}
+                                  />
+                                </div>
+                              )}
+
+                              {escolha === "categoria" && (
+                                <div>
+                                  <Label htmlFor={idValor} className="text-xs text-muted-foreground">
+                                    {t("Nome da categoria")}
+                                  </Label>
+                                  <Input
+                                    id={idValor}
+                                    value={editor.taxonomias[categoria.chave] ?? ""}
+                                    onChange={(e) => {
+                                      const valor = e.target.value;
+                                      if (valor !== "" && !TAXONOMIA_REGEX.test(valor)) return;
+                                      mudarEditor({
+                                        ...editor,
+                                        taxonomias: {
+                                          ...editor.taxonomias,
+                                          [categoria.chave]: valor,
+                                        },
+                                      });
+                                    }}
+                                  />
+                                </div>
+                              )}
+
+                              {escolha === "categoria" && categoria.nivel && (
+                                <div>
+                                  <Label htmlFor={idNivel} className="text-xs text-muted-foreground">
+                                    {t("Nível")}
+                                  </Label>
+                                  <select
+                                    id={idNivel}
+                                    value={editor.niveis[categoria.chave] ?? "qualquer"}
+                                    onChange={(e) => {
+                                      mudarEditor({
+                                        ...editor,
+                                        niveis: {
+                                          ...editor.niveis,
+                                          [categoria.chave]: e.target.value,
+                                        },
+                                      });
+                                    }}
+                                    className="mt-1 block w-full rounded-md border bg-background p-2 text-sm"
+                                  >
+                                    <option value="qualquer">{t("Qualquer")}</option>
+                                    {categoria.nivel === "filho" && (
+                                      <option value="filho">{t("Só o bairro (tem cidade acima)")}</option>
+                                    )}
+                                    {categoria.nivel === "raiz" && (
+                                      <option value="raiz">{t("Só a cidade (não tem cidade acima)")}</option>
+                                    )}
+                                  </select>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ── Esconder imóveis ────────────────────────────────────── */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        {t("Esconder imóveis")}
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <Label
+                            htmlFor={`${idInputAcf}-situacao-campo`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            {t("Campo da situação")}
+                          </Label>
+                          <Input
+                            id={`${idInputAcf}-situacao-campo`}
+                            value={editor.situacaoCampo}
+                            onChange={(e) => {
+                              const valor = e.target.value;
+                              if (valor !== "" && !META_KEY_REGEX.test(valor)) return;
+                              mudarEditor({ ...editor, situacaoCampo: valor });
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label
+                            htmlFor={`${idInputAcf}-situacao-ocultar`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            {t("Valores a esconder")}
+                          </Label>
+                          <Input
+                            id={`${idInputAcf}-situacao-ocultar`}
+                            value={editor.situacaoOcultar}
+                            onChange={(e) => {
+                              mudarEditor({ ...editor, situacaoOcultar: e.target.value });
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {t("Imóvel com um desses valores na situação não aparece para o cliente.")}
+                      </p>
                     </div>
                   </div>
                 )}
@@ -379,7 +738,10 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                   <Button size="sm" onClick={salvar}>
                     {t("Salvar")}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setRascunho(null)}>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    setRascunho(null);
+                    setEditorAcf(null);
+                  }}>
                     {t("Cancelar")}
                   </Button>
                   <Button size="sm" onClick={() => executarPreview(inst)} disabled={previewando}>

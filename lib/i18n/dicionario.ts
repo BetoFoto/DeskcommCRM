@@ -14435,6 +14435,33 @@ export const DICIONARIO: Traducoes = {
   "Mapeamento de campos (meta_key)": { es: "Mapeo de campos (meta_key)" },
   Quartos: { es: "Habitaciones" },
   "Área": { es: "Área" },
+  // ─── Receitas prontas ACF com categorias (Spec 25 R2 ampliada) ───
+  "Campos do imóvel": { es: "Campos del inmueble" },
+  "O nome do campo no ACF ou no JetEngine. Deixe vazio o que o site não usa.": {
+    es: "El nombre del campo en ACF o en JetEngine. Deja vacío lo que el sitio no use.",
+  },
+  "Categorias": { es: "Categorías" },
+  "Bairro, cidade, tipo e finalidade podem estar no site como categoria ou como campo.": {
+    es: "Barrio, ciudad, tipo y finalidad pueden estar en el sitio como categoría o como campo.",
+  },
+  "Nome do campo": { es: "Nombre del campo" },
+  "Nome da categoria": { es: "Nombre de la categoría" },
+  "Nível": { es: "Nivel" },
+  "Qualquer": { es: "Cualquiera" },
+  "Só o bairro (tem cidade acima)": { es: "Solo el barrio (tiene ciudad arriba)" },
+  "Só a cidade (não tem cidade acima)": { es: "Solo la ciudad (no tiene ciudad arriba)" },
+  "Esconder imóveis": { es: "Ocultar inmuebles" },
+  "Campo da situação": { es: "Campo de la situación" },
+  "Valores a esconder": { es: "Valores a ocultar" },
+  "Imóvel com um desses valores na situação não aparece para o cliente.": {
+    es: "El inmueble con uno de esos valores en la situación no aparece para el cliente.",
+  },
+  "Finalidade": { es: "Finalidad" },
+  "Aluguel": { es: "Alquiler" },
+  "Condomínio": { es: "Condominio" },
+  "Suítes": { es: "Suites" },
+  "Banheiros": { es: "Baños" },
+  "Vagas": { es: "Plazas de garaje" },
   "linha": { es: "línea" },
   "O campo {campo} não pôde ser salvo: {motivo}": {
     es: "El campo {campo} no se pudo guardar: {motivo}",
