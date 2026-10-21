@@ -26,7 +26,7 @@
  * (`node --import tsx`, o mesmo do #2826) importando o MESMO módulo que a
  * produção usa: o número medido não é de um probe paralelo, é do código do PR.
  */
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -226,10 +226,13 @@ setInterval(() => undefined, 1000);
 `,
   );
 
-  const filho: ChildProcessWithoutNullStreams = spawn(
+  const filho = spawn(
     launcher[0]!,
     [...launcher.slice(1), probe, String(prazoMs), ordemAtual ? "hoje" : "atual"],
-    { cwd: RAIZ, stdio: ["ignore", "pipe", "pipe"] },
+    // A tupla `as const` é o que faz o TypeScript escolher a sobrecarga de
+    // `stdio` POR POSIÇÃO — sem ela, `stdout` sai possivelmente nulo e o
+    // typecheck reprova o teste (mesmo que ele passe).
+    { cwd: RAIZ, stdio: ["ignore", "pipe", "pipe"] as const },
   );
   let saida = "";
   filho.stdout.on("data", (d: Buffer) => {
