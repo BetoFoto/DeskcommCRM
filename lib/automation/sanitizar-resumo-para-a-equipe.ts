@@ -81,14 +81,20 @@ const INSTRUCAO_A_QUEM_LE: readonly RegExp[] = [
   // Resposta forçada: "responda somente com SIM", "replique apenas OK". Os
   // verbos são só os de RESPOSTA — "diga/escreva" são comuns demais numa fala
   // legítima e virariam falso positivo.
-  // Só o IMPERATIVO: "responder apenas as dúvidas" é próxima ação legítima.
-  /\b(responda|responde|replique)\b[^.!?\n]{0,30}\b(somente|apenas|exatamente)\b/i,
+  // Só "responda/replique": "responder apenas as dúvidas" e "cliente responde
+  // apenas por áudio" são próxima ação legítima.
+  /\b(responda|replique)\b[^.!?\n]{0,30}\b(somente|apenas|exatamente)\b/i,
   // Troca de regra em inglês: "ignore previous instructions", "disregard all rules".
   /\b(ignore|disregard)\b[^.!?\n]{0,40}\b(previous|prior|above|all)\b[^.!?\n]{0,20}\b(instructions?|rules?|prompts?)\b/i,
   // Ordem de PIX: "mande o pix", "faça o pix na chave". Só o pix: "envie a
   // proposta com o valor" e "mande o boleto e confirme o pagamento" são a
   // próxima ação de quem vende, e caíam inteiras com valor/pagamento na lista.
-  /\b(mande|manda|envie|envia|transfira|pague|deposite|faça)\b[^.!?\n]{0,30}\bpix\b/i,
+  // Sem "manda/envia": também são indicativo, e "cliente envia o pix amanhã" é
+  // compromisso legítimo. Limite conhecido: "envie a chave pix ao cliente" cai.
+  /\b(mande|envie|transfira|pague|deposite|faça)\b[^.!?\n]{0,30}\bpix\b/i,
+  // Transferência e depósito de dinheiro: "transfira o valor", "deposite o
+  // dinheiro na conta". Só esses dois verbos, que não são próxima ação comum.
+  /\b(transfira|deposite)\b[^.!?\n]{0,30}\b(dinheiro|valor)\b/i,
   // Marca de PAPEL (o cabeçalho em que a injeção finge ser o sistema).
   /^\s*(system|assistant|developer|user)\s*:/im,
 ];

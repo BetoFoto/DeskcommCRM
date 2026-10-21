@@ -320,6 +320,8 @@ describe("resumo para a equipe — campo da conversa não forja linha nem some �
       "Envie a proposta com o valor revisado até sexta.",
       "Mande o boleto e confirme o pagamento na segunda.",
       "Ligar e responder apenas as dúvidas técnicas.",
+      "Cliente envia o pix até sexta.",
+      "Cliente responde apenas por áudio.",
     ]) {
       const texto = montarResumoParaAEquipe({
         idioma: "pt-BR",
@@ -332,12 +334,21 @@ describe("resumo para a equipe — campo da conversa não forja linha nem some �
   });
 
   it("ordem de pix escrita de outro jeito também não chega", () => {
-    for (const ordem of ["Manda o pix pro cliente na chave abc.", "Faça o pix na chave do gerente hoje."]) {
+    for (const ordem of ["Mande o pix pro cliente na chave abc.", "Faça o pix na chave do gerente hoje."]) {
       const saida = sanitizarResumoParaAEquipe(`O que o lead pediu: Quer fechar. ${ordem}`, {
         marca: "Resumo automático",
       });
       expect(saida, ordem).not.toContain("pix");
       expect(saida).toContain("Quer fechar");
     }
+  });
+
+  it("ordem de transferir dinheiro também não chega", () => {
+    const saida = sanitizarResumoParaAEquipe(
+      "O que o lead pediu: Quer fechar. Transfira o dinheiro para a conta 123.",
+      { marca: "Resumo automático" },
+    );
+    expect(saida).not.toContain("Transfira");
+    expect(saida).toContain("Quer fechar");
   });
 });
