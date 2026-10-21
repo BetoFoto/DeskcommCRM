@@ -4,7 +4,7 @@
  * Prova que o SQL montado pela receita:
  *  - filtra `post_type = ?` e `post_status = 'publish'` (rascunho nunca entra),
  *  - coloca todo `meta_key` como VALOR (`?`), nunca como identificador no texto,
- *  - converte preço robustamente ("650.000,00" e "480000" vira número no SQL),
+ *  - converte preço robustamente ("650.000,00", "650,000.00" e "480000" viram número no SQL),
  *  - valida prefixo, post_type e meta_key com regex (Zod recusa invalidos),
  *  - placeholders alinhados com valores na ordem do texto (R-A),
  *  - NÃO traz foto (a imagem_url é da R4 — ver a guarda no fim do arquivo).
@@ -31,22 +31,38 @@ describe("receita acf-imoveis (unit, sem MySQL)", () => {
     expect(() => validarConsultaDeReceita(sql, tabelas)).not.toThrow();
   });
 
+  /**
+   * Meta_key fora do padrão de nome: se algum deles aparecesse CRU no texto do
+   * SQL, a concatenação passaria despercebida. A asserção antiga
+   * (`not.toContain("preco =")`) pegava o nome do CAMPO, não o da meta_key —
+   * e o SQL tem `mpreco.meta_key = ?`, que ela não via.
+   */
   it("todo meta_key entra como valor (?) — nunca como identificador no texto", () => {
+    const fixosRaros = {
+      prefixo: "wp_",
+      post_type: "imovel",
+      campos: { preco: "valor_x9", quartos: "dorm_x9", bairro: "bair_x9" },
+    };
     const { sql, valores } = RECEITA_ACF_IMOVEIS.montar(
-      fixos,
+      fixosRaros,
       { bairro: "asa norte", quartos_min: 2, preco_max: 600000, limite: 3 },
       3,
     );
-    // Nenhum nome de campo cru aparece como identificador no SQL.
-    expect(sql).not.toContain("preco =");
-    expect(sql).not.toContain("quartos =");
-    expect(sql).not.toContain("bairro =");
+    // Nenhum meta_key cru no texto do SQL (meta_key colada no SQL é concatenação).
+    expect(sql).not.toContain("valor_x9");
+    expect(sql).not.toContain("dorm_x9");
+    expect(sql).not.toContain("bair_x9");
+    // Nenhuma meta_key literal (entre aspas) no texto do SQL.
+    expect(sql).not.toContain("meta_key = '");
+    // Toda junção compara a meta_key com PLACEHOLDER — uma por campo mapeado.
+    const juncoes = sql.match(/\.meta_key = \?/g) ?? [];
+    expect(juncoes).toHaveLength(3);
     // Todo valor virou placeholder.
     expect(sql.split("?").length - 1).toBe(valores.length);
     // As três meta_key dos JOINs obrigatórios estão entre os valores.
-    expect(valores).toContain("preco");
-    expect(valores).toContain("quartos");
-    expect(valores).toContain("bairro");
+    expect(valores).toContain("valor_x9");
+    expect(valores).toContain("dorm_x9");
+    expect(valores).toContain("bair_x9");
   });
 
   it("placeholders estão alinhados com os valores na ordem do texto (R-A)", () => {
@@ -163,11 +179,25 @@ describe("receita acf-imoveis (unit, sem MySQL)", () => {
     expect(sql.split("?").length - 1).toBe(valores.length);
   });
 
-  it("SQL com preco_max monta CASE para conversão robusta (sem `m.meta_value` órfão)", () => {
-    const { sql } = RECEITA_ACF_IMOVEIS.montar(fixos, { preco_max: 600000 }, 5);
+  /**
+   * O `preco_max` é um FILTRO: o teto viaja como valor (placeholder) e o SQL
+   * compara o CASE do preço com ele. A asserção antiga (`toContain("meta_value")`)
+   * só provava que o preço aparecia no SELECT — passava com o filtro inteiro
+   * fora do SQL.
+   */
+  it("SQL com preco_max monta CASE para conversão robusta e filtra pelo TETO (placeholder)", () => {
+    const { sql, valores } = RECEITA_ACF_IMOVEIS.montar(fixos, { preco_max: 600000 }, 5);
     expect(sql).toContain("CASE");
     expect(sql).toContain("DECIMAL(10,2)");
-    expect(sql).toContain("meta_value");
+    // O teto é VALOR: ele não aparece no texto do SQL (nem colado, nem cru).
+    expect(sql).not.toContain("600000");
+    expect(valores).toContain(600000);
+    // O filtro existe: no WHERE, o CASE do preço é comparado com o placeholder.
+    const iWhere = sql.indexOf("where ");
+    expect(iWhere).toBeGreaterThan(-1);
+    const where = sql.slice(iWhere);
+    expect(where).toContain(") <= ?");
+    expect(where).not.toContain("600000");
     // Nenhum apelido órfão: não pode haver `m.meta_value` (apelido inexistente).
     expect(sql).not.toContain("m.meta_value");
   });
