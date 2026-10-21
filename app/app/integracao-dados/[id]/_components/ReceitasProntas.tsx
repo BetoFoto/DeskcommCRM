@@ -16,6 +16,7 @@ import { previewReceita, salvarReceitas, useReceitasDaConexao } from "@/hooks/ex
 import { randomId } from "@/lib/random-id";
 import { ApiError } from "@/lib/api/types";
 import { useT } from "@/hooks/i18n/useT";
+import { POST_TYPE_PADRAO, POST_TYPE_REGEX } from "@/lib/external-db/receitas/acf-imoveis";
 import { RECEITAS, receitaDe } from "@/lib/external-db/receitas/registro";
 import type { InstanciaDeReceita } from "@/lib/external-db/receitas/tipos";
 import type { DefinicaoDeReceita } from "@/lib/external-db/receitas/tipos";
@@ -32,6 +33,31 @@ const PREFIXO_PADRAO = "wp_";
 const PREFIXO_REGEX = /^[A-Za-z0-9_]{1,20}$/;
 const BUSCA_PADRAO = { limite: 5 };
 
+/**
+ * Os campos que o administrador mapeia por `meta_key` na receita `acf-imoveis`
+ * (Spec 25 R2). Os três primeiros são obrigatórios: a receita faz JOIN
+ * interno neles, então imóvel sem o campo nem entra na busca.
+ */
+const CAMPOS_ACF: { chave: string; rotulo: string; obrigatorio: boolean }[] = [
+  { chave: "preco", rotulo: "Preço", obrigatorio: true },
+  { chave: "quartos", rotulo: "Quartos", obrigatorio: true },
+  { chave: "bairro", rotulo: "Bairro", obrigatorio: true },
+  { chave: "cidade", rotulo: "Cidade", obrigatorio: false },
+  { chave: "area", rotulo: "Área", obrigatorio: false },
+];
+
+/** A regex do `meta_key`: mesma da receita (`acf-imoveis.ts`), aqui para o campo da tela. */
+const META_KEY_REGEX = /^[A-Za-z0-9_\-]{1,64}$/;
+
+/** Os fixos que a receita `acf-imoveis` precisa: prefixo, tipo de post e o mapeamento. */
+function fixosPadraoAcf(): InstanciaDeReceita["fixos"] {
+  return {
+    prefixo: PREFIXO_PADRAO,
+    post_type: POST_TYPE_PADRAO,
+    campos: { preco: "preco", quartos: "quartos", bairro: "bairro" },
+  };
+}
+
 function receitasDisponiveis(motor: "mysql" | "postgres"): DefinicaoDeReceita[] {
   return [...RECEITAS.values()].filter((r) => r.motores.includes(motor));
 }
@@ -42,6 +68,8 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
   const idInputRotulo = useId();
   const idInputDescricao = useId();
   const idInputPrefixo = useId();
+  const idInputPostType = useId();
+  const idInputAcf = useId();
 
   // Uma linha em edição (rascunho local, ainda não salvo). A lista completa
   // sempre deriva do servidor (query.data) + o rascunho em edição, então
@@ -116,7 +144,9 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
       receita: primeira.id,
       rotulo: receita?.rotulo ?? primeira.id,
       descricao: "",
-      fixos: { prefixo: PREFIXO_PADRAO },
+      // A receita `acf-imoveis` precisa de prefixo + tipo de post + o mapeamento
+      // de meta_key: sem os fixos certos, o SQL montado não acha as tabelas.
+      fixos: primeira.id === "acf-imoveis" ? fixosPadraoAcf() : { prefixo: PREFIXO_PADRAO },
       ativa: true,
     };
     setRascunho(nova);
@@ -199,10 +229,17 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
         {receitas.map((inst) => {
           const receita = receitaDe(inst.receita);
           const editandoEsta = rascunho?.id === inst.id;
+          const ehAcf = receita?.id === "acf-imoveis";
           const cols =
             inst.fixos && typeof inst.fixos === "object" && "prefixo" in inst.fixos
               ? String((inst.fixos as { prefixo?: string }).prefixo ?? PREFIXO_PADRAO)
               : PREFIXO_PADRAO;
+          // Os fixos do ACF: tipo de post e o mapeamento de meta_key por campo.
+          const fixosAcf: { post_type?: string; campos?: Record<string, string> } = (inst.fixos as
+            | { post_type?: string; campos?: Record<string, string> }
+            | undefined) ?? {};
+          const postType = fixosAcf.post_type ?? POST_TYPE_PADRAO;
+          const camposAcf = fixosAcf.campos ?? {};
 
           if (editandoEsta && canWrite) {
             return (
@@ -254,6 +291,29 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                       {t("O prefixo aparece antes de _posts no banco do WordPress (padrão wp_).")}
                     </p>
                   </div>
+                  {ehAcf && (
+                    <div>
+                      <Label htmlFor={idInputPostType} className="text-xs text-muted-foreground">
+                        {t("Tipo de post")}
+                      </Label>
+                      <Input
+                        id={idInputPostType}
+                        value={postType}
+                        onChange={(e) => {
+                          const valor = e.target.value;
+                          if (!POST_TYPE_REGEX.test(valor)) return;
+                          const prox = {
+                            ...inst,
+                            fixos: { ...(inst.fixos as object), post_type: valor },
+                          };
+                          setRascunho(prox);
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {t("Qual tipo de post do WordPress (padrão imovel).")}
+                      </p>
+                    </div>
+                  )}
                   <div className="col-span-1 md:col-span-1 flex items-end">
                     <Switch
                       checked={inst.ativa}
@@ -265,6 +325,43 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                     <Label className="text-xs ml-2 text-muted-foreground">{t("Ativa")}</Label>
                   </div>
                 </div>
+                {ehAcf && (
+                  <div className="mt-2 border-t pt-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                      {t("Mapeamento de campos (meta_key)")}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {CAMPOS_ACF.map((campo) => {
+                        const idCampo = `${idInputAcf}-${campo.chave}`;
+                        return (
+                          <div key={campo.chave}>
+                            <Label
+                              htmlFor={idCampo}
+                              className={`text-xs text-muted-foreground ${campo.obrigatorio ? "font-medium" : ""}`}
+                            >
+                              {t(campo.rotulo)}
+                              {campo.obrigatorio ? " *" : ""}
+                            </Label>
+                            <Input
+                              id={idCampo}
+                              value={camposAcf[campo.chave] ?? ""}
+                              onChange={(e) => {
+                                const valor = e.target.value;
+                                if (valor !== "" && !META_KEY_REGEX.test(valor)) return;
+                                const proxCampos = { ...camposAcf, [campo.chave]: valor };
+                                const prox = {
+                                  ...inst,
+                                  fixos: { ...(inst.fixos as object), campos: proxCampos },
+                                };
+                                setRascunho(prox);
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-2 mt-2">
                   <Button size="sm" onClick={salvar}>
                     {t("Salvar")}
@@ -337,6 +434,11 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                   <p className="text-xs text-muted-foreground">
                     {t("Prefixo:")} <span className="font-mono">{cols}</span>
                   </p>
+                  {ehAcf && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("Tipo de post:")} <span className="font-mono">{postType}</span>
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1">
                   <Badge variant={inst.ativa ? "success" : "secondary"}>

@@ -14425,6 +14425,15 @@ export const DICIONARIO: Traducoes = {
   "Carregando receitas…": { es: "Cargando recetas…" },
   "Prefixo:": { es: "Prefijo:" },
   "Não foi possível carregar as receitas.": { es: "No se pudieron cargar las recetas." },
+  // ─── Receitas prontas ACF (Spec 25 R2) ───
+  "Tipo de post": { es: "Tipo de entrada" },
+  "Tipo de post:": { es: "Tipo de entrada:" },
+  "Qual tipo de post do WordPress (padrão imovel).": {
+    es: "Qué tipo de entrada de WordPress (predeterminado imovel).",
+  },
+  "Mapeamento de campos (meta_key)": { es: "Mapeo de campos (meta_key)" },
+  Quartos: { es: "Habitaciones" },
+  "Área": { es: "Área" },
   "linha": { es: "línea" },
   "O campo {campo} não pôde ser salvo: {motivo}": {
     es: "El campo {campo} no se pudo guardar: {motivo}",
