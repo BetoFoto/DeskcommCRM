@@ -83,8 +83,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   // Tarefas › Planos ao negócio, criando as N tarefas de uma vez e na ordem.
   apply_task_plan: "Aplicar um plano de tarefas ao negócio",
   // #2642 — o único destino que não é o lead. A frase diz "equipe" e não
-  // "WhatsApp" porque o canal é escolhido embaixo (WhatsApp do aviso ou
-  // e-mail do membro), e quem lê a lista precisa saber que quem recebe é
-  // GENTE DA CASA, não o cliente.
+  // "WhatsApp" porque quem recebe é o WhatsApp cadastrado em Avisos, e quem
+  // lê a lista precisa saber que quem recebe é GENTE DA CASA, não o cliente.
   notify_team: "Mensagem para a equipe (resumo do negócio ganho)",
 };
