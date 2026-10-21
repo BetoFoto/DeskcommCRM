@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -12,10 +13,12 @@ const h = vi.hoisted(() => ({
   tabela: [] as Linha[],
   updates: [] as Array<{ payload: Linha; filtros: Record<string, unknown> }>,
   selects: [] as Array<Record<string, unknown>>,
-  rodadas: [] as Array<{ id: string; teto: unknown }>,
+  rodadas: [] as Array<{ id: string; teto: unknown; opcoes?: { prazo?: number } }>,
   autoriza: true,
   rodadaLanca: null as string | null,
   aposSelect: null as null | (() => void),
+  /** Quanto o relógio anda a cada rodada dublada (ms). */
+  avancoPorRodada: 0,
 }));
 
 vi.mock("@/lib/auth/cron-auth", () => ({ autorizaCron: () => h.autoriza }));
@@ -23,8 +26,9 @@ vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 vi.mock("@/lib/channels/historico/rodada", () => ({
   TETO_PADRAO: { conversas: 3, mensagens: 300, chamadas: 20 },
-  rodarUmaRodada: vi.fn(async (_admin: unknown, id: string, teto: unknown) => {
-    h.rodadas.push({ id, teto });
+  rodarUmaRodada: vi.fn(async (_admin: unknown, id: string, teto: unknown, opcoes?: { prazo?: number }) => {
+    h.rodadas.push({ id, teto, opcoes });
+    if (h.avancoPorRodada) vi.setSystemTime(Date.now() + h.avancoPorRodada);
     if (h.rodadaLanca) throw new Error(h.rodadaLanca);
     return { status: "rodando", gravadas: 1, existentes: 0 };
   }),
@@ -64,6 +68,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 const { GET } = await import("@/app/api/v1/cron/historico-import/route");
+const { MARGEM_PARA_CHAMADA_MS, PRAZO_DA_CHAMADA_MS } = await import("@/lib/channels/historico/prazo");
 const chamar = () => GET(new Request("http://localhost/api/v1/cron/historico-import") as never);
 const linha = (id: string, extra: Linha = {}): Linha => ({
   id,
@@ -84,6 +89,8 @@ beforeEach(() => {
   h.autoriza = true;
   h.rodadaLanca = null;
   h.aposSelect = null;
+  h.avancoPorRodada = 0;
+  vi.useRealTimers();
 });
 
 describe("cron da importação do histórico (#999)", () => {
@@ -102,6 +109,32 @@ describe("cron da importação do histórico (#999)", () => {
     expect(h.rodadas[0]!.teto).toEqual({ conversas: 3, mensagens: 300, chamadas: 20 });
     expect(h.selects[0]).toMatchObject({ status: "rodando" });
     expect((await r.json()).data).toMatchObject({ rodadas: 2 });
+  });
+
+  it("a rodada recebe o prazo da chamada, e o curl do agendador espera mais que ele, com folga", async () => {
+    h.tabela = [linha("a")];
+    const inicio = Date.now();
+    await chamar();
+    const prazo = h.rodadas[0]!.opcoes?.prazo;
+    expect(typeof prazo).toBe("number");
+    expect(prazo!).toBeGreaterThan(inicio);
+    expect(prazo!).toBeLessThanOrEqual(Date.now() + PRAZO_DA_CHAMADA_MS);
+
+    const entrypoint = readFileSync("docker/scheduler/entrypoint.sh", "utf8");
+    const job = entrypoint.match(/^[^#\n]*\|(\d+)\|api\/v1\/cron\/historico-import$/m);
+    expect(job).not.toBeNull();
+    // folga para as gravações no banco depois da última chamada ao canal
+    expect(Number(job![1]) * 1000).toBeGreaterThanOrEqual(PRAZO_DA_CHAMADA_MS + 15_000);
+  });
+
+  it("sem tempo para uma chamada ao canal, não começa outra rodada nem trava a importação", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    h.tabela = [linha("a"), linha("b")];
+    // a primeira rodada deixa menos de uma chamada de tempo pela frente
+    h.avancoPorRodada = PRAZO_DA_CHAMADA_MS - MARGEM_PARA_CHAMADA_MS + 1;
+    await chamar();
+    expect(h.rodadas.map((x) => x.id)).toEqual(["a"]);
+    expect(h.updates.map((u) => u.filtros.id)).toEqual(["a"]);
   });
 
   it("trava antes de rodar: update condicional no updated_at lido, com trava_ate no cursor", async () => {

@@ -5,13 +5,16 @@
  * quem lê o acervo e grava é este cron, UMA rodada por importação `rodando` a
  * cada chamada, com o teto padrão da rodada (3 conversas OU 300 mensagens OU
  * 20 chamadas ao canal). O teto não vem de fora: com menos de 3 chamadas a
- * rodada não avança.
+ * rodada não avança. Todas as rodadas da chamada dividem `PRAZO_DA_CHAMADA_MS`
+ * (`lib/channels/historico/prazo.ts`): a rodada não começa chamada ao canal sem
+ * tempo para ela, e o `-m` do curl no agendador fica acima do prazo com folga.
  *
  * ─── Uma execução por importação ────────────────────────────────────────────
  *
  * O agendador chama a cada minuto e corta o `curl` em 60 s, mas o servidor
- * segue com o pedido; uma rodada lenta (canal no teto de 15 s por chamada)
- * pode se sobrepor à chamada seguinte. A rodada NÃO serializa execuções
+ * segue com o pedido. Sem prazo por rodada, uma rodada com mídia passava do
+ * minuto (prova de 21/10: `curl: (28)`, e as chamadas seguintes puladas pela
+ * trava); com ele, ainda pode haver sobreposição se o banco demorar. A rodada NÃO serializa execuções
  * simultâneas da mesma importação (ver `rodada.ts`): isso é daqui. A trava é
  * `cursor.trava_ate`, gravada por update condicional no `updated_at` que esta
  * chamada leu: quem perde a corrida não roda. A rodada apaga a trava sozinha,
@@ -29,6 +32,7 @@ import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { autorizaCron } from "@/lib/auth/cron-auth";
+import { MARGEM_PARA_CHAMADA_MS, PRAZO_DA_CHAMADA_MS } from "@/lib/channels/historico/prazo";
 import { rodarUmaRodada, TETO_PADRAO } from "@/lib/channels/historico/rodada";
 import { logger } from "@/lib/logger";
 import { STATUS_OPERANTE, ehOperante, statusDaOrgEmbutida } from "@/lib/organizacao/operante";
@@ -38,8 +42,6 @@ export const dynamic = "force-dynamic";
 
 /** Importações por chamada; as mais antigas (por `updated_at`) primeiro. */
 const LOTE = 10;
-/** Passado isto, não começa outra rodada: o resto fica para o próximo minuto. */
-const PRAZO_DA_CHAMADA_MS = 45_000;
 /** Validade da trava: bem acima de uma rodada lenta, para não rodar em dobro. */
 const TRAVA_MS = 5 * 60_000;
 
@@ -83,7 +85,8 @@ async function handle(req: NextRequest): Promise<Response> {
   const status: Record<string, number> = {};
 
   for (const l of linhas) {
-    if (Date.now() > prazo) break;
+    // Sem tempo para uma chamada ao canal, a rodada não avançaria: nem trava.
+    if (prazo - Date.now() < MARGEM_PARA_CHAMADA_MS) break;
     if (travada(l.cursor, Date.now())) {
       puladas++;
       continue;
@@ -107,7 +110,7 @@ async function handle(req: NextRequest): Promise<Response> {
 
     rodadas++;
     try {
-      const r = await rodarUmaRodada(admin, l.id, TETO_PADRAO);
+      const r = await rodarUmaRodada(admin, l.id, TETO_PADRAO, { prazo });
       status[r.status] = (status[r.status] ?? 0) + 1;
     } catch (err) {
       // A rodada guarda o próprio erro na linha; o que chega aqui é o que ela

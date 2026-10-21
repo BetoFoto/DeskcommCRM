@@ -39,6 +39,7 @@ vi.mock("@/lib/waha/client", () => ({
 }));
 
 import { rodarUmaRodada } from "@/lib/channels/historico/rodada";
+import { MARGEM_PARA_CHAMADA_MS, TETO_DO_DOWNLOAD_MS } from "@/lib/channels/historico/prazo";
 
 const ORG = "org-1";
 const IMP = "imp-1";
@@ -367,6 +368,67 @@ describe("mídia do histórico", () => {
     expect(ultima.status).toBe("concluida");
     expect(db.messages).toHaveLength(3);
     expect(db.importacoes.get(IMP)).toMatchObject({ mensagens_gravadas: 2, mensagens_existentes: 1 });
+  });
+
+  it("prazo da rodada: não começa download sem tempo para ele; para com o cursor firme e segue na próxima", async () => {
+    const nomes = ["D1", "D2", "D3", "D4", "D5"];
+    canal.mensagens = nomes.map((n, i) => imagem(n, agora - 90_000 + i));
+    for (const n of nomes) canal.midia[idCanal(n)] = { url: `http://canal/files/${n}.jpg`, erro: false };
+    // relógio de mentira: cada download leva 10 s
+    let relogio = 0;
+    canal.aoBaixar = () => {
+      relogio += 10_000;
+    };
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    const rodada = () => {
+      const prazo = relogio + 45_000;
+      return rodarUmaRodada(db.admin as never, IMP, SEM_TETO, { prazo, relogio: () => relogio }).then((r) => ({
+        r,
+        prazo,
+      }));
+    };
+
+    const { r: r1, prazo: p1 } = await rodada();
+    expect(r1.status).toBe("rodando");
+    // nenhum download começou sem tempo para terminar dentro do prazo
+    expect(relogio).toBeLessThanOrEqual(p1);
+    expect(canal.baixadas.length).toBeGreaterThan(0);
+    expect(canal.baixadas.length).toBeLessThan(nomes.length);
+    // cada download leva o teto, e o teto cabe no prazo
+    expect(canal.opcoesDoDownload.every((o) => o?.tetoMs === TETO_DO_DOWNLOAD_MS)).toBe(true);
+    expect(TETO_DO_DOWNLOAD_MS).toBeLessThanOrEqual(MARGEM_PARA_CHAMADA_MS);
+    // a página não foi firmada: refeita na próxima, só as pendentes
+    expect(db.importacoes.get(IMP)!.cursor).toMatchObject({ indiceConversa: 0, offsetMensagens: 0 });
+
+    let ultima = r1;
+    for (let i = 0; i < 10 && ultima.status === "rodando"; i++) {
+      const { r, prazo } = await rodada();
+      expect(relogio).toBeLessThanOrEqual(prazo);
+      ultima = r;
+    }
+    expect(ultima.status).toBe("concluida");
+    expect(canal.baixadas.map((b) => b[2]).sort()).toEqual(nomes.map(idCanal));
+    expect(emits(db)).toHaveLength(nomes.length);
+    expect(db.importacoes.get(IMP)).toMatchObject({
+      midias_baixadas: nomes.length,
+      mensagens_gravadas: nomes.length,
+      mensagens_existentes: 0,
+    });
+  });
+
+  it("prazo da rodada: sem tempo para uma chamada, não pede página nenhuma ao canal", async () => {
+    canal.mensagens = [imagem("E1", agora - 86_400)];
+    const db = bancoDeMentira();
+    novaImportacao(db, { cursor: { indiceConversa: 0, offsetMensagens: 0, desde: agora - 30 * 86_400 } });
+    const r = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO, {
+      prazo: 1_000 + MARGEM_PARA_CHAMADA_MS - 1,
+      relogio: () => 1_000,
+    });
+    expect(r.status).toBe("rodando");
+    expect(canal.paginas).toBe(0);
+    expect(db.messages).toHaveLength(0);
+    expect(db.importacoes.get(IMP)!.cursor).toMatchObject({ indiceConversa: 0, offsetMensagens: 0 });
   });
 
   it("só emite persist_requested: nenhum outro evento, nem derivação", async () => {

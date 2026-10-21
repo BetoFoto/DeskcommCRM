@@ -717,16 +717,19 @@ export class WahaClient {
   /**
    * Pede a mídia de UMA mensagem. `erro: true` quando o WhatsApp não guarda
    * mais o arquivo (`media.error` na resposta); `url: null` sem `erro` quando
-   * a mensagem simplesmente não traz URL.
+   * a mensagem simplesmente não traz URL. `opts.tetoMs` troca o teto do
+   * cliente: o importador passa o que cabe no prazo da rodada.
    */
   async baixarMidiaDaMensagem(
     session: string,
     chatId: string,
     messageId: string,
+    opts: { tetoMs?: number } = {},
   ): Promise<{ url: string | null; erro: boolean }> {
     const res = await this.fetchComTeto(
       `${this.baseUrl}/api/${encodeURIComponent(session)}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}?downloadMedia=true`,
       { headers: { "X-Api-Key": this.apiKey } },
+      opts.tetoMs,
     );
     if (!res.ok) throw new Error(`waha_media_${res.status}`);
     const bruto = (await res.json().catch(() => null)) as Record<string, unknown> | null;

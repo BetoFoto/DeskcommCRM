@@ -23,6 +23,8 @@ let forcarStatus: number | null = null;
 let corpoForcado: string | null = null;
 let midia: unknown = fx.midia.disponivel;
 let mensagensExtras: unknown[] = [];
+/** Atraso da resposta de mídia, para medir o teto do download. */
+let atrasoDaMidia = 0;
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -38,7 +40,14 @@ beforeAll(async () => {
     if (u.pathname === "/api/s1/chats") return res.end(JSON.stringify(fx.chats));
     const m = u.pathname.match(/^\/api\/s1\/chats\/([^/]+)\/messages$/);
     if (m) return res.end(JSON.stringify([...(fx.messages[decodeURIComponent(m[1] ?? "")] ?? []), ...mensagensExtras]));
-    if (/^\/api\/s1\/chats\/[^/]+\/messages\/[^/]+$/.test(u.pathname)) return res.end(JSON.stringify(midia));
+    if (/^\/api\/s1\/chats\/[^/]+\/messages\/[^/]+$/.test(u.pathname)) {
+      if (atrasoDaMidia > 0) {
+        const t = setTimeout(() => res.end(JSON.stringify(midia)), atrasoDaMidia);
+        res.on("close", () => clearTimeout(t));
+        return;
+      }
+      return res.end(JSON.stringify(midia));
+    }
     res.statusCode = 404;
     res.end("{}");
   });
@@ -53,6 +62,7 @@ beforeEach(() => {
   corpoForcado = null;
   midia = fx.midia.disponivel;
   mensagensExtras = [];
+  atrasoDaMidia = 0;
 });
 
 const novo = () => new WahaClient(base, "chave");
@@ -207,5 +217,12 @@ describe("baixarMidiaDaMensagem", () => {
   it("status diferente de 200 vira waha_media_<status>", async () => {
     forcarStatus = 404;
     await expect(novo().baixarMidiaDaMensagem("s1", "a@lid", "m")).rejects.toThrow("waha_media_404");
+  });
+
+  it("respeita o teto de tempo pedido por quem chama (o prazo da rodada)", async () => {
+    atrasoDaMidia = 2_000;
+    const inicio = Date.now();
+    await expect(novo().baixarMidiaDaMensagem("s1", "a@lid", "m", { tetoMs: 100 })).rejects.toThrow("waha_timeout");
+    expect(Date.now() - inicio).toBeLessThan(1_500);
   });
 });

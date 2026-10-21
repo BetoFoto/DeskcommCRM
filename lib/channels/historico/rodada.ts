@@ -22,7 +22,9 @@
  * ─── Rodadas curtas que retomam ─────────────────────────────────────────────
  *
  * Cada rodada faz no máximo `teto.conversas` conversas OU `teto.mensagens`
- * mensagens OU `teto.chamadas` chamadas ao canal (o que vier primeiro) e grava
+ * mensagens OU `teto.chamadas` chamadas ao canal (o que vier primeiro), e só
+ * começa uma chamada ao canal (página ou download) com tempo para ela antes de
+ * `opcoes.prazo` (ver `prazo.ts`); sem tempo, para como no teto. Grava
  * o cursor
  * `{ indiceConversa, offsetMensagens, desde }`:
  *   - `indiceConversa` é a POSIÇÃO da conversa na lista do canal (ordenada por
@@ -56,6 +58,7 @@ import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 import { getWahaClient } from "@/lib/waha/client";
 import { ehReacao, notifyNameOf, type WahaPayload } from "@/lib/waha/ingest";
+import { MARGEM_PARA_CHAMADA_MS, TETO_DO_DOWNLOAD_MS } from "@/lib/channels/historico/prazo";
 import {
   candidatosDeExternalId,
   identidadeDoChat,
@@ -82,6 +85,16 @@ export interface CursorDaImportacao {
   offsetMensagens: number;
   /** Epoch em segundos; fixado na primeira rodada. */
   desde?: number;
+}
+
+export interface OpcoesDaRodada {
+  /**
+   * Epoch em ms. A rodada não começa chamada ao canal sem `MARGEM_PARA_CHAMADA_MS`
+   * pela frente: para com o cursor firme e a próxima segue. Sem ele, sem prazo.
+   */
+  prazo?: number;
+  /** Relógio (epoch em ms); os testes passam um de mentira. */
+  relogio?: () => number;
 }
 
 export type StatusDaImportacao = "previa" | "rodando" | "concluida" | "erro" | "cancelada";
@@ -140,6 +153,7 @@ export async function rodarUmaRodada(
   admin: SupabaseClient,
   importacaoId: string,
   teto: TetoDaRodada = TETO_PADRAO,
+  opcoes: OpcoesDaRodada = {},
 ): Promise<ResultadoDaRodada> {
   const { data: lida, error: erroDeLeitura } = await admin
     .from("importacoes_de_historico")
@@ -219,8 +233,14 @@ export async function rodarUmaRodada(
   const tetoDeChamadas = teto.chamadas ?? TETO_PADRAO.chamadas;
   let chamadas = 0;
   let processadas = 0;
+  const relogio = opcoes.relogio ?? Date.now;
+  const semTempo = () => opcoes.prazo !== undefined && opcoes.prazo - relogio() < MARGEM_PARA_CHAMADA_MS;
+  // O teto e o prazo valem antes de TODA chamada ao canal (página ou download).
   const noTeto = () =>
-    desta.conversas >= teto.conversas || processadas >= teto.mensagens || chamadas >= tetoDeChamadas;
+    desta.conversas >= teto.conversas ||
+    processadas >= teto.mensagens ||
+    chamadas >= tetoDeChamadas ||
+    semTempo();
 
   try {
     const canal = getWahaClient();
@@ -302,7 +322,7 @@ export async function rodarUmaRodada(
                 midias,
               });
               if (!completa) {
-                // Teto de chamadas no meio das mídias: a página inteira é refeita
+                // Teto (ou prazo) no meio das mídias: a página inteira é refeita
                 // na próxima rodada, então o cursor fica no último ponto firme.
                 Object.assign(cursor, cursorFirme);
                 desta.ignoradas = ignoradasAntes;
@@ -460,12 +480,20 @@ async function gravarMensagens(
 }
 
 /** Cliente do canal, só com o que `resolverMidias` usa. */
-type CanalDeMidia = { baixarMidiaDaMensagem(session: string, chatId: string, messageId: string): Promise<{ url: string | null; erro: boolean }> };
+type CanalDeMidia = {
+  baixarMidiaDaMensagem(
+    session: string,
+    chatId: string,
+    messageId: string,
+    opts?: { tetoMs?: number },
+  ): Promise<{ url: string | null; erro: boolean }>;
+};
 
 /**
  * Resolve a mídia (imagem e áudio) das mensagens DESTA página, as recém-gravadas
  * e as que já existiam como `pendente` (página refeita). Devolve `false` quando o
- * teto de chamadas acabou antes de resolver todas: quem chama não firma o cursor.
+ * teto de chamadas ou o prazo acabou antes de resolver todas: quem chama não
+ * firma o cursor. Cada download leva `TETO_DO_DOWNLOAD_MS` no próprio pedido.
  *
  * Erro de transporte (exceção do canal) NÃO é tratado aqui: sobe para a rodada,
  * que para com o cursor firme anterior e tenta de novo depois. Só `erro: true`
@@ -523,7 +551,9 @@ async function resolverMidias(
     ctl.contarChamada();
     let resposta: { url: string | null; erro: boolean };
     try {
-      resposta = await canal.baixarMidiaDaMensagem(nomeNoCanal, chatId, messageIdNoCanal);
+      resposta = await canal.baixarMidiaDaMensagem(nomeNoCanal, chatId, messageIdNoCanal, {
+        tetoMs: TETO_DO_DOWNLOAD_MS,
+      });
     } catch (err) {
       // Limite de 3 tentativas por mensagem: sem ele, uma mídia que o canal
       // recusa SEMPRE (ex.: 500) derrubaria toda rodada na mesma página, e as
