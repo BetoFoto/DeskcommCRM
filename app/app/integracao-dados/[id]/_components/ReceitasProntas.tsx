@@ -37,6 +37,17 @@ import {
   camposDoModelo,
   modeloDe,
 } from "@/lib/external-db/receitas/modelos-wordpress";
+import {
+  MAX_CAMPOS_TABELA_DIRETA,
+  type CampoMapeadoTabelaDireta,
+  type EsconderQuandoTabelaDireta,
+  type SoMostrarQuandoTabelaDireta,
+} from "@/lib/external-db/receitas/tabela-direta";
+import {
+  MODELOS_TABELA_DIRETA,
+  camposDoModelo as camposDoModeloTabelaDireta,
+  modeloDe as modeloDeTabelaDireta,
+} from "@/lib/external-db/receitas/modelos-tabela-direta";
 import type { InstanciaDeReceita } from "@/lib/external-db/receitas/tipos";
 import type { DefinicaoDeReceita } from "@/lib/external-db/receitas/tipos";
 
@@ -54,6 +65,185 @@ const BUSCA_PADRAO = { limite: 5 };
 
 /** O id da receita genérica de WordPress (a que a tela monta campo a campo). */
 const RECEITA_WORDPRESS = "wordpress-conteudo";
+
+/** O id da receita genérica de tabela direta (uma linha = um item). */
+const RECEITA_TABELA_DIRETA = "tabela-direta";
+
+/** A regex do nome da tabela e das colunas: mesma da receita. */
+const TABELA_DIRETA_REGEX = /^[A-Za-z0-9_]{1,64}$/;
+
+/** A regex da chave do dado: mesma da receita. */
+const CHAVE_TABELA_DIRETA_REGEX = /^[a-z][a-z0-9_]{0,31}$/;
+
+/**
+ * O que a tela está editando de uma tabela direta.
+ *
+ * O editor é a FONTE da verdade enquanto a edição está aberta: os "fixos"
+ * que vão para o banco são DERIVADOS dele.
+ */
+interface CampoEditadoTabelaDireta {
+  /** O nome do dado na saída. Vem do rótulo, mas a pessoa pode editar. */
+  chave: string;
+  /** A pessoa editou a chave na mão: o rótulo não pode mais mudá-la. */
+  chaveManual: boolean;
+  rotulo: string;
+  /** O nome da coluna na tabela. */
+  coluna: string;
+  tipo: TipoDeCampo;
+  filtro: FiltroDeCampo;
+}
+
+interface EditorTabelaDireta {
+  /** A tabela do banco externo. */
+  tabela: string;
+  /** A coluna que vira `id` na saída. */
+  colunaId: string;
+  /** A coluna que vira `titulo` na saída. */
+  colunaTitulo: string;
+  /** Os dados mapeados (uma coluna → um dado na saída). */
+  campos: CampoEditadoTabelaDireta[];
+  /** Só mostrar quando esta coluna é igual a este valor. */
+  soMostrarQuandoColuna: string;
+  soMostrarQuandoValor: string;
+  /** Esconder quando esta coluna está entre estes valores. */
+  esconderQuandoColuna: string;
+  esconderQuandoValores: string;
+}
+
+/** Os valores a esconder, já separados e limpos. */
+function valoresOcultosTabelaDireta(texto: string): string[] {
+  return texto
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0)
+    .slice(0, 10);
+}
+
+/**
+ * Os "fixos" que a tela grava, DERIVADOS do editor da tabela direta.
+ */
+function fixosDoEditorTabelaDireta(
+  editor: EditorTabelaDireta,
+): Record<string, unknown> {
+  const campos: CampoMapeadoTabelaDireta[] = editor.campos.map((c) => ({
+    chave: c.chave,
+    rotulo: c.rotulo.trim(),
+    coluna: c.coluna.trim(),
+    tipo: c.tipo,
+    filtro: c.filtro,
+  }));
+
+  const fixos: Record<string, unknown> = {
+    tabela: editor.tabela.trim(),
+    coluna_id: editor.colunaId.trim(),
+    coluna_titulo: editor.colunaTitulo.trim(),
+    campos,
+  };
+
+  const soMostrarColuna = editor.soMostrarQuandoColuna.trim();
+  const soMostrarValor = editor.soMostrarQuandoValor.trim();
+  if (soMostrarColuna.length > 0 && soMostrarValor.length > 0) {
+    fixos.so_mostrar_quando = { coluna: soMostrarColuna, valor: soMostrarValor };
+  }
+
+  const esconderColuna = editor.esconderQuandoColuna.trim();
+  const esconderValores = valoresOcultosTabelaDireta(editor.esconderQuandoValores);
+  if (esconderColuna.length > 0 && esconderValores.length > 0) {
+    fixos.esconder_quando = { coluna: esconderColuna, valores: esconderValores };
+  }
+
+  return fixos;
+}
+
+/** O editor a partir dos "fixos" gravados (o que a pessoa tinha salvo). */
+function editorDoTabelaDireta(fixos: unknown): EditorTabelaDireta {
+  const f = (fixos ?? {}) as {
+    tabela?: string;
+    coluna_id?: string;
+    coluna_titulo?: string;
+    campos?: CampoMapeadoTabelaDireta[];
+    so_mostrar_quando?: { coluna?: string; valor?: string };
+    esconder_quando?: { coluna?: string; valores?: string[] };
+  };
+  return {
+    tabela: f.tabela ?? "",
+    colunaId: f.coluna_id ?? "",
+    colunaTitulo: f.coluna_titulo ?? "",
+    campos: (f.campos ?? []).map((c) => ({ ...c, chaveManual: true })),
+    soMostrarQuandoColuna: f.so_mostrar_quando?.coluna ?? "",
+    soMostrarQuandoValor: f.so_mostrar_quando?.valor ?? "",
+    esconderQuandoColuna: f.esconder_quando?.coluna ?? "",
+    esconderQuandoValores: (f.esconder_quando?.valores ?? []).join(", "),
+  };
+}
+
+/** O editor de uma instância nova: uma linha de campo para a pessoa preencher. */
+function editorPadraoTabelaDireta(): EditorTabelaDireta {
+  return {
+    tabela: "",
+    colunaId: "",
+    colunaTitulo: "",
+    campos: [
+      {
+        chave: "",
+        chaveManual: false,
+        rotulo: "",
+        coluna: "",
+        tipo: "texto",
+        filtro: "nenhum",
+      },
+    ],
+    soMostrarQuandoColuna: "",
+    soMostrarQuandoValor: "",
+    esconderQuandoColuna: "",
+    esconderQuandoValores: "",
+  };
+}
+
+/**
+ * O que impede a gravação da tabela direta, em português de leigo.
+ *
+ * Recebe `t` para devolver a frase JÁ traduzida no idioma da tela.
+ */
+function problemaDoEditorTabelaDireta(
+  t: (texto: string) => string,
+  editor: EditorTabelaDireta | null,
+): string | null {
+  if (!editor) return null;
+  if (editor.tabela.trim().length === 0) return t("Escreva o nome da tabela.");
+  if (editor.colunaId.trim().length === 0) return t("Escreva a coluna do id.");
+  if (editor.colunaTitulo.trim().length === 0) return t("Escreva a coluna do título.");
+  if (editor.campos.length === 0) return t("Mapeie pelo menos um dado da tabela.");
+  for (const campo of editor.campos) {
+    if (campo.rotulo.trim().length === 0 || campo.coluna.trim().length === 0) {
+      return t("Preencha o rótulo e a coluna de todos os dados.");
+    }
+    if (campo.chave.trim().length === 0) {
+      return t(
+        "Um dos rótulos não virou uma chave. Escreva o rótulo com letras ou números.",
+      );
+    }
+  }
+  return null;
+}
+
+/**
+ * A tela já tem coisa preenchida? (para pedir confirmação antes de trocar de
+ * receita ou de modelo da tabela direta).
+ */
+function temConteudoTabelaDireta(editor: EditorTabelaDireta | null): boolean {
+  if (!editor) return false;
+  return (
+    editor.tabela.trim().length > 0 ||
+    editor.colunaId.trim().length > 0 ||
+    editor.colunaTitulo.trim().length > 0 ||
+    editor.campos.some((c) => c.rotulo.trim().length > 0 || c.coluna.trim().length > 0) ||
+    editor.soMostrarQuandoColuna.trim().length > 0 ||
+    editor.soMostrarQuandoValor.trim().length > 0 ||
+    editor.esconderQuandoColuna.trim().length > 0 ||
+    editor.esconderQuandoValores.trim().length > 0
+  );
+}
 
 /** A regex do `meta_key`: mesma da receita, aqui para o campo da tela. */
 const META_KEY_REGEX = /^[A-Za-z0-9_\-]{1,64}$/;
@@ -315,6 +505,10 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
   const [rascunho, setRascunho] = useState<InstanciaDeReceita | null>(null);
   // O que a tela está editando (a fonte da verdade dos "fixos" em edição).
   const [editor, setEditor] = useState<EditorDoWordpress | null>(null);
+  // O que a tela está editando de uma tabela direta (quando a receita é tabela-direta).
+  const [editorTabelaDireta, setEditorTabelaDireta] = useState<EditorTabelaDireta | null>(
+    null,
+  );
   // A tela de ESCOLHER a receita (só na adição; editar não troca a receita).
   const [escolhendo, setEscolhendo] = useState(false);
   // O modelo que espera confirmação ("isto apaga o que você preencheu").
@@ -350,11 +544,14 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
   const salvar = async () => {
     if (!canWrite) return;
     if (rascunho) {
-      const problema = problemaDoEditor(
-        t,
-        editor,
-        String((rascunho.fixos as { post_type?: string } | undefined)?.post_type ?? ""),
-      );
+      const ehTabelaDireta = rascunho.receita === RECEITA_TABELA_DIRETA;
+      const problema = ehTabelaDireta
+        ? problemaDoEditorTabelaDireta(t, editorTabelaDireta)
+        : problemaDoEditor(
+            t,
+            editor,
+            String((rascunho.fixos as { post_type?: string } | undefined)?.post_type ?? ""),
+          );
       if (problema) {
         toast.error(problema);
         return;
@@ -404,6 +601,15 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
     setRascunho({
       ...rascunho,
       fixos: fixosDoEditor(novo, f.prefixo ?? PREFIXO_PADRAO, tipoDePost),
+    });
+  };
+
+  const mudarEditorTabelaDireta = (novo: EditorTabelaDireta) => {
+    setEditorTabelaDireta(novo);
+    if (!rascunho) return;
+    setRascunho({
+      ...rascunho,
+      fixos: fixosDoEditorTabelaDireta(novo),
     });
   };
 
@@ -500,24 +706,101 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
     mudarEditor({ ...editor, categorias });
   };
 
+  const mudarCampoTabelaDireta = (indice: number, mudanca: Partial<CampoEditadoTabelaDireta>) => {
+    if (!editorTabelaDireta) return;
+    const campos = editorTabelaDireta.campos.map((c, i) => {
+      if (i !== indice) return c;
+      const novo: CampoEditadoTabelaDireta = { ...c, ...mudanca };
+      if (!c.chaveManual && mudanca.rotulo !== undefined) {
+        novo.chave = chaveUnica(chaveDoRotulo(mudanca.rotulo), [
+          ...editorTabelaDireta.campos.filter((_, j) => j !== indice).map((x) => x.chave),
+        ]);
+      }
+      if (mudanca.tipo !== undefined && mudanca.filtro === undefined) {
+        novo.filtro = filtroQueCabe(mudanca.tipo, c.filtro);
+      }
+      return novo;
+    });
+    mudarEditorTabelaDireta({ ...editorTabelaDireta, campos });
+  };
+
+  const adicionarCampoTabelaDireta = () => {
+    if (!editorTabelaDireta) return;
+    if (editorTabelaDireta.campos.length >= MAX_CAMPOS_TABELA_DIRETA) return;
+    const campos = [
+      ...editorTabelaDireta.campos,
+      {
+        chave: "",
+        chaveManual: false,
+        rotulo: "",
+        coluna: "",
+        tipo: "texto" as TipoDeCampo,
+        filtro: "nenhum" as FiltroDeCampo,
+      },
+    ];
+    mudarEditorTabelaDireta({ ...editorTabelaDireta, campos });
+  };
+
+  const removerCampoTabelaDireta = (indice: number) => {
+    if (!editorTabelaDireta) return;
+    const campos = editorTabelaDireta.campos.filter((_, i) => i !== indice);
+    mudarEditorTabelaDireta({ ...editorTabelaDireta, campos });
+  };
+
   /**
    * Aplica um MODELO: ele só preenche a configuração da tela.
    *
-   * Trocar de modelo apaga o que estava preenchido — inclusive o TIPO DE
-   * POST, que o modelo traz o dele. Por isso a tela pergunta antes, e o tipo
-   * de post digitado conta como coisa preenchida.
+   * Trocar de modelo apaga o que estava preenchido. Por isso a tela pergunta
+   * antes, quando já há algo digitado.
    */
   const aplicarModelo = (id: string) => {
-    const modelo = modeloDe(id);
+    const ehTabelaDireta = rascunho?.receita === RECEITA_TABELA_DIRETA;
+    const modelo = ehTabelaDireta ? modeloDeTabelaDireta(id) : modeloDe(id);
     if (!modelo) return;
-    const postTypeAtual = String(
-      (rascunho?.fixos as { post_type?: string } | undefined)?.post_type ?? "",
-    );
-    if (temConteudo(editor, postTypeAtual) && confirmandoModelo !== id) {
+    const jaTemConteudo = ehTabelaDireta
+      ? temConteudoTabelaDireta(editorTabelaDireta)
+      : temConteudo(
+          editor,
+          String((rascunho?.fixos as { post_type?: string } | undefined)?.post_type ?? ""),
+        );
+    if (jaTemConteudo && confirmandoModelo !== id) {
       setConfirmandoModelo(id);
       return;
     }
     setConfirmandoModelo(null);
+    if (ehTabelaDireta) {
+      const campos = camposDoModeloTabelaDireta(modelo).map((c) => ({
+        ...c,
+        chaveManual: false,
+      }));
+      const novo: EditorTabelaDireta = {
+        tabela: modelo.tabela,
+        colunaId: modelo.colunaId,
+        colunaTitulo: modelo.colunaTitulo,
+        campos:
+          campos.length > 0
+            ? campos
+            : [
+                {
+                  chave: "",
+                  chaveManual: false,
+                  rotulo: "",
+                  coluna: "",
+                  tipo: "texto",
+                  filtro: "nenhum",
+                },
+              ],
+        soMostrarQuandoColuna: modelo.soMostrarQuando?.coluna ?? "",
+        soMostrarQuandoValor: modelo.soMostrarQuando?.valor ?? "",
+        esconderQuandoColuna: modelo.esconderQuando?.coluna ?? "",
+        esconderQuandoValores: (modelo.esconderQuando?.valores ?? []).join(", "),
+      };
+      mudarEditorTabelaDireta(novo);
+      return;
+    }
+    const postTypeAtual = String(
+      (rascunho?.fixos as { post_type?: string } | undefined)?.post_type ?? "",
+    );
     const campos = camposDoModelo(modelo).map((c) => ({ ...c, chaveManual: false }));
     const categorias = categoriasDoModelo(modelo).map((c) => ({ ...c, chaveManual: false }));
     const novo: EditorDoWordpress = {
@@ -548,8 +831,11 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
   /** Cria a instância da receita escolhida. */
   const escolherReceita = (receita: DefinicaoDeReceita) => {
     const ehWordpress = receita.id === RECEITA_WORDPRESS;
+    const ehTabelaDireta = receita.id === RECEITA_TABELA_DIRETA;
     const novoEditor = ehWordpress ? editorPadraoWordpress() : null;
+    const novoEditorTabelaDireta = ehTabelaDireta ? editorPadraoTabelaDireta() : null;
     setEditor(novoEditor);
+    setEditorTabelaDireta(novoEditorTabelaDireta);
     setEscolhendo(false);
     setConfirmandoModelo(null);
     setMostrandoChaves(false);
@@ -558,12 +844,11 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
       receita: receita.id,
       rotulo: receita.rotulo,
       descricao: "",
-      // A receita do WordPress precisa do prefixo, do tipo de post e do
-      // mapeamento de onde vem cada dado: sem os fixos certos, o SQL montado
-      // não acha as tabelas.
       fixos: ehWordpress
         ? fixosDoEditor(novoEditor!, PREFIXO_PADRAO, "")
-        : { prefixo: PREFIXO_PADRAO },
+        : ehTabelaDireta
+          ? fixosDoEditorTabelaDireta(novoEditorTabelaDireta!)
+          : { tabela: "" },
       ativa: true,
     };
     setRascunho(nova);
@@ -572,6 +857,9 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
   const editar = (inst: InstanciaDeReceita) => {
     if (!canWrite) return;
     setEditor(inst.receita === RECEITA_WORDPRESS ? editorDoWordpress(inst.fixos) : null);
+    setEditorTabelaDireta(
+      inst.receita === RECEITA_TABELA_DIRETA ? editorDoTabelaDireta(inst.fixos) : null,
+    );
     setEscolhendo(false);
     setConfirmandoModelo(null);
     setMostrandoChaves(false);
@@ -678,13 +966,16 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
           const receita = receitaDe(inst.receita);
           const editandoEsta = rascunho?.id === inst.id;
           const ehWordpress = receita?.id === RECEITA_WORDPRESS;
+          const ehTabelaDireta = receita?.id === RECEITA_TABELA_DIRETA;
           const cols =
             inst.fixos && typeof inst.fixos === "object" && "prefixo" in inst.fixos
               ? String((inst.fixos as { prefixo?: string }).prefixo ?? PREFIXO_PADRAO)
               : PREFIXO_PADRAO;
-          // Os fixos: o tipo de post e o mapeamento de meta_key por campo.
+          // Os fixos: o tipo de post e o mapeamento de meta_key por campo (WordPress)
+          // ou a tabela, coluna do id, coluna do título e mapeamento de coluna (tabela direta).
           const fixosInstancia = (inst.fixos as
             | { post_type?: string; campos?: CampoMapeado[]; categorias?: CategoriaMapeada[] }
+            | { tabela?: string; coluna_id?: string; coluna_titulo?: string; campos?: CampoMapeadoTabelaDireta[] }
             | undefined) ?? {};
           const postType = fixosInstancia.post_type ?? "";
           // O editor é a fonte da verdade dos campos em edição; quando ele não
@@ -693,6 +984,10 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
           // faria a pessoa salvar o mapeamento apagado sem querer.
           const editorDaInstancia =
             editandoEsta && ehWordpress ? (editor ?? editorDoWordpress(inst.fixos)) : null;
+          const editorDaInstanciaTabelaDireta =
+            editandoEsta && ehTabelaDireta
+              ? (editorTabelaDireta ?? editorDoTabelaDireta(inst.fixos))
+              : null;
 
           if (editandoEsta && canWrite) {
             return (
@@ -764,6 +1059,77 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                       />
                       <p className="text-xs text-muted-foreground">
                         {t("Qual tipo de post do WordPress (por exemplo, imovel, veiculo, produto).")}
+                      </p>
+                    </div>
+                  )}
+                  {ehTabelaDireta && (
+                    <div className="col-span-1 md:col-span-2">
+                      <Label htmlFor={idInputPrefixo} className="text-xs text-muted-foreground">
+                        {t("Tabela")}
+                      </Label>
+                      <Input
+                        id={`${idInputPrefixo}-tabela`}
+                        value={String((fixosInstancia as { tabela?: string }).tabela ?? "")}
+                        onChange={(e) => {
+                          const valor = e.target.value;
+                          if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
+                          const prox = {
+                            ...inst,
+                            fixos: { ...(inst.fixos as object), tabela: valor },
+                          };
+                          setRascunho(prox);
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {t("O nome da tabela no banco de origem (ex.: wp_jet_cct_imovel).")}
+                      </p>
+                    </div>
+                  )}
+                  {ehTabelaDireta && (
+                    <div className="col-span-1 md:col-span-1">
+                      <Label htmlFor={idInputPostType} className="text-xs text-muted-foreground">
+                        {t("Coluna do id")}
+                      </Label>
+                      <Input
+                        id={`${idInputPostType}-coluna-id`}
+                        value={String((fixosInstancia as { coluna_id?: string }).coluna_id ?? "")}
+                        onChange={(e) => {
+                          const valor = e.target.value;
+                          if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
+                          const prox = {
+                            ...inst,
+                            fixos: { ...(inst.fixos as object), coluna_id: valor },
+                          };
+                          setRascunho(prox);
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {t("A coluna que vira o id de cada item na saída.")}
+                      </p>
+                    </div>
+                  )}
+                  {ehTabelaDireta && (
+                    <div className="col-span-1 md:col-span-1">
+                      <Label htmlFor={idInputDescricao} className="text-xs text-muted-foreground">
+                        {t("Coluna do título")}
+                      </Label>
+                      <Input
+                        id={`${idInputDescricao}-coluna-titulo`}
+                        value={String(
+                          (fixosInstancia as { coluna_titulo?: string }).coluna_titulo ?? "",
+                        )}
+                        onChange={(e) => {
+                          const valor = e.target.value;
+                          if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
+                          const prox = {
+                            ...inst,
+                            fixos: { ...(inst.fixos as object), coluna_titulo: valor },
+                          };
+                          setRascunho(prox);
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {t("A coluna que vira o título de cada item na saída.")}
                       </p>
                     </div>
                   )}
@@ -1123,6 +1489,366 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                     </div>
                   </div>
                 )}
+                {ehTabelaDireta && editorDaInstanciaTabelaDireta && (
+                  <div className="mt-2 space-y-4 border-t pt-3">
+                    {/* ── Modelos ─────────────────────────────────────────────── */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        {t("Começar de um modelo")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {t("O modelo só preenche esta tela com uma configuração que serve ao seu site.")}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {MODELOS_TABELA_DIRETA.map((modelo) => (
+                          <Button
+                            key={modelo.id}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => aplicarModelo(modelo.id)}
+                          >
+                            {t(modelo.rotulo)}
+                          </Button>
+                        ))}
+                      </div>
+                      {confirmandoModelo && (
+                        <div className="mt-2 rounded-md border p-2">
+                          <p className="text-xs text-muted-foreground mb-1">
+                            {t("Trocar de modelo apaga o que você preencheu. Quer continuar?")}
+                          </p>
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={() => aplicarModelo(confirmandoModelo)}>
+                              {t("Sim")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setConfirmandoModelo(null)}
+                            >
+                              {t("Não")}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Tabela e colunas ────────────────────────────────────── */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        {t("Tabela e colunas")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {t("A tabela do banco de origem e as colunas que viram id e título.")}
+                      </p>
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 items-end">
+                          <div>
+                            <Label
+                              htmlFor={`${idInputPrefixo}-tabela-ed`}
+                              className="text-xs text-muted-foreground"
+                            >
+                              {t("Tabela")}
+                            </Label>
+                            <Input
+                              id={`${idInputPrefixo}-tabela-ed`}
+                              value={editorDaInstanciaTabelaDireta.tabela}
+                              onChange={(e) => {
+                                const valor = e.target.value;
+                                if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
+                                mudarEditorTabelaDireta({
+                                  ...editorDaInstanciaTabelaDireta,
+                                  tabela: valor,
+                                });
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label
+                              htmlFor={`${idInputPostType}-coluna-id-ed`}
+                              className="text-xs text-muted-foreground"
+                            >
+                              {t("Coluna do id")}
+                            </Label>
+                            <Input
+                              id={`${idInputPostType}-coluna-id-ed`}
+                              value={editorDaInstanciaTabelaDireta.colunaId}
+                              onChange={(e) => {
+                                const valor = e.target.value;
+                                if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
+                                mudarEditorTabelaDireta({
+                                  ...editorDaInstanciaTabelaDireta,
+                                  colunaId: valor,
+                                });
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label
+                              htmlFor={`${idInputDescricao}-coluna-titulo-ed`}
+                              className="text-xs text-muted-foreground"
+                            >
+                              {t("Coluna do título")}
+                            </Label>
+                            <Input
+                              id={`${idInputDescricao}-coluna-titulo-ed`}
+                              value={editorDaInstanciaTabelaDireta.colunaTitulo}
+                              onChange={(e) => {
+                                const valor = e.target.value;
+                                if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
+                                mudarEditorTabelaDireta({
+                                  ...editorDaInstanciaTabelaDireta,
+                                  colunaTitulo: valor,
+                                });
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── Campos ──────────────────────────────────────────────── */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        {t("Campos da tabela")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {t("Cada coluna mapeada como um dado na saída, com tipo e filtro.")}
+                      </p>
+                      <div className="space-y-2">
+                        {editorDaInstanciaTabelaDireta.campos.map((campo, i) => {
+                          const idRotulo = `${idInputWordpress}-td-campo-${i}-rotulo`;
+                          const idColuna = `${idInputWordpress}-td-campo-${i}-coluna`;
+                          const idTipo = `${idInputWordpress}-td-campo-${i}-tipo`;
+                          const idFiltro = `${idInputWordpress}-td-campo-${i}-filtro`;
+                          const idChave = `${idInputWordpress}-td-campo-${i}-chave`;
+                          return (
+                            <div
+                              key={`td-campo-${i}`}
+                              role="group"
+                              aria-label={campo.rotulo || t("Campo")}
+                              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end"
+                            >
+                              <div>
+                                <Label htmlFor={idRotulo} className="text-xs text-muted-foreground">
+                                  {t("Rótulo")}
+                                </Label>
+                                <Input
+                                  id={idRotulo}
+                                  maxLength={40}
+                                  value={campo.rotulo}
+                                  onChange={(e) =>
+                                    mudarCampoTabelaDireta(i, { rotulo: e.target.value })
+                                  }
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor={idColuna} className="text-xs text-muted-foreground">
+                                  {t("Coluna na tabela")}
+                                </Label>
+                                <Input
+                                  id={idColuna}
+                                  value={campo.coluna}
+                                  onChange={(e) => {
+                                    const valor = e.target.value;
+                                    if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
+                                    mudarCampoTabelaDireta(i, { coluna: valor });
+                                  }}
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor={idTipo} className="text-xs text-muted-foreground">
+                                  {t("Tipo")}
+                                </Label>
+                                <select
+                                  id={idTipo}
+                                  value={campo.tipo}
+                                  onChange={(e) =>
+                                    mudarCampoTabelaDireta(i, {
+                                      tipo: e.target.value as TipoDeCampo,
+                                    })
+                                  }
+                                  className="mt-1 block w-full rounded-md border bg-background p-2 text-sm"
+                                >
+                                  <option value="texto">{t("Texto")}</option>
+                                  <option value="numero">{t("Número")}</option>
+                                  <option value="preco">{t("Preço")}</option>
+                                </select>
+                              </div>
+                              <div>
+                                <Label htmlFor={idFiltro} className="text-xs text-muted-foreground">
+                                  {t("Filtro")}
+                                </Label>
+                                <select
+                                  id={idFiltro}
+                                  value={campo.filtro}
+                                  onChange={(e) =>
+                                    mudarCampoTabelaDireta(i, {
+                                      filtro: e.target.value as FiltroDeCampo,
+                                    })
+                                  }
+                                  className="mt-1 block w-full rounded-md border bg-background p-2 text-sm"
+                                >
+                                  <option value="nenhum">{t("Nenhum")}</option>
+                                  {campo.tipo === "texto" && (
+                                    <option value="contem">{t("Contém")}</option>
+                                  )}
+                                  {campo.tipo !== "texto" && (
+                                    <>
+                                      <option value="minimo">{t("Mínimo")}</option>
+                                      <option value="maximo">{t("Máximo")}</option>
+                                    </>
+                                  )}
+                                </select>
+                              </div>
+                              {mostrandoChaves && (
+                                <div>
+                                  <Label htmlFor={idChave} className="text-xs text-muted-foreground">
+                                    {t("Chave")}
+                                  </Label>
+                                  <Input
+                                    id={idChave}
+                                    value={campo.chave}
+                                    onChange={(e) => {
+                                      const valor = e.target.value;
+                                      if (valor !== "" && !CHAVE_TABELA_DIRETA_REGEX.test(valor))
+                                        return;
+                                      mudarCampoTabelaDireta(i, {
+                                        chave: valor,
+                                        chaveManual: true,
+                                      });
+                                    }}
+                                  />
+                                </div>
+                              )}
+                              <div>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => removerCampoTabelaDireta(i)}
+                                  aria-label={t("Remover campo")}
+                                >
+                                  {t("Remover")}
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={adicionarCampoTabelaDireta}>
+                          {t("Adicionar campo")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setMostrandoChaves((v) => !v)}
+                        >
+                          {mostrandoChaves ? t("Esconder as chaves") : t("Chaves (avançado)")}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* ── Só mostrar quando ───────────────────────────────────── */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        {t("Só mostrar quando")}
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <Label
+                            htmlFor={`${idInputPrefixo}-td-somostrar-coluna`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            {t("Coluna")}
+                          </Label>
+                          <Input
+                            id={`${idInputPrefixo}-td-somostrar-coluna`}
+                            value={editorDaInstanciaTabelaDireta.soMostrarQuandoColuna}
+                            onChange={(e) => {
+                              const valor = e.target.value;
+                              if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
+                              mudarEditorTabelaDireta({
+                                ...editorDaInstanciaTabelaDireta,
+                                soMostrarQuandoColuna: valor,
+                              });
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label
+                            htmlFor={`${idInputPrefixo}-td-somostrar-valor`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            {t("Valor")}
+                          </Label>
+                          <Input
+                            id={`${idInputPrefixo}-td-somostrar-valor`}
+                            value={editorDaInstanciaTabelaDireta.soMostrarQuandoValor}
+                            onChange={(e) => {
+                              mudarEditorTabelaDireta({
+                                ...editorDaInstanciaTabelaDireta,
+                                soMostrarQuandoValor: e.target.value,
+                              });
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {t("Só exibe itens onde esta coluna é igual a este valor (ex.: cct_status = publish).")}
+                      </p>
+                    </div>
+
+                    {/* ── Esconder quando ─────────────────────────────────────── */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        {t("Esconder quando")}
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <Label
+                            htmlFor={`${idInputPrefixo}-td-esconder-coluna`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            {t("Coluna")}
+                          </Label>
+                          <Input
+                            id={`${idInputPrefixo}-td-esconder-coluna`}
+                            value={editorDaInstanciaTabelaDireta.esconderQuandoColuna}
+                            onChange={(e) => {
+                              const valor = e.target.value;
+                              if (valor !== "" && !TABELA_DIRETA_REGEX.test(valor)) return;
+                              mudarEditorTabelaDireta({
+                                ...editorDaInstanciaTabelaDireta,
+                                esconderQuandoColuna: valor,
+                              });
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label
+                            htmlFor={`${idInputPrefixo}-td-esconder-valores`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            {t("Valores a esconder")}
+                          </Label>
+                          <Input
+                            id={`${idInputPrefixo}-td-esconder-valores`}
+                            value={editorDaInstanciaTabelaDireta.esconderQuandoValores}
+                            onChange={(e) => {
+                              mudarEditorTabelaDireta({
+                                ...editorDaInstanciaTabelaDireta,
+                                esconderQuandoValores: e.target.value,
+                              });
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {t("Itens com um desses valores na coluna não aparecem para o cliente.")}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-2 mt-2">
                   <Button size="sm" onClick={salvar}>
                     {t("Salvar")}
@@ -1130,6 +1856,7 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                   <Button size="sm" variant="outline" onClick={() => {
                     setRascunho(null);
                     setEditor(null);
+                    setEditorTabelaDireta(null);
                     setConfirmandoModelo(null);
                   }}>
                     {t("Cancelar")}
@@ -1219,6 +1946,29 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                       {t("Categorias:")}{" "}
                       <span className="font-mono">
                         {(fixosInstancia.categorias ?? []).map((c) => c.rotulo).join(", ")}
+                      </span>
+                    </p>
+                  )}
+                  {ehTabelaDireta && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("Tabela:")} <span className="font-mono">{String((fixosInstancia as { tabela?: string }).tabela ?? "")}</span>
+                    </p>
+                  )}
+                  {ehTabelaDireta && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("Coluna do id:")} <span className="font-mono">{String((fixosInstancia as { coluna_id?: string }).coluna_id ?? "")}</span>
+                    </p>
+                  )}
+                  {ehTabelaDireta && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("Coluna do título:")} <span className="font-mono">{String((fixosInstancia as { coluna_titulo?: string }).coluna_titulo ?? "")}</span>
+                    </p>
+                  )}
+                  {ehTabelaDireta && (fixosInstancia as { campos?: CampoMapeadoTabelaDireta[] }).campos?.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("Campos:")}{" "}
+                      <span className="font-mono">
+                        {(fixosInstancia as { campos?: CampoMapeadoTabelaDireta[] }).campos!.map((c) => c.rotulo).join(", ")}
                       </span>
                     </p>
                   )}

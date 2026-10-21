@@ -14707,6 +14707,52 @@ export const DICIONARIO: Traducoes = {
   "Um dos rótulos não virou uma chave. Escreva o rótulo com letras ou números.": {
     es: "Una de las etiquetas no se convirtió en una clave. Escribe la etiqueta con letras o números.",
   },
+  // ─── Tabela direta ───
+  "Escreva o nome da tabela.": { es: "Escribe el nombre de la tabla." },
+  "Escreva a coluna do id.": { es: "Escribe la columna del id." },
+  "Escreva a coluna do título.": { es: "Escribe la columna del título." },
+  "Mapeie pelo menos um dado da tabela.": { es: "Asigna al menos un dato de la tabla." },
+  "Preencha o rótulo e a coluna de todos os dados.": {
+    es: "Llena la etiqueta y la columna de todos los datos.",
+  },
+  "Tabela e colunas": { es: "Tabla y columnas" },
+  "A tabela do banco de origem e as colunas que viram id e título.": {
+    es: "La tabla de la base de origen y las columnas que se convierten en id y título.",
+  },
+  "Campos da tabela": { es: "Campos de la tabla" },
+  "Cada coluna mapeada como um dado na saída, com tipo e filtro.": {
+    es: "Cada columna mapeada como un dato en la salida, con tipo y filtro.",
+  },
+  "Só mostrar quando": { es: "Mostrar solo cuando" },
+  "Só exibe itens onde esta coluna é igual a este valor (ex.: cct_status = publish).": {
+    es: "Solo muestra los ítems donde esta columna es igual a este valor (ej.: cct_status = publish).",
+  },
+  "Esconder quando": { es: "Ocultar cuando" },
+  "Itens com um desses valores na coluna não aparecem para o cliente.": {
+    es: "Los ítems con alguno de estos valores en la columna no aparecen para el cliente.",
+  },
+  "O nome da tabela no banco de origem (ex.: wp_jet_cct_imovel).": {
+    es: "El nombre de la tabla en la base de origen (ej.: wp_jet_cct_imovel).",
+  },
+  "A coluna que vira o id de cada item na saída.": {
+    es: "La columna que se convierte en el id de cada ítem en la salida.",
+  },
+  "A coluna que vira o título de cada item na saída.": {
+    es: "La columna que se convierte en el título de cada ítem en la salida.",
+  },
+  "JetEngine — tipo de conteúdo próprio (CCT)": {
+    es: "JetEngine — tipo de contenido propio (CCT)",
+  },
+  "Tabela plana wp_jet_cct_<slug>: id (_ID), título (titulo), só publicados (cct_status = publish) e campos de imóveis.": {
+    es: "Tabla plana wp_jet_cct_<slug>: id (_ID), título (titulo), solo publicados (cct_status = publish) y campos de inmuebles.",
+  },
+  "Comece do zero: escreva a tabela, as colunas e mapeie os dados que o site guarda.": {
+    es: "Empieza desde cero: escribe la tabla, las columnas y asigna los datos que el sitio guarda.",
+  },
+  "Tabela": { es: "Tabla" },
+  "Coluna do id": { es: "Columna del id" },
+  "Coluna do título": { es: "Columna del título" },
+  "Coluna na tabela": { es: "Columna en la tabla" },
   // ─── O rótulo do caminho que falhou no 422 das receitas ───
   "Categoria do bairro": { es: "Categoría del barrio" },
   "Categoria da cidade": { es: "Categoría de la ciudad" },
