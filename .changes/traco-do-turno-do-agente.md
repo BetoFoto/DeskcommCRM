@@ -13,3 +13,5 @@ falha ou é devolvido à fila sem enviar. O Teste do agente deixa a mesma linha,
 marcada como prévia, para nunca ser confundida com um turno que falou com alguém
 de verdade. É o que faltava para explicar, olhando o histórico, por que o agente
 respondeu daquele jeito.
+
+Contribuição de @webtecnica (#3169).
