@@ -853,11 +853,13 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
       receita: receita.id,
       rotulo: receita.rotulo,
       descricao: "",
+      // WooCommerce é banco do WordPress também: sem o prefixo, o SQL dela
+      // não acha <prefixo>posts e <prefixo>postmeta.
       fixos: ehWordpress
         ? fixosDoEditor(novoEditor!, PREFIXO_PADRAO, "")
         : ehTabelaDireta
           ? fixosDoEditorTabelaDireta(novoEditorTabelaDireta!)
-          : { tabela: "" },
+          : { prefixo: PREFIXO_PADRAO },
       ativa: true,
     };
     setRascunho(nova);
