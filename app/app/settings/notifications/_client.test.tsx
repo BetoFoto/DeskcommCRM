@@ -56,7 +56,20 @@ const pushClient = vi.hoisted(() => ({
   encerrarPushDesteAparelho: vi.fn(async () => {}),
   syncPushSubscription: vi.fn(async () => ({ situacao: "ativo", motivo: "" })),
 }));
-vi.mock("@/lib/notifications/push_client", () => pushClient);
+/**
+ * ⚠️ `importOriginal`, E NÃO UM OBJETO SÓ COM OS DOIS DUBLÊS.
+ *
+ * `_client.tsx` chama `pushNaoEntrega` (a tabela causa × interruptor) e
+ * `ehMotivoDoAparelho`, além do `syncPushSubscription`. Um dublê que só traz os
+ * dois de sempre deixa as outras DUAS `undefined`, a tela lança ao clicar e o
+ * teste morre com "expected null not to be null" — que parece defeito do
+ * componente e não é. Aqui só a ida à rede é dublada; a decisão é a de produção,
+ * que é justamente o que este arquivo mede.
+ */
+vi.mock("@/lib/notifications/push_client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/notifications/push_client")>()),
+  ...pushClient,
+}));
 
 const CHAVE = "notify.prefs.v1";
 
@@ -228,6 +241,96 @@ describe("o interruptor de Push de mensagem liga e desliga a inscrição do apar
     expect(container.textContent).not.toContain("O servidor recusou");
     expect(container.innerHTML).toContain('data-testid="alerts-enable"');
     expect(container.innerHTML).not.toContain('data-testid="alerts-toggle"');
+  });
+
+  /**
+   * ISSUE #3164 — OS CAMINHOS QUE NÃO INSCREVEM NADA E NÃO ERAM TRATADOS.
+   *
+   * O navegador que não registra o service worker e a instalação sem o par VAPID
+   * devolvem `ignorado`; a tela só olhava `recusado`/`sem_rede`, então o
+   * interruptor ficava LIGADO e nenhum aviso chegava, sem uma palavra. Cada
+   * causa tem a sua frase — a pessoa precisa saber de quem é o problema.
+   */
+  it("navegador sem service worker (`ignorado`): frase própria e o interruptor volta a desligar", async () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
+    pushClient.syncPushSubscription.mockResolvedValueOnce({
+      situacao: "ignorado",
+      motivo: "sem_service_worker",
+    });
+    const container = montar();
+
+    await clicar(container, "Nova mensagem via push");
+
+    const aviso = container.querySelector('[data-testid="push-recusado"]');
+    expect(aviso, "o interruptor ficou ligado em silêncio — o defeito da #3164").not.toBeNull();
+    expect(aviso?.getAttribute("data-motivo")).toBe("sem_service_worker");
+    expect(container.textContent).toContain(
+      "Este navegador não registrou o service worker dos avisos, então este aparelho não recebe Push",
+    );
+    expect(container.innerHTML).toContain('data-testid="alerts-enable"');
+    expect(container.innerHTML).not.toContain('data-testid="alerts-toggle"');
+  });
+
+  it("instalação sem o par VAPID (`ignorado`): frase própria e o interruptor volta a desligar", async () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
+    pushClient.syncPushSubscription.mockResolvedValueOnce({ situacao: "ignorado", motivo: "sem_vapid" });
+    const container = montar();
+
+    await clicar(container, "Nova mensagem via push");
+
+    const aviso = container.querySelector('[data-testid="push-recusado"]');
+    expect(aviso, "o interruptor ficou ligado em silêncio — o defeito da #3164").not.toBeNull();
+    expect(aviso?.getAttribute("data-motivo")).toBe("sem_vapid");
+    expect(container.textContent).toContain("Esta instalação não tem o par de chaves do Push (VAPID)");
+    // A frase NÃO pode dizer que o servidor recusou: não houve recusa nenhuma.
+    expect(container.textContent).not.toContain("O servidor recusou a inscrição");
+    expect(container.innerHTML).toContain('data-testid="alerts-enable"');
+    expect(container.innerHTML).not.toContain('data-testid="alerts-toggle"');
+  });
+
+  /**
+   * ESTA É A PROPRIEDADE QUE IMPEDE O CONSERTO PREGUIÇOSO: um texto só para as
+   * quatro causas. Duas causas com a mesma frase significam que uma delas está
+   * dizendo a causa errada — e é o defeito de novo, com outra roupa.
+   */
+  it("as quatro causas de aparelho: uma frase DIFERENTE para cada, e todas desligando o interruptor", async () => {
+    const motivos = ["sem_service_worker", "sem_vapid", "inscricao_incompleta", "navegador_recusou"] as const;
+    const frases = new Map<string, string>();
+
+    for (const motivo of motivos) {
+      window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
+      pushClient.syncPushSubscription.mockResolvedValueOnce({ situacao: "ignorado", motivo });
+      const container = montar();
+
+      await clicar(container, "Nova mensagem via push");
+
+      const aviso = container.querySelector('[data-testid="push-recusado"]');
+      expect(aviso?.getAttribute("data-motivo"), motivo).toBe(motivo);
+      expect(container.innerHTML, motivo).toContain('data-testid="alerts-enable"');
+      frases.set(motivo, aviso?.textContent ?? "");
+    }
+
+    expect(frases.size).toBe(motivos.length);
+    expect(new Set(frases.values()).size, "duas causas mostram a MESMA frase").toBe(motivos.length);
+    for (const [motivo, frase] of frases) expect(frase.length, motivo).toBeGreaterThan(40);
+  });
+
+  // CONTROLE: `ignorado` que é só preferência da pessoa NÃO desliga o
+  // interruptor. Ali ele diz uma escolha dela; desfazê-la sozinho seria tirar a
+  // escolha da mão de quem clicou — e o remédio seria pior que a doença.
+  it("`ignorado` que é só preferência da pessoa: NÃO desliga o interruptor nem avisa (controle)", async () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
+    pushClient.syncPushSubscription.mockResolvedValueOnce({
+      situacao: "ignorado",
+      motivo: "preferencia_do_usuario",
+    });
+    const container = montar();
+
+    await clicar(container, "Nova mensagem via push");
+
+    expect(container.querySelector('[data-testid="push-recusado"]')).toBeNull();
+    expect(container.innerHTML).toContain('data-testid="alerts-toggle"');
+    expect(container.innerHTML).not.toContain('data-testid="alerts-enable"');
   });
 
   // CONTROLE: aceita (ativo), o interruptor segue ligado e nada é dito.
