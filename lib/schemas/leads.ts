@@ -181,7 +181,7 @@ export type LoseLeadInput = z.infer<typeof loseLeadSchema>;
 
 /**
  * createLeadSchema → POST /api/v1/leads
- * Status, source_metadata, custom_fields, position_in_stage are server-managed.
+ * Status, source_metadata, position_in_stage are server-managed.
  */
 export const createLeadSchema = z.object({
   pipeline_id: z.string().uuid(),
