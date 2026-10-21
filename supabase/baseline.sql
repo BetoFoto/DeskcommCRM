@@ -60814,7 +60814,7 @@ create table if not exists public.importacoes_de_historico (
   midias_baixadas int not null default 0,
   midias_indisponiveis int not null default 0,
   erro text,
-  criada_por uuid,
+  criada_por uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
