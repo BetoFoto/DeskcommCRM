@@ -55,6 +55,8 @@ export interface AtribuicaoDeAnuncio {
   titulo: string | null;
   corpo: string | null;
   sourceUrl: string | null;
+  /** Payload de onde isto foi extraído — nunca descartado, é a prova. */
+  bruto: Record<string, unknown>;
   /**
    * A identidade do NAVEGADOR, presente quando o clique foi capturado na
    * PÁGINA (formulário) e não no `referral` de uma conversa (#2317).
@@ -69,8 +71,6 @@ export interface AtribuicaoDeAnuncio {
     fbc: string | null;
     fbp: string | null;
   };
-  /** Payload de onde isto foi extraído — nunca descartado, é a prova. */
-  bruto: Record<string, unknown>;
 }
 
 export type Bruto = Record<string, unknown>;
