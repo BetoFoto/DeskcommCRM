@@ -1,6 +1,6 @@
 -- manifest: **A mensagem do histórico importado não dispara gatilho (#999).** O importador de histórico do WhatsApp grava em `messages` conversas antigas marcadas com `metadata.historico_importado = 'true'` (contrato já escrito na 0686). Sem corte, cada linha atravessava os TRÊS gatilhos de INSERT que tratam toda linha como mensagem recebida: `trg_messages_emit_event` emitia `message.received`/`message.sent` (que acorda a IA, a push, o webhook de saída, a campanha e o follow-up — a IA responderia gente que falou meses atrás), `trg_demanda_abre_no_inbound` chamava `fn_service_inbound` (reabre a conversa encerrada, abre demanda/SLA, carimba `service_revision`) e `trg_reply_inbound_revision` somava +1 na revisão de contexto. A cura é o corte `coalesce(new.metadata->>'historico_importado','') = 'true'` no topo das três funções, no mesmo molde do corte da reação (0684): a linha continua gravada, só não conta como fala. E a RPC nova `fn_upsert_wa_conversation_importada(p_org, p_contact, p_session, p_last_message_at)` devolve a conversa 1:1 existente (mesma chave da `fn_upsert_wa_conversation`) sem tocar nela, ou cria uma `closed`, sem dono, com `last_message_at` da última mensagem que o canal tem (a inbox ordena por ela) — `trg_conversation_routing_requested` só dispara para `open`/`pending` sem dono, então a conversa importada não entra na fila. `create or replace` e função nova; sem tabela/coluna/policy/dado novo; apêndice idempotente no `baseline.sql` antes da VARREDURA anon.
 
--- ---- o histórico importado não é mensagem recebida (migration 0704, #999) ----
+-- ---- o histórico importado não é mensagem recebida (migration 0723, #999) ----
 --
 -- ─── O defeito ──────────────────────────────────────────────────────────────
 --
@@ -77,7 +77,7 @@ begin
   if new.type = 'reaction' then
     return new;
   end if;
-  -- O HISTÓRICO IMPORTADO É PASSADO, NÃO ATENDIMENTO (0704, #999). Sem este
+  -- O HISTÓRICO IMPORTADO É PASSADO, NÃO ATENDIMENTO (0723, #999). Sem este
   -- corte, cada mensagem trazida do celular reabria a conversa e abria demanda
   -- com SLA. Mesma chave e mesmo texto da 0686.
   if coalesce(new.metadata->>'historico_importado','') = 'true' then
@@ -101,7 +101,7 @@ begin
   if new.type = 'reaction' then
     return new;
   end if;
-  -- O histórico importado não vira evento, em NENHUMA direção (0704, #999):
+  -- O histórico importado não vira evento, em NENHUMA direção (0723, #999):
   -- `message.received` acordaria a IA para responder quem falou há meses, e
   -- `message.sent`/`message.outbound` alimentaria webhook e métrica com o
   -- passado. Mesma chave e mesmo texto da 0686.
@@ -145,7 +145,7 @@ begin
   -- A revisão de contexto é "o cliente falou de novo" — e a reação não é fala.
   -- Sem o corte, um 👍 somava +1 e invalidava o rascunho de resposta da tela à
   -- toa, além de contar junto com a reabertura (que este bloco também acabou de
-  -- desligar). O histórico importado tampouco é fala de agora (0704, #999).
+  -- desligar). O histórico importado tampouco é fala de agora (0723, #999).
   if new.direction='inbound' and new.type <> 'reaction'
      and coalesce(new.metadata->>'historico_importado','') <> 'true' then
     update public.conversations set reply_context_revision=reply_context_revision+1 where organization_id=new.organization_id and id=new.conversation_id and contact_id=new.contact_id;

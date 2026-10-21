@@ -7,7 +7,7 @@
  * da conversa (`last_message_*`, não lidas), nem `emit_event`. A única data que
  * a conversa recebe é a de nascimento: a conversa CRIADA pela importação nasce
  * com `last_message_at` da lista do canal (ver `garantirContatoEConversa`). O que os
- * gatilhos de `messages` fariam, a 0704 corta pela chave
+ * gatilhos de `messages` fariam, a 0723 corta pela chave
  * `metadata.historico_importado = 'true'` que o mapeador põe em toda linha.
  * Mídia (só imagem e áudio): logo depois de gravar cada página, `resolverMidias`
  * pede ao canal a URL; com URL, grava `media_url` e emite `media.persist_requested`
@@ -184,7 +184,7 @@ export async function rodarUmaRodada(
    * Grava SÓ se a importação ainda está `rodando`: um cancelamento feito
    * durante a rodada não vira `concluida`. NÃO serializa duas execuções
    * simultâneas da mesma importação (as duas veem `rodando`); isso é de quem
-   * dispara a rodada. O índice único parcial da 0705 só impede duas
+   * dispara a rodada. O índice único parcial da 0724 só impede duas
    * importações `rodando` no mesmo número.
    * Devolve `null` quando gravou, ou o status que a linha tem quando não gravou.
    */

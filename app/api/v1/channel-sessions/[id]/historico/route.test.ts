@@ -19,7 +19,7 @@ vi.mock("@/lib/channels/historico/previa", () => ({ lerSessaoDoHistorico: vi.fn(
 /**
  * A importação do histórico (#999), pela porta das rotas: a rota só cria e
  * muda o ESTADO da linha; quem anda o acervo é o cron. A tabela é uma lista em
- * memória que imita o índice único parcial da 0705 (uma `rodando` por número).
+ * memória que imita o índice único parcial da 0724 (uma `rodando` por número).
  */
 const org = "11111111-1111-4111-8111-111111111111";
 const outraOrg = "33333333-3333-4333-8333-333333333333";

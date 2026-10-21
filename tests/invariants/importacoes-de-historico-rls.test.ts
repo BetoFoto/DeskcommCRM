@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { countAs, sql } from "./gov-helpers";
 
 /**
- * `importacoes_de_historico` (0705, #999): membro da organização lê a própria;
+ * `importacoes_de_historico` (0724, #999): membro da organização lê a própria;
  * membro de OUTRA organização não lê; ninguém além do `service_role` escreve; e
  * só uma importação `rodando` por número.
  */
@@ -61,7 +61,7 @@ describe("importacoes_de_historico: RLS e unicidade", () => {
     ).toContain("3");
   });
 
-  it("os quatro períodos da tela são aceitos, 180 inclusive (0706)", () => {
+  it("os quatro períodos da tela são aceitos, 180 inclusive (0725)", () => {
     expect(
       sql(`begin;
         insert into importacoes_de_historico (organization_id, channel_session_id, status, dias)

@@ -20,7 +20,7 @@ import { GOV_ORG, GOV_SESSION, seedGov } from "./gov-helpers";
  *     falou há meses;
  *   * `trg_reply_inbound_revision` → +1 na revisão de contexto.
  *
- * A cura (migration 0704) é o mesmo corte da reação (0684): a linha continua
+ * A cura (migration 0723) é o mesmo corte da reação (0684): a linha continua
  * gravada, só não conta como fala. E a conversa que o importador cria nasce
  * `closed`, sem dono, pela `fn_upsert_wa_conversation_importada` — sem
  * `conversation.routing_requested`.

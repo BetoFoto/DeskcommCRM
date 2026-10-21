@@ -56349,7 +56349,7 @@ revoke all on function public.fn_reply_inbound_revision() from public,anon,authe
 
 notify pgrst, 'reload schema';
 
--- ---- o histórico importado não é mensagem recebida (migration 0704, #999) ----
+-- ---- o histórico importado não é mensagem recebida (migration 0723, #999) ----
 --
 -- ─── O defeito ──────────────────────────────────────────────────────────────
 --
@@ -56423,7 +56423,7 @@ begin
   if new.type = 'reaction' then
     return new;
   end if;
-  -- O HISTÓRICO IMPORTADO É PASSADO, NÃO ATENDIMENTO (0704, #999). Sem este
+  -- O HISTÓRICO IMPORTADO É PASSADO, NÃO ATENDIMENTO (0723, #999). Sem este
   -- corte, cada mensagem trazida do celular reabria a conversa e abria demanda
   -- com SLA. Mesma chave e mesmo texto da 0686.
   if coalesce(new.metadata->>'historico_importado','') = 'true' then
@@ -56447,7 +56447,7 @@ begin
   if new.type = 'reaction' then
     return new;
   end if;
-  -- O histórico importado não vira evento, em NENHUMA direção (0704, #999):
+  -- O histórico importado não vira evento, em NENHUMA direção (0723, #999):
   -- `message.received` acordaria a IA para responder quem falou há meses, e
   -- `message.sent`/`message.outbound` alimentaria webhook e métrica com o
   -- passado. Mesma chave e mesmo texto da 0686.
@@ -56491,7 +56491,7 @@ begin
   -- A revisão de contexto é "o cliente falou de novo" — e a reação não é fala.
   -- Sem o corte, um 👍 somava +1 e invalidava o rascunho de resposta da tela à
   -- toa, além de contar junto com a reabertura (que este bloco também acabou de
-  -- desligar). O histórico importado tampouco é fala de agora (0704, #999).
+  -- desligar). O histórico importado tampouco é fala de agora (0723, #999).
   if new.direction='inbound' and new.type <> 'reaction'
      and coalesce(new.metadata->>'historico_importado','') <> 'true' then
     update public.conversations set reply_context_revision=reply_context_revision+1 where organization_id=new.organization_id and id=new.conversation_id and contact_id=new.contact_id;
@@ -60770,7 +60770,7 @@ create view public.external_db_connections_safe
 revoke all on public.external_db_connections_safe from anon;
 grant select on public.external_db_connections_safe to authenticated;
 
--- ---- estado da importação do histórico do WhatsApp (migration 0705, #999) ----
+-- ---- estado da importação do histórico do WhatsApp (migration 0724, #999) ----
 --
 -- A importação traz do celular as conversas anteriores à conexão do número, em
 -- RODADAS curtas que retomam de onde pararam (`lib/channels/historico/rodada.ts`).
@@ -60835,11 +60835,11 @@ grant all on public.importacoes_de_historico to service_role;
 
 notify pgrst, 'reload schema';
 
--- ---- período de 180 dias na importação do histórico (migration 0706, #999) ----
+-- ---- período de 180 dias na importação do histórico (migration 0725, #999) ----
 --
--- A 0705 já está aplicada onde a importação rodou (prova de 21/10), e o
+-- A 0724 já está aplicada onde a importação rodou (prova de 21/10), e o
 -- `create table if not exists` dela não refaz o CHECK: daí uma migration nova
--- em vez de editar a 0705. Tela, rota e banco mudam no MESMO commit, ou a
+-- em vez de editar a 0724. Tela, rota e banco mudam no MESMO commit, ou a
 -- prévia de 180 dias falha com 23514 no insert.
 
 alter table public.importacoes_de_historico
