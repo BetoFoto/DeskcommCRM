@@ -44,6 +44,8 @@ import { deriveTemplateContract } from '@/lib/channels/meta/template-contract';
 import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { classifyPromise } from '../guardrails/promise/semantic';
 import { scheduleCronJob } from '../cron/scheduler';
+import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
+import { loadChannelKnobs } from '../pacing/store';
 import {
   JobSettledError,
   ritualBlocks,
@@ -67,6 +69,8 @@ import {
   type PropostaDeEsperaBruta,
 } from './followup-flow-classify';
 import { consultarJevNoFollowup } from '@/lib/ai/decisao/followup';
+import { enviarComSaidaConfiguravel } from "@/lib/prospecting/saida-configuravel";
+
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -759,6 +763,35 @@ async function runFlowDrivenTurn(
       }
       return;
     }
+    // #3103 — A JANELA ANTI-BAN DO CANAL, ANTES DO TURNO DA IA. `runAgentTurn`
+    // também adia fora da janela, mas só reagenda o job e lança
+    // `JobSettledError`: o enrollment não fica sabendo, o motor lê a espera
+    // como worker morto e o dead-man (~11h) mata a inscrição com
+    // `action_turn_never_completed` antes da abertura. Medido em produção:
+    // passo de IA enfileirado 21h com janela 9h–18h morria às 8h30. O adiamento
+    // volta para o enrollment como o do texto fixo acima e o da janela própria.
+    const aberturaAntiBan = await aberturaDaJanelaDeDisparo(pool, target, clock(), runLog);
+    if (aberturaAntiBan !== null) {
+      await rescheduleReentry(pool, {
+        tenantId: target.tenantId,
+        leadId: target.leadId,
+        jobId: job.id,
+        at: aberturaAntiBan,
+        payload: job.payload,
+      });
+      runLog.info('passo de IA do fluxo adiado pela janela anti-ban de envio', {
+        next_run_at: aberturaAntiBan.toISOString(),
+      });
+      await complete(pool, {
+        jobId: job.id,
+        jobClaim: claimOfJob(job),
+        organizationId: target.tenantId,
+        enrollmentId,
+        nodeId,
+        result: { kind: 'deferred', until: aberturaAntiBan, reason: 'outside_window' },
+      });
+      return;
+    }
     await runAgentTurn(deps, job, pool, ctx, {
       channelSessionId: target.channelSessionId,
       conversationId: target.conversationId,
@@ -1219,12 +1252,28 @@ async function sendFixedOutbound(
         }
       : {}),
     send: (finalBody) =>
-      channel.send({
-        tenantId, leadId, jobId: job.id, jobClaim: claimOfJob(job), seq: 1, conversationId, body: finalBody,
-        ...(modelo !== undefined ? { template: modelo } : {}),
-        // #2734 — mídia do passo: o `body` acima é a LEGENDA dela.
-        ...(midia !== undefined ? { media: { url: midia.url, mime: midia.mime, type: midia.type } } : {}),
-      }),
+      // SAÍDA CONFIGURÁVEL: template (modelo) não conta nem leva — o corpo aprovado pelo canal não se altera.
+      enviarComSaidaConfiguravel(
+        {
+          db: pool,
+          organizationId: tenantId,
+          // template (modelo) não conta nem leva: o corpo aprovado pelo canal não se altera.
+          conversationId: modelo === undefined ? conversationId : null,
+          via: "followup",
+          // A mesma intenção do `channel.send` abaixo: o `queued` lança no `switch`
+          // mais abaixo e o retry genérico da fila re-roda este job (gasta tentativa).
+          mensagem: { jobId: job.id, seq: 1 },
+          avisar: (m, c) => runLog.warn(m, c),
+        },
+        finalBody,
+        (finalBody) =>
+          channel.send({
+            tenantId, leadId, jobId: job.id, jobClaim: claimOfJob(job), seq: 1, conversationId, body: finalBody,
+            ...(modelo !== undefined ? { template: modelo } : {}),
+            // #2734 — mídia do passo: o `body` acima é a LEGENDA dela.
+            ...(midia !== undefined ? { media: { url: midia.url, mime: midia.mime, type: midia.type } } : {}),
+          }),
+      ),
   });
 
   if (chain.status === 'vetoed') {
@@ -1264,6 +1313,23 @@ async function sendFixedOutbound(
     case 'unavailable':
       throw new Error(`envio fixo: canal indisponível (${outcome.reason}) — run re-tentado pela fila`);
   }
+}
+
+/**
+ * Próxima abertura da janela de DISPARO do canal quando ela está fechada agora;
+ * `null` quando o envio pode sair. É a mesma régua de `runAgentTurn` para a
+ * retomada (`janelaDeEnvioAberta(agora, knobs, false)`), lida antes do turno
+ * para que o adiamento volte ao enrollment (#3103).
+ */
+async function aberturaDaJanelaDeDisparo(
+  pool: pg.Pool,
+  target: ReentrySendTarget,
+  agora: Date,
+  log: Parameters<typeof loadChannelKnobs>[3],
+): Promise<Date | null> {
+  const { knobs } = await loadChannelKnobs(pool, target.tenantId, target.channelSessionId, log);
+  if (janelaDeEnvioAberta(agora, knobs, false)) return null;
+  return proximaAberturaDaJanela(agora, knobs, false);
 }
 
 /**

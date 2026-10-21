@@ -156,10 +156,10 @@ export function FlowsList({ initialData, canWrite, surface }: Props) {
                 <dl className="grid grid-cols-2 gap-2 pt-1 text-xs">
                   <div>
                     <dt className="text-text-muted">{t("Versão")}</dt>
-                    <dd className="font-mono">{flow.active_version_id ? "publicada" : "—"}</dd>
+                    <dd className="font-mono">{flow.active_version_id ? t("publicada") : "—"}</dd>
                   </div>
                   <div>
-                    <dt className="text-text-muted">Handoff</dt>
+                    <dt className="text-text-muted">{t("Handoff")}</dt>
                     <dd className="font-mono">{flow.handoff_policy}</dd>
                   </div>
                 </dl>

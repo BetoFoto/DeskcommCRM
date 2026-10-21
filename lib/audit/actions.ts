@@ -244,6 +244,14 @@ export const AUDIT_ACTIONS = [
   // Emitida pelo worker quando houve EFEITO (tentativa de envio), nunca em
   // rodada de cron vazia.
   "prospecting.approach_sent",
+  // A SAÍDA ("responda PARAR") oferecida numa mensagem automática da prospecção
+  // (modo da 2ª mensagem). Sem texto, sem telefone — só os ponteiros.
+  // Emitida por inbound-turn e followup-turn quando o envio é aceito.
+  "prospecting.exit_offered",
+  // A compensação da anterior: a mensagem que levava a saída virou `failed`
+  // depois de aceita (watchdog, handler, webhook de status), e a reserva voltou.
+  // Gravada pelo gatilho `fn_prospeccao_saida_volta_com_a_mensagem` (0705).
+  "prospecting.exit_offer_withdrawn",
   "channel.pairing_code_requested",
   "channel.social_configured",
   "channel.social_disconnected",
@@ -1177,6 +1185,12 @@ export const AUDIT_ACTIONS = [
   // interruptores, a antecedência e o opt-in de WhatsApp). O número NÃO entra:
   // é dado de contato, e o audit é trilha legível por quem administra.
   "user.task_reminder_prefs_updated",
+  // O admin mudou o que os avisos do celular mostram com a tela bloqueada
+  // (`settings.notificacoes`); metadata com o valor anterior e o novo.
+  "notificacoes.tela_bloqueada_alterada",
+  // Inscrição de push removida no servidor: desligar os alertas, sair, ou
+  // "sair de todos os dispositivos" (metadata.escopo diz qual).
+  "notification_prefs.push_subscription_removed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

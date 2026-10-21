@@ -649,6 +649,7 @@ jobs:
         wizard-do-funcionario.spec.ts mfa-opcional.spec.ts inbox-responder-citando.spec.ts
         agenda-tela-do-produto.spec.ts
         notificacoes-diz-o-que-falta.spec.ts
+        notificacoes-tela-bloqueada.spec.ts
         cobranca-asaas.spec.ts
         relogio-http-cron-externo.spec.ts
         j20-elegibilidade-respondi.spec.ts j20-elegibilidade-followup.spec.ts

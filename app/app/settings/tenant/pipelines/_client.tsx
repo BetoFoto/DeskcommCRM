@@ -60,6 +60,35 @@ export interface PipelineRow {
  */
 export const TIPOS_DE_CAMPO = customFieldSchema.shape.type.options;
 
+/**
+ * O RÓTULO de cada tipo, em português de quem configura o funil (issue #3037).
+ *
+ * O `value` do seletor continua sendo o NOME TÉCNICO (`text`, `multiselect`,
+ * `searchable_select`…) — é o que o schema e a API gravam. O que muda é só o
+ * que a pessoa LÊ: `multiselect` e `searchable_select` não dizem qual é a lista
+ * de várias escolhas e qual é a pesquisável, e o dono do negócio não deveria
+ * precisar saber o vocabulário do banco para configurar o próprio funil.
+ *
+ * `Record<CustomFieldDef["type"], string>` de propósito: tipo novo no schema
+ * sem rótulo aqui passa a reprovar no typecheck, em vez de voltar a aparecer
+ * cru na tela. Onde o rótulo já é chave do dicionário, a MESMA chave é
+ * reutilizada — nada de entrada duplicada.
+ */
+export const ROTULOS_DO_TIPO: Record<CustomFieldDef["type"], string> = {
+  text: "Texto curto",
+  textarea: "Texto longo",
+  number: "Número",
+  currency: "Moeda (BRL)",
+  date: "Data",
+  select: "Lista de uma escolha",
+  multiselect: "Lista de várias escolhas",
+  searchable_select: "Lista pesquisável",
+  boolean: "Sim ou não",
+  email: "E-mail",
+  phone: "Telefone",
+  url: "Link (URL)",
+};
+
 /** Tipos cujo valor sai de uma lista fechada — são os que mostram o campo de opções. */
 export function tipoTemOpcoes(tipo: CustomFieldDef["type"]): boolean {
   return tipo === "select" || tipo === "multiselect" || tipo === "searchable_select";
@@ -438,19 +467,19 @@ function PipelineEditor({
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="space-y-1">
-          <Label className="text-xs">Lead</Label>
+          <Label className="text-xs">{t("Lead")}</Label>
           <Input value={lead} onChange={(e) => setLead(e.target.value)} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Deal</Label>
+          <Label className="text-xs">{t("Deal")}</Label>
           <Input value={deal} onChange={(e) => setDeal(e.target.value)} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Won</Label>
+          <Label className="text-xs">{t("Won")}</Label>
           <Input value={won} onChange={(e) => setWon(e.target.value)} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Lost</Label>
+          <Label className="text-xs">{t("Lost")}</Label>
           <Input value={lost} onChange={(e) => setLost(e.target.value)} />
         </div>
       </div>
@@ -603,7 +632,7 @@ function PipelineEditor({
               <SelectContent>
                 {TIPOS_DE_CAMPO.map((tipo) => (
                   <SelectItem key={tipo} value={tipo}>
-                    {tipo === "currency" ? t("Moeda (BRL)") : tipo}
+                    {t(ROTULOS_DO_TIPO[tipo])}
                   </SelectItem>
                 ))}
               </SelectContent>
