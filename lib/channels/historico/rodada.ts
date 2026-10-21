@@ -12,11 +12,14 @@
  * Mídia (só imagem e áudio): logo depois de gravar cada página, `resolverMidias`
  * pede ao canal a URL; com URL, grava `media_url` e emite `media.persist_requested`
  * (o worker guarda no storage e, por causa da chave do histórico, NÃO deriva);
- * sem URL (`erro: true`), marca `indisponivel` e não tenta de novo. Vídeo,
+ * sem URL (`erro: true`), marca `indisponivel` e não tenta de novo. Sem URL e
+ * sem erro, ou tempo esgotado no download, conta `tentativas_midia` e vira
+ * `indisponivel` na 3ª; até lá a página não se firma e é refeita. Vídeo,
  * documento e figurinha ficam `fora_do_escopo`, sem chamada. Se o teto de
- * chamadas acabar no meio das mídias da página, a rodada para ANTES de firmar o
- * cursor dela: a página é refeita, as mensagens contam como existentes e só as
- * mídias ainda `pendente` são tentadas.
+ * chamadas ou o prazo acabar no meio das mídias da página, a rodada para ANTES
+ * de firmar o cursor dela: a página é refeita, as mensagens que esta importação
+ * já gravou não são inseridas nem contadas de novo, e só as mídias ainda
+ * `pendente` são tentadas.
  * Auditoria é de quem chama (as rotas).
  *
  * ─── Rodadas curtas que retomam ─────────────────────────────────────────────
@@ -493,12 +496,17 @@ type CanalDeMidia = {
 /**
  * Resolve a mídia (imagem e áudio) das mensagens DESTA página, as recém-gravadas
  * e as que já existiam como `pendente` (página refeita). Devolve `false` quando o
- * teto de chamadas ou o prazo acabou antes de resolver todas: quem chama não
- * firma o cursor. Cada download leva `TETO_DO_DOWNLOAD_MS` no próprio pedido.
+ * teto de chamadas ou o prazo acabou antes de resolver todas, ou quando alguma
+ * ficou `pendente` para tentar de novo: quem chama não firma o cursor e a
+ * página é refeita. Cada download leva `TETO_DO_DOWNLOAD_MS` no próprio pedido.
  *
- * Erro de transporte (exceção do canal) NÃO é tratado aqui: sobe para a rodada,
- * que para com o cursor firme anterior e tenta de novo depois. Só `erro: true`
- * (o canal diz que a mídia não existe mais) vira `indisponivel`.
+ * Tentativa que não é veredito (sem URL e sem erro, ou tempo esgotado no
+ * download) conta `tentativas_midia` e a rodada segue para a próxima mídia; na
+ * 3ª a mídia vira `indisponivel`. Sem esse limite, K mídias assim, com K maior
+ * que os downloads que cabem numa rodada, deixariam a página aberta para sempre.
+ * Outro erro de transporte (o canal fora do ar) sobe para a rodada, que para em
+ * `erro` com o cursor firme anterior. Só `erro: true` (o canal diz que a mídia
+ * não existe mais) vira `indisponivel` de uma vez.
  */
 async function resolverMidias(
   admin: SupabaseClient,
@@ -541,6 +549,21 @@ async function resolverMidias(
   if (error) throw new Error(`messages_consulta_midia: ${mensagemDeErro(error)}`);
 
   const linhas = (data ?? []) as Array<{ id: string; external_id: string; metadata: Record<string, unknown> | null }>;
+  let restouPendente = false;
+  /** Tentativa sem veredito: conta e, na 3ª, desiste da mídia. */
+  const contarTentativa = async (id: string, meta: Record<string, unknown>) => {
+    const tentativas = (typeof meta.tentativas_midia === "number" ? meta.tentativas_midia : 0) + 1;
+    if (tentativas < LIMITE_DE_TENTATIVAS_DE_MIDIA) {
+      await atualizarMensagem(admin, imp, id, { metadata: { ...meta, tentativas_midia: tentativas } });
+      restouPendente = true;
+      return { tentativas, desistiu: false };
+    }
+    await atualizarMensagem(admin, imp, id, {
+      metadata: { ...meta, tentativas_midia: tentativas, media_status: "indisponivel" },
+    });
+    ctl.midias.indisponiveis += 1;
+    return { tentativas, desistiu: true };
+  };
   for (const linha of linhas) {
     const meta = linha.metadata ?? {};
     // Só o que o importador marcou e ainda ninguém resolveu.
@@ -558,28 +581,25 @@ async function resolverMidias(
     } catch (err) {
       // Limite de 3 tentativas por mensagem: sem ele, uma mídia que o canal
       // recusa SEMPRE (ex.: 500) derrubaria toda rodada na mesma página, e as
-      // mídias seguintes nunca seriam alcançadas. Nas duas primeiras a rodada
-      // para em erro (cursor firme anterior); na terceira desiste e segue.
-      const tentativas = (typeof meta.tentativas_midia === "number" ? meta.tentativas_midia : 0) + 1;
-      if (tentativas < LIMITE_DE_TENTATIVAS_DE_MIDIA) {
-        await atualizarMensagem(admin, imp, linha.id, { metadata: { ...meta, tentativas_midia: tentativas } });
-        throw err;
-      }
-      await atualizarMensagem(admin, imp, linha.id, {
-        metadata: { ...meta, tentativas_midia: tentativas, media_status: "indisponivel" },
-      });
-      ctl.midias.indisponiveis += 1;
+      // mídias seguintes nunca seriam alcançadas. Tempo esgotado em UM download
+      // não é o canal fora do ar: conta e segue, sem levar a importação a `erro`.
+      // Outro erro de transporte: nas duas primeiras a rodada para em erro
+      // (cursor firme anterior); na terceira desiste e segue.
+      const { desistiu } = await contarTentativa(linha.id, meta);
+      if (!desistiu && !ehTempoEsgotado(err)) throw err;
       continue;
     }
     const { url, erro } = resposta;
 
     if (!url) {
       // `erro: true` é "indisponível, não tente de novo". Sem URL e sem erro o
-      // canal não devolveu o arquivo agora (não é veredito): fica `pendente`, sem
-      // contar, e a rodada segue. Só uma página refeita voltaria a tentar.
+      // canal não devolveu o arquivo agora (não é veredito): conta tentativa,
+      // fica `pendente` até a 3ª e a página é refeita para tentar de novo.
       if (erro) {
         await atualizarMensagem(admin, imp, linha.id, { metadata: { ...meta, media_status: "indisponivel" } });
         ctl.midias.indisponiveis += 1;
+      } else {
+        await contarTentativa(linha.id, meta);
       }
       continue;
     }
@@ -605,7 +625,12 @@ async function resolverMidias(
     }
     ctl.midias.baixadas += 1;
   }
-  return true;
+  return !restouPendente;
+}
+
+/** O teto de tempo do pedido estourou (o cliente do WAHA diz `waha_timeout`). */
+function ehTempoEsgotado(err: unknown): boolean {
+  return err instanceof Error && err.message.startsWith("waha_timeout");
 }
 
 async function atualizarMensagem(

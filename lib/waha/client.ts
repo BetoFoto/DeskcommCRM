@@ -719,6 +719,11 @@ export class WahaClient {
    * mais o arquivo (`media.error` na resposta); `url: null` sem `erro` quando
    * a mensagem simplesmente não traz URL. `opts.tetoMs` troca o teto do
    * cliente: o importador passa o que cabe no prazo da rodada.
+   *
+   * O teto do `AbortSignal` vale também para a LEITURA do corpo: estourar ali é
+   * `waha_timeout`, não "sem URL". Engolir esse estouro (o `.catch(() => null)`
+   * de antes) fazia o importador tratar a mídia como "não veio agora" e pedi-la
+   * de novo a cada página refeita, sem nunca contar tentativa.
    */
   async baixarMidiaDaMensagem(
     session: string,
@@ -732,7 +737,22 @@ export class WahaClient {
       opts.tetoMs,
     );
     if (!res.ok) throw new Error(`waha_media_${res.status}`);
-    const bruto = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    let texto: string;
+    try {
+      texto = await res.text();
+    } catch (e) {
+      const nome = e instanceof Error ? e.name : "";
+      if (nome === "TimeoutError" || nome === "AbortError") {
+        throw new Error(`waha_timeout: o WAHA não terminou de responder em ${opts.tetoMs ?? this.tetoMs}ms (mídia)`);
+      }
+      throw e;
+    }
+    let bruto: Record<string, unknown> | null = null;
+    try {
+      bruto = JSON.parse(texto) as Record<string, unknown> | null;
+    } catch {
+      bruto = null;
+    }
     const media = bruto && typeof bruto.media === "object" ? (bruto.media as Record<string, unknown> | null) : null;
     if (!media) return { url: null, erro: false };
     if (media.error) return { url: null, erro: true };

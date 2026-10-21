@@ -25,6 +25,8 @@ let midia: unknown = fx.midia.disponivel;
 let mensagensExtras: unknown[] = [];
 /** Atraso da resposta de mídia, para medir o teto do download. */
 let atrasoDaMidia = 0;
+/** Manda o cabeçalho e o começo do corpo já, e o resto só depois do atraso. */
+let corpoPelaMetade = false;
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -41,6 +43,12 @@ beforeAll(async () => {
     const m = u.pathname.match(/^\/api\/s1\/chats\/([^/]+)\/messages$/);
     if (m) return res.end(JSON.stringify([...(fx.messages[decodeURIComponent(m[1] ?? "")] ?? []), ...mensagensExtras]));
     if (/^\/api\/s1\/chats\/[^/]+\/messages\/[^/]+$/.test(u.pathname)) {
+      if (atrasoDaMidia > 0 && corpoPelaMetade) {
+        res.write('{"media":');
+        const t = setTimeout(() => res.end(JSON.stringify(midia) + "}"), atrasoDaMidia);
+        res.on("close", () => clearTimeout(t));
+        return;
+      }
       if (atrasoDaMidia > 0) {
         const t = setTimeout(() => res.end(JSON.stringify(midia)), atrasoDaMidia);
         res.on("close", () => clearTimeout(t));
@@ -63,6 +71,7 @@ beforeEach(() => {
   midia = fx.midia.disponivel;
   mensagensExtras = [];
   atrasoDaMidia = 0;
+  corpoPelaMetade = false;
 });
 
 const novo = () => new WahaClient(base, "chave");
@@ -224,5 +233,11 @@ describe("baixarMidiaDaMensagem", () => {
     const inicio = Date.now();
     await expect(novo().baixarMidiaDaMensagem("s1", "a@lid", "m", { tetoMs: 100 })).rejects.toThrow("waha_timeout");
     expect(Date.now() - inicio).toBeLessThan(1_500);
+  });
+
+  it("estouro do teto durante a leitura do corpo é tempo esgotado, não 'sem URL'", async () => {
+    atrasoDaMidia = 2_000;
+    corpoPelaMetade = true;
+    await expect(novo().baixarMidiaDaMensagem("s1", "a@lid", "m", { tetoMs: 200 })).rejects.toThrow("waha_timeout");
   });
 });

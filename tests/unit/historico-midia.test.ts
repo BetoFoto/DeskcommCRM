@@ -6,7 +6,7 @@ vi.mock("@/lib/audit", () => ({ audit: auditEspiao }));
 const canal = vi.hoisted(() => ({
   mensagens: [] as Array<Record<string, unknown>>,
   /** id da mensagem no canal -> o que `baixarMidiaDaMensagem` devolve (ou lança). */
-  midia: {} as Record<string, { url: string | null; erro: boolean } | "lanca">,
+  midia: {} as Record<string, { url: string | null; erro: boolean } | "lanca" | "tempo">,
   baixadas: [] as Array<[string, string, string]>,
   /** Opções que a rodada passou a cada download (o teto do download). */
   opcoesDoDownload: [] as Array<{ tetoMs?: number } | undefined>,
@@ -33,6 +33,7 @@ vi.mock("@/lib/waha/client", () => ({
       canal.aoBaixar?.();
       const r = canal.midia[messageId];
       if (r === "lanca") throw new Error("waha_media_500");
+      if (r === "tempo") throw new Error("waha_timeout: o WAHA não respondeu em 15000ms (http://canal/x)");
       return r ?? { url: null, erro: false };
     },
   }),
@@ -429,6 +430,63 @@ describe("mídia do histórico", () => {
     expect(canal.paginas).toBe(0);
     expect(db.messages).toHaveLength(0);
     expect(db.importacoes.get(IMP)!.cursor).toMatchObject({ indiceConversa: 0, offsetMensagens: 0 });
+  });
+
+  it("mídias sem URL e sem erro: contam tentativa, viram indisponíveis na 3ª e a importação conclui", async () => {
+    const nomes = ["N1", "N2", "N3", "N4"];
+    canal.mensagens = nomes.map((n, i) => imagem(n, agora - 90_000 + i));
+    for (const n of nomes) canal.midia[idCanal(n)] = { url: null, erro: false };
+    let relogio = 0;
+    canal.aoBaixar = () => {
+      relogio += 10_000;
+    };
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    let ultima = { status: "rodando" } as Awaited<ReturnType<typeof rodarUmaRodada>>;
+    for (let i = 0; i < 30 && ultima.status === "rodando"; i++) {
+      ultima = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO, { prazo: relogio + 45_000, relogio: () => relogio });
+    }
+    expect(ultima.status).toBe("concluida");
+    for (const n of nomes) {
+      const m = db.messages.find((x) => x.external_id === idCanal(n))!;
+      expect(m.metadata).toMatchObject({ media_status: "indisponivel", tentativas_midia: 3 });
+      expect(canal.baixadas.filter((b) => b[2] === idCanal(n))).toHaveLength(3);
+    }
+    expect(db.importacoes.get(IMP)).toMatchObject({ midias_indisponiveis: nomes.length, midias_baixadas: 0 });
+  });
+
+  it("tempo esgotado em UM download conta tentativa e segue para a próxima mídia, sem levar a importação a erro", async () => {
+    canal.mensagens = [imagem("T1", agora - 90_000), imagem("T2", agora - 80_000)];
+    canal.midia[idCanal("T1")] = "tempo";
+    canal.midia[idCanal("T2")] = { url: "http://canal/files/t2.jpg", erro: false };
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    const r1 = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(r1.status).not.toBe("erro");
+    expect(db.importacoes.get(IMP)!.erro ?? null).toBeNull();
+    const t1 = () => db.messages.find((m) => m.external_id === idCanal("T1"))!;
+    expect(t1().metadata).toMatchObject({ media_status: "pendente", tentativas_midia: 1 });
+    // a próxima mídia foi alcançada na mesma rodada
+    expect(db.messages.find((m) => m.external_id === idCanal("T2"))!.media_url).toBe("http://canal/files/t2.jpg");
+
+    let ultima = r1;
+    for (let i = 0; i < 6 && ultima.status === "rodando"; i++) {
+      ultima = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+      expect(ultima.status).not.toBe("erro");
+    }
+    expect(ultima.status).toBe("concluida");
+    expect(t1().metadata).toMatchObject({ media_status: "indisponivel", tentativas_midia: 3 });
+    expect(db.importacoes.get(IMP)).toMatchObject({ midias_indisponiveis: 1, midias_baixadas: 1 });
+  });
+
+  it("canal fora do ar na mídia (transporte que não é tempo) continua levando a rodada a erro", async () => {
+    canal.mensagens = [imagem("F1", agora - 86_400)];
+    canal.midia[idCanal("F1")] = "lanca";
+    const db = bancoDeMentira();
+    novaImportacao(db);
+    const r = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(r.status).toBe("erro");
+    expect(db.importacoes.get(IMP)!.erro).toContain("waha_media_500");
   });
 
   it("só emite persist_requested: nenhum outro evento, nem derivação", async () => {
