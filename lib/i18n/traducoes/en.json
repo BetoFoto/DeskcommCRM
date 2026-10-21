@@ -1157,6 +1157,8 @@
   "Menu do usuário": "User menu",
   "Sair": "Log out",
   "Central de avisos": "Notification center",
+  "A Central de avisos é para quem atende": "The notification center is for the people who handle conversations",
+  "Os avisos são pedidos do assistente para as pessoas que atendem. Se precisar deles, peça a quem administra para revisar seu acesso.": "Notifications are the assistant's requests for the people who handle conversations. If you need them, ask whoever administers the workspace to review your access.",
   "em aberto": "open",
   "Agentes de IA": "AI agents",
   "Configure o comportamento dos agentes que respondem no WhatsApp.": "Configure the behavior of the agents that respond on WhatsApp.",

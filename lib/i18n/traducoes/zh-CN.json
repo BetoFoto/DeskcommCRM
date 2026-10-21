@@ -426,6 +426,8 @@
   "Menu do usuário": "用户菜单",
   "Sair": "退出",
   "Central de avisos": "通知中心",
+  "A Central de avisos é para quem atende": "通知中心是给接待人员用的",
+  "Os avisos são pedidos do assistente para as pessoas que atendem. Se precisar deles, peça a quem administra para revisar seu acesso.": "通知是助手向接待人员提出的请求。如果你需要收到通知，请让管理员检查你的权限。",
   "em aberto": "待处理",
   "Agentes de IA": "AI 智能体",
   "Configure o comportamento dos agentes que respondem no WhatsApp.": "配置在 WhatsApp 中回复的 AI 智能体的行为。",
