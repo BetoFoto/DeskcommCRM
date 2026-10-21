@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
 
+import { chaveDaRequisicao, comIdempotencia, type DesfechoIdempotente } from "@/lib/api/idempotency";
 import { ApiError } from "@/lib/api/types";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
@@ -22,10 +23,13 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { encaminharMensagem } from "@/lib/inbox/encaminhar-mensagem";
 import { createClient } from "@/lib/supabase/server";
+import type { Message } from "@/lib/types/messaging";
 
 interface Ctx {
   params: Promise<{ id: string }>;
 }
+
+const ENDPOINT = "POST /api/v1/messages/[id]/forward";
 
 /** O corpo: só a conversa de destino. O conteúdo vem da mensagem de origem. */
 const corpoSchema = z.object({ conversation_id: z.string().uuid() });
@@ -53,9 +57,17 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     return fail("validation_failed", t("Escolha uma conversa de destino."), 422, { requestId });
   }
 
+  // O `apiClient` carimba Idempotency-Key em todo POST: um duplo clique ou uma
+  // retentativa de rede encaminharia duas vezes. Mesma régua de
+  // `POST /api/v1/messages`: chave, quando vem, é UUID.
+  const chave = chaveDaRequisicao(req);
+  if (chave !== null && !z.string().uuid().safeParse(chave).success) {
+    return fail("validation_error", "Idempotency-Key deve ser UUID", 400, { requestId });
+  }
+
   const supabase = await createClient();
-  try {
-    const mensagem = await encaminharMensagem(
+  const encaminhar = () =>
+    encaminharMensagem(
       supabase,
       {
         organization_id: authz.org.orgId,
@@ -67,10 +79,44 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       // fica com quem atendeu" valer no encaminhamento, como no envio.
       { messageId: id, conversationIdDestino: corpo.conversation_id, via: "session" },
     );
-    return ok(mensagem, { status: 201, requestId });
+  try {
+    const desfecho: DesfechoIdempotente<Message> =
+      chave === null
+        ? { tipo: "executou", resposta: await encaminhar(), status: 201 }
+        : await comIdempotencia({
+            db: supabase,
+            organizationId: authz.org.orgId,
+            endpoint: ENDPOINT,
+            chave,
+            // A mensagem de origem vem do path: ela faz parte da identidade.
+            corpo: { message_id: id, conversation_id: corpo.conversation_id },
+            executar: async () => ({ resposta: await encaminhar(), status: 201 }),
+          });
+
+    if (desfecho.tipo === "conflito") {
+      return fail(
+        "idempotency_conflict",
+        t("Esta chave de idempotência já foi usada com outro conteúdo."),
+        409,
+        { requestId },
+      );
+    }
+    if (desfecho.tipo === "em_curso") {
+      return fail(
+        "idempotency_in_progress",
+        t("A mesma requisição ainda está em curso. Tente de novo em instantes."),
+        409,
+        { requestId },
+      );
+    }
+    return ok(desfecho.resposta, { status: 201, requestId });
   } catch (err) {
     if (err instanceof ApiError) {
-      return fail(err.code, err.message, err.status, { requestId });
+      return fail(err.code, err.message, err.status, {
+        requestId,
+        // A recusa da janela de 24h leva `use: "template"` em `details`.
+        ...(err.details !== undefined ? { details: err.details as Record<string, unknown> } : {}),
+      });
     }
     throw err;
   }
