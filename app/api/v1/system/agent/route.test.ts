@@ -414,8 +414,13 @@ describe("POST /api/v1/system/agent — a volta automática (#2757)", () => {
     // A hora é do servidor (a mesma máquina do host) e sai nos DOIS carimbos:
     // `dispatched_at` põe esta linha como a mais recente no que a tela lê, e
     // `finished_at` é a hora que o aviso mostra.
-    expect(inserts[0].finished_at).toBeTruthy();
-    expect(inserts[0].dispatched_at).toEqual(inserts[0].finished_at);
+    // `noUncheckedIndexedAccess`: `inserts[0]` é `Linha | undefined` para o TS. O guarda
+    // transforma o `toHaveLength(1)` acima em estreitamento de tipo de verdade (e não em
+    // `as any`): se a rota não gravou nada, o teste falha aqui, com nome.
+    const linhaDaVolta = inserts[0];
+    if (!linhaDaVolta) throw new Error("a rota não gravou a linha do run da volta automática");
+    expect(linhaDaVolta.finished_at).toBeTruthy();
+    expect(linhaDaVolta.dispatched_at).toEqual(linhaDaVolta.finished_at);
     // Nada de fechar run alheio nem de sujar o estado da versão.
     expect(updates).toEqual([]);
   });
