@@ -156,6 +156,7 @@ import { validarRespostaDoFluxo } from './flow-validate';
 import { moduloLigadoComMemo } from '@/lib/instalacao/modulos';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { enviaAvisoForaDoHorario, portasDeProducao } from './aviso-fora-do-horario';
+import { enviarComSaidaConfiguravel } from "@/lib/prospecting/saida-configuravel";
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
 import { avisarJanelaFechada, resolverAvisoDeJanela } from '../pacing/aviso-de-janela';
@@ -3659,7 +3660,6 @@ async function executarTurnoDoAgente(
             // disclosure via inject); é ELE que vai ao canal, não o `body` capturado da tool.
             send: (finalBody: string) => {
               pararDigitando(); // a mensagem sai agora; renovar depois dela mentiria
-              corposEnviados.push(finalBody);
               const sleep =
                 deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
               const jitter = () =>
@@ -3686,28 +3686,33 @@ async function executarTurnoDoAgente(
                   ...(media ? { media } : {}),
                 });
               };
-              // Cada foto é uma mensagem física: só vão as que cabem no que resta do teto
-              // do turno (a checagem de `max_sends_per_turn` acima roda uma vez, antes).
-              // O resto é medido ANTES DE CADA FOTO, depois do texto: o texto acima do
-              // teto de legenda sai à parte e também gasta o teto.
-              return enviarComFotos(finalBody, fotosDoProduto, {
-                sleep,
-                jitter,
-                restantes: () => maxSendsPerTurn - seq,
-                enviarFoto: (foto, legenda) => enviar(legenda, foto),
-                enviarTexto: (texto) =>
-                  sendInBubbles(texto, {
-                    enabled: agentConfig?.splitMessages ?? false,
-                    maxChars: agentConfig?.splitMaxChars ?? 600,
-                    // O teto do turno vale para as bolhas: o que passa dele vai junto na última.
-                    maxBubbles: Math.max(1, maxSendsPerTurn - seq),
+              // Saída configurável da prospecção (fora de prévia); ver saida-configuravel.ts.
+              const saida = { db: pool, organizationId: tenantId, conversationId: preview ? null : input.conversationId, via: "inbound_turn" as const, mensagem: { jobId: preview ? "" : liveJob().id, seq: seq + 1 }, avisar: (m: string, c: Record<string, unknown>) => runLog.warn(m, c) };
+              return enviarComSaidaConfiguravel(saida, finalBody, (finalBody) => {
+                  corposEnviados.push(finalBody);
+                  // Cada foto é uma mensagem física: só vão as que cabem no teto do turno,
+                  // medido ANTES DE CADA FOTO, depois do texto.
+                  return enviarComFotos(finalBody, fotosDoProduto, {
                     sleep,
                     jitter,
-                    // A pausa humana do turno NÃO mora mais aqui: ela subiu para
-                    // `esperaForaDoLock` (paga antes de o guardrail tomar o lock do número) —
-                    // issue #654. Neste ponto fica só o jitter anti-ban entre bolhas.
-                    send: (bubble) => enviar(bubble),
-                  }),
+                    restantes: () => maxSendsPerTurn - seq,
+                    enviarFoto: (foto, legenda) => enviar(legenda, foto),
+                    enviarTexto: (texto) =>
+                      sendInBubbles(texto, {
+                        enabled: agentConfig?.splitMessages ?? false,
+                        maxChars: agentConfig?.splitMaxChars ?? 600,
+                        // O teto do turno vale para as bolhas: o que passa dele vai
+                        // junto na última.
+                        maxBubbles: Math.max(1, maxSendsPerTurn - seq),
+                        sleep,
+                        jitter,
+                        // A pausa humana do turno NÃO mora mais aqui: ela subiu para
+                        // `esperaForaDoLock` (paga antes de o guardrail tomar o lock do
+                        // número) — issue #654. Neste ponto fica só o jitter anti-ban
+                        // entre bolhas.
+                        send: (bubble) => enviar(bubble),
+                      }),
+                  });
               });
             },
           };

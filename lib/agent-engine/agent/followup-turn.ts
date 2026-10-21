@@ -69,6 +69,8 @@ import {
   type PropostaDeEsperaBruta,
 } from './followup-flow-classify';
 import { consultarJevNoFollowup } from '@/lib/ai/decisao/followup';
+import { enviarComSaidaConfiguravel } from "@/lib/prospecting/saida-configuravel";
+
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -1250,12 +1252,28 @@ async function sendFixedOutbound(
         }
       : {}),
     send: (finalBody) =>
-      channel.send({
-        tenantId, leadId, jobId: job.id, jobClaim: claimOfJob(job), seq: 1, conversationId, body: finalBody,
-        ...(modelo !== undefined ? { template: modelo } : {}),
-        // #2734 — mídia do passo: o `body` acima é a LEGENDA dela.
-        ...(midia !== undefined ? { media: { url: midia.url, mime: midia.mime, type: midia.type } } : {}),
-      }),
+      // SAÍDA CONFIGURÁVEL: template (modelo) não conta nem leva — o corpo aprovado pelo canal não se altera.
+      enviarComSaidaConfiguravel(
+        {
+          db: pool,
+          organizationId: tenantId,
+          // template (modelo) não conta nem leva: o corpo aprovado pelo canal não se altera.
+          conversationId: modelo === undefined ? conversationId : null,
+          via: "followup",
+          // A mesma intenção do `channel.send` abaixo: o `queued` lança no `switch`
+          // mais abaixo e o retry genérico da fila re-roda este job (gasta tentativa).
+          mensagem: { jobId: job.id, seq: 1 },
+          avisar: (m, c) => runLog.warn(m, c),
+        },
+        finalBody,
+        (finalBody) =>
+          channel.send({
+            tenantId, leadId, jobId: job.id, jobClaim: claimOfJob(job), seq: 1, conversationId, body: finalBody,
+            ...(modelo !== undefined ? { template: modelo } : {}),
+            // #2734 — mídia do passo: o `body` acima é a LEGENDA dela.
+            ...(midia !== undefined ? { media: { url: midia.url, mime: midia.mime, type: midia.type } } : {}),
+          }),
+      ),
   });
 
   if (chain.status === 'vetoed') {
