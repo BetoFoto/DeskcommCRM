@@ -23,6 +23,21 @@ function semV(versao: string | undefined): string {
 }
 
 /**
+ * "14h10" — a hora da volta automática (#2757).
+ *
+ * No fuso de quem lê (o navegador), não em UTC: o dono do servidor está no
+ * mesmo fuso da instalação, e "16h10 UTC" para quem está em Brasília é uma
+ * conta que ninguém faz de cabeça. Devolve vazio com data inválida — a frase
+ * então sai sem a hora, em vez de dizer "Invalid Date".
+ */
+function horaCurta(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getHours()).padStart(2, "0")}h${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
  * O um-clique que fecha o ciclo sem terminal (#2757).
  *
  * Ele não inventa um caminho novo: manda para a rota de atualização o MESMO
@@ -148,10 +163,33 @@ export function UpdatePanel() {
   // O app reinicia no meio da atualização: a requisição falhar aqui é
   // ESPERADA, não é erro. Só é erro de verdade se nunca houve run em curso.
   const rodando = data?.run?.status === "dispatched";
-  if (isError && rodando) return <Reiniciando />;
+
+  /**
+   * O AVISO DE "SEM SMTP" ATRAVESSA TODOS OS ESTADOS DESTA TELA.
+   *
+   * O estado existia desde sempre — só que apenas no log do `update.sh`, que o
+   * dono de uma VPS não abre. Aqui ele passa a ser lido na tela, no caminho de
+   * leitura que já existe (`GET /api/v1/system/version`, o mesmo que alimenta o
+   * resto do painel) e com a mesma régua da ação que sofre com ele
+   * (`semSmtpNaInstalacao`, em `lib/email/estado.ts`).
+   *
+   * A comparação é com `false`, e não `!data.smtp_configured`: o campo só vem
+   * para o dono da instalação (`is_platform_admin`) e, fora do servidor único,
+   * vem sempre `true`. Ausente é "não sei", e sobre o que não se sabe esta tela
+   * não afirma nada.
+   *
+   * POR QUE AQUI, e não na lista de alertas do painel de administração: aquela
+   * lista é por EMPRESA (uma linha por cliente, com link para o cadastro dele).
+   * "Esta instalação não envia e-mail" é do SERVIDOR — não tem empresa dona nem
+   * cadastro para abrir, e acomodá-lo lá exigiria inventar um tenant para o
+   * aviso. O dono que precisa dele é justamente quem abre esta tela.
+   */
+  const semSmtp = data?.smtp_configured === false;
+
+  if (isError && rodando) return <Reiniciando semSmtp={semSmtp} />;
   if (!data) {
     return (
-      <Layout>
+      <Layout semSmtp={semSmtp}>
         <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>
       </Layout>
     );
@@ -189,11 +227,18 @@ export function UpdatePanel() {
     const destinoDoPedido = semV(data.run?.to_version) || nova;
 
     if (!data.run?.last_step) {
-      return <AguardandoOServidor dispatchedAt={data.run?.dispatched_at} destino={destinoDoPedido} />;
+      return (
+        <AguardandoOServidor
+          dispatchedAt={data.run?.dispatched_at}
+          // O destino é o do RUN (#2757) — a mesma razão do título logo abaixo.
+          destino={destinoDoPedido}
+          semSmtp={semSmtp}
+        />
+      );
     }
 
     return (
-      <Layout titulo={`${t("Atualizando para a versão")} ${destinoDoPedido}`}>
+      <Layout semSmtp={semSmtp} titulo={`${t("Atualizando para a versão")} ${destinoDoPedido}`}>
         <ol className="space-y-2 text-sm">
           {PASSOS.map((passo) => {
             const indice = PASSOS.findIndex((p) => p.chave === data.run?.last_step);
@@ -257,7 +302,7 @@ export function UpdatePanel() {
   if (data.just_updated) {
     const pedida = semV(data.run?.to_version);
     return (
-      <Layout titulo={`${t("A atualização para a versão")} ${pedida} ${t("terminou")}`}>
+      <Layout semSmtp={semSmtp} titulo={`${t("A atualização para a versão")} ${pedida} ${t("terminou")}`}>
         <p className="text-sm">
           {t(
             "O servidor ainda não me confirmou em que versão ele voltou ao ar — a última versão que ele confirmou é a",
@@ -300,8 +345,31 @@ export function UpdatePanel() {
 
   if (falhaVigente && data.run?.status === "failed_rolled_back") {
     return (
-      <Layout titulo={`${t("A atualização para a versão")} ${alvo} ${t("não deu certo")}`}>
-        <p className="text-sm">
+      <Layout semSmtp={semSmtp} titulo={`${t("A atualização para a versão")} ${alvo} ${t("não deu certo")}`}>
+        {/* A VOLTA QUE NINGUÉM PEDIU (#2757).
+            O agente do host devolve a versão sozinho quando o site não
+            responde duas vezes seguidas logo depois da atualização — e até
+            aqui isso só ficava no log da VPS: quem abria o painel via a versão
+            mudar sem explicação, e quem não usa terminal nunca sabia o que
+            houve. A frase é a mesma que o mantenedor pediu, com as quatro
+            informações em linguagem de gente: para onde voltou, quando, e por
+            quê (a versão que falhou vem junto porque situa o leitor).
+            Só aparece quando NINGUÉM pediu o run — uma volta pedida pela tela
+            continua dizendo "Voltei o sistema", que ali é verdade. */}
+        {data.run.volta_automatica ? (
+          <p className="text-sm" data-testid="volta-automatica">
+            {t("O sistema voltou sozinho para a versão")} <strong>{anterior}</strong>
+            {data.run.finished_at ? (
+              <>
+                {" "}
+                {t("às")} <strong>{horaCurta(data.run.finished_at)}</strong>
+              </>
+            ) : null}
+            {t(", porque o site não respondeu logo depois da atualização para a versão")}{" "}
+            <strong>{alvo}</strong>.
+          </p>
+        ) : null}
+        <p className={data.run.volta_automatica ? "mt-3 text-sm" : "text-sm"}>
           {t("Voltei o sistema para a versão")} {anterior},{" "}
           {t(
             "que é a que está no ar agora, e os seus dados estão intactos. O banco de dados já tinha sido atualizado e permanece assim — isso é seguro, a versão",
@@ -357,7 +425,7 @@ export function UpdatePanel() {
     // comando de volta. A cópia alarmante erra para o lado de fazer conferir, e
     // o log logo abaixo explica em português quando foi só uma recusa.
     return (
-      <Layout titulo={`${t("A atualização para a versão")} ${alvo} ${t("não deu certo")}`}>
+      <Layout semSmtp={semSmtp} titulo={`${t("A atualização para a versão")} ${alvo} ${t("não deu certo")}`}>
         <p className="text-sm">
           {t("E eu")} <strong>{t("não consegui")}</strong>{" "}
           {t("voltar sozinho para a versão")} {anterior}:{" "}
@@ -397,7 +465,7 @@ export function UpdatePanel() {
 
   if (data.run?.status === "unknown") {
     return (
-      <Layout titulo={t("Não sei dizer como terminou")}>
+      <Layout semSmtp={semSmtp} titulo={t("Não sei dizer como terminou")}>
         <p className="text-sm">
           {t("Comecei a atualização para a versão")} {alvo}{" "}
           {t(
@@ -419,7 +487,7 @@ export function UpdatePanel() {
 
   if (!data.agent_online) {
     return (
-      <Layout titulo={t("Atualização automática indisponível")}>
+      <Layout semSmtp={semSmtp} titulo={t("Atualização automática indisponível")}>
         <p className="text-sm">
           {t(
             "Não estou conseguindo falar com o servidor onde o sistema está instalado, então não posso atualizar sozinho. Quem tem acesso ao servidor pode entrar na pasta onde o sistema foi instalado e rodar este comando — se for a primeira vez, rode duas vezes: a primeira baixa o programa novo e a segunda liga o botão desta tela.",
@@ -438,7 +506,7 @@ export function UpdatePanel() {
   // conta disso é o cliente nunca receber a próxima correção de segurança.
   if (data.compare_failed) {
     return (
-      <Layout titulo={t("Não consegui checar se há versão nova")}>
+      <Layout semSmtp={semSmtp} titulo={t("Não consegui checar se há versão nova")}>
         <p className="text-sm">
           {t("O servidor não conseguiu comparar a sua versão (")}
           <strong>{versao}</strong>
@@ -462,7 +530,7 @@ export function UpdatePanel() {
 
   if (!data.update_available && !data.off_release) {
     return (
-      <Layout titulo={`${t("Você está na versão")} ${versao}`}>
+      <Layout semSmtp={semSmtp} titulo={`${t("Você está na versão")} ${versao}`}>
         <p className="text-sm text-muted-foreground">
           {t("É a mais recente. Não há nada a fazer.")}
         </p>
@@ -484,7 +552,7 @@ export function UpdatePanel() {
   if (!nova) {
     if (!data.has_known_release) {
       return (
-        <Layout titulo={t("Ainda não há nenhuma versão publicada")}>
+        <Layout semSmtp={semSmtp} titulo={t("Ainda não há nenhuma versão publicada")}>
           <p className="text-sm">
             {t(
               "Este projeto ainda não tem nenhuma versão publicada para comparar com a sua instalação — normal em um fork novo ou recém-criado a partir do código-fonte.",
@@ -502,7 +570,7 @@ export function UpdatePanel() {
       );
     }
     return (
-      <Layout titulo={t("Você está à frente da versão publicada")}>
+      <Layout semSmtp={semSmtp} titulo={t("Você está à frente da versão publicada")}>
         <p className="text-sm">
           {t("Seu sistema roda uma versão mais nova do que a última publicada, então")}{" "}
           <strong>{t("não há nada a atualizar")}</strong>.{" "}
@@ -522,7 +590,7 @@ export function UpdatePanel() {
   }
 
   return (
-    <Layout titulo={`${t("Versão")} ${nova} ${t("disponível")}`}>
+    <Layout semSmtp={semSmtp} titulo={`${t("Versão")} ${nova} ${t("disponível")}`}>
       {data.off_release && (
         <p className="mb-4 rounded-md border border-warning bg-warning-bg p-3 text-sm text-warning-fg">
           {t("Sua instalação está numa versão de desenvolvimento. Atualizar vai levá-la para a versão publicada")}{" "}
@@ -621,9 +689,11 @@ export function UpdatePanel() {
 function AguardandoOServidor({
   dispatchedAt,
   destino,
+  semSmtp,
 }: {
   dispatchedAt: string | undefined;
   destino: string;
+  semSmtp?: boolean;
 }) {
   const t = useT();
   // Um segundo, e não os 5s do poll: o poll traz dado do servidor, este tique
@@ -638,7 +708,7 @@ function AguardandoOServidor({
   const segundos = Number.isNaN(inicio) ? null : Math.max(0, Math.floor((agora - inicio) / 1000));
 
   return (
-    <Layout titulo={t("Pedido enviado — esperando o servidor pegar")}>
+    <Layout semSmtp={semSmtp} titulo={t("Pedido enviado — esperando o servidor pegar")}>
       <p className="text-sm">
         {t("Anotei o pedido de atualizar para a versão")} <strong>{destino}</strong>.{" "}
         {t(
@@ -770,7 +840,49 @@ function DetalhesTecnicos({ texto }: { texto: string | undefined }) {
   );
 }
 
-function Layout({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
+/**
+ * O AVISO DE "SEM SMTP", no topo do painel e FORA do cartão de conteúdo.
+ *
+ * Fica aqui, e não dentro do `<Card>`, porque não é um estado da atualização: é
+ * um fato da INSTALAÇÃO que continua verdadeiro enquanto ele não for
+ * consertado, em qualquer estado desta tela.
+ *
+ * O endereço aparece como texto, do mesmo jeito que o kit escreve a mesma
+ * instrução no terminal ("Configure em /admin/email"): uma chave de dicionário
+ * só, e nenhuma promessa de navegação entre superfícies diferentes.
+ */
+function AvisoDeSmtp() {
+  const t = useT();
+  return (
+    <div
+      data-testid="aviso-sem-smtp"
+      className="rounded-md border border-warning bg-warning-bg p-3 text-sm text-warning-fg"
+    >
+      <p className="font-medium">⚠️ {t("Sem SMTP configurado")}</p>
+      <p className="mt-1">
+        {t(
+          "O serviço de login desta instalação não envia e-mail: \"esqueci a senha\" e a confirmação de cadastro não chegam. Configure o servidor de e-mail em /admin/email e, no servidor, rode bash hostgator-setup-kit/update.sh — é ele que leva o SMTP ao serviço de login.",
+        )}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * `semSmtp` atravessa TODOS os estados desta tela — inclusive a espera e o
+ * reinício. O aviso é da instalação, não do estado da atualização: quem abriu
+ * esta página para atualizar é a mesma pessoa que precisa saber, agora, que o
+ * e-mail não sai.
+ */
+function Layout({
+  titulo,
+  children,
+  semSmtp,
+}: {
+  titulo?: string;
+  children: React.ReactNode;
+  semSmtp?: boolean;
+}) {
   const t = useT();
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
@@ -779,15 +891,16 @@ function Layout({ titulo, children }: { titulo?: string; children: React.ReactNo
           {titulo ?? t("Atualização do sistema")}
         </h1>
       </header>
+      {semSmtp ? <AvisoDeSmtp /> : null}
       <Card className="p-6">{children}</Card>
     </div>
   );
 }
 
-function Reiniciando() {
+function Reiniciando({ semSmtp }: { semSmtp?: boolean }) {
   const t = useT();
   return (
-    <Layout titulo={t("Reiniciando…")}>
+    <Layout semSmtp={semSmtp} titulo={t("Reiniciando…")}>
       <p className="text-sm text-muted-foreground">
         {t("O sistema está voltando. Esta página se atualiza sozinha em alguns instantes.")}
       </p>
