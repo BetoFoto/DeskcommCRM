@@ -226,7 +226,7 @@ test.describe("designer de automações", () => {
   /**
    * O CANVAS DO DESIGNER MEDE ALTURA DE VERDADE (#3153).
    *
-   * O defeito, como o dono do produto o viu: o canvas aparece EM BRANCO. O
+   * O defeito, como a #3153 o relata: o canvas aparece EM BRANCO. O
    * container do React Flow (`div.relative.h-full.flex-1`,
    * `data-testid="designer-canvas"`) mede 0 px de altura, enquanto a linha flex
    * que o contém mede centenas — e o clique na caixa do gatilho é interceptado
