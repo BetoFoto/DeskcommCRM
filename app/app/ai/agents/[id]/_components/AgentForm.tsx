@@ -525,7 +525,7 @@ export function AgentForm(props: Props) {
    * chave que tinha acabado de escolher.
    */
   const publishBlockReason = React.useMemo(() => {
-    if (!isEdit) return t("Salve o agent antes de publicar.");
+    if (!isEdit) return t("Salve o agente antes de publicar.");
     const motivo = bloqueioDePublicacao({
       temRascunhoVigente: !!props.draft,
       formularioValido: isValid,
@@ -614,7 +614,7 @@ export function AgentForm(props: Props) {
           toast.error(res.message ?? `${t("Erro")}: ${res.error}`);
           return;
         }
-        toast.success(t("Agent criado."));
+        toast.success(t("Agente criado."));
         router.push(`/app/ai/agents/${res.data!.agent_id}`);
       }
     } finally {
