@@ -33,7 +33,7 @@ interface Props {
  * relance quem está parado há dias. Uma linha por negócio cabe dez vezes mais
  * na tela — e, principalmente, a leitura é a DA PÁGINA: a rota pede `per_page`
  * linhas com `range`, e o índice `idx_crm_leads_org_pipeline_position_id`
- * (migration 0734) é o que faz o banco parar na página em vez de avaliar o
+ * (migration 0739) é o que faz o banco parar na página em vez de avaliar o
  * funil inteiro. O quadro, esse sim, lê o funil inteiro de uma vez (e cada
  * linha passa por `fn_can_view_lead`); num funil migrado com milhares de
  * negócios isso levou 19 s, até estourar o `statement_timeout` do papel

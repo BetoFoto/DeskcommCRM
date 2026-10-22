@@ -18,7 +18,7 @@
  * funil antes de ordenar (medido pelo mantenedor: 3.901 chamadas de
  * `fn_can_view_lead` e ~3,8 s na página 1 de um funil com 3.901 negócios). Quem
  * faz o corte ser de verdade é o índice `idx_crm_leads_org_pipeline_position_id`
- * (migration 0734), sobre as MESMAS colunas que o `select` filtra e ordena.
+ * (migration 0739), sobre as MESMAS colunas que o `select` filtra e ordena.
  *
  * ─── O que esta fatia NÃO faz ──────────────────────────────────────────────
  *
