@@ -47,6 +47,16 @@
  * exige o `messaging_channel` junto. Declarar `website` passaria no envio e a
  * conversão não seria atribuída ao anúncio — o pior desfecho possível, porque
  * devolve 200 e não produz efeito nenhum.
+ *
+ * ─── Por que `system_generated` mesmo com `fbc`/`fbp` (#2317) ───────────────
+ *
+ * O lead de formulário TEM identidade de navegador, e mesmo assim o evento sai
+ * `system_generated`: a venda não aconteceu no navegador, foi registrada no CRM
+ * horas ou dias depois do preenchimento — `website` afirmaria um evento no site
+ * que não existiu. O que viaja de página é só a identidade (`fbc`/`fbp`), e é
+ * ela que liga a venda ao clique do anúncio. `business_messaging` continua fora
+ * deste caso por um motivo mais duro: ele exige `ctwa_clid`, e o formulário não
+ * tem um — passar o `fbclid` ali seria entregar ao campo a string errada.
  */
 import { createHash } from "node:crypto";
 

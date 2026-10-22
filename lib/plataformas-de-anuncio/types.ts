@@ -96,7 +96,8 @@ export interface ConversaoOffline {
    * junto com `cliqueDeOrigem` vazio — é o outro lado da mesma troca: quem tem
    * `ctwa_clid` não tem cookie de página, e quem tem cookie de página não veio
    * de uma conversa. Quem lê `cliqueDeOrigem` para decidir a origem declarada
-   * não precisa olhar este campo; o transporte, sim, para montar o `user_data`.
+   * não precisa olhar este campo; o transporte, sim, para montar o
+   * `user_data`.
    */
   identidadeDoNavegador?: { fbc: string | null; fbp: string | null };
   identificadoresGoogle?: IdentificadoresGoogle;

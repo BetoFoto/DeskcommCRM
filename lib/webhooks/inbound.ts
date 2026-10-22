@@ -47,23 +47,15 @@ export const CHAVES_DE_PLATAFORMA = new Set([
   "_jfb_current_render_states[]",
 ]);
 
-export interface MappedLead {
-  name: string | null;
-  phone: string | null;
-  email: string | null;
-  custom_fields: Record<string, string>;
-  source_metadata: Record<string, string>;
-}
-
 /**
  * As chaves com que uma PLATAFORMA DE ANÚNCIO marca o clique que trouxe a pessoa
  * (issue #2317).
  *
  * Quem anuncia para uma landing page com FORMULÁRIO manda `fbclid`, `fbc`,
- * `fbp`, `gclid`, `ad_id`, `adset_id` e `campaign_id` no envio. Sem esta lista
- * elas caem em `custom_fields` — aparecem no card do lead como se a pessoa as
- * tivesse preenchido — e a origem do anúncio se perde: `lib/conversoes`, que lê
- * a atribuição do contato, não sabe de que clique veio uma venda de formulário.
+ * `fbp`, `gclid`, `ad_id`, `adset_id` e `campaign_id` no envio. Até aqui elas
+ * caíam em `custom_fields` — apareciam no card do lead como se a pessoa as
+ * tivesse preenchido — e a origem do anúncio se perdia: `lib/conversoes`, que lê
+ * a atribuição do contato, não sabia de que clique veio uma venda de formulário.
  *
  * RESERVADAS, e por isso seguem o MESMO caminho do `utm_*`: vão para
  * `source_metadata`, de onde a atribuição do contato é estampada
@@ -93,6 +85,14 @@ export const CHAVES_DE_ANUNCIO: ReadonlySet<string> = new Set([
   "adset_id",
   "campaign_id",
 ]);
+
+export interface MappedLead {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  custom_fields: Record<string, string>;
+  source_metadata: Record<string, string>;
+}
 
 /**
  * A chave é de anúncio? Normaliza a chave do payload (é o que os mapeadores
@@ -144,8 +144,8 @@ export function mapInboundPayload(
     const chave = key.toLowerCase();
     // As chaves de CAMPANHA — `utm_*` e as de anúncio reservadas — descrevem como
     // a pessoa CHEGOU, não o que ela respondeu: vão para `source_metadata`, onde
-    // viram a atribuição do contato (`extrairAtribuicaoDoInbound`), e não
-    // aparecem no card como campo preenchido.
+    // viram a atribuição do contato, e não aparecem no card como campo
+    // preenchido. `CHAVES_DE_ANUNCIO` é a lista da issue #2317.
     if (chave.startsWith("utm_") || CHAVES_DE_ANUNCIO.has(chave)) source_metadata[chave] = str;
     else custom_fields[key] = str;
   }
