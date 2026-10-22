@@ -5,6 +5,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Smiley } from "@/lib/ui/icons";
 
 // Lazy: o picker (+dados) só carrega quando o usuário abre — zero peso no bundle do inbox.
@@ -19,27 +20,39 @@ export function EmojiButton({ disabled, onPick }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="h-9 w-9 shrink-0"
-          aria-label={t("Emoji")}
-          disabled={disabled}
-        >
-          <Smiley size={18} weight="regular" aria-hidden />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" side="top" className="w-auto border-none p-0 shadow-lg">
-        {open && (
-          <Suspense fallback={<Skeleton className="h-[420px] w-[352px]" />}>
-            <EmojiPickerLazy onPick={onPick} />
-          </Suspense>
-        )}
-      </PopoverContent>
-    </Popover>
+    // Provider LOCAL, como em MessageBubble.tsx: o painel do inbox não tem
+    // TooltipProvider ancestral e o Radix lança sem ele — o throw derruba a
+    // árvore inteira, não só a dica. Provider/Tooltip/Trigger não criam nó
+    // nenhum: quem entra na linha de ações continua sendo o mesmo botão
+    // "h-9 w-9", então a altura dela não muda.
+    <TooltipProvider delayDuration={200}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9 shrink-0"
+                aria-label={t("Emoji")}
+                disabled={disabled}
+              >
+                <Smiley size={18} weight="regular" aria-hidden />
+              </Button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent>{t("Emoji")}</TooltipContent>
+        </Tooltip>
+        <PopoverContent align="start" side="top" className="w-auto border-none p-0 shadow-lg">
+          {open && (
+            <Suspense fallback={<Skeleton className="h-[420px] w-[352px]" />}>
+              <EmojiPickerLazy onPick={onPick} />
+            </Suspense>
+          )}
+        </PopoverContent>
+      </Popover>
+    </TooltipProvider>
   );
 }
 
