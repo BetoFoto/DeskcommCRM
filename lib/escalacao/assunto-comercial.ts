@@ -37,7 +37,7 @@ export function contemAssuntoComercialRestrito(texto: string): boolean {
  * "à vista" soltos, as palavras de preço em espanhol e inglês, moeda por extenso
  * ("cem euros"), decimal com ponto em posição de preço ("por 299.90", "299.90
  * cada"), honorários/abatimento/cupom/pesos, parcela com valor depois ("10 vezes
- * de 29", "3x 600", "12x150") e inteiro ou milhar depois de verbo de preço ("faço
+ * de 29", "10 vezes 99", "3x 600", "12x 50", "12x150") e inteiro ou milhar depois de verbo de preço ("faço
  * 1800", "por 1.800"). "N vezes" sozinho é frequência ("remarcou 3 vezes", "use 2
  * vezes diariamente") e não conta; "em/até N vezes", "N vezes sem juros" e "N vezes
  * no cartão" já vêm da entrada. Data e hora com ponto continuam fora: sem palavra
@@ -52,6 +52,10 @@ const PRECO_SO_NA_SAIDA: readonly RegExp[] = [
   // ponytail: na forma "Nx" o valor precisa de 3 dígitos ou centavos — "foto 3x4" e
   // "3x12 repetições" ficam de fora, e "10x 50" também (vai pela palavra de preço, se houver).
   /\b\d{1,2}\s*vezes\s+de\s+(?:r\$\s*)?\d|\b\d{1,2}\s*x\s*(?:de\s+)?(?:r\$\s*)?(?:\d{3,}|\d+[.,]\d{2})(?![\d/:-])/u,
+  // Parcela com espaço e sem "de": "10 vezes 99", "12x 50", "3 vezes 200". O valor tem 2+
+  // dígitos e não é seguido de unidade nem frequência ("2x 30 minutos", "3 vezes 10 repetições").
+  // ponytail: a lista de unidades é a régua; outra contagem ("3x 10 agachamentos") barra e vai à equipe.
+  /\b\d{1,2}(?:\s*vezes|x)\s+(?:r\$\s*)?\d{2,}(?![\d/:-]|[.,]\d|\s*(?:x|cm|mm|m|metros?|kg|g|mg|ml|l|h|min|minutos?|horas?|dias?|semanas?|meses|repeti\w*|series?|comprimidos?|gotas?|ao dia|por (?:dia|semana)|diariamente)\b)/u,
   // Inteiro ou milhar com ponto depois de verbo/preposição de preço ("por 1.800",
   // "faço 1800"). Ano, hora, telefone e porcentagem ficam de fora; "mais de 1.000
   // clientes" também. ponytail: a lista de quantificadores antes de "de" é a régua; contagem

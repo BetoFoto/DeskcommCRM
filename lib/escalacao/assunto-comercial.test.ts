@@ -80,6 +80,17 @@ describe("parcela na saída: só com contexto de pagamento", () => {
     ("a saída não barra: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(false));
 });
 
+// Rodada 4 do #3270: parcela com espaço e sem "de" passava ("10 vezes 99", "12x 50").
+describe("parcela na saída: valor depois do espaço, sem 'de'", () => {
+  it.each(["10 vezes 99", "12x 50", "3 vezes 200", "6x R$ 80", "São 10 vezes 99 no total", "Dá 12x 50 pra você"])
+    ("a saída barra: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(true));
+  it.each(["Você já remarcou 3 vezes", "Ligamos 2 vezes e ninguém atendeu", "Use 2 vezes diariamente",
+    "Tome 2x ao dia", "A sala 3x4 está livre", "Rua Augusta, 1500", "CEP 01310-100", "Caminhe 2x 30 minutos",
+    "Faça 3 vezes 10 repetições", "Pingue 2 vezes 10 gotas", "Venha 2x 14:30", "Recorte 2x 80 cm",
+    "Tome 3 vezes 1 comprimido", "Repita 2x 15 dias"])
+    ("a saída não barra: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(false));
+});
+
 describe("restricaoComercialBarra: a régua dos dois caminhos de envio", () => {
   const avisar = () => {};
   it("corpo sem preço não lê a escolha", async () => {
