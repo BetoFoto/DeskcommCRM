@@ -1,40 +1,77 @@
 /**
- * #2942 — O PROVEDOR `local-http`: engine de scraping self-hosted, escolhido por URL.
+ * #2942 — O PROVEDOR `local-http`: engine de scraping self-hosted.
  *
  * O que este arquivo mede, na ordem:
  *
  * 1. Organização com `settings.prospecting.provider = 'local-http'` tem a busca
- *    entregue ao ENGINE, na URL que ela guardou como credencial — e ZERO chamadas
- *    a `api.apify.com`. Antes desta fatia a mesma organização caía fechado em
- *    `Provedor de busca desconhecido nesta organização: local-http` (422).
- * 2. A régua de credencial do provedor é o HEALTH CHECK do engine: é o que
- *    `configureCredential` pergunta antes de cifrar a URL.
- * 3. A fatia não mexe em quem não escolheu nada: sem escolha, continua a Apify.
- * 4. `local-http` é de PRODUÇÃO — ao contrário de `teste`, que só existe sob
- *    `NODE_ENV=test` (#2174). Sob `NODE_ENV=production` ele segue disponível.
- * 5. `synchronizeSearch` lê a busca e os resultados pelo mesmo engine, e os itens
- *    que o normalizador da casa já entende viram candidatos.
- * 6. Falha do engine e URL inválida saem FECHADO, como `ProspectingError`.
+ *    entregue ao ENGINE, na URL DA INSTALAÇÃO (`PROSPECTING_LOCAL_HTTP_URL`) —
+ *    e ZERO chamadas a `api.apify.com`. Antes desta fatia a mesma organização
+ *    caía fechado em `Provedor de busca desconhecido nesta organização`
+ *    (422).
+ * 2. **A URL vem da INSTALAÇÃO, nunca da organização.** O valor que a
+ *    organização informaria (o canal de credencial) é IGNORADO: uma URL
+ *    arbitrária dela não vale.
+ * 3. **Destino de rede interna não autorizado é RECUSA FECHADA.** O endereço
+ *    do engine passa pela régua de destinos internos
+ *    (`motivoDaRecusaDeDestino(..., "instalacao")`), e um IP interno fora da
+ *    lista que a instalação autoriza não é alcançado.
+ * 4. Endereço interno COBERTO pela lista da instalação alcança o engine — o
+ *    caso de uso que motivou a #2942.
+ * 5. A régua de credencial do provedor é o HEALTH CHECK do engine da
+ *    instalação, e NADA é gravado (não há segredo por organização).
+ * 6. A fatia não mexe em quem não escolheu nada: sem escolha, continua a Apify.
+ * 7. `local-http` é de PRODUÇÃO — ao contrário de `teste`, que só existe sob
+ *    `NODE_ENV=test` (#2174).
+ * 8. `synchronizeSearch` lê a busca e os resultados pelo mesmo engine; os itens
+ *    que o normalizador da casa já entende viram candidatos — e um estado
+ *    terminal COM FALHA (`failed`/`cancelled`) vira `search_status='failed'`.
+ * 9. Falha do engine e URL inválida saem FECHADO, como `ProspectingError`.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/** A URL do engine é a credencial desta organização: o canal cifrado já existente a devolve. */
-let credencialDaOrg: string | ((org: string) => string) = "https://engine.interno:8080";
+/** A URL do engine é da INSTALAÇÃO — quem diz é `PROSPECTING_LOCAL_HTTP_URL`. */
+// IP público LITERAL: a régua de destino julga o IP direto, sem tocar em DNS —
+// nada de dublê de resolução, nada de rede. E `https` para valer em produção.
+const ENGINE = "https://93.184.216.34:8080";
+
+/**
+ * O canal cifrado por organização segue existindo (a escolha da Apify o usa),
+ * mas o `local-http` o IGNORA: `credencialDaOrg` é justamente a URL arbitrária
+ * que a organização poderia informar e que NÃO pode valer.
+ */
+let credencialDaOrg: string | ((org: string) => string) = "https://url-da-organizacao.test:1234";
 
 vi.mock("@/lib/webhooks/secrets", () => ({
   decryptWebhookSecret: vi.fn(async () => credencialDaOrg),
   encryptWebhookSecret: vi.fn(async () => "cifrado"),
 }));
 
-import { configureCredential, createSearch, synchronizeSearch } from "@/lib/prospecting/store";
+/**
+ * O guard de destino (`lib/automation/outbound-ip.ts`) julga o IP LITERAL da URL
+ * sem passar por DNS — por isso o engine de teste usa um IP público literal
+ * (`ENGINE`) e não um nome. Nenhum dublê de resolução é preciso.
+ */
+
+/** Sem banco no teste: a lista de destinos internos cai no piso (vazio). */
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => {
+    throw new Error("sem banco no teste");
+  },
+}));
+
+import {
+  configureCredential,
+  createSearch,
+  synchronizeSearch,
+} from "@/lib/prospecting/store";
 import { ProspectingError } from "@/lib/prospecting/provider";
 import { provedorDaOrganizacao } from "@/lib/prospecting/provedor";
 import { provedorDeTeste } from "@/lib/prospecting/provedor-teste";
 import { searchSchema } from "@/lib/prospecting/schema";
+import { esquecerDestinosInternos } from "@/lib/automation/destinos-internos-autorizados";
 
 const ORG_LOCAL = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ORG_SEM_ESCOLHA = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const ENGINE = "https://engine.interno:8080";
 
 const BUSCA = searchSchema.parse({
   name: "clínicas de SP",
@@ -111,6 +148,7 @@ function fakeDb(porOrg: Record<string, Record<string, unknown> | null>) {
     if (sql.startsWith("select * from prospecting_campaigns")) return { rows: [] };
     if (sql.includes("set run_id=$3")) return { rows: [] };
     if (sql.includes("search_status='unknown'")) return { rows: [] };
+    if (sql.includes("search_status='failed'")) return { rows: [] };
     return { rows: [] };
   });
   const client = { query, release: () => undefined };
@@ -203,13 +241,18 @@ function campanhaDoEngine(org: string, runId = "job-1"): Campanha {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
-  credencialDaOrg = ENGINE;
+  // A URL do engine é da INSTALAÇÃO (nunca da organização).
+  vi.stubEnv("PROSPECTING_LOCAL_HTTP_URL", ENGINE);
+  // A URL da organização é a isca: sempre uma que NÃO pode vencer a da instalação.
+  credencialDaOrg = "https://url-da-organizacao.test:1234";
+  // A lista de destinos internos é memoizada em `globalThis`: limpa entre testes.
+  esquecerDestinosInternos();
   fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
 });
 
 describe("#2942 provedor local-http (engine de scraping self-hosted)", () => {
-  it("organização com provider 'local-http' é atendida pelo engine, na URL dela, sem tocar na Apify", async () => {
+  it("organização com provider 'local-http' é atendida pelo engine, na URL da instalação, sem tocar na Apify", async () => {
     const db = fakeDb({ [ORG_LOCAL]: { prospecting: { provider: "local-http" } } });
     observarRun(db);
     const urls = engine({});
@@ -235,18 +278,83 @@ describe("#2942 provedor local-http (engine de scraping self-hosted)", () => {
     expect(campanha.search_status).toBe("running");
   });
 
-  it("a régua da credencial é o health check do engine, e nada é gravado quando ele não confirma", async () => {
+  it("a URL do engine vem da INSTALAÇÃO: a URL que a organização informa é ignorada", async () => {
+    const db = fakeDb({ [ORG_LOCAL]: { prospecting: { provider: "local-http" } } });
+    observarRun(db);
+    const urls = engine({});
+
+    // A organização "informa" uma URL arbitrária no canal de credencial.
+    const urlArbitraria = "http://10.9.9.9:9999";
+    credencialDaOrg = urlArbitraria;
+
+    await createSearch(
+      db.pool as never,
+      {} as never,
+      ORG_LOCAL,
+      "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
+      BUSCA,
+    );
+
+    // O engine é o da instalação; a URL da organização NÃO é usada em lugar nenhum.
+    expect(urls.length).toBeGreaterThan(0);
+    expect(urls.every((u) => u.startsWith(ENGINE))).toBe(true);
+    expect(urls.some((u) => u.includes("10.9.9.9"))).toBe(false);
+    expect(urls.some((u) => u.includes("url-da-organizacao"))).toBe(false);
+  });
+
+  it("destino de rede interna NÃO autorizado é RECUSA FECHADA — o engine não é alcançado", async () => {
+    // A instalação aponta o engine para um IP da rede de dentro; a lista de
+    // destinos internos está VAZIA (piso do `.env`), então isto NÃO é autorizado.
+    vi.stubEnv("PROSPECTING_LOCAL_HTTP_URL", "http://10.1.2.7:8080");
+    const db = fakeDb({ [ORG_LOCAL]: { prospecting: { provider: "local-http" } } });
+    observarRun(db);
+    const urls = engine({});
+
+    const provedor = await provedorDaOrganizacao(db.pool as never, ORG_LOCAL);
+    const recusa = await provedor.startSearch("", BUSCA).catch((e: unknown) => e);
+
+    expect(recusa).toBeInstanceOf(ProspectingError);
+    expect((recusa as ProspectingError).status).toBe(422);
+    expect((recusa as Error).message).toContain("private_host");
+    // Nada saiu para a rede interna: o guard fecha ANTES do fetch.
+    expect(urls).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("destino interno COBERTO pela lista da instalação alcança o engine (o caso de uso da #2942)", async () => {
+    vi.stubEnv("PROSPECTING_LOCAL_HTTP_URL", "http://10.1.2.7:8080");
+    // A instalação autorizou ESTE destino interno (última lista conhecida).
+    globalThis.__ultimosDestinosInternosConhecidos = ["10.1.2.7"];
+    const db = fakeDb({ [ORG_LOCAL]: { prospecting: { provider: "local-http" } } });
+    observarRun(db);
+    const urls = engine({});
+
+    await createSearch(
+      db.pool as never,
+      {} as never,
+      ORG_LOCAL,
+      "bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb",
+      BUSCA,
+    );
+
+    expect(urls.every((u) => u.startsWith("http://10.1.2.7:8080"))).toBe(true);
+    expect(urls.some((u) => u.endsWith("/api/v1/scrape"))).toBe(true);
+  });
+
+  it("a régua da credencial é o health check do engine da instalação, e NADA é gravado", async () => {
     const db = fakeDb({ [ORG_LOCAL]: { prospecting: { provider: "local-http" } } });
     const urls = engine({});
 
-    await configureCredential(db.pool as never, {} as never, ORG_LOCAL, ENGINE);
+    // A organização manda o valor que quiser: ele é IGNORADO (a URL da instalação vale).
+    await configureCredential(db.pool as never, {} as never, ORG_LOCAL, "https://isca.test");
 
     expect(urls).toEqual([`${ENGINE}/api/v1/health`]);
+    // Não há segredo por organização no local-http: o `configure` só valida.
     expect(
       db.log.some((q) =>
         q.sql.includes("prospecting_settings(organization_id,credential_encrypted)"),
       ),
-    ).toBe(true);
+    ).toBe(false);
 
     // Engine no ar mas sem confirmar: fecha fechado e NÃO grava a credencial.
     vi.clearAllMocks();
@@ -257,7 +365,7 @@ describe("#2942 provedor local-http (engine de scraping self-hosted)", () => {
       dbRuim.pool as never,
       {} as never,
       ORG_LOCAL,
-      ENGINE,
+      "https://isca.test",
     ).catch((e: unknown) => e);
     expect(falha).toBeInstanceOf(ProspectingError);
     expect(dbRuim.log.some((q) => q.sql.includes("prospecting_settings(organization_id"))).toBe(
@@ -276,6 +384,10 @@ describe("#2942 provedor local-http (engine de scraping self-hosted)", () => {
 
     await configureCredential(db.pool as never, {} as never, ORG_SEM_ESCOLHA, "chave-apify");
     expect(fetch.mock.calls[0]![0]).toBe("https://api.apify.com/v2/users/me");
+    // E a credencial da organização É gravada (a Apify tem segredo por organização).
+    expect(
+      db.log.some((q) => q.sql.includes("prospecting_settings(organization_id,credential_encrypted)")),
+    ).toBe(true);
 
     await createSearch(
       db.pool as never,
@@ -332,14 +444,49 @@ describe("#2942 provedor local-http (engine de scraping self-hosted)", () => {
     expect(db.log.some((q) => q.sql.includes("search_status='succeeded'"))).toBe(true);
   });
 
-  it("engine fora do ar e URL que não é http(s) falham FECHADO como ProspectingError", async () => {
+  it("estado terminal COM FALHA do engine vira search_status='failed'", async () => {
+    const db = fakeDb({ [ORG_LOCAL]: { prospecting: { provider: "local-http" } } });
+    engine({
+      job: (id) =>
+        new Response(JSON.stringify({ job_id: id, status: "failed", results: [] }), {
+          status: 200,
+        }),
+    });
+
+    await synchronizeSearch(db.client as never, {} as never, campanhaDoEngine(ORG_LOCAL) as never);
+
+    const fechamento = db.log.find((q) => q.sql.includes("search_status='failed'"));
+    expect(fechamento).toBeDefined();
+    expect(String(fechamento!.params?.[2])).toContain("FAILED");
+    // Estado terminal NÃO insere candidato nenhum nem marca sucesso.
+    expect(db.log.some((q) => q.sql.startsWith("insert into prospecting_candidates"))).toBe(false);
+    expect(db.log.some((q) => q.sql.includes("search_status='succeeded'"))).toBe(false);
+  });
+
+  it("estado 'cancelled' também é terminal COM FALHA", async () => {
+    const db = fakeDb({ [ORG_LOCAL]: { prospecting: { provider: "local-http" } } });
+    engine({
+      job: (id) =>
+        new Response(JSON.stringify({ job_id: id, status: "cancelled", results: [] }), {
+          status: 200,
+        }),
+    });
+
+    await synchronizeSearch(db.client as never, {} as never, campanhaDoEngine(ORG_LOCAL) as never);
+
+    const fechamento = db.log.find((q) => q.sql.includes("search_status='failed'"));
+    expect(fechamento).toBeDefined();
+    expect(String(fechamento!.params?.[2])).toContain("FAILED");
+  });
+
+  it("engine fora do ar e URL inválida falham FECHADO como ProspectingError", async () => {
     const db = fakeDb({ [ORG_LOCAL]: { prospecting: { provider: "local-http" } } });
     observarRun(db);
 
     // Engine fora do ar: o provedor fecha com 502, não com o erro cru do fetch.
     fetch.mockRejectedValue(new Error("ECONNREFUSED"));
     const provedor = await provedorDaOrganizacao(db.pool as never, ORG_LOCAL);
-    const foraDoAr = await provedor.startSearch(ENGINE, BUSCA).catch((e: unknown) => e);
+    const foraDoAr = await provedor.startSearch("", BUSCA).catch((e: unknown) => e);
     expect(foraDoAr).toBeInstanceOf(ProspectingError);
     expect((foraDoAr as ProspectingError).status).toBe(502);
     expect((foraDoAr as ProspectingError).escopo).toBe("campanha");
@@ -360,13 +507,11 @@ describe("#2942 provedor local-http (engine de scraping self-hosted)", () => {
     // URL sem esquema (o erro de digitação mais provável de quem digita "localhost:8080").
     vi.clearAllMocks();
     const dbRuim = fakeDb({ [ORG_LOCAL]: { prospecting: { provider: "local-http" } } });
-    credencialDaOrg = "localhost:8080";
+    vi.stubEnv("PROSPECTING_LOCAL_HTTP_URL", "localhost:8080");
     fetch.mockRejectedValue(new Error("a rede não deve ser usada"));
 
     const provedorRuim = await provedorDaOrganizacao(dbRuim.pool as never, ORG_LOCAL);
-    const urlInvalida = await provedorRuim
-      .startSearch("localhost:8080", BUSCA)
-      .catch((e: unknown) => e);
+    const urlInvalida = await provedorRuim.startSearch("", BUSCA).catch((e: unknown) => e);
     expect(urlInvalida).toBeInstanceOf(ProspectingError);
     expect((urlInvalida as ProspectingError).status).toBe(422);
     expect(fetch).not.toHaveBeenCalled();

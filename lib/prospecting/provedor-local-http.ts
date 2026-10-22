@@ -10,14 +10,30 @@
  * importante quanto o que faz — ele não toca em `PROVEDOR_PADRAO`, não muda
  * nada do caminho default da Apify e não cria migration nenhuma.
  *
- * ─── A CREDENCIAL É A URL ──────────────────────────────────────────────────
+ * ─── DE ONDE VEM A URL DO ENGINE: DA INSTALAÇÃO, NUNCA DA ORGANIZAÇÃO ──────
  *
- * Não há chave de API: o engine roda na mesma rede e se identifica pelo
- * endereço. A URL entra pelo MESMO canal cifrado que já existe
- * (`prospecting_settings.credential_encrypted`, via `configureCredential` em
- * `store.ts`) — nenhuma coluna nova, nenhum caminho novo de segredo. O que
- * muda é só a pergunta que a régua do provedor faz antes de cifrar: em vez de
- * `users/me` da Apify, o HEALTH CHECK do engine.
+ * A #2942 propôs a URL no lugar da chave, e a primeira versão deste provedor
+ * seguiu a issue: o endereço do engine entrava pelo canal de credencial por
+ * organização. Isso colide com a REGRA DA CASA — endereço de saída escolhido
+ * por uma ORGANIZAÇÃO nunca alcança a rede interna da instalação. A decisão
+ * 22-d (`lib/automation/destinos-internos-autorizados.ts`, regra 2) diz que a
+ * liberação de destino interno vale SÓ para endereço configurado pela
+ * INSTALAÇÃO. Com a URL vindo da organização, o caso de uso do engine interno
+ * (rodando na rede do compose) deixaria de funcionar, e aceitar uma URL
+ * qualquer abriria a rede interna a quem só sabe escolher um provedor.
+ *
+ * O desenho, então, é o mesmo de `WACALLS_API_BASE_URL` (`lib/env.ts`): a URL
+ * do engine é variável da INSTALAÇÃO (`PROSPECTING_LOCAL_HTTP_URL`), opcional e
+ * com default vazio, e o destino passa pela MESMA régua de saída que o resto da
+ * casa — `motivoDaRecusaDeDestino(endereco, "instalacao")`. Só um endereço
+ * apontado pela instalação E coberto pela lista de destinos internos
+ * (`/admin/destinos-internos`) alcança a rede de dentro; qualquer outra URL
+ * interna é recusada, e o erro é FECHADO.
+ *
+ * O valor recebido pela organização (o parâmetro `_url` dos três métodos, a
+ * "chave" de sempre) é IGNORADO aqui: não é gravado nem usado. Por isso o
+ * `local-http` não exige credencial salva — ver `provedor.ts`
+ * (`exigeCredencialDaOrganizacao: false`) e `store.ts`.
  *
  * ─── A LÍNGUA DO ENGINE (e o que fica fora desta fatia) ────────────────────
  *
@@ -46,6 +62,8 @@
  * - **Rotear pelo provedor que lançou a busca (#2174).** `synchronizeSearch`
  *   continua lendo a escolha ATUAL da organização, como já faz.
  */
+import { motivoDaRecusaDeDestino } from "@/lib/automation/destinos-internos-autorizados";
+
 import { ProspectingError } from "./provider";
 import type { DadosDaExecucao, ProvedorDeBusca } from "./provedor";
 import type { SearchInput } from "./schema";
@@ -54,7 +72,7 @@ import type { SearchInput } from "./schema";
 const TIMEOUT_MS = 20_000;
 
 /**
- * A URL da organização vira a base das chamadas, ou o erro FECHADO de sempre.
+ * A URL da INSTALAÇÃO vira a base das chamadas, ou o erro FECHADO de sempre.
  *
  * `localhost:8080` (sem esquema) é o erro de digitação mais provável — e o mais
  * traiçoeiro: o parser de URL aceita `localhost:` como se fosse o protocolo.
@@ -76,6 +94,35 @@ export function baseDoEngine(url: string): string {
       `A URL do engine de busca local precisa começar com http:// ou https:// (recebido: ${bruta}).`,
     );
   return bruta;
+}
+
+/**
+ * A base do engine, já AUTORIZADA como destino.
+ *
+ * Lê `PROSPECTING_LOCAL_HTTP_URL` — variável da INSTALAÇÃO, e não da
+ * organização — e passa o endereço pela régua de destinos internos
+ * (`motivoDaRecusaDeDestino(..., "instalacao")`). Só endereço coberto pela
+ * lista que a instalação autoriza alcança a rede de dentro; qualquer outra URL
+ * interna é recusa FECHADA, com o mesmo código que `outbound-ip.ts` usa.
+ *
+ * Vazio = a instalação não oferece o engine, e `baseDoEngine` fecha com o erro
+ * de sempre. A régua roda a cada chamada de propósito: é o que pega o nome que
+ * passou a resolver para IP interno depois de configurado.
+ *
+ * Lida de `process.env` (e não de `env.*`) pelo MESMO motivo de
+ * `JITSI_SERVER_URL` (`lib/video/jitsi.ts`): o valor é resolvido no runtime e
+ * testável com `vi.stubEnv`, sem recarregar o módulo.
+ */
+export async function baseDoEngineDaInstalacao(): Promise<string> {
+  const base = baseDoEngine(process.env.PROSPECTING_LOCAL_HTTP_URL ?? "");
+  const recusa = await motivoDaRecusaDeDestino(base, "instalacao");
+  if (recusa)
+    throw new ProspectingError(
+      `O endereço do engine de busca local não é um destino autorizado (${recusa}). ` +
+        `Ajuste PROSPECTING_LOCAL_HTTP_URL ou libere o destino em /admin/destinos-internos.`,
+      422,
+    );
+  return base;
 }
 
 /** O estado do engine na língua que `store.ts` já lê. Estado novo = erro fechado, não palpite. */
@@ -126,7 +173,7 @@ async function pedir(
     });
   } catch {
     throw new ProspectingError(
-      `O engine de busca local não respondeu em ${url}. Confira se ele está no ar e se a URL da organização aponta para ele.`,
+      `O engine de busca local não respondeu em ${url}. Confira se ele está no ar e se PROSPECTING_LOCAL_HTTP_URL aponta para ele.`,
       502,
     );
   }
@@ -158,9 +205,14 @@ async function corpoDoJob(url: string, id: string): Promise<CorpoDoJob> {
   return corpo;
 }
 
+/**
+ * O `_url` dos três métodos é o valor que a ORGANIZAÇÃO informaria — e é
+ * IGNORADO: a base sai de `baseDoEngineDaInstalacao()`. Mantido no contrato
+ * (`ProvedorDeBusca`) só para não mudar a interface de quem despacha.
+ */
 export const provedorLocalHttp: ProvedorDeBusca = {
-  async startSearch(url, input: SearchInput): Promise<DadosDaExecucao> {
-    const base = baseDoEngine(url);
+  async startSearch(_url, input: SearchInput): Promise<DadosDaExecucao> {
+    const base = await baseDoEngineDaInstalacao();
     const resposta = await pedir(base, "/api/v1/scrape", {
       method: "POST",
       body: JSON.stringify({
@@ -187,8 +239,8 @@ export const provedorLocalHttp: ProvedorDeBusca = {
       usageTotalUsd: 0,
     };
   },
-  async readSearch(url, id: string): Promise<DadosDaExecucao> {
-    const base = baseDoEngine(url);
+  async readSearch(_url, id: string): Promise<DadosDaExecucao> {
+    const base = await baseDoEngineDaInstalacao();
     const corpo = await corpoDoJob(base, id);
     return {
       id: corpo.job_id as string,
@@ -199,8 +251,8 @@ export const provedorLocalHttp: ProvedorDeBusca = {
       usageTotalUsd: 0,
     };
   },
-  async readResults(url, dataset: string, limit: number): Promise<Record<string, unknown>[]> {
-    const base = baseDoEngine(url);
+  async readResults(_url, dataset: string, limit: number): Promise<Record<string, unknown>[]> {
+    const base = await baseDoEngineDaInstalacao();
     const corpo = await corpoDoJob(base, dataset);
     const itens = Array.isArray(corpo.results) ? corpo.results : [];
     return itens
@@ -210,13 +262,14 @@ export const provedorLocalHttp: ProvedorDeBusca = {
 };
 
 /**
- * A régua de credencial deste provedor: o HEALTH CHECK do engine. É o que
- * `configureCredential` (`store.ts:127`) pergunta antes de cifrar a URL — a
- * mesma pergunta que a Apify responde em `users/me`, só que aqui é "você é um
- * engine de verdade e está no ar?".
+ * A régua de credencial deste provedor: o HEALTH CHECK do engine DA INSTALAÇÃO.
+ * É o que `configureCredential` (`store.ts`) pergunta antes de qualquer busca —
+ * a mesma pergunta que a Apify responde em `users/me`, só que aqui é "você é um
+ * engine de verdade e está no ar?" contra a URL da instalação. O valor recebido
+ * (`_chave`) é IGNORADO: não há segredo por organização nesta fatia.
  */
-export async function validarCredencialLocalHttp(url: string): Promise<void> {
-  const base = baseDoEngine(url);
+export async function validarCredencialLocalHttp(_chave: string): Promise<void> {
+  const base = await baseDoEngineDaInstalacao();
   const resposta = await pedir(base, "/api/v1/health");
   let corpo: { status?: unknown };
   try {
@@ -229,7 +282,7 @@ export async function validarCredencialLocalHttp(url: string): Promise<void> {
   }
   if (corpo?.status !== "ok")
     throw new ProspectingError(
-      `O engine de busca local em ${base} não confirmou o health check. Confira a URL da organização.`,
+      `O engine de busca local em ${base} não confirmou o health check. Confira PROSPECTING_LOCAL_HTTP_URL.`,
       502,
     );
 }
