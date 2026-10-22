@@ -6,14 +6,16 @@ import { useT } from "@/hooks/i18n/useT";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { chaveDoQuadro, useBoard } from "@/hooks/kanban/useBoard";
-import { useMoveCard, type RecusaDeCampos, type RetomadaPendente } from "@/hooks/kanban/useMoveCard";
+import { useMoveCard, type MoveArgs, type RecusaDeCampos, type RetomadaPendente } from "@/hooks/kanban/useMoveCard";
 import { useRenameStage } from "@/hooks/kanban/useRenameStage";
 import { CamposObrigatoriosDialog } from "./CamposObrigatoriosDialog";
+import { LoseLeadDialog } from "./LoseLeadDialog";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAtRiskLeads } from "@/hooks/leads/useAtRiskLeads";
 import { useReactivations } from "@/hooks/leads/useReactivations";
 import { midpoint } from "@/lib/kanban/fractional-indexing";
-import { proximoNaEtapaInteira } from "@/lib/kanban/vizinho-na-etapa";
+import { posicaoNoFimDaEtapa, proximoNaEtapaInteira } from "@/lib/kanban/vizinho-na-etapa";
+import { decideMotivoDaPerda } from "@/lib/leads/motivo-da-perda";
 import type { Lead } from "@/lib/types/leads";
 import type { BoardData, Pipeline, Stage } from "@/lib/kanban/types";
 import { StageColumn } from "./StageColumn";
@@ -106,6 +108,7 @@ export function KanbanBoard({
   // esta opção só troca o destino do erro.
   const [recusaDeCampos, setRecusaDeCampos] = useState<RecusaDeCampos | null>(null);
   const [retomada, setRetomada] = useState<RetomadaPendente | null>(null);
+  const [perdaPendente, setPerdaPendente] = useState<MoveArgs | null>(null);
   const moveCard = useMoveCard(pipelineId, {
     onCamposFaltando: setRecusaDeCampos,
     onRetomada: setRetomada,
@@ -201,6 +204,40 @@ export function KanbanBoard({
     [onSelectionChange, selectedLeadIds],
   );
 
+  // Arrastar e "Mover para…" passam por aqui. A etapa de perda sem motivo abre a
+  // janela do motivo ANTES do move, com a mesma regra que a rota aplica: sem
+  // isso o move ia sem `lost_reason` e voltava como toast.
+  const moverPara = useCallback(
+    (args: MoveArgs) => {
+      const etapa = data?.stages.find((s) => s.id === args.stageId);
+      const lead = data?.leads.find((l) => l.id === args.leadId);
+      if (!decideMotivoDaPerda({ etapaDeDestino: etapa, motivoAtual: lead?.lost_reason }).ok) {
+        setPerdaPendente(args);
+        return;
+      }
+      moveCard.mutate(args);
+    },
+    [data, moveCard],
+  );
+
+  // O menu não tem ponto de soltura: o card vai para o fim da etapa INTEIRA
+  // (cache do quadro, sem o filtro da página — #2545).
+  const aoMoverPelaLista = useCallback(
+    (lead: Lead, stageId: string) => {
+      const funil = qc.getQueryData<BoardData>(chaveDoQuadro(pipelineId))?.leads ?? data?.leads ?? [];
+      moverPara({
+        leadId: lead.id,
+        stageId,
+        positionInStage: posicaoNoFimDaEtapa(
+          funil.filter((l) => l.stage_id === stageId),
+          lead.id,
+        ),
+        expectedUpdatedAt: lead.updated_at,
+      });
+    },
+    [qc, pipelineId, data, moverPara],
+  );
+
   const handleDragEnd = useCallback(
     (result: DropResult) => {
       if (!data || !grouped) return;
@@ -252,14 +289,14 @@ export function KanbanBoard({
         return;
       }
 
-      moveCard.mutate({
+      moverPara({
         leadId: lead.id,
         stageId: destStageId,
         positionInStage: newPosition,
         expectedUpdatedAt: lead.updated_at,
       });
     },
-    [data, grouped, moveCard, qc, pipelineId],
+    [data, grouped, moverPara, qc, pipelineId],
   );
 
   if (isLoading) {
@@ -321,6 +358,8 @@ export function KanbanBoard({
             selectedLeadIds={selectedLeadIds}
             onSelectMany={handleSelectMany}
             onOpen={setDossieId}
+            etapas={data.stages}
+            onMoverPara={aoMoverPelaLista}
             podeRenomear={podeRenomearEtapa}
             onRenomear={(nome) => renameStage.mutate({ stageId: stage.id, name: nome })}
           />
@@ -356,6 +395,19 @@ export function KanbanBoard({
             customFields,
             ...(wonReason !== undefined ? { wonReason } : {}),
           });
+        }}
+      />
+      <LoseLeadDialog
+        open={perdaPendente !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setPerdaPendente(null);
+        }}
+        pipelineId={pipelineId}
+        submitting={moveCard.isPending}
+        onConfirm={(lostReason) => {
+          if (!perdaPendente) return;
+          setPerdaPendente(null);
+          moveCard.mutate({ ...perdaPendente, lostReason });
         }}
       />
       {retomada && (
