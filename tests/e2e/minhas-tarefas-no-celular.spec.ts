@@ -202,6 +202,8 @@ test.describe("Minhas tarefas no celular — o que o lembrete abre", () => {
         { timeout: 30_000 },
       )
       .toBe("done");
+    // Com "Em aberto" (o padrão), a concluída sai da lista: é isso que a 03 mostra.
+    await expect(tela.getByText(MINHA, { exact: true })).toHaveCount(0, { timeout: 30_000 });
     await captura(page, "03-concluida-pelo-toque");
   });
 });
