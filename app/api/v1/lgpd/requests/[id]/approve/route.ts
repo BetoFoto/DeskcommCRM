@@ -21,6 +21,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -112,7 +113,9 @@ export async function POST(
   // Fetch the lgpd_request
   const { data: request, error: reqErr } = await admin
     .from("lgpd_requests")
-    .select("id, organization_id, request_type, status, contact_id, external_customer_id, due_at")
+    .select(
+      "id, organization_id, request_type, status, contact_id, external_customer_id, due_at, request_payload",
+    )
     .eq("organization_id", orgId)
     .eq("id", id)
     .maybeSingle();
@@ -167,10 +170,45 @@ export async function POST(
     // Non-blocking — worker can recover via cron
   }
 
+  // ─── A EVIDÊNCIA DO ATO, para o atestado do pedido ───────────────────────
+  //
+  // O atestado tem de declarar QUEM executou, de QUAL IP e QUANDO, e esta rota
+  // é o único ponto que vê os três: o worker roda depois, noutro processo e sem
+  // requisição. A evidência vai no `request_payload` do pedido — o mesmo lugar
+  // onde o produto guarda o contexto, e o que o worker lê —, e NÃO na trilha de
+  // auditoria: a auditoria segue sem PII, e IP de quem opera é dado de pessoa
+  // identificável.
+  const evidenciaDaExecucao = {
+    origem: "aprovacao_manual" as const,
+    executor: {
+      user_id: authUser.id,
+      // `full_name` pode não existir (conta criada por convite sem nome): o
+      // documento imprime o endereço, que é o que identifica quem executou.
+      nome: authUser.full_name ?? authUser.email,
+      email: authUser.email,
+      papel:
+        typeof (activeOrg as { role?: unknown } | null)?.role === "string"
+          ? String((activeOrg as { role?: unknown }).role)
+          : "administrador",
+    },
+    ip: ipDoCliente(req.headers),
+    user_agent: req.headers.get("user-agent"),
+    em: new Date().toISOString(),
+  };
+
   // Transition status → processing
   const { error: updateErr } = await admin
     .from("lgpd_requests")
-    .update({ status: "processing", updated_at: new Date().toISOString() })
+    .update({
+      status: "processing",
+      updated_at: new Date().toISOString(),
+      request_payload: {
+        ...(typeof request.request_payload === "object" && request.request_payload !== null
+          ? (request.request_payload as Record<string, unknown>)
+          : {}),
+        execucao: evidenciaDaExecucao,
+      },
+    })
     .eq("organization_id", orgId)
     .eq("id", id);
 

@@ -27,9 +27,11 @@ import { createHash } from "node:crypto";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { audit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
-import { perfilDaOrganizacao, PAIS_PADRAO } from "@/lib/legal/perfil-do-pais";
+import { citacaoDaLei, perfilDaOrganizacao, PAIS_PADRAO } from "@/lib/legal/perfil-do-pais";
 import { findContactByExternalId, findLgpdRequest } from "@/lib/lgpd/repository";
+import { evidenciaDoPedido, titularDoAtestado, type DadosDoAtestado } from "@/lib/lgpd/atestado-de-anonimizacao";
 import { avisarTitularAposApagamento } from "@/lib/lgpd/aviso-apos-apagar";
+import { emitirAtestadoDeAnonimizacao, type AtestadoEmitido } from "@/lib/lgpd/emitir-atestado";
 import { cascadeRedactContact } from "@/lib/lgpd/redact-cascade";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -233,19 +235,32 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
       const perfil = await perfilDaOrganizacao(admin, orgId);
       const avisaTitular = perfil.codigo !== PAIS_PADRAO;
 
+      // A IDENTIDADE do titular é lida AQUI, antes da cascata, para TODA
+      // organização: o passo 1 zera `email`, `display_name` e `phone_number`, e
+      // o atestado — o papel que o pedido emite — declara quem era. A leitura
+      // NÃO é o aviso: o envio do aviso continua decidido pela guarda do país
+      // logo abaixo (decisão de 2026-10-16, provada em
+      // `tests/invariants/lgpd-aviso-do-artigo-12-so-fora-do-brasil.test.ts`).
+      const { data: contatoAntes } = await admin
+        .from("contacts")
+        .select("email, display_name, phone_number, custom_fields, cpf_hash")
+        .eq("organization_id", orgId)
+        .eq("id", contactId)
+        .maybeSingle();
+      const contato = contatoAntes as {
+        email?: string | null;
+        display_name?: string | null;
+        phone_number?: string | null;
+        custom_fields?: Record<string, unknown> | null;
+        cpf_hash?: string | null;
+      } | null;
+
       let emailTitular: string | null = null;
       if (avisaTitular) {
-        const { data: contatoAntes } = await admin
-          .from("contacts")
-          .select("email")
-          .eq("organization_id", orgId)
-          .eq("id", contactId)
-          .maybeSingle();
         const emailNoPayload = req.request_payload?.["email"];
         // Duas checagens `typeof` em vez de uma pilha de `??`: o endereço vem do
         // contato (lido antes do apagamento) ou do payload, e o tipo de cada um
         // é tratado de forma explícita — mesma ordem de preferência de antes.
-        const contato = contatoAntes as { email?: string | null } | null;
         const emailDoContato = contato?.email;
         if (typeof emailDoContato === "string") {
           emailTitular = emailDoContato;
@@ -310,6 +325,77 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
       // main.
       const art12Notice = aviso ? (aviso.enviado ? "sent" : aviso.motivo) : null;
 
+      // ─── O ATESTADO DE ANONIMIZAÇÃO (o papel do pedido) ──────────────────
+      //
+      // O aviso diz que apagou; o atestado é o PAPEL: datado, com o IP de quem
+      // executou, quem executou e um código de autenticidade. Nasce DEPOIS da
+      // cascata (a identidade já foi lida antes dela) e em TODA organização: o
+      // texto dele não cita lei nenhuma por conta própria — a citação entra
+      // pelo perfil do país, como no relatório do art. 18, II, que sempre foi
+      // ao titular brasileiro. O AVISO por e-mail segue com a guarda do país.
+      //
+      // Best-effort por decisão: o pedido do titular não pode virar `failed`
+      // porque o Storage, o renderizador ou a chave caíram. A falha fica dita
+      // em `result.atestado.erro` e no log — uma ausência silenciosa, aqui,
+      // leria-se como "não é para emitir".
+      let atestadoDoPedido: AtestadoEmitido | { erro: string } | null = null;
+      const instanteDaExecucao = new Date().toISOString();
+      try {
+        const { data: orgLinha } = await admin
+          .from("organizations")
+          .select("legal_name, display_name, cnpj, dpo_email, timezone")
+          .eq("id", orgId)
+          .maybeSingle();
+        const org = orgLinha as {
+          legal_name?: string | null;
+          display_name?: string | null;
+          cnpj?: string | null;
+          dpo_email?: string | null;
+          timezone?: string | null;
+        } | null;
+        const dadosDoAtestado: DadosDoAtestado = {
+          request_id: requestId,
+          organization_id: orgId,
+          organization_name: org?.legal_name ?? org?.display_name ?? "não informado",
+          organization_document: org?.cnpj ?? null,
+          organization_email: org?.dpo_email ?? null,
+          titular: titularDoAtestado({
+            payload: (req.request_payload ?? null) as Record<string, unknown> | null,
+            nomeDoContato: typeof contato?.display_name === "string" ? contato.display_name : null,
+            emailDoContato: typeof contato?.email === "string" ? contato.email : null,
+            telefoneDoContato: typeof contato?.phone_number === "string" ? contato.phone_number : null,
+            camposCustomizados: (contato?.custom_fields ?? null) as Record<string, unknown> | null,
+            temDocumentoNoCadastro: typeof contato?.cpf_hash === "string",
+          }),
+          evidencia: evidenciaDoPedido(req.request_payload?.["execucao"], instanteDaExecucao),
+          escopo: req.scope === "tenant" ? "tenant" : "contact",
+          fuso: org?.timezone ?? "America/Sao_Paulo",
+          lei_rotulo: perfil.lei?.rotuloNoDocumento ?? null,
+          lei_citada: citacaoDaLei(perfil),
+        };
+        const emitido = await emitirAtestadoDeAnonimizacao(admin, dadosDoAtestado);
+        atestadoDoPedido = emitido;
+        await audit({
+          action: "lgpd.atestado_emitido",
+          organizationId: orgId,
+          resourceType: "lgpd_request",
+          resourceId: requestId,
+          metadata: {
+            codigo: emitido.codigo_curto,
+            algoritmo: emitido.algoritmo,
+            sha256: emitido.sha256,
+            path: emitido.path,
+            escopo: dadosDoAtestado.escopo,
+            origem: dadosDoAtestado.evidencia.origem,
+          },
+          bypassedRls: true,
+        });
+      } catch (erroDoAtestado) {
+        const motivo = erroDoAtestado instanceof Error ? erroDoAtestado.message : String(erroDoAtestado);
+        atestadoDoPedido = { erro: motivo };
+        logger.warn("lgpd: atestado de anonimização não emitido", { requestId, motivo });
+      }
+
       await admin
         .from("lgpd_requests")
         .update({
@@ -323,6 +409,10 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
             // O aviso do art. 12.º é prova do cumprimento, não enfeite: a razão
             // fica no resultado (`result.art12_notice`), com o POR QUÊ quando não saiu.
             ...(art12Notice ? { art12_notice: art12Notice } : {}),
+            // O PAPEL do pedido: código de autenticidade, caminho no Storage e
+            // hash do arquivo — ou o motivo de não ter saído. Omitir a chave
+            // quando falha faria o resultado mentir por ausência.
+            ...(atestadoDoPedido ? { atestado: atestadoDoPedido } : {}),
           },
           cascaded_to: cascade.counts,
           error_message: null,
