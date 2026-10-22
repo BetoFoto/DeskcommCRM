@@ -76,6 +76,13 @@ export async function updatePipelineConfig(
   if (parsed.data.reabertura_campos !== undefined) {
     nextSettings.reabertura_campos = parsed.data.reabertura_campos;
   }
+  // A entrada do Inbox (issue #3011): a ETAPA em que a conversa nova vira card
+  // neste funil. Grava o bloco inteiro, e não campo a campo, porque `ativa` e
+  // `stage_id` são uma decisão só — desligar sem perder a etapa escolhida é o
+  // que a tela precisa poder fazer.
+  if (parsed.data.entrada_do_inbox !== undefined) {
+    nextSettings.entrada_do_inbox = parsed.data.entrada_do_inbox;
+  }
 
   // Campo que passa a ser do Contato e que uma regra ativa do gatilho por data
   // lê (#2791): a regra seguiria ligada e pararia de disparar em silêncio.
@@ -113,6 +120,7 @@ export async function updatePipelineConfig(
       won_reasons_count: parsed.data.won_reasons?.length ?? null,
       won_reason_required: parsed.data.won_reason_required ?? null,
       reabertura: parsed.data.reabertura ?? null,
+      entrada_do_inbox_ativa: parsed.data.entrada_do_inbox?.ativa ?? null,
     },
   });
 
