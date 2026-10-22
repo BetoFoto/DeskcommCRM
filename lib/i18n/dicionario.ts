@@ -16605,6 +16605,10 @@ export const DICIONARIO: Traducoes = {
   "Esse valor não está na lista. Escolha uma das opções.": {
     es: "Ese valor no está en la lista. Elija una de las opciones.",
   },
+  // ─── Lista pesquisável com MÚLTIPLA ESCOLHA #3182 ───
+  "Digite para buscar e acrescentar…": { es: "Escriba para buscar y agregar…" },
+  "Permitir várias escolhas": { es: "Permitir varias opciones" },
+  "Escolhidos": { es: "Elegidos" },
   // #2813 — o painel "Iniciar conversa" do Inbox.
   "Nova conversa": { es: "Nueva conversación" },
   "Diga para quem e o que dizer. O canal de saída é você quem escolhe quando há mais de um número.": {
