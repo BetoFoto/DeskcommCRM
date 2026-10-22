@@ -18,7 +18,7 @@ import type { FonteDeVariavel, VariaveisDoModelo } from "@/lib/channels/meta/var
 import { actionConfigSchema } from "@/lib/followup/graph-schema";
 import type { VariavelDoModelo } from "@/lib/followup/modelos-aprovados";
 import { MODOS_DA_ACAO, opcoes, type ModoDaAcao } from "@/lib/followup/vocabulario";
-import { camposDoFunil } from "@/lib/leads/campos-do-funil";
+import { camposDoFunil, camposPorEscopo } from "@/lib/leads/campos-do-funil";
 import { usePipelines } from "@/hooks/webhooks/useWebhookSources";
 import { useMessageTemplates } from "@/hooks/inbox/useMessageTemplates";
 import { useModelosAprovadosDoFluxo } from "@/hooks/followup/useModelosAprovadosDoFluxo";
@@ -160,7 +160,12 @@ function MapaDeVariaveis({
 }) {
   const t = useT();
   const pipelines = usePipelines();
-  const campos = (pipelines.data?.data ?? []).flatMap((p) => camposDoFunil(p.settings));
+  // Só campos do NEGÓCIO: o envio lê `crm_leads.custom_fields`, e o valor de um
+  // campo do contato mora em `contacts.custom_fields` — escolhê-lo pularia o
+  // passo em toda inscrição (#2791; mesmo filtro do quadro e do calendário).
+  const campos = (pipelines.data?.data ?? []).flatMap((p) =>
+    camposPorEscopo(camposDoFunil(p.settings), "negocio"),
+  );
   const camposUnicos = [...new Map(campos.map((c) => [c.key, c])).values()];
   const faltando = variaveis.filter((v) => !valor[v.chave]);
 
