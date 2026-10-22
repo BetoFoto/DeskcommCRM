@@ -101,28 +101,49 @@ describe("ChatThread: busca nas mensagens carregadas", () => {
       msg("m-1", "Qual o valor do BOLETO?"),
       msg("m-2", "Bom dia"),
       msg("m-3", "segue o boleto", { direction: "outbound" }),
-      msg("m-4", "boleto apagado", { revoked_at: "2026-09-24T12:05:00.000Z" }),
+      msg("m-4", "boleto apagado pelo cliente", { revoked_at: "2026-09-24T12:05:00.000Z" }),
       msg("m-5", "boleto oculto", { metadata: { crm_hidden_at: "2026-09-24T12:06:00.000Z" } }),
+      msg("m-6", "boleto apagado pela equipe", {
+        direction: "outbound",
+        revoked_at: "2026-09-24T12:07:00.000Z",
+      }),
     ];
   });
   afterEach(() => {
     Element.prototype.scrollIntoView = original;
   });
 
-  it("marca só as bolhas visíveis que contêm o termo, sem diferenciar maiúsculas", () => {
+  it("marca as bolhas VISÍVEIS com o termo — inclusive a apagada cujo texto aparece", () => {
     const { container } = render(<ChatThread conversationId="c-1" searchTerm="  Boleto " />, {
       wrapper,
     });
     const achadas = marcadas(container);
-    expect(achadas).toHaveLength(2);
+    // m-4 é a apagada PELO CONTATO: a bolha dela mostra o texto (régua de
+    // `lib/messaging/apagada.ts`), então a busca tem de achá-la — deixá-la de
+    // fora esconderia da busca justamente o que a tela está mostrando.
+    expect(achadas).toHaveLength(3);
     expect(achadas[0]).toContain("Qual o valor do BOLETO?");
     expect(achadas[1]).toContain("segue o boleto");
-    expect(screen.getByRole("status")).toHaveTextContent("Resultados nas mensagens carregadas: 2");
+    expect(achadas[2]).toContain("boleto apagado pelo cliente");
+    expect(screen.getByRole("status")).toHaveTextContent("Resultados nas mensagens carregadas: 3");
     // O anel é o que o atendente enxerga; o atributo sozinho não pinta nada.
     const bolha = container.querySelector('[data-search-match="true"] [data-testid="message-bubble"]');
     expect(bolha?.className).toContain("ring-2");
     // Não consulta o servidor: a busca é só sobre o que já está carregado.
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it("a apagada pelo ATENDENTE e a oculta ficam de fora: o termo não está na tela", () => {
+    // Marcar uma bolha sem o termo visível seria mentir — o atendente veria o
+    // anel e nenhuma ocorrência dentro dele. m-6 apagada pela equipe e m-5
+    // oculta no CRM têm o corpo na LINHA, mas não na bolha.
+    const equipe = render(<ChatThread conversationId="c-1" searchTerm="equipe" />, { wrapper });
+    expect(marcadas(equipe.container)).toEqual([]);
+    expect(get).not.toHaveBeenCalled();
+    equipe.unmount();
+
+    const oculto = render(<ChatThread conversationId="c-1" searchTerm="oculto" />, { wrapper });
+    expect(marcadas(oculto.container)).toEqual([]);
   });
 
   it("leva a primeira ocorrência ao campo de visão", () => {

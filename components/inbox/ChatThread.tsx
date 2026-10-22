@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageBubble } from "./MessageBubble";
 import { separarReacoes } from "@/lib/inbox/reacoes-no-fio";
+import { textoDaApagadaApareceNaInbox } from "@/lib/messaging/apagada";
 import { NoteCard } from "./NoteCard";
 import { PassagemCard } from "./PassagemCard";
 import { useMessagesRealtime } from "@/hooks/inbox/useMessagesRealtime";
@@ -124,8 +125,10 @@ export function ChatThread({
   /**
    * BUSCA NO QUE JÁ ESTÁ NA TELA (#1793). Não vai ao servidor: filtra as
    * páginas carregadas, e o rótulo diz isso para ninguém ler "zero" como "não
-   * existe na conversa". Apagada e oculta ficam de fora — o texto delas não
-   * aparece na bolha, e marcar uma bolha sem o termo visível seria mentir.
+   * existe na conversa". A OCULTA fica de fora; a APAGADA segue a mesma régua da
+   * bolha (`textoDaApagadaApareceNaInbox`): marcar bolha sem o termo visível
+   * seria mentir, e deixar de fora a apagada cujo texto aparece seria esconder da
+   * busca justamente o que a tela está mostrando.
    */
   const termo = searchTerm.trim().toLocaleLowerCase();
   const resultados = useMemo(
@@ -135,8 +138,8 @@ export function ChatThread({
           .filter(
             (m) =>
               termo &&
-              !m.revoked_at &&
               !m.metadata?.crm_hidden_at &&
+              (!m.revoked_at || textoDaApagadaApareceNaInbox(m.direction)) &&
               m.body?.toLocaleLowerCase().includes(termo),
           )
           .map((m) => m.id),

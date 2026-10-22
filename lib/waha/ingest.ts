@@ -1865,14 +1865,23 @@ async function handleMessageEdited(
  *
  * A linha NÃO é removida: sumir com ela apagaria o contexto das vizinhas — uma
  * resposta passaria a responder ao nada — e o histórico de quem atendeu. O
- * corpo também não é limpo aqui: quem decide o que mostrar é a tela, e apagar o
- * texto no banco impediria o próprio atendente de entender, depois, o que tinha
- * sido combinado antes do arrependimento.
+ * corpo também não é limpo aqui: quem decide o que MOSTRAR é a régua da tela
+ * (`lib/messaging/apagada.ts`), e apagar o texto no banco destruiria o registro
+ * do que foi combinado — que é justamente o que a exportação da conversa e o
+ * pedido de LGPD precisam alcançar.
+ *
+ * A revogação que chega por AQUI é a que ninguém mais registra: quem apaga no
+ * aplicativo não passa por tela nenhuma, então sem esta trilha um pedido de
+ * LGPD/RGPD pergunta "quando e como esta mensagem foi apagada" e não há
+ * resposta. Vai para a auditoria o EVENTO (ids, direção e o fato de o conteúdo
+ * estar preservado) — nunca o corpo, que `api_audit_log` guardaria por 5 anos
+ * fora do alcance da cascata de anonimização.
  */
 async function handleMessageRevoked(
   admin: Admin,
   session: Session,
   p: WahaPayload,
+  requestId: string,
 ): Promise<void> {
   if (!p.revokedMessageId) return;
 
@@ -1891,11 +1900,40 @@ async function handleMessageRevoked(
         ? depois.fromMe
         : undefined;
 
-  await admin
+  const { data: apagadas, error: erroDoCarimbo } = await admin
     .from("messages")
     .update({ revoked_at: new Date().toISOString() })
     .eq("organization_id", session.organization_id)
-    .in("external_id", formasDaMensagemOriginal(p.revokedMessageId, chat, fromMe));
+    .in("external_id", formasDaMensagemOriginal(p.revokedMessageId, chat, fromMe))
+    .select("id, conversation_id, direction, external_id");
+  if (erroDoCarimbo) {
+    // Sem este ramo o evento "some" em silêncio e a mensagem apagada segue
+    // legível como se ninguém tivesse apagado — o modo de falha que este arquivo
+    // já pagou caro em outros lugares.
+    logger.warn("[waha] message.revoked não carimbou a linha", {
+      request_id: requestId,
+      error: erroDoCarimbo.message,
+    });
+    return;
+  }
+  // Uma trilha por linha carimbada: `direction` já diz quem apagou (recebida é o
+  // contato; enviada é o próprio número, apagando pelo celular — o apagamento
+  // feito pela tela do CRM tem a própria ação, `message.revoked`).
+  for (const linha of apagadas ?? []) {
+    await audit({
+      action: "message.revoked_in_channel",
+      organizationId: session.organization_id,
+      resourceType: "message",
+      resourceId: linha.id,
+      requestId,
+      metadata: {
+        conversation_id: linha.conversation_id,
+        direction: linha.direction,
+        external_id: linha.external_id,
+        conteudo_preservado: true,
+      },
+    });
+  }
 }
 
 /**
@@ -1999,7 +2037,7 @@ export async function dispatchWahaEvent(
   } else if (eventType === "message.edited") {
     await handleMessageEdited(admin, session, payload);
   } else if (eventType === "message.revoked") {
-    await handleMessageRevoked(admin, session, payload);
+    await handleMessageRevoked(admin, session, payload, requestId);
   } else if (eventType === "message.reaction") {
     await handleReaction(admin, session, payload);
   } else if (eventType === "session.status" || eventType === "state.change") {

@@ -175,7 +175,7 @@ A janela de 24h da Meta (envio proativo só com template aprovado fora da janela
 **ACs principais.**
 - Recebimento de cada um dos 10 tipos é persistido com `type` correto e payload parseado
 - Outbound de imagem com upload + URL assinada passa por WAHA e chega no cliente em <10s p95
-- Mensagem revogada pelo cliente é marcada `is_revoked=true` na thread, com timestamp original preservado
+- Mensagem revogada é marcada (`revoked_at`) na thread, com o timestamp original preservado, e o **texto** segue a régua de quem apagou (`lib/messaging/apagada.ts`): a revogada **pelo contato** continua legível ao atendente — o "apagar para todos" do aplicativo é gesto do titular no canal, e quem elimina de verdade é o pedido de LGPD da casa —; a revogada **pelo atendente** sai da tela e sai **marcada** na exportação da conversa, que entrega as duas (art. 18, II e V). O apagamento que chega pelo canal gera trilha de auditoria (evento, nunca o corpo)
 
 ### 3.6 Mídia via Supabase Storage
 
