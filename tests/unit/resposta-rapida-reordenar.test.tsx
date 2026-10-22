@@ -25,6 +25,11 @@
  *   5. `depois_de` de OUTRA organização é recusado pela régua de posse das mídias
  *      (a lista visível), e o vizinho alheio não é usado para calcular posição.
  *   6. O arrasto da TELA manda o VIZINHO da esquerda, não o índice.
+ *   7. Escrita que a RLS recusa não vira sucesso: nem 200, nem audit (P1), e a
+ *      renumeração recusa ANTES do primeiro UPDATE (P2) — com o par de controle
+ *      do admin, que renumera a lista inteira.
+ *   8. A resposta NOVA nasce no topo, sem empate: editar uma resposta nova não
+ *      a troca de lugar com outra nova (P3, pelo POST e pelo PATCH reais).
  *
  * O banco é um dublê stateful das duas consultas que a rota faz (a lista
  * visível e a escrita da posição) + o mesmo `order()` encadeado da listagem: é o
@@ -34,7 +39,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   guard: vi.fn(),
@@ -54,6 +59,7 @@ vi.mock("@/lib/auth/require-role", () => ({ requireRole: h.guard }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: h.apoio }));
 vi.mock("@/lib/audit", () => ({ audit: h.audit }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => banco() }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({
   apiClient: { put: h.put, get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
@@ -86,7 +92,8 @@ vi.mock("@hello-pangea/dnd", () => ({
   }) => children({ innerRef: () => {}, draggableProps: {}, dragHandleProps: {} }, { isDragging: false }),
 }));
 
-import { GET } from "@/app/api/v1/message-templates/route";
+import { GET, POST } from "@/app/api/v1/message-templates/route";
+import { PATCH } from "@/app/api/v1/message-templates/[id]/route";
 import { PUT } from "@/app/api/v1/message-templates/[id]/ordem/route";
 import { TemplateMenu } from "@/components/inbox/composer/TemplateMenu";
 import { TemplatesClient } from "@/app/app/templates/_components/TemplatesClient";
@@ -133,17 +140,19 @@ function linha(id: string, ordem: number, extra: Partial<Linha> = {}): Linha {
 }
 
 /**
- * O dublê do PostgREST: o MESMO `select/eq/order/maybeSingle` e o mesmo
- * `update(...).eq(...).select(...).maybeSingle()` que as duas rotas usam, com a
- * RLS de `message_templates` (todo membro lê compartilhado + próprio; escreve o
- * próprio com `agent`, e o compartilhado só com manager+).
+ * O dublê do PostgREST: o MESMO `select/eq/order/limit/maybeSingle`, o mesmo
+ * `update(...).eq(...).select(...).maybeSingle()` e o `insert(...).select().single()`
+ * que as rotas usam, com a RLS de `message_templates` (todo membro lê
+ * compartilhado + próprio; escreve o próprio com `agent`, e o compartilhado só
+ * com manager+).
+ *
+ * Cada `from()` abre uma consulta NOVA, como o supabase-js: filtros, patch e
+ * colunas de uma consulta não vazam para a seguinte. (A versão anterior
+ * reaproveitava um builder só e acumulava os `eq()` — a 2ª escrita de uma
+ * renumeração herdava o `id` da 1ª e não casava nada, então todo empate dava
+ * 409, até para admin.)
  */
 function banco() {
-  const filtros: Array<[string, unknown]> = [];
-  const ordem: Array<[string, boolean]> = [];
-  let patch: Record<string, unknown> | null = null;
-  let colunasDeVolta = "id";
-
   const visivel = (l: Linha) =>
     l.organization_id === h.papel.organizacao &&
     (l.owner_user_id === null || l.owner_user_id === h.papel.usuario);
@@ -153,37 +162,33 @@ function banco() {
     (l.owner_user_id === h.papel.usuario ||
       (l.owner_user_id === null && h.papel.podeCompartilhado));
 
-  const casam = (base: Linha[]) =>
-    base.filter((l) => filtros.every(([coluna, valor]) => l[coluna as keyof Linha] === valor));
+  function consulta() {
+    const filtros: Array<[string, unknown]> = [];
+    const ordem: Array<[string, boolean]> = [];
+    let patch: Record<string, unknown> | null = null;
+    let novo: Record<string, unknown> | null = null;
+    let colunasDeVolta = "id";
+    let teto = Number.POSITIVE_INFINITY;
 
-  const builder = {
-    select: (colunas?: string) => {
-      if (colunas) colunasDeVolta = colunas;
-      return builder;
-    },
-    eq: (coluna: string, valor: unknown) => {
-      filtros.push([coluna, valor]);
-      return builder;
-    },
-    update: (valores: Record<string, unknown>) => {
-      patch = valores;
-      return builder;
-    },
-    order: (coluna: string, opcoes?: { ascending?: boolean }) => {
-      ordem.push([coluna, opcoes?.ascending ?? true]);
-      return builder;
-    },
-    maybeSingle: async () => {
+    const casam = (base: Linha[]) =>
+      base.filter((l) => filtros.every(([coluna, valor]) => l[coluna as keyof Linha] === valor));
+
+    /** O efeito da consulta: escrita (insert/update) ou leitura ordenada. */
+    const executar = (): Array<Record<string, unknown>> => {
+      if (novo) {
+        const criada = linha(`n${h.linhas.length + 1}`, 0, {
+          updated_at: new Date().toISOString(),
+          ...(novo as Partial<Linha>),
+        });
+        if (!escrevivel(criada)) return [];
+        h.linhas.push(criada);
+        return [somente(criada, colunasDeVolta)];
+      }
       if (patch) {
         const alvos = casam(h.linhas).filter(escrevivel);
         for (const alvo of alvos) Object.assign(alvo, patch);
-        const primeiro = alvos[0];
-        return { data: primeiro ? somente(primeiro, colunasDeVolta) : null, error: null };
+        return alvos.map((l) => somente(l, colunasDeVolta));
       }
-      const achado = casam(h.linhas.filter(visivel))[0];
-      return { data: achado ? somente(achado, colunasDeVolta) : null, error: null };
-    },
-    then: (aoResolver?: ((v: unknown) => unknown) | null) => {
       const lista = casam(h.linhas.filter(visivel));
       lista.sort((a, b) => {
         for (const [coluna, ascendente] of ordem) {
@@ -194,13 +199,48 @@ function banco() {
         }
         return 0;
       });
-      return Promise.resolve({
-        data: lista.map((l) => somente(l, colunasDeVolta)),
-        error: null,
-      }).then(aoResolver ?? ((v) => v));
-    },
-  };
-  return { from: (_tabela: string) => builder };
+      return lista.slice(0, teto).map((l) => somente(l, colunasDeVolta));
+    };
+
+    const builder = {
+      select: (colunas?: string) => {
+        if (colunas) colunasDeVolta = colunas;
+        return builder;
+      },
+      eq: (coluna: string, valor: unknown) => {
+        filtros.push([coluna, valor]);
+        return builder;
+      },
+      update: (valores: Record<string, unknown>) => {
+        patch = valores;
+        return builder;
+      },
+      insert: (valores: Record<string, unknown>) => {
+        novo = valores;
+        return builder;
+      },
+      order: (coluna: string, opcoes?: { ascending?: boolean }) => {
+        ordem.push([coluna, opcoes?.ascending ?? true]);
+        return builder;
+      },
+      limit: (n: number) => {
+        teto = n;
+        return builder;
+      },
+      maybeSingle: async () => ({ data: executar()[0] ?? null, error: null }),
+      single: async () => {
+        const primeira = executar()[0];
+        return primeira
+          ? { data: primeira, error: null }
+          : { data: null, error: { code: "PGRST116", message: "no rows" } };
+      },
+      then: (aoResolver?: ((v: unknown) => unknown) | null) =>
+        Promise.resolve({ data: executar(), error: null }).then(aoResolver ?? ((v) => v)),
+    };
+    return builder;
+  }
+
+  return { from: (_tabela: string) => consulta() };
 }
 
 /** O que a coluna pedida devolve — `"id"` responde só o id, como o `select` da rota. */
@@ -331,6 +371,107 @@ describe("a listagem sai na ordem do operador, não na de edição", () => {
     const resposta = await PUT(requisicao({ depois_de: null }), parametros("de-outro"));
 
     expect(resposta.status).toBe(404);
+  });
+});
+
+describe("a escrita que a RLS recusa não vira sucesso", () => {
+  /** Um `agent`: escreve só as próprias; a compartilhada é de manager+. */
+  function comoAgente() {
+    h.papel = { organizacao: ORG, usuario: USER, podeCompartilhado: false };
+    h.guard.mockResolvedValue({
+      ok: true,
+      user: { id: USER, idioma: "pt" },
+      org: { orgId: ORG, role: "agent" },
+    });
+  }
+
+  /** As três em `0` — empate, o caminho da renumeração. */
+  const empatadas = () => [
+    linha("p1", 0, { updated_at: "2026-10-01T12:00:00.000Z" }),
+    linha("s", 0, { owner_user_id: null, updated_at: "2026-10-01T11:00:00.000Z" }),
+    linha("p2", 0, { updated_at: "2026-10-01T10:00:00.000Z" }),
+  ];
+  const ordens = () => Object.fromEntries(h.linhas.map((l) => [l.id, l.ordem]));
+
+  it("(P1) agent movendo resposta COMPARTILHADA: 403, sem audit e com a ordem intacta", async () => {
+    comoAgente();
+    h.linhas = [linha("a", 1000), linha("s", 2000, { owner_user_id: null })];
+
+    const resposta = await PUT(requisicao({ depois_de: null }), parametros("s"));
+
+    expect(resposta.status).toBe(403);
+    expect((await resposta.json()).error.code).toBe("forbidden");
+    expect(h.audit).not.toHaveBeenCalled();
+    expect(ordens()).toEqual({ a: 1000, s: 2000 });
+  });
+
+  it("(P2, controle) admin com empate renumera a lista INTEIRA na ordem pedida", async () => {
+    h.linhas = empatadas();
+
+    // Soltar p2 logo depois de p1: [p1, p2, s].
+    const resposta = await PUT(requisicao({ depois_de: "p1" }), parametros("p2"));
+
+    expect(resposta.status).toBe(200);
+    expect(ordens()).toEqual({ p1: 1000, p2: 2000, s: 3000 });
+    expect((await listar()).map((t) => t.id)).toEqual(["p1", "p2", "s"]);
+  });
+
+  it("(P2) agent com compartilhada na lista: 409 sem NENHUMA linha escrita", async () => {
+    comoAgente();
+    h.linhas = empatadas();
+
+    const resposta = await PUT(requisicao({ depois_de: "p1" }), parametros("p2"));
+
+    expect(resposta.status).toBe(409);
+    expect(ordens()).toEqual({ p1: 0, s: 0, p2: 0 });
+    expect(h.audit).not.toHaveBeenCalled();
+  });
+});
+
+describe("a resposta nova nasce no topo, sem empate", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** O POST real da criação, sem `Idempotency-Key`. */
+  async function criar(titulo: string): Promise<string> {
+    const resposta = await POST(
+      new NextRequest("http://localhost/api/v1/message-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: titulo, body: `Corpo ${titulo}` }),
+      }),
+    );
+    expect(resposta.status).toBe(201);
+    return ((await resposta.json()) as { data: { id: string } }).data.id;
+  }
+
+  it("(P3) cria D e depois E, edita D: E continua acima de D", async () => {
+    // Só o relógio é falso: o `updated_at` de cada passo é um instante distinto.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    h.linhas = [linha("velha", 1000)];
+
+    vi.setSystemTime(new Date("2026-10-22T10:00:00.000Z"));
+    const d = await criar("D");
+    expect((await listar()).map((t) => t.id)).toEqual([d, "velha"]);
+
+    vi.setSystemTime(new Date("2026-10-22T11:00:00.000Z"));
+    const e = await criar("E");
+    expect((await listar()).map((t) => t.id)).toEqual([e, d, "velha"]);
+
+    // O PATCH de conteúdo carimba `updated_at` — e não pode mover D.
+    vi.setSystemTime(new Date("2026-10-22T12:00:00.000Z"));
+    const editada = await PATCH(
+      new NextRequest(`http://localhost/api/v1/message-templates/${d}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: "Corpo novo" }),
+      }),
+      parametros(d),
+    );
+    expect(editada.status).toBe(200);
+
+    expect((await listar()).map((t) => t.id)).toEqual([e, d, "velha"]);
   });
 });
 
