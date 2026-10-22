@@ -211,7 +211,13 @@ export function KanbanBoard({
     (args: MoveArgs) => {
       const etapa = data?.stages.find((s) => s.id === args.stageId);
       const lead = data?.leads.find((l) => l.id === args.leadId);
-      if (!decideMotivoDaPerda({ etapaDeDestino: etapa, motivoAtual: lead?.lost_reason }).ok) {
+      // O motivo na linha só vale para o card que JÁ está perdido (reordenar na
+      // coluna de perda). O reaberto volta a `open` com o `lost_reason` da perda
+      // anterior — `fn_crm_lead_close_on_stage` não o limpa —, e reaproveitá-lo
+      // gravaria a perda nova com a causa da antiga.
+      const motivoAtual =
+        lead && (lead.status === "lost" || lead.stage_id === args.stageId) ? lead.lost_reason : null;
+      if (!decideMotivoDaPerda({ etapaDeDestino: etapa, motivoAtual }).ok) {
         setPerdaPendente(args);
         return;
       }
@@ -397,7 +403,10 @@ export function KanbanBoard({
           });
         }}
       />
+      {/* Uma instância para o quadro todo: a `key` a remonta a cada pendência,
+          senão o motivo escolhido e cancelado num negócio voltava marcado no próximo. */}
       <LoseLeadDialog
+        key={perdaPendente?.leadId ?? "fechado"}
         open={perdaPendente !== null}
         onOpenChange={(aberto) => {
           if (!aberto) setPerdaPendente(null);

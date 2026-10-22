@@ -125,11 +125,11 @@ function movesEnviados(): Array<{ url: string; corpo: Record<string, unknown> }>
     .map(([url, init]) => ({ url: String(url), corpo: JSON.parse(String((init as RequestInit).body)) }));
 }
 
-function montar() {
+function montar(visiveis: Lead[] = [MOVIDO, VISIVEL_NO_CONTATO]) {
   const funil: BoardData = {
     pipeline: { id: PIPELINE, settings: {} } as unknown as BoardData["pipeline"],
     stages: ETAPAS,
-    leads: [MOVIDO, VISIVEL_NO_CONTATO, ESCONDIDO_NO_CONTATO],
+    leads: [...visiveis, ESCONDIDO_NO_CONTATO],
   };
   qc.setQueryData<BoardData>(["board", PIPELINE], funil);
   render(
@@ -137,15 +137,15 @@ function montar() {
       <KanbanBoard
         pipelineId={PIPELINE}
         stages={ETAPAS}
-        leads={[MOVIDO, VISIVEL_NO_CONTATO]}
+        leads={visiveis}
         pipeline={funil.pipeline}
       />
     </QueryClientProvider>,
   );
 }
 
-async function abrirMenuDoMovido(user: ReturnType<typeof userEvent.setup>) {
-  const card = screen.getByRole("group", { name: `Lead: ${MOVIDO.title}` });
+async function abrirMenuDoMovido(user: ReturnType<typeof userEvent.setup>, alvo: Lead = MOVIDO) {
+  const card = screen.getByRole("group", { name: `Lead: ${alvo.title}` });
   const botao = Array.from(card.querySelectorAll("button")).find(
     (b) => b.getAttribute("aria-label") === "Ações do lead",
   )!;
@@ -253,5 +253,97 @@ describe("Mover para… no menu do card", () => {
 
     expect(await screen.findByRole("dialog", { name: "Marcar como perdido" })).toBeTruthy();
     expect(movesEnviados()).toHaveLength(0);
+  });
+
+  // O negócio REABERTO volta a `open` com o `lost_reason` da perda anterior na
+  // linha (`fn_crm_lead_close_on_stage` não o limpa). Esse motivo é de outra
+  // perda: levá-lo de novo à etapa de perda tem de pedir o motivo desta.
+  it("negócio reaberto com motivo da perda anterior: Perdido abre a janela em vez de reaproveitar o motivo velho", async () => {
+    const reaberto = lead("l-9", "s-1", 2000, { status: "open", lost_reason: "price" });
+    const user = userEvent.setup();
+    montar([MOVIDO, VISIVEL_NO_CONTATO, reaberto]);
+    await abrirMenuDoMovido(user, reaberto);
+    await user.click(screen.getByRole("menuitem", { name: "Perdido" }));
+
+    expect(await screen.findByRole("dialog", { name: "Marcar como perdido" })).toBeTruthy();
+    expect(movesEnviados()).toHaveLength(0);
+  });
+
+  it("controle: reordenar dentro da coluna de perda usa o motivo que o card já tem, sem janela", async () => {
+    const perdidoA = lead("l-7", "s-3", 1000, { status: "lost", lost_reason: "price" });
+    const perdidoB = lead("l-8", "s-3", 2000, { status: "lost", lost_reason: "no_response" });
+    montar([MOVIDO, perdidoA, perdidoB]);
+    await waitFor(() => expect(capturado.onDragEnd).not.toBeNull());
+
+    await act(async () => {
+      capturado.onDragEnd?.({
+        draggableId: perdidoA.id,
+        source: { droppableId: "s-3", index: 0 },
+        destination: { droppableId: "s-3", index: 1 },
+        reason: "DROP",
+        type: "DEFAULT",
+        mode: "FLUID",
+      });
+    });
+
+    await waitFor(() => expect(movesEnviados()).toHaveLength(1));
+    expect(screen.queryByRole("dialog", { name: "Marcar como perdido" })).toBeNull();
+    expect(movesEnviados()[0].corpo).not.toHaveProperty("lost_reason");
+  });
+
+  it("Cancelar a janela do motivo não move nada, e o motivo escolhido não vaza para o próximo negócio", async () => {
+    const user = userEvent.setup();
+    montar();
+    await abrirMenuDoMovido(user);
+    await user.click(screen.getByRole("menuitem", { name: "Perdido" }));
+    const janela = await screen.findByRole("dialog", { name: "Marcar como perdido" });
+    await user.click(janela.querySelector<HTMLInputElement>('input[type="radio"]')!);
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Marcar como perdido" })).toBeNull());
+    expect(movesEnviados()).toHaveLength(0);
+
+    await abrirMenuDoMovido(user, VISIVEL_NO_CONTATO);
+    await user.click(screen.getByRole("menuitem", { name: "Perdido" }));
+    const outra = await screen.findByRole("dialog", { name: "Marcar como perdido" });
+    expect(Array.from(outra.querySelectorAll<HTMLInputElement>('input[type="radio"]')).some((r) => r.checked)).toBe(false);
+    expect((screen.getByRole("button", { name: "Confirmar" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(movesEnviados()).toHaveLength(0);
+  });
+
+  it("perda com motivo que volta com campos faltando: o reenvio da janela de campos ainda leva o motivo", async () => {
+    let posts = 0;
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method !== "POST") return new Promise<Response>(() => {});
+      posts += 1;
+      return posts === 1
+        ? respostaJson(422, {
+            error: {
+              code: "required_fields_missing",
+              message: "Faltam campos",
+              details: { faltando: [{ chave: "cpf", rotulo: "CPF" }] },
+            },
+          })
+        : respostaJson(200, { data: { ...MOVIDO, stage_id: "s-3", status: "lost" } });
+    });
+    const user = userEvent.setup();
+    montar();
+    await abrirMenuDoMovido(user);
+    await user.click(screen.getByRole("menuitem", { name: "Perdido" }));
+    const janela = await screen.findByRole("dialog", { name: "Marcar como perdido" });
+    const motivo = janela.querySelector<HTMLInputElement>('input[type="radio"]')!;
+    await user.click(motivo);
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await screen.findByRole("dialog", { name: "Campos obrigatórios" });
+    await user.type(screen.getByRole("textbox", { name: "CPF" }), "123");
+    await user.click(screen.getByRole("button", { name: "Mover agora" }));
+
+    await waitFor(() => expect(movesEnviados()).toHaveLength(2));
+    expect(movesEnviados()[0].corpo).toMatchObject({ lost_reason: motivo.value });
+    expect(movesEnviados()[1].corpo).toMatchObject({
+      stage_id: "s-3",
+      lost_reason: motivo.value,
+      custom_fields: { cpf: "123" },
+    });
   });
 });
