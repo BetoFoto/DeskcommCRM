@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   MOTIVOS_DO_APARELHO,
-  ehMotivoDoAparelho,
+  MOTIVOS_QUE_DESLIGAM,
   encerrarPushDesteAparelho,
   pushNaoEntrega,
   syncPushSubscription,
@@ -200,7 +200,8 @@ describe("syncPushSubscription", () => {
       const resultado = await syncPushSubscription();
 
       expect(resultado).toEqual({ situacao: "ignorado", motivo: "sem_vapid" });
-      expect(pushNaoEntrega(resultado)).toBe(true);
+      // NÃO desliga: o aviso com a aba aberta não depende de VAPID (#3157).
+      expect(pushNaoEntrega(resultado)).toBe(false);
     });
 
     it("sem o service worker registrado: motivo `sem_service_worker`", async () => {
@@ -213,7 +214,7 @@ describe("syncPushSubscription", () => {
       const resultado = await syncPushSubscription();
 
       expect(resultado).toEqual({ situacao: "ignorado", motivo: "sem_service_worker" });
-      expect(pushNaoEntrega(resultado)).toBe(true);
+      expect(pushNaoEntrega(resultado)).toBe(false);
     });
 
     it("inscrição sem endpoint e sem as chaves: motivo `inscricao_incompleta`", async () => {
@@ -295,12 +296,21 @@ describe("syncPushSubscription", () => {
       expect(pushNaoEntrega({ situacao: "ignorado", motivo: "fora_do_navegador" })).toBe(false);
     });
 
-    it("só as causas de aparelho desligam — a lista inteira, sem sobra e sem engano", () => {
+    // A tabela escrita à mão, e não derivada de `MOTIVOS_QUE_DESLIGAM`: um
+    // motivo que entre na lista por engano tem de reprovar aqui (#3157).
+    it("só o navegador que recusa ou devolve inscrição incompleta desliga; sem VAPID e sem service worker NÃO", () => {
+      const esperado: Record<MotivoDoIgnorado, boolean> = {
+        fora_do_navegador: false,
+        preferencia_do_usuario: false,
+        sem_vapid: false,
+        sem_service_worker: false,
+        inscricao_incompleta: true,
+        navegador_recusou: true,
+      };
       expect(MOTIVOS_DO_APARELHO.length, "a lista de motivos encolheu para nada").toBe(4);
+      expect([...MOTIVOS_QUE_DESLIGAM].sort()).toEqual(["inscricao_incompleta", "navegador_recusou"]);
       for (const motivo of TODOS_OS_MOTIVOS) {
-        expect(pushNaoEntrega({ situacao: "ignorado", motivo }), motivo).toBe(
-          ehMotivoDoAparelho(motivo),
-        );
+        expect(pushNaoEntrega({ situacao: "ignorado", motivo }), motivo).toBe(esperado[motivo]);
       }
     });
 

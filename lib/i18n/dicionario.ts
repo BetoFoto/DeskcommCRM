@@ -16609,11 +16609,8 @@ export const DICIONARIO: Traducoes = {
     es: "No pude comunicarme con el servidor, así que este dispositivo no quedó inscrito: revisa la conexión a internet y vuelve a activar el Push.",
   },
   // ─── as causas de aparelho/instalação (issue #3164): cada caminho com a sua frase ───
-  "Este navegador não registrou o service worker dos avisos, então este aparelho não recebe Push: o interruptor voltou a ficar desligado.": {
-    es: "Este navegador no registró el service worker de los avisos, así que este dispositivo no recibe Push: el interruptor volvió a quedar desactivado.",
-  },
-  "Esta instalação não tem o par de chaves do Push (VAPID), então nenhum aparelho recebe aviso com o site fechado: o interruptor voltou a ficar desligado.": {
-    es: "Esta instalación no tiene el par de claves del Push (VAPID), así que ningún dispositivo recibe avisos con el sitio cerrado: el interruptor volvió a quedar desactivado.",
+  "Este navegador não registrou o service worker dos avisos: com o site fechado, este aparelho não recebe aviso.": {
+    es: "Este navegador no registró el service worker de los avisos: con el sitio cerrado, este dispositivo no recibe avisos.",
   },
   "O navegador não devolveu os dados completos da inscrição de Push deste aparelho, então os avisos não vão chegar: o interruptor voltou a ficar desligado.": {
     es: "El navegador no devolvió los datos completos de la inscripción de Push de este dispositivo, así que los avisos no van a llegar: el interruptor volvió a quedar desactivado.",

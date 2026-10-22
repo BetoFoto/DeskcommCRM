@@ -251,7 +251,7 @@ describe("o interruptor de Push de mensagem liga e desliga a inscrição do apar
    * interruptor ficava LIGADO e nenhum aviso chegava, sem uma palavra. Cada
    * causa tem a sua frase — a pessoa precisa saber de quem é o problema.
    */
-  it("navegador sem service worker (`ignorado`): frase própria e o interruptor volta a desligar", async () => {
+  it("navegador sem service worker (`ignorado`): frase própria e o interruptor continua ligado (#3157)", async () => {
     window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
     pushClient.syncPushSubscription.mockResolvedValueOnce({
       situacao: "ignorado",
@@ -265,40 +265,41 @@ describe("o interruptor de Push de mensagem liga e desliga a inscrição do apar
     expect(aviso, "o interruptor ficou ligado em silêncio — o defeito da #3164").not.toBeNull();
     expect(aviso?.getAttribute("data-motivo")).toBe("sem_service_worker");
     expect(container.textContent).toContain(
-      "Este navegador não registrou o service worker dos avisos, então este aparelho não recebe Push",
+      "Este navegador não registrou o service worker dos avisos: com o site fechado, este aparelho não recebe aviso.",
     );
-    expect(container.innerHTML).toContain('data-testid="alerts-enable"');
-    expect(container.innerHTML).not.toContain('data-testid="alerts-toggle"');
+    expect(container.innerHTML).toContain('data-testid="alerts-toggle"');
+    expect(container.innerHTML).not.toContain('data-testid="alerts-enable"');
   });
 
-  it("instalação sem o par VAPID (`ignorado`): frase própria e o interruptor volta a desligar", async () => {
+  // Sem VAPID quem fala é o cartão de `page.tsx`; o interruptor fica ligado
+  // porque o aviso com a aba aberta funciona sem as chaves (#3157).
+  it("instalação sem o par VAPID (`ignorado`): o interruptor continua ligado e nada é repetido aqui", async () => {
     window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
     pushClient.syncPushSubscription.mockResolvedValueOnce({ situacao: "ignorado", motivo: "sem_vapid" });
     const container = montar();
 
     await clicar(container, "Nova mensagem via push");
 
-    const aviso = container.querySelector('[data-testid="push-recusado"]');
-    expect(aviso, "o interruptor ficou ligado em silêncio — o defeito da #3164").not.toBeNull();
-    expect(aviso?.getAttribute("data-motivo")).toBe("sem_vapid");
-    expect(container.textContent).toContain("Esta instalação não tem o par de chaves do Push (VAPID)");
-    // A frase NÃO pode dizer que o servidor recusou: não houve recusa nenhuma.
-    expect(container.textContent).not.toContain("O servidor recusou a inscrição");
-    expect(container.innerHTML).toContain('data-testid="alerts-enable"');
-    expect(container.innerHTML).not.toContain('data-testid="alerts-toggle"');
+    expect(container.querySelector('[data-testid="push-recusado"]')).toBeNull();
+    expect(container.innerHTML).toContain('data-testid="alerts-toggle"');
+    expect(container.innerHTML).not.toContain('data-testid="alerts-enable"');
   });
 
   /**
    * ESTA É A PROPRIEDADE QUE IMPEDE O CONSERTO PREGUIÇOSO: um texto só para as
-   * quatro causas. Duas causas com a mesma frase significam que uma delas está
+   * causas. Duas causas com a mesma frase significam que uma delas está
    * dizendo a causa errada — e é o defeito de novo, com outra roupa.
    */
-  it("as quatro causas de aparelho: uma frase DIFERENTE para cada, e todas desligando o interruptor", async () => {
-    const motivos = ["sem_service_worker", "sem_vapid", "inscricao_incompleta", "navegador_recusou"] as const;
+  it("as causas com frase: uma frase DIFERENTE para cada, e só as do navegador desligam o interruptor", async () => {
+    // `sem_vapid` não está aqui: a frase dele é o cartão da página (caso acima).
+    const desliga = { sem_service_worker: false, inscricao_incompleta: true, navegador_recusou: true } as const;
+    const motivos = Object.keys(desliga) as (keyof typeof desliga)[];
     const frases = new Map<string, string>();
 
     for (const motivo of motivos) {
-      window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
+      // Pela store, e não só pelo storage: `sem_service_worker` deixa o
+      // interruptor LIGADO, e o cache da store sobreviveria à volta seguinte.
+      prefs.gravarCanal("message", "push", false);
       pushClient.syncPushSubscription.mockResolvedValueOnce({ situacao: "ignorado", motivo });
       const container = montar();
 
@@ -306,7 +307,9 @@ describe("o interruptor de Push de mensagem liga e desliga a inscrição do apar
 
       const aviso = container.querySelector('[data-testid="push-recusado"]');
       expect(aviso?.getAttribute("data-motivo"), motivo).toBe(motivo);
-      expect(container.innerHTML, motivo).toContain('data-testid="alerts-enable"');
+      expect(container.innerHTML, motivo).toContain(
+        desliga[motivo] ? 'data-testid="alerts-enable"' : 'data-testid="alerts-toggle"',
+      );
       frases.set(motivo, aviso?.textContent ?? "");
     }
 

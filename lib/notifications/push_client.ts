@@ -44,13 +44,10 @@ export type SituacaoDaInscricao = "ativo" | "recusado" | "sem_rede" | "ignorado"
 /**
  * OS CAMINHOS DE RETORNO EM QUE NADA FOI INSCRITO (issue #3164).
  *
- * Eram todos `ignorado`, sem mais nada — e a tela só revertia o interruptor em
- * `recusado`/`sem_rede`. Nestes quatro, o interruptor de Push ficava ligado e
- * nenhum aviso chegava, sem uma palavra: a mesma classe da #3116.
- *
- * Estes são os que dizem que ESTE APARELHO ou ESTA INSTALAÇÃO não aceita push:
- * nenhum aviso chegaria com o site fechado, então o interruptor tem de voltar a
- * desligar — e a tela diz qual dos quatro foi.
+ * Eram todos `ignorado`, sem mais nada, e a tela não dizia qual deles foi.
+ * Cada um destes quatro diz que ESTE APARELHO ou ESTA INSTALAÇÃO não recebe
+ * aviso com o site FECHADO — mas só uma parte deles desliga o interruptor: ver
+ * `MOTIVOS_QUE_DESLIGAM`.
  */
 export const MOTIVOS_DO_APARELHO = [
   "sem_service_worker",
@@ -58,6 +55,28 @@ export const MOTIVOS_DO_APARELHO = [
   "inscricao_incompleta",
   "navegador_recusou",
 ] as const;
+
+/**
+ * QUAIS CAUSAS DE APARELHO DESLIGAM O INTERRUPTOR (#3157, corrigindo a #3164).
+ *
+ * O interruptor de Push de mensagem governa DUAS entregas: o aviso com o site
+ * fechado (Web Push: VAPID + inscrição) e o aviso na bandeja com a aba aberta
+ * (`lib/notifications/emit.ts`, pelo service worker ou por `new Notification()`,
+ * liberado por `canalLigado("message", "push")` em `deliver.ts`). Desligá-lo
+ * mata as duas.
+ *
+ * - `sem_vapid` NÃO desliga: sem o par de chaves o aviso com a aba aberta
+ *   continua funcionando, e a página já diz isso e como conseguir as chaves
+ *   (decisão registrada em `app/app/settings/notifications/page.tsx`, no
+ *   comentário "O INTERRUPTOR CONTINUA LIGÁVEL DE PROPÓSITO").
+ * - `sem_service_worker` NÃO desliga: nos navegadores de computador o aviso com
+ *   a aba aberta cai em `new Notification()`. No Chrome do celular esse caminho
+ *   não existe sem service worker — isso ainda não foi medido, e por isso a
+ *   frase da tela só fala do site fechado.
+ * - `inscricao_incompleta` e `navegador_recusou` desligam, como `recusado` e
+ *   `sem_rede`: a pessoa pediu a inscrição deste aparelho e ela não aconteceu.
+ */
+export const MOTIVOS_QUE_DESLIGAM = ["inscricao_incompleta", "navegador_recusou"] as const;
 
 export type MotivoDoAparelho = (typeof MOTIVOS_DO_APARELHO)[number];
 
@@ -92,13 +111,14 @@ function ignorado(motivo: MotivoDoIgnorado): ResultadoDaInscricao {
 }
 
 /**
- * ESTE APARELHO NÃO VAI RECEBER AVISO — o interruptor tem de voltar a desligar
- * (issue #3164).
+ * O INTERRUPTOR TEM DE VOLTAR A DESLIGAR? (issues #3116 e #3164)
  *
  * `ativo` devolve `false` e `recusado`/`sem_rede` devolvem `true` (o servidor
  * não gravou a inscrição, é o que a #3116 já mede). Para `ignorado` quem
- * responde é o MOTIVO: as causas de aparelho/instalação desligam; as de
- * preferência do usuário — e o caso em que nem há navegador — NÃO.
+ * responde é o MOTIVO, e só os de `MOTIVOS_QUE_DESLIGAM` desligam — a falta de
+ * VAPID ou de service worker não, porque o aviso com a aba aberta não depende
+ * deles (ver o comentário da lista). Preferência do usuário e "fora do
+ * navegador" também não.
  *
  * Aceita `undefined`/`null` para quem dubla a função sem devolver nada: ali não
  * há notícia nenhuma, e sem notícia não se mexe no interruptor.
@@ -106,7 +126,8 @@ function ignorado(motivo: MotivoDoIgnorado): ResultadoDaInscricao {
 export function pushNaoEntrega(resultado: ResultadoDaInscricao | undefined | null): boolean {
   if (!resultado) return false;
   if (resultado.situacao === "ativo") return false;
-  if (resultado.situacao === "ignorado") return ehMotivoDoAparelho(resultado.motivo);
+  if (resultado.situacao === "ignorado")
+    return (MOTIVOS_QUE_DESLIGAM as readonly string[]).includes(resultado.motivo);
   return true;
 }
 

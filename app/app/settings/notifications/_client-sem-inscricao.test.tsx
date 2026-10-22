@@ -21,6 +21,14 @@
  * revertia o interruptor em `recusado`/`sem_rede`. Sem service worker e sem
  * VAPID são exatamente dois caminhos que caem no `ignorado` — e nos dois o
  * interruptor ficava ligado, sem uma palavra na tela. Ver o caso por caminho.
+ *
+ * ## E por que, nesses dois, o interruptor CONTINUA ligado (#3157)
+ *
+ * O interruptor também libera o aviso na bandeja com a aba ABERTA
+ * (`lib/notifications/emit.ts`), que não depende de VAPID nem de inscrição.
+ * Desligá-lo por falta de chaves mataria um aviso que funciona — a decisão
+ * registrada em `page.tsx` ("O INTERRUPTOR CONTINUA LIGÁVEL DE PROPÓSITO").
+ * Sem VAPID quem fala é o cartão da página; sem service worker, a frase daqui.
  */
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -102,8 +110,12 @@ async function ligarOPush(container: HTMLElement): Promise<void> {
   });
 }
 
-describe("sem inscrição, a tela diz a causa e o interruptor não fica ligado (issue #3164)", () => {
-  it("navegador não registra o service worker: a frase é a do service worker e o interruptor volta a desligar", async () => {
+function interruptorDoPush(container: HTMLElement): Element | null {
+  return container.querySelector('[aria-label="Nova mensagem via push"]');
+}
+
+describe("sem inscrição, a tela diz a causa sem tirar o aviso com a aba aberta (issues #3164 e #3157)", () => {
+  it("navegador não registra o service worker: a frase é a do service worker e o interruptor continua ligado", async () => {
     // `register` resolve SEM `pushManager`: é o navegador que não registra o
     // service worker — o primeiro caminho que a issue nomeia.
     comServiceWorker({});
@@ -115,35 +127,34 @@ describe("sem inscrição, a tela diz a causa e o interruptor não fica ligado (
     const aviso = container.querySelector('[data-testid="push-recusado"]');
     expect(aviso, "o interruptor ficou ligado e a tela não disse nada").not.toBeNull();
     expect(aviso?.getAttribute("data-motivo")).toBe("sem_service_worker");
+    expect(aviso?.getAttribute("role")).toBe("status");
     expect(container.textContent).toContain(
-      "Este navegador não registrou o service worker dos avisos, então este aparelho não recebe Push",
+      "Este navegador não registrou o service worker dos avisos: com o site fechado, este aparelho não recebe aviso.",
     );
-    expect(container.innerHTML).toContain('data-testid="alerts-enable"');
-    expect(container.innerHTML).not.toContain('data-testid="alerts-toggle"');
+    expect(interruptorDoPush(container)?.getAttribute("aria-checked")).toBe("true");
+    expect(container.innerHTML).toContain('data-testid="alerts-toggle"');
     // Nada foi inscrito: nenhum PUT saiu.
     expect(
       fetchFalso.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "PUT"),
     ).toBe(false);
   });
 
-  it("instalação sem o par VAPID: a frase é a das chaves e o interruptor volta a desligar", async () => {
+  // ⚠️ O estado de todo primeiro deploy. Com o interruptor desligando aqui, a
+  // instalação sem chaves não conseguia manter o Push de mensagem ligado — e
+  // junto ia o aviso com a aba aberta, que funciona sem VAPID (#3157).
+  it("instalação sem o par VAPID: o interruptor continua ligado e o cliente não repete o cartão da página", async () => {
     comServiceWorker(inscricaoValida());
     window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
     const container = montar();
 
     await ligarOPush(container);
 
-    const aviso = container.querySelector('[data-testid="push-recusado"]');
-    expect(aviso, "o interruptor ficou ligado e a tela não disse nada").not.toBeNull();
-    expect(aviso?.getAttribute("data-motivo")).toBe("sem_vapid");
-    expect(container.textContent).toContain(
-      "Esta instalação não tem o par de chaves do Push (VAPID)",
-    );
-    // ⚠️ E não diz que o servidor recusou: não houve recusa nenhuma — a
-    // inscrição nem foi tentada.
+    expect(interruptorDoPush(container)?.getAttribute("aria-checked")).toBe("true");
+    expect(container.innerHTML).toContain('data-testid="alerts-toggle"');
+    // Quem explica a falta das chaves é o cartão de `page.tsx`, não uma
+    // segunda frase aqui.
+    expect(container.querySelector('[data-testid="push-recusado"]')).toBeNull();
     expect(container.textContent).not.toContain("O servidor recusou a inscrição");
-    expect(container.innerHTML).toContain('data-testid="alerts-enable"');
-    expect(container.innerHTML).not.toContain('data-testid="alerts-toggle"');
   });
 
   it("CONTROLE (#3157): o PUT recusado pelo servidor segue com a frase dele e o interruptor desligado", async () => {

@@ -49,8 +49,13 @@ export function NotificationPrefsClient() {
    * O `ignorado` cobria caminhos que NÃO se parecem, e um texto só para todos
    * mentiria em pelo menos um: "o servidor recusou" para quem está sem internet,
    * "alguma coisa falhou" para quem precisa saber se o problema é do navegador,
-   * do aparelho ou da instalação. São quatro causas de aparelho, e cada uma tem
-   * a sua frase — a pessoa só consegue resolver sabendo qual é.
+   * do aparelho ou da instalação. Cada causa tem a sua frase — a pessoa só
+   * consegue resolver sabendo qual é.
+   *
+   * `sem_vapid` devolve `null` de propósito (#3157): a página já mostra, acima
+   * desta tabela, o cartão "Nesta instalação, os avisos só aparecem com o site
+   * aberto", com o porquê e como conseguir as chaves. Uma segunda frase aqui
+   * repetiria aquela.
    */
   function textoDaInscricao(r: ResultadoDaInscricao): string | null {
     if (r.situacao === "sem_rede")
@@ -65,12 +70,10 @@ export function NotificationPrefsClient() {
     switch (r.motivo) {
       case "sem_service_worker":
         return t(
-          "Este navegador não registrou o service worker dos avisos, então este aparelho não recebe Push: o interruptor voltou a ficar desligado.",
+          "Este navegador não registrou o service worker dos avisos: com o site fechado, este aparelho não recebe aviso.",
         );
       case "sem_vapid":
-        return t(
-          "Esta instalação não tem o par de chaves do Push (VAPID), então nenhum aparelho recebe aviso com o site fechado: o interruptor voltou a ficar desligado.",
-        );
+        return null;
       case "inscricao_incompleta":
         return t(
           "O navegador não devolveu os dados completos da inscrição de Push deste aparelho, então os avisos não vão chegar: o interruptor voltou a ficar desligado.",
@@ -98,19 +101,14 @@ export function NotificationPrefsClient() {
         return;
       }
       const resultado = await syncPushSubscription();
-      if (pushNaoEntrega(resultado)) {
-        // ⚠️ O INTERRUPTOR VOLTA A DESLIGAR, e é o estado honesto: nada foi
-        // inscrito, então nenhum aviso chegaria com o site fechado. Deixá-lo
-        // ligado era a mentira que as issues #3116 e #3164 medem. Quem decide é
-        // `pushNaoEntrega`, pela CAUSA: causa de aparelho/instalação desliga;
-        // causa que é só preferência da pessoa NÃO — ali o interruptor está
-        // dizendo uma escolha dela, e desfazê-la sozinha seria tirá-la da mão
-        // de quem clicou.
-        gravarCanal("message", "push", false);
-        setRecusaDoPush(resultado ?? null);
-      } else {
-        setRecusaDoPush(null);
-      }
+      // ⚠️ DIZER e DESLIGAR são decisões separadas (#3157). Quem decide se o
+      // interruptor volta a desligar é `pushNaoEntrega`, pela CAUSA: o servidor
+      // ou o navegador recusou a inscrição → desliga. Falta de VAPID ou de
+      // service worker → a frase diz o que não vai chegar, e o interruptor
+      // fica ligado, porque o aviso com a aba aberta não depende deles
+      // (ver `MOTIVOS_QUE_DESLIGAM` em `push_client.ts`).
+      if (pushNaoEntrega(resultado)) gravarCanal("message", "push", false);
+      setRecusaDoPush(resultado && textoDaInscricao(resultado) ? resultado : null);
     }
   }
 
@@ -144,14 +142,14 @@ export function NotificationPrefsClient() {
                 ) : null}
                 {cat === "message" && recusaDoPush !== null ? (
                   <div
-                    className="mt-1 text-xs text-destructive"
+                    className={`mt-1 text-xs ${pushNaoEntrega(recusaDoPush) ? "text-destructive" : "text-muted-foreground"}`}
                     data-testid="push-recusado"
                     data-motivo={
                       recusaDoPush.situacao === "ignorado"
                         ? recusaDoPush.motivo
                         : recusaDoPush.situacao
                     }
-                    role="alert"
+                    role={pushNaoEntrega(recusaDoPush) ? "alert" : "status"}
                   >
                     <p>{textoDaInscricao(recusaDoPush)}</p>
                     {recusaDoPush.situacao === "recusado" && recusaDoPush.motivo ? (
