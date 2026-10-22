@@ -10228,12 +10228,6 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "calendar_event_types"
       referencedColumns: ["organization_id","id"]
-    },{
-      foreignKeyName: "calendar_service_professionals_organization_id_fkey"
-      columns: ["organization_id"]
-isOneToOne: false
-      referencedRelation: "organizations"
-      referencedColumns: ["id"]
     }
                   ]
                 }
