@@ -1,4 +1,4 @@
--- manifest: **O gatilho de data do funil (`lead.date_field_due`, entidade `crm_lead`) passa a alcançar a origem do atendimento — a mesma classe que o #2330 consertou para `contact.birthday` e os seis `appointment.*` (issue #3286).** O cron `app/api/v1/cron/lead-date-field-due` emite o evento com `p_entity_kind='crm_lead'` e SEM `service_origin` no payload, e `fn_service_event_contact` — a tabela única `(tipo, entidade) → contato` que o carimbo do `emit_event` e a resolução de `fn_service_event_origin` leem — não conhecia o par: nenhum ramo da função o alcançava, a resolução recusava com `service_event_origin_unsupported` (40001), `serviceForEvent` devolvia `null` e `serviceForAutomation` lançava `StaleServiceBoundaryError` — a ação de WhatsApp terminava `failed` sem erro em lugar nenhum. O par novo entra na lista `crm_lead` que a função já mantinha, ao lado de `lead.created/stage_changed/tag_added`: as DUAS pontas passam a reconhecê-lo pela mesma linha. Não se toca no emissor (a origem é DERIVADA pelo par, não inventada no cron) e nenhum par existente é afrouxado. Idempotente: `create or replace`; apêndice igual no fim do `baseline.sql`, antes da VARREDURA anon (0116).
+-- manifest: **O gatilho de data do funil (`lead.date_field_due`, entidade `crm_lead`) passa a alcançar a origem do atendimento — a mesma classe que o #2330 consertou para `contact.birthday` e os seis `appointment.*` (issue #3286).** O cron `app/api/v1/cron/lead-date-field-due` emite o evento com `p_entity_kind='crm_lead'` e SEM `service_origin` no payload, e `fn_service_event_contact` — a tabela única `(tipo, entidade) → contato` que o carimbo do `emit_event` e a resolução de `fn_service_event_origin` leem — não conhecia o par: nenhum ramo da função o alcançava, a resolução recusava com `service_event_origin_unsupported` (40001), `serviceForEvent` devolvia `null` e `serviceForAutomation` lançava `StaleServiceBoundaryError` — a ação de WhatsApp terminava `failed` sem erro em lugar nenhum. O par novo entra na lista `crm_lead` que a função já mantinha, ao lado de `lead.created/stage_changed/tag_added`: as DUAS pontas passam a reconhecê-lo pela mesma linha. Não se toca no emissor (a origem é DERIVADA pelo par, não inventada no cron) e nenhum par existente é afrouxado. A função parte da ÚLTIMA definição de `fn_service_event_contact`, a da 0670 (#2812), que pôs `contact.phone_added` no ramo de contato; partir da 0551 desfaria aquele conserto. Idempotente: `create or replace`; apêndice igual no fim do `baseline.sql`, antes da VARREDURA anon (0116).
 
 -- ============================================================================
 -- 0743 — O GATILHO DE DATA DO FUNIL ALCANÇA A ORIGEM (#3286)
@@ -35,6 +35,11 @@
 -- no log dizia qual era o defeito.
 --
 -- ─── O desenho ──────────────────────────────────────────────────────────────
+--
+-- A definição abaixo parte da ÚLTIMA de `fn_service_event_contact`, a da
+-- 0670 (#2812), que acrescentou `contact.phone_added` ao ramo de contato. Partir
+-- da 0551 (a primeira das duas no baseline) apagaria esse tipo e o gatilho
+-- "ganhou telefone → WhatsApp" voltaria a morrer em `service_boundary_stale`.
 --
 -- O conserto é UMA linha: `lead.date_field_due` entra na lista de tipos que a
 -- função já resolvia para `entity_kind='crm_lead'`, ao lado de
@@ -73,7 +78,7 @@ returns table(contact_id uuid,suportado boolean) language plpgsql stable securit
 begin
  if p_event_type in ('lead.created','lead.stage_changed','lead.tag_added','lead.date_field_due') and p_entity_kind='crm_lead' then
    return query select (select l.contact_id from public.crm_leads l where l.organization_id=p_org and l.id=p_entity_id),true;
- elsif p_event_type in ('contact.tag_added','contact.birthday') and p_entity_kind='contact' then
+ elsif p_event_type in ('contact.tag_added','contact.birthday','contact.phone_added') and p_entity_kind='contact' then
    return query select (select c.id from public.contacts c where c.organization_id=p_org and c.id=p_entity_id),true;
  elsif p_event_type in ('appointment.created','appointment.confirmed','appointment.rescheduled','appointment.cancelled','appointment.completed','appointment.no_show') and p_entity_kind='calendar_appointment' then
    return query select (select a.contact_id from public.calendar_appointments a where a.organization_id=p_org and a.id=p_entity_id),true;
