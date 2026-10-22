@@ -611,7 +611,7 @@ describe("send_email — a variável {{resumo}} (#2642)", () => {
     expect(pedido.to).toBe("pessoa@estudio.com");
     // O resumo vem do MESMO montador do WhatsApp da equipe: só o número da
     // pontuação; o texto livre da conversa fica na ficha (doc 176, A).
-    expect(pedido.text.split("\n")).toContain("Pontuação: 72%");
+    expect((pedido.text ?? "").split("\n")).toContain("Pontuação: 72%");
     expect(pedido.text).not.toContain("dois compromissos marcados");
     expect(pedido.text).not.toContain("enviar proposta até sexta");
     expect(pedido.subject).toBe("Negócio ganho: Lua de mel");
