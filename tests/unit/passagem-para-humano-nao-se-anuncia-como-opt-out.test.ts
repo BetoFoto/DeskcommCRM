@@ -45,6 +45,7 @@ import path from "node:path";
 import type pg from "pg";
 import { describe, expect, it, vi } from "vitest";
 
+import { motivoDoBloqueioDaEntrega } from "@/lib/agent-engine/agent/meet-delivery";
 import { runBeforeSend, type RunBeforeSendArgs } from "@/lib/agent-engine/guardrails/before-send";
 import { motivoDoAviso, textoDoAviso } from "@/lib/escalacao/aviso-ao-lead";
 import { motivoCodigoDoTexto } from "@/lib/escalacao/passagem";
@@ -224,4 +225,32 @@ describe("#3310 · 3 — o pedido de humano só existe quando o cliente pediu", 
     expect(nativo).not.toMatch(/motivo_codigo\s*\?\?\s*['"]requested_human['"]/);
     expect(nativo).toMatch(/motivo_codigo\s*\?\?\s*['"]low_confidence['"]/);
   });
+});
+
+describe("#3310 · entrega da agenda — o motivo do bloqueio é um que o banco aceita", () => {
+  // `fn_meet_delivery_settle` recusa motivo fora de uma lista FECHADA
+  // (`meet_reason_invalid`): o settle cai no `retry` e a entrega termina
+  // `failed`, não `blocked`. Vale a ÚLTIMA definição do baseline.
+  const listas = [
+    ...fonte("supabase", "baseline.sql").matchAll(
+      /if reason not in \(([^)]*)\) then raise exception 'meet_reason_invalid'/g,
+    ),
+  ];
+  const aceitos = (listas.at(-1)?.[1] ?? "").split(",").map((v) => v.trim().replace(/^'|'$/g, ""));
+
+  it("controle: a lista do banco foi lida", () => {
+    expect(aceitos).toContain("opt_out");
+  });
+
+  it("a pausa por handoff vira `blocked:force_human`, nunca `opt_out`", () => {
+    expect(motivoDoBloqueioDaEntrega("atendimento_com_humano")).toBe("force_human");
+    expect(motivoDoBloqueioDaEntrega("contato_bloqueado")).toBe("opt_out");
+  });
+
+  it.each(["atendimento_com_humano", "contato_bloqueado", "lgpd_sem_base", "messaging_window_closed", "outro_veto"])(
+    "o motivo de %s está na lista do banco",
+    (code) => {
+      expect(aceitos).toContain(motivoDoBloqueioDaEntrega(code));
+    },
+  );
 });
