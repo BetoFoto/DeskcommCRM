@@ -108,10 +108,12 @@ export function detectHumanHandoffRequest(message: string): boolean {
  * que o turno JÁ tem em memória (o mesmo histórico que o modelo lê), sem
  * consulta nova e sem relógio do banco:
  *
- *   1. MENU — o texto é uma LISTA de opções numeradas (ou pede "digite o número
- *      da opção"): o rótulo casado é uma opção do menu, não um pedido;
- *   2. MARCA DE ROBÔ — o texto se declara automação ("assistente virtual",
- *      "mensagem automática"): quem escreve isso não é quem pede uma pessoa;
+ *   1. MENU — o texto é um menu E o pedido casado é UMA DAS OPÇÕES dele (o item
+ *      numerado "4 - Falar com um atendente", ou um menu que pede "digite o
+ *      número" e traz opções numeradas): o rótulo casado não é um pedido;
+ *   2. MARCA DE ROBÔ — o texto se DECLARA automação ("sou o assistente
+ *      virtual", "esta é uma mensagem automática"): quem escreve isso não é quem
+ *      pede uma pessoa. Citar o robô não basta — quem reclama do NOSSO bot cita;
  *   3. JANELA DA ABERTURA — a mensagem chegou segundos depois da mensagem NOSSA
  *      que ABRIU a conversa (o disparo da Prospecção/campanha): é a saudação
  *      automática de quem recebeu o disparo, antes de qualquer pessoa escrever.
@@ -148,11 +150,22 @@ export interface MensagemDoHistorico {
 const SEGUNDOS_DA_SAUDACAO_AUTOMATICA = 60;
 
 /**
- * Rótulos de OPÇÃO numerada: "1 - …", "2)", "3.", "*4*. São LINHAS (ou o começo
- * da mensagem), não números soltos no meio de uma frase: quem escreve "chegou em
- * 2 minutos" não está montando um menu.
+ * Onde começa um ITEM de menu: quebra de linha, ou o separador com espaço dos
+ * dois lados (" / ", " | ", " • ") do menu de uma linha só — o da issue é
+ * "1-Médicos / 2-Terapias / 3-Exames / 4-Falar com um atendente". O espaço é
+ * exigido para que a data "12/10" não vire dois itens.
  */
-const OPCAO_NUMERADA = /(?:^|\n)\s*\*{0,2}\d{1,2}\s*[-–—.)\]]|\*\d{1,2}\*|\d\ufe0f?\u20e3/g;
+const SEPARADOR_DE_ITEM = /\n|\s[/|•]\s/;
+
+/**
+ * Rótulos de OPÇÃO numerada: "1 - …", "2)", "3.", "*4*. Só no começo de um ITEM
+ * (ver `SEPARADOR_DE_ITEM`), não números soltos no meio de uma frase: quem
+ * escreve "chegou em 2 minutos" não está montando um menu.
+ */
+const OPCAO_NUMERADA = /(?:^|\n|\s[/|•]\s)\s*\*{0,2}\d{1,2}\s*[-–—.)\]]|\*\d{1,2}\*|\d\ufe0f?\u20e3/g;
+
+/** O mesmo rótulo, perguntado a UM item já separado (sem `g`: `test` sem estado). */
+const ITEM_NUMERADO = /^\s*\*{0,2}\d{1,2}\s*[-–—.)\]]|\*\d{1,2}\*|\d\ufe0f?\u20e3/;
 
 /**
  * Como um menu PEDE a escolha. "digite o número", "responda com a opção",
@@ -161,7 +174,7 @@ const OPCAO_NUMERADA = /(?:^|\n)\s*\*{0,2}\d{1,2}\s*[-–—.)\]]|\*\d{1,2}\*|\d
  */
 const INSTRUCOES_DE_MENU: readonly RegExp[] = [
   /\bdigite\s+(?:o\s+|a\s+)?(?:numero|opcao|palavra)\b/,
-  /\b(?:responda|responde|envie|envia|mande|manda|escolha|escolhe|selecione|seleciona|aperte|toque)\s+(?:com\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?(?:numero|opcao|palavra)\b/,
+  /\b(?:responda|responde|escolha|escolhe|selecione|seleciona|aperte|toque)\s+(?:com\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?(?:numero|opcao|palavra)\b/,
   /\bopcao\s+desejada\b/,
   /\bmenu\s+(?:de\s+opcoes|abaixo|acima|principal)\b/,
   /\b(?:as|nas)\s+opcoes\s+(?:abaixo|acima|ao\s+lado)\b/,
@@ -170,14 +183,15 @@ const INSTRUCOES_DE_MENU: readonly RegExp[] = [
 /**
  * Marcas em que a própria mensagem se declara AUTOMAÇÃO. Lista CURTA e
  * deliberada: só entra o que uma pessoa não escreve sobre si ao pedir uma
- * pessoa passar a conversa.
+ * pessoa passar a conversa — por isso só AUTODECLARAÇÃO ("sou o…", "esta é
+ * uma…"), nunca a menção solta. "esse assistente virtual não resolve nada",
+ * "cansei de mensagem automática de vocês" e "aqui é o bot de novo?" são gente
+ * reclamando do NOSSO robô, e têm de passar — como "não sou um robô", que é
+ * gente provando que é gente.
  */
 const MARCAS_DE_ROBO: readonly RegExp[] = [
-  /\bassistente\s+(?:virtual|digital|automatico|automatizada|automatizado|de\s+ia)\b/,
-  /\batendimento\s+(?:virtual|automatico|automatizado)\b/,
-  /\b(?:mensagem|resposta|aviso|retorno)\s+automatic[ao]\b/,
-  /\bsou\s+(?:um|uma)\s+(?:robo|bot|assistente\s+virtual|ia|inteligencia\s+artificial)\b/,
-  /\b(?:robo|bot)\s+(?:virtual|automatico|de\s+atendimento)\b/,
+  /(?<!\bnao\s+)\bsou\s+(?:o|a|um|uma)\s+(?:assistente\s+(?:virtual|digital)|robo|bot)\b/,
+  /\best[ae]\s+(?:e\s+uma\s+(?:mensagem|resposta)\s+automatica|(?:mensagem|resposta)\s+e\s+automatica)\b/,
 ];
 
 /**
@@ -193,6 +207,24 @@ export function ehMenuDeOpcoesNumeradas(mensagem: string): boolean {
   if (INSTRUCOES_DE_MENU.some((re) => re.test(normalizada))) return true;
   const opcoes = normalizada.match(OPCAO_NUMERADA);
   return opcoes !== null && new Set(opcoes.map((o) => o.replace(/\D/gu, ''))).size >= 2;
+}
+
+/**
+ * O pedido casado é UMA OPÇÃO do menu? (marca 1, a que a guarda usa)
+ *
+ * Ser menu não basta: uma pessoa que numera as próprias dúvidas ("1. o preço /
+ * 2. o prazo / quero falar com um atendente") escreve um "menu" e pede gente
+ * numa linha sem número; e quem reclama do nosso ("não sei qual a opção
+ * desejada") cita a instrução sem montar opção nenhuma. Por isso, além de ser
+ * menu, exige uma das duas: o pedido cai num ITEM numerado, ou há instrução de
+ * menu JUNTO com pelo menos uma opção numerada.
+ */
+export function pedidoEhOpcaoDoMenu(mensagem: string): boolean {
+  if (!ehMenuDeOpcoesNumeradas(mensagem)) return false;
+  const normalizada = normalize(mensagem);
+  const numerados = normalizada.split(SEPARADOR_DE_ITEM).filter((item) => ITEM_NUMERADO.test(item));
+  if (numerados.some((item) => HUMAN_HANDOFF_PATTERNS.some((re) => re.test(item)))) return true;
+  return numerados.length > 0 && INSTRUCOES_DE_MENU.some((re) => re.test(normalizada));
 }
 
 /**
@@ -261,7 +293,7 @@ export function ehRespostaDeRobo(
   historico: readonly MensagemDoHistorico[] = [],
 ): boolean {
   if (mensagem.trim() === '') return false;
-  if (ehMenuDeOpcoesNumeradas(mensagem)) return true;
+  if (pedidoEhOpcaoDoMenu(mensagem)) return true;
   if (ehMensagemDeRobo(mensagem)) return true;
   return chegouNaJanelaDaSaudacaoAutomatica(mensagem, historico);
 }

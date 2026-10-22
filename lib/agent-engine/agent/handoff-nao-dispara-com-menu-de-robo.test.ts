@@ -213,6 +213,39 @@ describe("as três marcas, uma por uma", () => {
   });
 });
 
+/** O menu da issue 3106, LITERAL: uma linha só, itens separados por " / ". */
+const MENU_DA_ISSUE =
+  "Digite o número de acordo a opção desejada: 1-Médicos / 2-Terapias / 3-Exames / 4-Falar com um atendente";
+
+describe("CONTROLE — gente reclamando do NOSSO robô continua sendo gente", () => {
+  // As marcas olham a FORMA da mensagem; quem reclama do bot cita o bot, cita a
+  // instrução do menu e às vezes numera as próprias dúvidas. Nenhuma dessas
+  // falas se declara automação nem faz do pedido uma opção de menu.
+  it.each([
+    "esse assistente virtual não resolve nada, quero falar com um atendente",
+    "cansei desse atendimento automático, quero falar com uma pessoa",
+    "cansei de mensagem automática de vocês, quero falar com um atendente",
+    "esta mensagem automática não responde nada, quero falar com um atendente",
+    "eu não sou um robô, quero falar com uma pessoa",
+    "não sei qual a opção desejada, quero falar com um atendente",
+    "Tenho 2 dúvidas:\n1. o preço\n2. o prazo\nquero falar com um atendente",
+  ])("%s", (frase) => {
+    expect(pedidoDeGente(frase, historicoEstabelecido())).toBe(true);
+  });
+});
+
+describe("o menu LITERAL da issue continua barrado", () => {
+  it("o item '4-Falar com um atendente' de um menu de uma linha só não passa a conversa", () => {
+    expect(detectHumanHandoffRequest(MENU_DA_ISSUE)).toBe(true);
+    expect(pedidoDeGente(MENU_DA_ISSUE, historicoEstabelecido())).toBe(false);
+  });
+
+  it("datas como '12/10' não viram itens de menu", () => {
+    const frase = "Pedi para 12/10. Remarcaram para 20/11. Quero falar com um atendente";
+    expect(pedidoDeGente(frase, historicoEstabelecido())).toBe(true);
+  });
+});
+
 /**
  * FIAÇÃO — presença antes de comportamento. Uma guarda que existe e ninguém
  * chama é o mesmo defeito de antes com mais linhas; e a prova de que ela decide
