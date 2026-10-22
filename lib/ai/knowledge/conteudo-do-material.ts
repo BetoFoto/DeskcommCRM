@@ -64,7 +64,11 @@ export interface ConteudoLegivel {
   itens: { question: string; answer: string }[] | null;
   /** Texto legível — presente em `arquivo` e em `indice`. */
   conteudo: string | null;
-  /** Quantos itens/trechos legíveis vieram (1 quando é o texto inteiro do arquivo). */
+  /**
+   * Quantos itens/trechos o material TEM (1 quando é o texto inteiro do arquivo).
+   * É o total do material, e não o que coube na tela: a frase "Mostrando os
+   * primeiros trechos de N" é a mesma do diálogo de trechos, que usa `chunks_count`.
+   */
   total: number;
   /** Há mais do que a tela mostrou (o material não foi perdido — só não coube). */
   truncado: boolean;
@@ -93,6 +97,7 @@ interface FonteRow {
   source_type: string | null;
   source_metadata: Record<string, unknown> | null;
   active_kb_version_id: string | null;
+  chunks_count: number | null;
 }
 
 export async function lerConteudoDoMaterial(
@@ -101,7 +106,7 @@ export async function lerConteudoDoMaterial(
 ): Promise<LeituraDoMaterial> {
   const { data, error } = await supabase
     .from("ai_knowledge_sources")
-    .select("id, name, source_type, source_metadata, active_kb_version_id")
+    .select("id, name, source_type, source_metadata, active_kb_version_id, chunks_count")
     .eq("id", p.sourceId)
     .eq("organization_id", p.orgId)
     .maybeSingle();
@@ -144,13 +149,13 @@ export async function lerConteudoDoMaterial(
 
   // 1. FAQ: o que a pessoa escreveu, na ordem em que escreveu.
   if (tipo === "faq") {
-    const itens = await lerParesDeFaq(supabase, p);
+    const { itens, total } = await lerParesDeFaq(supabase, p);
     if (itens.length > 0) {
       return fechar({
         origem: "faq",
         itens,
-        total: itens.length,
-        truncado: itens.length >= TETO,
+        total,
+        truncado: total > itens.length,
       });
     }
     // FAQ sem par nenhum não é erro de leitura: pode ter sido indexado por outro
@@ -182,11 +187,13 @@ export async function lerConteudoDoMaterial(
   //    não pôde ser lido agora. É o que o agente já sabe deste material.
   const trechos = await lerTrechosIndexados(supabase, p, versaoAtiva);
   if (trechos.length > 0) {
+    // O total é o do material (`chunks_count`), como em `trechos/route.ts`.
+    const total = fonte.chunks_count ?? trechos.length;
     return fechar({
       origem: "indice",
       conteudo: trechos.join("\n\n"),
-      total: trechos.length,
-      truncado: trechos.length >= TETO,
+      total,
+      truncado: total > trechos.length,
       motivo: motivoDaFalha,
     });
   }
@@ -198,14 +205,14 @@ export async function lerConteudoDoMaterial(
   });
 }
 
-/** Os pares cadastrados. Falha de leitura aqui não é fatal: o índice ainda pode ter texto. */
+/** Os pares cadastrados (até o teto) e quantos existem. Falha de leitura aqui não é fatal: o índice ainda pode ter texto. */
 async function lerParesDeFaq(
   supabase: ClienteComSessao,
   p: { orgId: string; sourceId: string },
-): Promise<{ question: string; answer: string }[]> {
-  const { data, error } = await supabase
+): Promise<{ itens: { question: string; answer: string }[]; total: number }> {
+  const { data, error, count } = await supabase
     .from("ai_faq_items")
-    .select("question, answer")
+    .select("question, answer", { count: "exact" })
     .eq("organization_id", p.orgId)
     .eq("knowledge_source_id", p.sourceId)
     .order("position", { ascending: true })
@@ -213,9 +220,10 @@ async function lerParesDeFaq(
 
   if (error) {
     console.error("[conhecimento-conteudo] leitura dos pares falhou:", error.message);
-    return [];
+    return { itens: [], total: 0 };
   }
-  return (data ?? []) as unknown as { question: string; answer: string }[];
+  const itens = (data ?? []) as unknown as { question: string; answer: string }[];
+  return { itens, total: count ?? itens.length };
 }
 
 /** Os trechos da versão ATIVA, na ordem de indexação e sem o vetor. */

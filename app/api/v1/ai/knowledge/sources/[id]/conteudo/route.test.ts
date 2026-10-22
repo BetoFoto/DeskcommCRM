@@ -64,6 +64,8 @@ function supabaseFalso(opts: {
   fonte?: Record<string, unknown> | null;
   itens?: Record<string, unknown>[];
   trechos?: Record<string, unknown>[];
+  /** O `count` que o PostgREST devolve com `{ count: "exact" }` em `ai_faq_items`. */
+  contagemDeItens?: number;
   erroNaFonte?: string | null;
 }) {
   const tabelasConsultadas: string[] = [];
@@ -76,7 +78,9 @@ function supabaseFalso(opts: {
         error: opts.erroNaFonte ? { message: opts.erroNaFonte } : null,
       };
     }
-    if (tabela === "ai_faq_items") return { data: opts.itens ?? [], error: null };
+    if (tabela === "ai_faq_items") {
+      return { data: opts.itens ?? [], error: null, count: opts.contagemDeItens ?? null };
+    }
     if (tabela === "ai_chunks") return { data: opts.trechos ?? [], error: null };
     return { data: [], error: null };
   };
@@ -279,6 +283,70 @@ describe("ler o material na tela (#3059)", () => {
       valor: ORG_DA_SESSAO,
     });
     expect(db.__filtros.some((f) => f.valor === ORG_ALHEIA)).toBe(false);
+  });
+
+  /**
+   * O aviso de truncamento reusa a frase do diálogo de trechos ("Mostrando os
+   * primeiros trechos de N"), e lá o N é o TOTAL do material (`chunks_count`).
+   * Com `total = trechos.length`, um catálogo de 350 trechos aparecia "de 200",
+   * e um material de exatamente 200 acusava truncamento sem estar truncado.
+   */
+  describe("o total do aviso é o do material, e não o que coube", () => {
+    const duzentos = Array.from({ length: 200 }, (_, i) => ({
+      id: `t${i}`,
+      position: i,
+      content: `t${i}`,
+    }));
+    const automatico = (chunks_count: number) =>
+      supabaseFalso({
+        fonte: {
+          id: FONTE,
+          name: "Catálogo",
+          source_type: "catalogo",
+          source_metadata: {},
+          active_kb_version_id: VERSAO,
+          chunks_count,
+        },
+        trechos: duzentos,
+      });
+    type Total = { data: { origem: string; total: number; truncado: boolean } };
+
+    it("350 trechos no material, 200 na tela: total 350 e truncado", async () => {
+      vi.mocked(createClient).mockResolvedValue(automatico(350) as never);
+      const corpo = (await (await ler()).json()) as Total;
+
+      expect(corpo.data.origem).toBe("indice");
+      expect(corpo.data.total).toBe(350);
+      expect(corpo.data.truncado).toBe(true);
+    });
+
+    it("exatamente 200 trechos: não acusa truncamento", async () => {
+      vi.mocked(createClient).mockResolvedValue(automatico(200) as never);
+      const corpo = (await (await ler()).json()) as Total;
+
+      expect(corpo.data.total).toBe(200);
+      expect(corpo.data.truncado).toBe(false);
+    });
+
+    it("FAQ com 230 pares, 200 na tela: total 230 e truncado", async () => {
+      const db = supabaseFalso({
+        fonte: {
+          id: FONTE,
+          name: "Dúvidas",
+          source_type: "faq",
+          source_metadata: {},
+          active_kb_version_id: VERSAO,
+        },
+        itens: duzentos.map((t) => ({ question: t.content, answer: "r" })),
+        contagemDeItens: 230,
+      });
+      vi.mocked(createClient).mockResolvedValue(db as never);
+      const corpo = (await (await ler()).json()) as Total;
+
+      expect(corpo.data.origem).toBe("faq");
+      expect(corpo.data.total).toBe(230);
+      expect(corpo.data.truncado).toBe(true);
+    });
   });
 
   it("403 para papel abaixo de manager, e nada é lido antes disso", async () => {
