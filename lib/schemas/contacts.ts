@@ -143,8 +143,9 @@ function telefoneNacionalE164(valor: string): string | null {
  * o DDI brasileiro assim que a pessoa errava — dentro do mesmo formulário.
  *
  * No Brasil entra também o formato nacional, e a NORMALIZAÇÃO mora no schema,
- * e não na tela, porque a tela não é a única porta: a importação por planilha
- * e o MCP chamam esta mesma fábrica. Os demais países seguem como estavam —
+ * e não na tela, porque a tela não é a única porta: a API v1 de contatos
+ * (POST e PATCH /api/v1/contacts) e a importação por planilha chamam esta
+ * mesma fábrica. Os demais países seguem como estavam —
  * o formato internacional completo é o único aceito.
  *
  * `.transform()` ANTES do `.refine()`: o `refine` julga o valor já
@@ -164,6 +165,13 @@ function telefoneDoPais(perfil: PerfilDoPais) {
 /** O que já é E.164 passa intacto; o nacional brasileiro ganha o `+55`. O resto segue para o `refine` recusar. */
 function normalizarTelefoneBR(valor: string): string {
   if (PHONE_REGEX.test(valor)) return valor;
+  // Quem escreveu o `+` declarou o DDI: `+1 (415) 555-1234` é os Estados
+  // Unidos, e a régua nacional o leria como DDD 14 + celular — `+5514155551234`,
+  // o número de outra pessoa. É a mesma leitura de `normalizePhoneBR`
+  // (lib/channels/phone-variants.ts): quem vem com `+` é respeitado. Só a
+  // máscara (espaço, parêntese, ponto, traço) sai; letra e ramal ficam, e o
+  // `refine` os recusa.
+  if (valor.trim().startsWith("+")) return `+${valor.trim().slice(1).replace(/[\s().-]/g, "")}`;
   return telefoneNacionalE164(valor) ?? valor;
 }
 

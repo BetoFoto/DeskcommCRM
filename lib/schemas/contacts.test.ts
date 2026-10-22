@@ -146,6 +146,22 @@ describe("telefone nacional da organização brasileira (#3301)", () => {
     expect(r.success && r.data.phone_number).toBe("+5511999998888");
   });
 
+  it("número com `+` e máscara mantém o DDI que a pessoa escreveu — nunca vira +55", () => {
+    // 10/11 dígitos de outro país (EUA, França, Alemanha) cabem na régua
+    // nacional; sem respeitar o `+`, o DDI viraria DDD e o contato seria de outra pessoa.
+    const digitado = {
+      "+1 (415) 555-1234": "+14155551234",
+      "+33 1 23 45 67 89": "+33123456789",
+      "+55 (11) 99999-8888": "+5511999998888",
+    };
+    for (const [entrada, esperado] of Object.entries(digitado)) {
+      const r = criar.safeParse({ phone_number: entrada });
+      expect(r.success && r.data.phone_number, entrada).toBe(esperado);
+    }
+    expect(criar.safeParse({ phone_number: "+12" }).success).toBe(false);
+    expect(criar.safeParse({ phone_number: "+55 (11) 99999-8888 ramal 22" }).success).toBe(false);
+  });
+
   it("E.164 continua aceito sem ser reescrito", () => {
     const r = criar.safeParse({ phone_number: "+5511999998888" });
     expect(r.success).toBe(true);
