@@ -16982,6 +16982,13 @@ export const DICIONARIO: Traducoes = {
   "Nesta primeira versão a meta é da EMPRESA inteira, para a quantidade de vendas ganhas: o que conta é o negócio fechado como ganho dentro do mês. Meta por vendedor, por período maior e por funil ficam para as próximas fatias.": {
     es: "En esta primera versión la meta es de TODA la empresa, para la cantidad de ventas ganadas: lo que cuenta es el negocio cerrado como ganado dentro del mes. La meta por vendedor, por período mayor y por embudo quedan para las próximas entregas.",
   },
+  // A descrição da porta no catálogo (`lib/navigation/catalogo.ts`) também é
+  // TELA — aparece no hub de Configurações e na busca do menu. A guarda
+  // `tests/unit/i18n-catalogo-do-menu.test.ts` cobra o espanhol de todo texto do
+  // menu, e foi ela que pegou esta linha faltando.
+  "Quanto a empresa quer vender no mês, para o Desempenho medir o progresso.": {
+    es: "Cuánto quiere vender la empresa en el mes, para que Rendimiento mida el progreso.",
+  },
   "A meta vale para o mês escolhido, do dia 1º ao último.": {
     es: "La meta vale para el mes elegido, del día 1 al último.",
   },
