@@ -59,16 +59,35 @@ function pedido(query = "", autenticado = false): NextRequest {
  * Dublê do `fetch`: o endereço do BANCO responde o que o caso mandar, e os
  * demais serviços respondem `200` JSON (senão eles derrubariam o veredito geral
  * e o caso não provaria nada do banco).
+ *
+ * O dublê imita a semântica REAL do `fetch`: redirect é SEGUIDO por padrão, e um
+ * `3xx` só chega cru quando a chamada pede `redirect: "manual"` — e é aí que ele
+ * entrega o `200` da tela de login, exatamente como o defeito nasceu. Sem essa
+ * fidelidade o dublê seria mais generoso que o `fetch`: ele devolveria o `3xx`
+ * para quem não pediu `manual`, e o teste passaria a provar menos que a
+ * realidade (o `307` chegaria cru de graça para o código sem o conserto).
  */
 function espiao(respostaDoBanco: () => Response): Parameters<typeof fetch>[] {
   const chamadas: Parameters<typeof fetch>[] = [];
   vi.stubGlobal("fetch", (...args: Parameters<typeof fetch>) => {
     chamadas.push(args);
     const alvo = typeof args[0] === "string" ? args[0] : String(args[0]);
-    if (alvo.startsWith(URL_DO_PROJETO)) return Promise.resolve(respostaDoBanco());
-    return Promise.resolve(
-      new Response("{}", { status: 200, headers: { "content-type": "application/json" } }),
-    );
+    if (!alvo.startsWith(URL_DO_PROJETO)) {
+      return Promise.resolve(
+        new Response("{}", { status: 200, headers: { "content-type": "application/json" } }),
+      );
+    }
+    const resposta = respostaDoBanco();
+    const ehRedirecionamento = resposta.status >= 300 && resposta.status < 400;
+    if (ehRedirecionamento && args[1]?.redirect !== "manual") {
+      return Promise.resolve(
+        new Response(HTML_DA_TELA_DE_LOGIN, {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      );
+    }
+    return Promise.resolve(resposta);
   });
   return chamadas;
 }
