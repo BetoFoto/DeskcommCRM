@@ -9,9 +9,9 @@
  * não lê `lead`, então quem clicava caía na lista e tinha de adivinhar em qual
  * funil o negócio estava.
  *
- * Quem sabe levar ao quadro certo é `/app/leads/<id>` — a URL estável do
+ * Quem sabe levar ao quadro certo é `/app/leads/[id]` — a URL estável do
  * negócio, que resolve o funil ATUAL na hora (leads mudam de funil) e
- * redireciona para `/app/pipelines/<funil>?lead=<id>`, que o board abre no card.
+ * redireciona para `/app/pipelines/[funil]?lead=[id]`, que o board abre no card.
  * Ela também é a única que já existe no produto: três outras telas a usam, e
  * não há por que inventar uma segunda resolução de funil aqui.
  *
