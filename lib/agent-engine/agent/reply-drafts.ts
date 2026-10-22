@@ -108,7 +108,8 @@ export async function generateReplyDraft(
       // uma ação e não escreve). O painel dizia "Não foi possível concluir a
       // sugestão" para um desfecho que deu certo. A oferta é o corpo OU as
       // propostas; sem nenhum dos dois, `failed` continua certo.
-      const temOferta = temOfertaAoAtendente(body, result.proposals);
+      // Com veto/truncamento/teto, a proposta não basta: o motivo só aparece em `failed`.
+      const temOferta = temOfertaAoAtendente(body, result.proposals, result.impediments[0]?.code);
       const { rows: finished } = await pool.query(
         `update ai_reply_drafts set status=case when not fn_reply_context_current($1,id) then 'stale' when $4::boolean then 'pending' else 'failed' end,
  original_body=$5,edited_body=$5,proposals=$6,trace=$7,error_code=$8,updated_at=now()

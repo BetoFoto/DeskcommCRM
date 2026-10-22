@@ -5020,6 +5020,9 @@ async function executarTurnoDoAgente(
     // revelar. Só com texto solto: silêncio sem texto é decisão já tomada, e
     // pedir de novo pagaria uma chamada de modelo para ouvir a mesma coisa.
     let correcaoTruncou = false;
+    // A correção também pode gastar o teto dela (3 passos) só em consultas: na
+    // prévia isso é a mesma falha do teto da primeira chamada, não decisão.
+    let tetoNaCorrecao = false;
     const correcaoDoTurnoMudoPedida =
       preview?.kind === 'assisted'
         ? previaPedeCorrecaoDoTurnoMudo({
@@ -5072,6 +5075,11 @@ async function executarTurnoDoAgente(
       // Sinal de FALHA da correção: terminou no teto de tokens. Silêncio com
       // finishReason normal (stop/tool-calls) é resposta escolhida, não defeito.
       correcaoTruncou = correcao.result.finishReason === 'length';
+      tetoNaCorrecao = tetoDePassosAtingido({
+        passosUsados: correcao.result.steps?.length ?? 0,
+        maxSteps: Math.min(maxSteps, 3),
+        finishReason: correcao.result.finishReason,
+      });
       mensagensDoTurno = [...mensagensDoTurno, pedidoDeCorrecao, ...correcao.result.responseMessages];
       if (runError !== null) throw runError;
       if (outcomes.some((o) => o.kind === 'failed')) {
@@ -5266,12 +5274,15 @@ async function executarTurnoDoAgente(
       const desfecho = desfechoSemCandidato({
         candidatos: p.result.candidates.length,
         impedimentos: p.result.impediments.length,
-        saidaTruncada,
-        tetoDePassosAtingido: tetoDePassosAtingido({
-          passosUsados: turn.result.steps?.length ?? 0,
-          maxSteps,
-          finishReason: turn.result.finishReason,
-        }),
+        // A correção que termina truncada ou no teto dela é FALHA, não decisão
+        // — a produção trata o mesmo sinal como `correction_truncated_failed`.
+        saidaTruncada: saidaTruncada || correcaoTruncou,
+        tetoDePassosAtingido:
+          tetoDePassosAtingido({
+            passosUsados: turn.result.steps?.length ?? 0,
+            maxSteps,
+            finishReason: turn.result.finishReason,
+          }) || tetoNaCorrecao,
       });
       if (desfecho !== null) p.result.impediments.push(desfecho);
     };

@@ -132,16 +132,33 @@ describe("PROPOSTA sem resposta não lê como `failed` (#3093, caso 2)", () => {
   it("⛔ só propostas, sem resposta: o rascunho tem o que oferecer", () => {
     // Antes: corpo vazio → `failed`, e o painel dizia "Não foi possível concluir
     // a sugestão" para um desfecho que deu certo (a proposta está registrada).
-    expect(temOfertaAoAtendente("", [{ tool: "request_human_handoff", arguments: {} }])).toBe(
-      true,
-    );
+    expect(
+      temOfertaAoAtendente("", [{ tool: "request_human_handoff", arguments: {} }], "no_candidate"),
+    ).toBe(true);
+    expect(temOfertaAoAtendente("", [{ tool: "save_lead_note", arguments: {} }], null)).toBe(true);
+  });
+
+  it("⛔ veto + proposta continua `failed` (o motivo do veto aparece)", () => {
+    // O `send_message` foi vetado e o modelo propôs uma ação em seguida. Em
+    // `pending` o painel mostraria só a proposta, sem dizer que o contato pediu
+    // para não receber mensagens — o motivo só é exibido em `failed` (#2975).
+    const proposta = [{ tool: "save_lead_note", arguments: {} }];
+    expect(temOfertaAoAtendente("", proposta, "contato_bloqueado")).toBe(false);
+    expect(temOfertaAoAtendente("", proposta, "lgpd_anonymized")).toBe(false);
+    expect(temOfertaAoAtendente("", proposta, "messaging_window_closed")).toBe(false);
+  });
+
+  it("⛔ output_truncated / max_steps_exhausted + proposta continuam `failed`", () => {
+    const proposta = [{ tool: "update_lead_state", arguments: {} }];
+    expect(temOfertaAoAtendente("", proposta, "output_truncated")).toBe(false);
+    expect(temOfertaAoAtendente("", proposta, "max_steps_exhausted")).toBe(false);
   });
 
   it("CONTROLE: sem resposta E sem proposta continua `failed` — ali não há nada", () => {
-    expect(temOfertaAoAtendente("", [])).toBe(false);
-    expect(temOfertaAoAtendente("   ", [])).toBe(false);
-    expect(temOfertaAoAtendente("", null)).toBe(false);
-    expect(temOfertaAoAtendente("", undefined)).toBe(false);
+    expect(temOfertaAoAtendente("", [], "no_candidate")).toBe(false);
+    expect(temOfertaAoAtendente("   ", [], null)).toBe(false);
+    expect(temOfertaAoAtendente("", null, "no_candidate")).toBe(false);
+    expect(temOfertaAoAtendente("", undefined, undefined)).toBe(false);
   });
 });
 
@@ -160,7 +177,7 @@ describe("CONTROLE: a prévia que responde continua concluída", () => {
   });
 
   it("a prévia que responde mantém o rascunho fora de `failed`", () => {
-    expect(temOfertaAoAtendente("Olá, posso ajudar?", [])).toBe(true);
+    expect(temOfertaAoAtendente("Olá, posso ajudar?", [], null)).toBe(true);
   });
 });
 
@@ -182,9 +199,19 @@ describe("o motor e a tela usam ESTAS decisões", () => {
     expect(motor).toMatch(/tetoDePassosAtingido\(\{/);
   });
 
+  it("a correção truncada ou no teto dela é falha, não decisão", () => {
+    // Presença de texto, não comportamento: o closure do turno não roda sozinho.
+    const motor = ler("lib/agent-engine/agent/inbound-turn.ts");
+    expect(motor).toMatch(/saidaTruncada: saidaTruncada \|\| correcaoTruncou/);
+    expect(motor).toMatch(/tetoNaCorrecao = tetoDePassosAtingido\(\{/);
+    expect(motor).toMatch(/\}\) \|\| tetoNaCorrecao/);
+  });
+
   it("a oferta decide o status do rascunho NO SQL (uma régua só)", () => {
     const drafts = ler("lib/agent-engine/agent/reply-drafts.ts");
-    expect(drafts).toMatch(/temOfertaAoAtendente\(body, result\.proposals\)/);
+    expect(drafts).toMatch(
+      /temOfertaAoAtendente\(body, result\.proposals, result\.impediments\[0\]\?\.code\)/,
+    );
     expect(drafts).toMatch(/when \$4::boolean then 'pending' else 'failed'/);
   });
 });

@@ -331,10 +331,21 @@ export const CODIGOS_DE_VETO_CONHECIDOS: readonly string[] = [
  *
  * A regra é a MESMA que o SQL usa (`reply-drafts.ts` passa este booleano como o
  * parâmetro do `case`), para não haver duas versões dela em dois lugares.
+ *
+ * A proposta sozinha só conta quando o desfecho é a DECISÃO (`no_candidate`, ou
+ * nenhum impedimento). Um veto (opt-out, LGPD, janela de 24h), o truncamento ou
+ * o teto de passos seguidos de proposta continuam `failed`: o painel só mostra o
+ * motivo (`motivoDoVeto`) em `failed`, e em `pending` quem atende veria a lista
+ * de propostas sem saber por que não há resposta — o #2975 de volta.
  */
 export function temOfertaAoAtendente(
   body: string,
   propostas: readonly unknown[] | null | undefined,
+  codigoDoImpedimento: string | null | undefined,
 ): boolean {
-  return body.trim() !== "" || (propostas?.length ?? 0) > 0;
+  return (
+    body.trim() !== "" ||
+    ((propostas?.length ?? 0) > 0 &&
+      (codigoDoImpedimento == null || codigoDoImpedimento === "no_candidate"))
+  );
 }
