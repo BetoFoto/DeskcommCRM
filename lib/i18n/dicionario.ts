@@ -1588,6 +1588,7 @@ export const DICIONARIO: Traducoes = {
     {
       es: "Reglas de atención que valen para toda esta empresa. No cambian permisos: el rol y el acceso siguen decidiendo qué alcanza cada persona.",
     },
+  "Aplicar regras de atendimento": { es: "Aplicar reglas de atención" },
   "Bloqueio da caixa de mensagem salvo.": { es: "Bloqueo del cuadro de mensaje guardado." },
   "Não foi possível salvar o bloqueio da caixa de mensagem.": {
     es: "No se pudo guardar el bloqueo del cuadro de mensaje.",

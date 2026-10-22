@@ -68,7 +68,7 @@ export function InboxDaEmpresaForm({ initial }: Props) {
         </span>
       </label>
       <Button type="button" size="sm" disabled={isPending} onClick={salvar}>
-        {t("Salvar")}
+        {t("Aplicar regras de atendimento")}
       </Button>
     </Card>
   );
