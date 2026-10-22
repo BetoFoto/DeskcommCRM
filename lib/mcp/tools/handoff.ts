@@ -46,7 +46,10 @@ const inputShape = {
    * Quem ATENDE ao pedido continua mandando `"requested_human"` e recebendo a
    * frase do pedido.
    */
-  reason: z.string().min(1).max(500).optional(),
+  reason: z.string().min(1).max(500).optional().describe(
+    'código do motivo ou texto livre. Envie exatamente "requested_human" quando o cliente pedir uma pessoa; ' +
+      "sem isso a passagem fica registrada como low_confidence (o assistente não resolveu sozinho).",
+  ),
   urgency: z.enum(["low", "normal", "high"]).default("normal"),
   /**
    * O contexto para quem vai assumir — o mesmo vocabulário da ferramenta nativa
