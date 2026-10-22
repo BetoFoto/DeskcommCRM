@@ -31,15 +31,82 @@ create index if not exists crm_lead_attachments_storage_path_idx
 
 alter table public.crm_lead_attachments enable row level security;
 
--- `drop` + `create` com o MESMO nome: o `update.sh` reaplica este arquivo sem
--- ON_ERROR_STOP, e um `create policy` sem guarda erraria com `already exists`.
--- Leitura: qualquer membro. Escrita: `agent` para cima também na RLS — as
--- rotas já exigem `agent`, e um `viewer` falando direto com o PostgREST não
--- pode anexar nem apagar (a dívida de RBAC não cresce: rbac-config-ia-canais).
+-- O caminho do arquivo fica preso à organização, ao negócio e ao campo da
+-- PRÓPRIA linha. As rotas de mídia e de remoção falam com o Storage pelo
+-- cliente admin, então é o banco que garante que a linha só aponta para o que
+-- é dela — vale para qualquer escritor, inclusive o `service_role`. O nome do
+-- arquivo é um segmento só (sem barra e sem começar por ponto), e a chave do
+-- campo segue a régua do funil (`customFieldSchema.key`). O `case` fixa a
+-- ordem: a chave é conferida antes de entrar na expressão regular.
+-- Bloco DO: o `update.sh` roda sem ON_ERROR_STOP, e um `drop` solto seguido de
+-- um `add` que falhasse deixaria a tabela sem a guarda. A linha que não cabe
+-- na régua só pode ter vindo de escrita direta (a rota nunca a produziu, e a
+-- tabela não saiu em versão nenhuma): sai antes da restrição entrar.
+do $$
+begin
+  delete from public.crm_lead_attachments
+   where not (case
+     when field_key ~ '^[A-Za-z][A-Za-z0-9_]{0,39}$'
+       then storage_path ~ ('^' || organization_id::text || '/leads/' || lead_id::text || '/'
+                            || field_key || '/[A-Za-z0-9_-][A-Za-z0-9._-]*$')
+     else false
+   end);
+  alter table public.crm_lead_attachments
+    drop constraint if exists crm_lead_attachments_storage_path_check;
+  alter table public.crm_lead_attachments
+    add constraint crm_lead_attachments_storage_path_check check (case
+      when field_key ~ '^[A-Za-z][A-Za-z0-9_]{0,39}$'
+        then storage_path ~ ('^' || organization_id::text || '/leads/' || lead_id::text || '/'
+                             || field_key || '/[A-Za-z0-9_-][A-Za-z0-9._-]*$')
+      else false
+    end);
+end $$;
+
+-- Depois de gravado, o caminho não muda (nenhuma rota o altera).
+create or replace function public.fn_crm_lead_attachments_caminho_imutavel()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.storage_path is distinct from old.storage_path then
+    raise exception 'crm_lead_attachments.storage_path não muda depois de gravado'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.fn_crm_lead_attachments_caminho_imutavel() from public, anon, authenticated;
+
+drop trigger if exists trg_crm_lead_attachments_caminho_imutavel on public.crm_lead_attachments;
+create trigger trg_crm_lead_attachments_caminho_imutavel
+  before update on public.crm_lead_attachments
+  for each row execute function public.fn_crm_lead_attachments_caminho_imutavel();
+
+-- Policies: `drop` de TODOS os nomes que esta tabela já teve (o head original
+-- do PR e a primeira versão desta migration) antes de criar as atuais —
+-- policies permissivas somam (OR), e uma antiga esquecida reabriria o que as
+-- novas fecham. `drop` + `create` com o MESMO nome: o `update.sh` reaplica
+-- este arquivo sem ON_ERROR_STOP.
+-- Leitura e escrita amarradas à visibilidade do NEGÓCIO pai: o `exists` em
+-- `crm_leads` roda sob a RLS dela, então quem não enxerga o negócio (escopo
+-- "só os seus") não enxerga nem mexe nos anexos dele. Escrita: `agent` para
+-- cima também na RLS — as rotas já exigem `agent`, e um `viewer` falando
+-- direto com o PostgREST não pode anexar nem apagar.
+drop policy if exists tenant_isolation_crm_lead_attachments_all on public.crm_lead_attachments;
+drop policy if exists crm_lead_attachments_tenant_isolate on public.crm_lead_attachments;
 drop policy if exists tenant_isolation_crm_lead_attachments_select on public.crm_lead_attachments;
 create policy tenant_isolation_crm_lead_attachments_select on public.crm_lead_attachments
   for select to authenticated
-  using (organization_id in (select public.fn_user_org_ids()));
+  using (
+    organization_id in (select public.fn_user_org_ids())
+      and exists (
+        select 1 from public.crm_leads l
+         where l.id = crm_lead_attachments.lead_id
+           and l.organization_id = crm_lead_attachments.organization_id
+      )
+  );
 
 drop policy if exists tenant_isolation_crm_lead_attachments_write on public.crm_lead_attachments;
 create policy tenant_isolation_crm_lead_attachments_write on public.crm_lead_attachments
@@ -47,10 +114,20 @@ create policy tenant_isolation_crm_lead_attachments_write on public.crm_lead_att
   using (
     organization_id in (select public.fn_user_org_ids())
       and public.fn_role_at_least(organization_id, 'agent')
+      and exists (
+        select 1 from public.crm_leads l
+         where l.id = crm_lead_attachments.lead_id
+           and l.organization_id = crm_lead_attachments.organization_id
+      )
   )
   with check (
     organization_id in (select public.fn_user_org_ids())
       and public.fn_role_at_least(organization_id, 'agent')
+      and exists (
+        select 1 from public.crm_leads l
+         where l.id = crm_lead_attachments.lead_id
+           and l.organization_id = crm_lead_attachments.organization_id
+      )
   );
 
 -- O `alter default privileges` do baseline dá ALL a `anon` em tabela nova.
