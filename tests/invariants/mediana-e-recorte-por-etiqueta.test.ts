@@ -248,8 +248,17 @@ function como(actor: string): string {
     do $c$ begin perform set_config('request.jwt.claims', '{"sub":"${actor}"}', false); end $c$;`;
 }
 
-/** A linha do atendente na saída da função — `null` quando ele não aparece. */
-function linhaDe(func: string, owner: string | null, etiqueta: string | null): Record<string, unknown> | null {
+/**
+ * A linha do atendente na saída da função — `null` quando ele não aparece.
+ * `alvo` é QUEM a linha procurada representa (por padrão, o próprio `owner`) —
+ * antes ele era o AGENT fixo, e a linha do OUTRO nunca era encontrada.
+ */
+function linhaDe(
+  func: string,
+  owner: string | null,
+  etiqueta: string | null,
+  alvo: string = owner ?? AGENT,
+): Record<string, unknown> | null {
   const args = owner === null ? "null" : `'${owner}'`;
   // A régua de REFERÊNCIA tem QUATRO argumentos (é o corpo de `origin/main`): a
   // etiqueta só existe na função nova.
@@ -262,7 +271,7 @@ function linhaDe(func: string, owner: string | null, etiqueta: string | null): R
     )
     select coalesce(
       (select x::text from r, jsonb_array_elements(r.j -> 'attendants') x
-        where x ->> 'user_id' = '${AGENT}'),
+        where x ->> 'user_id' = '${alvo}'),
       'NULO');
   `);
   // O psql com `-tA` imprime o command tag das instruções anteriores ("SET",
