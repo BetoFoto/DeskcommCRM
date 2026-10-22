@@ -20,10 +20,12 @@
  *
  * ─── O empate, e por que ele é tratado aqui ─────────────────────────────────
  *
- * Duas respostas podem nascer na MESMA posição: `ordem` nasce com `default 0`
- * (o topo) e duas criações seguidas ficam as duas em `0`. A média entre duas
- * iguais não existe (`NaN`) e a média entre duas que só diferem no último bit
- * pode não caber no `double`. `posicaoEntre` devolve `null` nesses casos e quem
+ * Duas respostas ainda podem dividir a MESMA posição: a criação grava um passo
+ * acima da primeira da lista (`posicaoEntre(null, menor)`), e duas criações
+ * simultâneas leem a mesma primeira. A coluna é `numeric` (como
+ * `position_in_stage`), mas a conta é feita aqui, em `double`: a média entre duas
+ * iguais não existe e a média entre duas que só diferem no último bit pode não
+ * caber entre elas. `posicaoEntre` devolve `null` nesses casos e quem
  * chama RENUMERA a lista visível — nunca grava `NaN`, que ordenaria como
  * `nulls last` e sumiria com a linha do lugar onde o operador a soltou.
  */
@@ -55,9 +57,9 @@ export function posicaoEntre(anterior: number | null, proxima: number | null): n
  * A posição de quem está no índice `i` da lista RE-NUMERADA — quando a média não
  * existe, a lista visível inteira ganha posições espaçadas e na ordem pedida.
  *
- * Começa em `PASSO_DA_ORDEM` (e não em `0`) de propósito: `0` é o topo que a
- * resposta NOVA herda, e uma resposta que acabou de ser criada continua acima de
- * qualquer lista renumerada.
+ * Começa em `PASSO_DA_ORDEM`, e as posições ficam todas positivas e espaçadas.
+ * A resposta criada depois disso nasce um passo acima da primeira (`0`, depois
+ * `-1000`…), então continua no topo sem precisar de renumeração.
  */
 export function ordemDaRenumeracao(indice: number): number {
   return (indice + 1) * PASSO_DA_ORDEM;
