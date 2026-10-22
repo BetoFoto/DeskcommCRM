@@ -5,17 +5,16 @@ import { marcadorDaApagada, textoDaApagadaApareceNaInbox } from "./apagada";
 /**
  * A RÉGUA DA MENSAGEM APAGADA — o contrato, num lugar só.
  *
- * Bolha, citação e busca da thread consultam estes dois helpers. Se a régua
- * mudar de ideia, muda AQUI, e é este arquivo que diz — em uma tela — o que o
- * produto decidiu mostrar e o que ele decidiu guardar para a auditoria.
+ * A bolha da Inbox consulta estes dois helpers. Se a régua mudar de ideia,
+ * muda AQUI, e é este arquivo que diz o que o produto decidiu mostrar.
  */
 describe("na Inbox, o texto da apagada aparece?", () => {
-  it("apagada pelo CONTATO: aparece — o registro do atendimento é do controlador", () => {
-    expect(textoDaApagadaApareceNaInbox("inbound")).toBe(true);
+  it("apagada pelo CONTATO: não aparece — é o que ele pediu para tirar do ar", () => {
+    expect(textoDaApagadaApareceNaInbox("inbound")).toBe(false);
   });
 
-  it("apagada pelo ATENDENTE: não aparece — quem apagou não escolhe o que a equipe lê", () => {
-    expect(textoDaApagadaApareceNaInbox("outbound")).toBe(false);
+  it("apagada pelo ATENDENTE: aparece — o gerente segue vendo o que foi mandado", () => {
+    expect(textoDaApagadaApareceNaInbox("outbound")).toBe(true);
   });
 });
 

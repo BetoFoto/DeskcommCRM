@@ -141,8 +141,8 @@ async function alterar(req: NextRequest, ctx: Ctx, acao: "edit" | "revoke"): Pro
       // retenção de 5 anos, e sobrevive ao apagamento da organização — copiar o
       // texto criaria dado pessoal fora do alcance da cascata de anonimização. A
       // trilha guarda o EVENTO (quem apagou, qual mensagem, quando, e que o
-      // conteúdo foi preservado); o texto fica na linha, que é o que a exportação
-      // da conversa entrega marcado.
+      // conteúdo foi preservado); o texto fica na linha, onde a retenção e o
+      // pedido de LGPD o alcançam.
       conteudo_preservado: true,
     },
   });

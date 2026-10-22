@@ -1926,8 +1926,8 @@ async function handleMessageEdited(
  * resposta passaria a responder ao nada — e o histórico de quem atendeu. O
  * corpo também não é limpo aqui: quem decide o que MOSTRAR é a régua da tela
  * (`lib/messaging/apagada.ts`), e apagar o texto no banco destruiria o registro
- * do que foi combinado — que é justamente o que a exportação da conversa e o
- * pedido de LGPD precisam alcançar.
+ * do que foi combinado — que é justamente o que o pedido de LGPD precisa
+ * alcançar.
  *
  * A revogação que chega por AQUI é a que ninguém mais registra: quem apaga no
  * aplicativo não passa por tela nenhuma, então sem esta trilha um pedido de

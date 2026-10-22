@@ -146,25 +146,22 @@ describe("MessageBubble — ações sobre mensagem própria", () => {
     expect(screen.queryByRole("menuitem", { name: "Apagar para todos" })).not.toBeInTheDocument();
   });
 
-  it("apagada pelo ATENDENTE: cinza, sem o texto na tela, e a bolha diz onde ele está", () => {
+  it("apagada pelo ATENDENTE: cinza, diz quem apagou e mantém o texto visível só no CRM", () => {
     render(<MessageBubble message={msg({ revoked_at: "2026-09-24T11:00:00Z", body: "valor combinado" })} />);
     expect(screen.getByText("Esta mensagem foi apagada pelo atendente")).toBeInTheDocument();
-    // Quem apaga o próprio envio não escolhe o que a equipe lê na tela. O texto
-    // segue na LINHA (é ele que sai na exportação e na auditoria) — o que não
-    // volta é a bolha.
-    expect(screen.queryByText("valor combinado")).not.toBeInTheDocument();
-    expect(screen.getByText(/exportação da conversa/)).toBeInTheDocument();
+    expect(screen.getByText("valor combinado")).toBeInTheDocument();
+    expect(screen.getByText("Visível só aqui no CRM")).toBeInTheDocument();
     const classes = screen.getByTestId("message-bubble").className;
     // Cinza: a apagada sai das cores da direção — `bg-primary` é o envio vivo.
     expect(classes).toContain("bg-muted/60");
     expect(classes).not.toContain("bg-primary");
   });
 
-  it("apagada pelo CONTATO: o texto APARECE — é o registro do que foi combinado", () => {
+  it("apagada pelo CONTATO: cinza, diz quem apagou e NÃO mostra o texto", () => {
     render(<MessageBubble message={msg({ direction: "inbound", revoked_at: "2026-09-24T11:00:00Z", body: "texto do cliente" })} />);
     expect(screen.getByText("Esta mensagem foi apagada pelo contato")).toBeInTheDocument();
-    expect(screen.getByText("texto do cliente")).toBeInTheDocument();
-    expect(screen.getByText("Conteúdo preservado (LGPD)")).toBeInTheDocument();
+    expect(screen.queryByText("texto do cliente")).not.toBeInTheDocument();
+    expect(screen.queryByText("Visível só aqui no CRM")).not.toBeInTheDocument();
     expect(screen.getByTestId("message-bubble").className).toContain("bg-muted/60");
   });
 

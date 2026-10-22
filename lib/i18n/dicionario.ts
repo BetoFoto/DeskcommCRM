@@ -7934,12 +7934,6 @@ export const DICIONARIO: Traducoes = {
   "Esta mensagem foi apagada": { es: "Este mensaje fue eliminado" },
   "Esta mensagem foi apagada pelo contato": { es: "Este mensaje fue eliminado por el contacto" },
   "Esta mensagem foi apagada pelo atendente": { es: "Este mensaje fue eliminado por el agente" },
-  "Conteúdo preservado (LGPD)": { es: "Contenido conservado (LGPD)" },
-  "O conteúdo segue preservado: saiu da tela, aparece na exportação da conversa e fica registrado na auditoria.": {
-    es: "El contenido se conserva: salió de la pantalla, aparece en la exportación de la conversación y queda registrado en la auditoría.",
-  },
-  "(apagada pelo contato)": { es: "(eliminada por el contacto)" },
-  "(apagada pelo atendente)": { es: "(eliminada por el agente)" },
   "Visível só aqui no CRM": { es: "Visible solo aquí en el CRM" },
   editada: { es: "editado" },
   "O autor editou esta mensagem": { es: "El autor editó este mensaje" },

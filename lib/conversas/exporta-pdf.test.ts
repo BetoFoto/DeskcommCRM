@@ -341,37 +341,15 @@ describe("conversas/exporta-pdf", () => {
     ]);
   });
 
-  it("apagada pelo CONTATO sai COM o texto e com a marca de quem apagou", () => {
+  it("mensagem apagada pelo autor fica como linha, sem o texto que saiu do ar", () => {
     const apagada = mensagensDe3()[0] as MensagemParaPdf;
     const linhas = linhasDoHistorico(conversa, [
-      { ...apagada, direction: "inbound", body: "o texto que a pessoa apagou", revoked_at: "2026-09-01T12:10:00.000Z" },
+      { ...apagada, body: "o texto que a pessoa apagou", revoked_at: "2026-09-01T12:10:00.000Z" },
     ], { t });
 
-    // É o documento que o operador guarda no caso (art. 18, II e V) — o lugar em
-    // que o conteúdo apagado NA TELA continua legível. Sem a marca, a linha
-    // passaria por mensagem viva e o que foi apagado sumiria do histórico.
     expect(linhas).toHaveLength(1);
-    expect(linhas[0]?.texto).toContain("o texto que a pessoa apagou");
-    expect(linhas[0]?.texto).toContain("(apagada pelo contato)");
-  });
-
-  it("apagada pelo ATENDENTE também sai: a régua da TELA não governa o documento", () => {
-    const apagada = mensagensDe3()[0] as MensagemParaPdf;
-    const linhas = linhasDoHistorico(conversa, [
-      { ...apagada, direction: "outbound", body: "valor combinado", revoked_at: "2026-09-01T12:10:00.000Z" },
-    ], { t });
-
-    expect(linhas[0]?.texto).toContain("valor combinado");
-    expect(linhas[0]?.texto).toContain("(apagada pelo atendente)");
-  });
-
-  it("apagada SEM corpo (mídia sem legenda) não some do histórico", () => {
-    const apagada = mensagensDe3()[0] as MensagemParaPdf;
-    const linhas = linhasDoHistorico(conversa, [
-      { ...apagada, direction: "inbound", body: null, media_derived_text: null, type: "image", revoked_at: "2026-09-01T12:10:00.000Z" },
-    ], { t });
-
-    expect(linhas[0]?.texto).toContain("(apagada pelo contato)");
+    expect(linhas[0]?.texto).toBe("Mensagem apagada pelo autor.");
+    expect(linhas[0]?.texto).not.toContain("o texto que a pessoa apagou");
   });
 
   it("GET com papel errado (viewer) devolve 403 e não toca no banco", async () => {

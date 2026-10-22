@@ -224,8 +224,8 @@ describe("edição e apagar de mensagem RECEBIDA chegam ao CRM", () => {
     // Quem apaga pelo aplicativo não passa por tela nenhuma: sem esta linha, um
     // pedido de LGPD/RGPD pergunta "quando e como isto foi apagado" e ninguém
     // responde. O que a trilha guarda é o EVENTO — qual mensagem, de que lado, e
-    // que o conteúdo ficou —, porque o corpo tem outro destino (a linha, e a
-    // exportação da conversa que o entrega marcado).
+    // que o conteúdo ficou —, porque o corpo tem outro destino (a linha, onde
+    // a retenção e o pedido de LGPD o alcançam).
     expect(vi.mocked(audit)).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "message.revoked_in_channel",

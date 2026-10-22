@@ -193,9 +193,8 @@ describe("os elos que somem sem barulho", () => {
     const fonte = readFileSync("components/inbox/MessageBubble.tsx", "utf8");
     expect(fonte).toMatch(/revoked_at/);
     expect(fonte).toMatch(/editada/);
-    // O texto da apagada deixou de ser decidido DENTRO da bolha: quem responde é
-    // `lib/messaging/apagada.ts`, consultado pela bolha, pela citação e pela
-    // busca da thread. A segunda cópia da regra é o defeito que a régua evita.
+    // Quem decide se o texto da apagada aparece na bolha é
+    // `lib/messaging/apagada.ts`, não uma condição solta dentro dela.
     expect(fonte).toMatch(/textoDaApagadaApareceNaInbox/);
     const regua = readFileSync("lib/messaging/apagada.ts", "utf8");
     expect(regua).toMatch(/Esta mensagem foi apagada pelo contato/);

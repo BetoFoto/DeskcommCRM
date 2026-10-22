@@ -168,11 +168,9 @@ export function MessageBubble({
   // Figurinha sem caption: sem moldura de bolha (padrão WhatsApp).
   const isBareSticker = hasMedia && message.type === "sticker" && !message.body;
   // Apagada pelo autor ("apagar para todos"). A linha continua no histórico —
-  // sumir com ela deixaria a resposta seguinte respondendo ao nada. O TEXTO,
-  // porém, depende de QUEM apagou, e a régua disso mora numa fonte só
-  // (`lib/messaging/apagada.ts`): a apagada pelo contato aparece (o gesto no
-  // aplicativo não é pedido de eliminação — quem elimina é o pedido de LGPD,
-  // que anonimiza de verdade), a apagada pelo atendente não aparece.
+  // sumir com ela deixaria a resposta seguinte respondendo ao nada —, mas o
+  // texto do CLIENTE não aparece: mostrá-lo seria expor justamente o que ele
+  // pediu para tirar do ar. A régua mora em `lib/messaging/apagada.ts`.
   const apagada = Boolean(message.revoked_at);
   const textoApagadoVisivel = apagada && textoDaApagadaApareceNaInbox(message.direction);
   const ocultaNoCrm = Boolean(message.metadata?.crm_hidden_at);
@@ -317,8 +315,7 @@ export function MessageBubble({
           // Apagada sai das cores da DIREÇÃO e vai para o CINZA: a diferença
           // entre o que foi apagado e o que está vivo tem de ser vista de
           // relance, e o fundo é justamente o que diz de quem é a mensagem —
-          // trocá-lo é o ponto. Vem ANTES do anel da busca de propósito: na
-          // bolha apagada achada, o anel (que marca o achado) tem de vencer.
+          // trocá-lo é o ponto.
           apagada && "bg-muted/60 text-muted-foreground ring-1 ring-border",
           // A marca da busca é ANEL, não cor de fundo: o fundo já diz de quem é
           // a mensagem, e trocá-lo apagaria essa leitura justo na bolha achada.
@@ -405,20 +402,18 @@ export function MessageBubble({
               {citada.direction === "outbound" ? t("Você") : t("Cliente")}
             </div>
             {/*
-              A CITADA PODE TER SIDO APAGADA — e quem decide é a MESMA régua da
-              bolha principal (`textoDaApagadaApareceNaInbox`), porque a citação
-              é o mesmo texto num segundo lugar da tela. Apagada pelo contato, o
-              texto dela segue aqui: sem esta linha, o "apagar para todos" do
-              cliente sumiria da bolha original e continuaria legível dentro de
-              cada resposta que a citou. Apagada pelo atendente, sai — é o outro
-              lado da régua. O fio permanece nos dois casos: a citação some, a
-              resposta não.
+              A CITADA PODE TER SIDO APAGADA — e aí o texto dela não volta aqui.
+
+              A bolha principal já trata isto (`apagada`, acima): "mostrá-lo
+              seria expor justamente o que o cliente pediu para tirar do ar". A
+              citação é o mesmo texto, num segundo lugar da tela — sem esta
+              linha, o "apagar para todos" do cliente sumia da bolha original e
+              continuava legível dentro de cada resposta que a citou. O fio
+              permanece (a citação some, não a resposta); o conteúdo, não.
             */}
             <div className={cn("line-clamp-2 wrap-anywhere opacity-70", Boolean(citada.revoked_at || citada.metadata?.crm_hidden_at) && "italic")}>
               {citada.revoked_at
-                ? textoDaApagadaApareceNaInbox(citada.direction) && citada.body?.trim()
-                  ? citada.body
-                  : t("Esta mensagem foi apagada")
+                ? t("Esta mensagem foi apagada")
                 : citada.metadata?.crm_hidden_at
                 ? t("Mensagem ocultada no CRM")
                 : citada.type === "contact"
@@ -464,21 +459,14 @@ export function MessageBubble({
         ) : apagada ? (
           <div className="space-y-1">
             <p className="italic leading-snug opacity-80">{t(marcadorDaApagada(message.direction))}</p>
-            {/* O corpo NUNCA é limpo — é o registro do atendimento, e apagá-lo
-                deixaria o combinado sem prova. Quem decide se ele aparece é
-                `textoDaApagadaApareceNaInbox`; a razão de cada ponta (e por que
-                o apagamento pela equipe não vira texto na tela) está no
-                cabeçalho de `lib/messaging/apagada.ts`. */}
+            {/* O WhatsApp revoga o envio; o CRM conserva o corpo para auditoria
+                interna. Não revelamos texto de uma mensagem apagada pelo cliente
+                (`textoDaApagadaApareceNaInbox`). */}
             {textoApagadoVisivel && message.body && (
               <div className="border-t border-current/20 pt-1">
-                <p className="text-[10px] opacity-70">{t("Conteúdo preservado (LGPD)")}</p>
+                <p className="text-[10px] opacity-70">{t("Visível só aqui no CRM")}</p>
                 <p className="whitespace-pre-wrap wrap-anywhere leading-snug">{message.body}</p>
               </div>
-            )}
-            {!textoApagadoVisivel && (
-              <p className="text-[10px] opacity-70">
-                {t("O conteúdo segue preservado: saiu da tela, aparece na exportação da conversa e fica registrado na auditoria.")}
-              </p>
             )}
           </div>
         ) : ocultaNoCrm ? (

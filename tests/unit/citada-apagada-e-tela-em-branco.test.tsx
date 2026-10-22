@@ -6,18 +6,12 @@ import { MessageBubble } from "@/components/inbox/MessageBubble";
 import type { Message } from "@/lib/types/messaging";
 
 /**
- * A CITAÇÃO E O "APAGAR PARA TODOS".
+ * DOIS DEFEITOS DA CITAÇÃO, achados medindo o PR #305 antes do merge.
  *
  * Este arquivo prova COMPORTAMENTO — renderiza e lê o que apareceu na tela.
  * O irmão `responder-citando-no-toque.test.ts` casa CLASSES no fonte, e é
  * honesto sobre o que isso não prova; aqui a pergunta é outra e tem resposta
  * observável, então a resposta é observada.
- *
- * A citação é o MESMO texto da bolha original, num segundo lugar da tela — e não
- * tem regra própria: bolha, citação e busca da thread consultam a mesma régua
- * (`lib/messaging/apagada.ts`). Por isso os DOIS sentidos aparecem aqui: a régua
- * é assimétrica de propósito, e divergir num segundo lugar é o modo de falha
- * caro (o texto sai da bolha e segue legível em cada resposta que a citou).
  */
 
 function msg(over: Partial<Message> = {}): Message {
@@ -53,32 +47,26 @@ function msg(over: Partial<Message> = {}): Message {
   } as Message;
 }
 
-describe("a citação de uma mensagem APAGADA segue a régua da bolha", () => {
+describe("a citação de uma mensagem APAGADA não devolve o texto", () => {
   /**
-   * O autor apagou, a linha ficou: quem elimina de verdade é o pedido de LGPD
-   * desta casa (anonimiza e zera o corpo). O gesto no aplicativo é o titular
-   * mexendo no canal, e o registro do que foi combinado é do controlador — então
-   * o texto continua na tela, e a citação dele também.
+   * O "apagar para todos" some com o texto da bolha original — a própria
+   * `MessageBubble` já fazia isso, com o motivo escrito ali: "mostrá-lo seria
+   * expor justamente o que o cliente pediu para tirar do ar".
+   *
+   * A citação é o MESMO texto, num segundo lugar da tela. Sem tratar o caso, o
+   * cliente apagava e o conteúdo continuava legível dentro de cada resposta que
+   * o tivesse citado — a proteção valia num lugar e não no outro.
    */
-  it("apagada pelo CONTATO: mantém o texto, como a bolha", () => {
+  it("mostra o aviso no lugar do conteúdo", () => {
     render(
       <MessageBubble
         message={msg({ id: "m2", direction: "outbound", body: "claro, já resolvo" })}
         citada={msg({ revoked_at: "2026-08-21T12:05:00.000Z" })}
       />,
     );
-    expect(screen.getByText(/segredo que o cliente apagou/)).toBeInTheDocument();
-  });
-
-  it("apagada pelo ATENDENTE: não devolve o texto — a citação também é tela", () => {
-    render(
-      <MessageBubble
-        message={msg({ id: "m2", direction: "inbound", body: "claro, já resolvo" })}
-        citada={msg({ direction: "outbound", revoked_at: "2026-08-21T12:05:00.000Z" })}
-      />,
-    );
     expect(screen.queryByText(/segredo que o cliente apagou/)).toBeNull();
-    expect(screen.getByText("Esta mensagem foi apagada")).toBeInTheDocument();
+    // Duas ocorrências seria a bolha principal também apagada; aqui só a citada.
+    expect(screen.getAllByText("Esta mensagem foi apagada")).toHaveLength(1);
   });
 
   it("CONTROLE: a citada viva continua aparecendo", () => {

@@ -261,25 +261,13 @@ function autorDaMensagem(
 }
 
 /**
- * O QUE ESTA LINHA DIZ. Apagada pelo autor o texto SAI — com a marca de quem
- * apagou —, nos DOIS sentidos: este documento é a prova que o operador guarda
- * no caso (art. 18, II e V), e é aqui que o conteúdo apagado na tela continua
- * legível. Acesso por `requireRole("agent")` + RLS: quem baixa o arquivo já
- * enxerga a conversa. A régua da TELA é `textoDaApagadaApareceNaInbox`
- * (`lib/messaging/apagada.ts`); a da exportação é mostrar, e é de propósito que
- * as duas não coincidem.
- *
- * A linha continua entrando mesmo quando o corpo não existe (mídia sem legenda):
- * o que foi apagado tem de aparecer no histórico, não sumir dele.
+ * O QUE ESTA LINHA DIZ. Apagada pelo autor o texto NÃO entra (a linha fica,
+ * como na tela: sumir com ela deixaria a resposta seguinte respondendo ao nada,
+ * e mostrá-la seria expor o que a pessoa pediu para tirar do ar).
  */
 function textoDaMensagem(m: MensagemParaPdf, t: (texto: string) => string): string {
+  if (m.revoked_at) return t("Mensagem apagada pelo autor.");
   const corpo = (m.body ?? "").trim() || (m.media_derived_text ?? "").trim();
-  if (m.revoked_at) {
-    const marca = t(
-      m.direction === "inbound" ? "(apagada pelo contato)" : "(apagada pelo atendente)",
-    );
-    return corpo === "" ? `${marca} [${m.type}]` : `${corpo} ${marca}`;
-  }
   if (corpo === "") return `[${m.type}]`;
   return m.edited_at ? `${corpo} ${t("(editada)")}` : corpo;
 }
