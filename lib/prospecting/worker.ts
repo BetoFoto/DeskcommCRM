@@ -25,8 +25,6 @@ import { decidirPreGoLiveDoCanalViaSupabase } from "@/lib/ai/elegibilidade/consu
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { assertProspectingContinuation, assertProspectingDelivery } from "./guard";
-import { campaignConfigSchema, type OfertaDaCampanha } from "./schema";
-import { CanalReconectandoError, ProspectingError } from "./provider";
 import { instrucaoDeAbordagemFria, montarDadosDeAbordagem, estrategiaDoCandidato } from "./estrategia-site";
 import {
   INTERVALO_MINIMO_ENTRE_TENTATIVAS_MIN,
@@ -35,7 +33,9 @@ import {
 } from "./site-efetivo";
 import { previaDoAgente } from "./previa";
 import { blocoVozVendedor, personalizacaoDaOrganizacao } from "./personalizar";
+import { campaignConfigSchema, type OfertaDaCampanha } from "./schema";
 import { prepararCandidatos } from "./preparo";
+import { CanalReconectandoError, ProspectingError } from "./provider";
 import { OrgNaoOperanteError } from "@/lib/organizacao/operante";
 import {
   withProspectingLock,
@@ -63,11 +63,12 @@ const TETO_DE_BOLHAS_DA_ABORDAGEM = 3;
  *
  * A régua é `prospecting_campaigns.channel_down_since`: gravado a partir da
  * PRIMEIRA vez que a campanha viu o canal fora (`coalesce(channel_down_since,
- * now())`) e zerado quando ela o vê em `WORKING`. Mede, portanto, "desde a
- * última vez em WORKING" como observado pelo tick. O relógio do PRÓPRIO canal
+ * now())`) e zerado quando ela o vê em `WORKING`. Conta, portanto, desde o
+ * PRIMEIRO adiamento desta espera (até um tick depois do último `WORKING` que o
+ * tick observou). O relógio do PRÓPRIO canal
  * (`channel_sessions.last_status_change_at`) NÃO serve: a ingestão o regrava a
  * cada evento de status, então um canal que alterna `STARTING`↔`STOPPED`
- * reiniciaria a contagem a cada volta (`lib/waha/ingest.ts`).
+ * reiniciaria a contagem a cada volta.
  *
  * 30 minutos, e o número sai da cadência MEDIDA da campanha, não do gosto:
  * - o tick roda a cada minuto (`docs/features/prospeccao-nativa.md`) e o passo do
@@ -776,8 +777,8 @@ export async function tickProspecting(pool: pg.Pool, admin: SupabaseClient, requ
             // marcar, nem erro a gravar na campanha — a lista não perdeu nada.
             if (error instanceof CanalReconectandoError) {
               // O TETO (issue #3073): esperar o canal voltar TEM LIMITE. Passado
-              // `TETO_DO_ADIAMENTO_MS` desde a última vez que a campanha o viu em
-              // `WORKING` (`c.channel_down_since`), a "reconexão" já não é um
+              // `TETO_DO_ADIAMENTO_MS` desde o primeiro adiamento desta espera
+              // (`c.channel_down_since`), a "reconexão" já não é um
               // soluço: a campanha PAUSA com a recusa de canal DESCONECTADO — a
               // mesma frase do `FAILED` —, em vez de seguir "Ativa" sem enviar e
               // sem aviso para sempre. Pausar deixa o motivo no cartão e volta
@@ -798,7 +799,9 @@ export async function tickProspecting(pool: pg.Pool, admin: SupabaseClient, requ
                 });
               } else {
                 await db.query(
-                  "update prospecting_campaigns set next_send_at=$3,channel_down_since=coalesce(channel_down_since,now()),updated_at=now() where organization_id=$1 and id=$2",
+                  // `greatest`, como a retomada: a vaga já agendada (com o jitter da
+                  // esteira fria) não é ANTECIPADA para o passo curto do adiamento.
+                  "update prospecting_campaigns set next_send_at=greatest(next_send_at,$3),channel_down_since=coalesce(channel_down_since,now()),updated_at=now() where organization_id=$1 and id=$2",
                   [org, c.id, new Date(Date.now() + error.retomarEmMs)],
                 );
                 logger.info("[prospecting] conexão reconectando; o envio foi adiado e a campanha segue", {

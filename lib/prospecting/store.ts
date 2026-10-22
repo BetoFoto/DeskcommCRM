@@ -50,7 +50,7 @@ export interface Campaign {
    * em `WORKING` (ou ao iniciar/retomar a campanha). É esta a régua do teto do
    * adiamento — `channel_sessions.last_status_change_at` não serve: a ingestão a
    * regrava a cada evento, então um canal que alterna `STARTING`↔`STOPPED`
-   * reiniciaria o relógio a cada volta (`lib/waha/ingest.ts`).
+   * reiniciaria o relógio a cada volta.
    */
   channel_down_since: Date | null;
 }
