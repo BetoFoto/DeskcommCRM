@@ -28,7 +28,16 @@
  * A janela é SEMIABERTA (`from <= closed_at < to`), a mesma régua das rotas
  * irmãs: balde é intervalo, e um ponto exatamente em `to` pertence à janela
  * seguinte.
+ *
+ * ## O balde é do calendário da ORGANIZAÇÃO, não do UTC
+ *
+ * O dia, a semana e o mês viram no fuso de `organizations.timezone`. Em UTC, o
+ * ganho das 23h30 de São Paulo (02h30 UTC) cairia no dia SEGUINTE — quem fecha
+ * negócio à noite veria a venda no dia errado. Por isso todo instante passa
+ * primeiro por `partesNoFuso` e a conta segue sobre a data de parede.
  */
+import { partesNoFuso } from "@/lib/agenda/fuso";
+
 
 /** O recorte de tempo pedido pela tela: dia, semana ISO (segunda) ou mês. */
 export type Granularidade = "dia" | "semana" | "mes";
@@ -69,7 +78,17 @@ export function granularidadeValida(valor: unknown): valor is Granularidade {
   return valor === "dia" || valor === "semana" || valor === "mes";
 }
 
-/** O instante UTC que ABRE o balde a que `d` pertence. */
+/**
+ * A data de parede do instante no fuso, como meia-noite UTC daquele dia do
+ * calendário local. Daqui em diante a conta é só de calendário: os campos UTC
+ * desta data SÃO o dia, o mês e o ano locais.
+ */
+function diaDoCalendario(instante: Date, fuso: string): Date {
+  const p = partesNoFuso(instante, fuso);
+  return new Date(Date.UTC(p.ano, p.mes - 1, p.dia));
+}
+
+/** O dia de calendário que ABRE o balde a que `d` (já local) pertence. */
 function truncar(d: Date, granularidade: Granularidade): Date {
   const ano = d.getUTCFullYear();
   const mes = d.getUTCMonth();
@@ -81,7 +100,7 @@ function truncar(d: Date, granularidade: Granularidade): Date {
   return new Date(Date.UTC(ano, mes, dia - desdeSegunda));
 }
 
-/** O balde seguinte — um dia, sete dias ou um mês depois. */
+/** O balde seguinte — um dia, sete dias ou um mês depois, no calendário. */
 function avancar(inicio: Date, granularidade: Granularidade): Date {
   const ano = inicio.getUTCFullYear();
   const mes = inicio.getUTCMonth();
@@ -104,6 +123,9 @@ function chaveDoBalde(inicio: Date, granularidade: Granularidade): string {
  * negócio que caia em `from <= closed_at < to` (regra 1); devolve em ordem de
  * data (regra 3). Data ilegível é descartada — nunca vira balde inventado.
  *
+ * Os baldes viram no calendário de `fuso` (IANA). Quem chama passa um fuso já
+ * validado — a rota usa `fusoUtilizavel`; fuso que o `Intl` recusa LANÇA.
+ *
  * Lança se a granularidade não estiver em `GRANULARIDADES`: o silêncio é o que
  * publicaria o número errado.
  */
@@ -111,6 +133,7 @@ export function agregarGanhos(
   ganhos: readonly FechamentoDeGanho[] | null | undefined,
   janela: Janela,
   granularidade: string,
+  fuso: string,
 ): BaldeDeGanhos[] {
   if (!granularidadeValida(granularidade)) {
     throw new Error(`Granularidade inválida: ${String(granularidade)}`);
@@ -125,8 +148,10 @@ export function agregarGanhos(
   // segundo passo não varrer a lista de novo.
   const baldes: BaldeDeGanhos[] = [];
   const indicePorChave = new Map<string, number>();
-  let cursor = truncar(inicio, granularidade);
-  while (cursor.getTime() < fim.getTime()) {
+  // O último balde é o do último instante DENTRO da janela (`to` é aberto).
+  let cursor = truncar(diaDoCalendario(inicio, fuso), granularidade);
+  const ultimo = truncar(diaDoCalendario(new Date(fim.getTime() - 1), fuso), granularidade);
+  while (cursor.getTime() <= ultimo.getTime()) {
     const chave = chaveDoBalde(cursor, granularidade);
     indicePorChave.set(chave, baldes.length);
     baldes.push({ balde: chave, ganhos: 0 });
@@ -139,7 +164,9 @@ export function agregarGanhos(
     const instante = quando.getTime();
     if (!Number.isFinite(instante)) continue;
     if (instante < inicio.getTime() || instante >= fim.getTime()) continue;
-    const indice = indicePorChave.get(chaveDoBalde(truncar(quando, granularidade), granularidade));
+    const indice = indicePorChave.get(
+      chaveDoBalde(truncar(diaDoCalendario(quando, fuso), granularidade), granularidade),
+    );
     if (indice === undefined) continue;
     const balde = baldes[indice];
     if (balde) balde.ganhos += 1;
@@ -149,8 +176,11 @@ export function agregarGanhos(
 }
 
 /**
- * O total da janela: a SOMA dos baldes, e só. É o mesmo número que a tabela por
- * atendente soma em `won` — a tela publica os dois, então eles têm de bater.
+ * O total da janela: a SOMA dos baldes, e só.
+ *
+ * NÃO é o número da tabela por atendente: aquela (`fn_attendant_metrics`) conta
+ * só negócio COM responsável e segue o filtro de atendente da tela; esta série
+ * conta todo ganho que a RLS deixa ver, com ou sem dono.
  */
 export function totalDeGanhos(baldes: readonly BaldeDeGanhos[]): number {
   return baldes.reduce((acc, b) => acc + b.ganhos, 0);
