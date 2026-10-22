@@ -8720,6 +8720,7 @@ isOneToOne: false
         Row: {
           agent_setup: Json
           agent_setup_revision: number
+          channel_down_since: string | null
           config: Json | null
           cost_usd: number | null
           created_at: string
@@ -8741,6 +8742,7 @@ isOneToOne: false
         Insert: {
           agent_setup?: Json
           agent_setup_revision?: number
+          channel_down_since?: string | null
           config?: Json | null
           cost_usd?: number | null
           created_at?: string
@@ -8762,6 +8764,7 @@ isOneToOne: false
         Update: {
           agent_setup?: Json
           agent_setup_revision?: number
+          channel_down_since?: string | null
           config?: Json | null
           cost_usd?: number | null
           created_at?: string

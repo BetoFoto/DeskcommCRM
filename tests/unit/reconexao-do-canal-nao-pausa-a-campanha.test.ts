@@ -143,9 +143,14 @@ vi.mock("@/lib/prospecting/store", async (importOriginal) => ({
 
 import { CHANNEL_PROVIDER_META, CHANNEL_PROVIDER_WAHA } from "@/lib/channels/capabilities";
 import { CanalReconectandoError, ProspectingError } from "@/lib/prospecting/provider";
-import { validateConfig, withProspectingLock } from "@/lib/prospecting/store";
+import {
+  MSG_CANAL_DESCONECTADO,
+  MSG_CANAL_RECONECTANDO,
+  validateConfig,
+  withProspectingLock,
+} from "@/lib/prospecting/store";
 import type { Campaign } from "@/lib/prospecting/store";
-import { tickProspecting } from "@/lib/prospecting/worker";
+import { TETO_DO_ADIAMENTO_MS, tickProspecting } from "@/lib/prospecting/worker";
 
 /** O cliente Supabase que a guarda REAL enxerga (cadeia tolerante). */
 function clienteDoSupa() {
@@ -184,6 +189,7 @@ const campaign = {
   id,
   organization_id: id,
   next_send_at: new Date(0),
+  channel_down_since: null as Date | null,
   config: {
     agent_id: AGENTE,
     channel_session_id: id,
@@ -288,6 +294,10 @@ beforeEach(() => {
   };
   envios.length = 0;
   sqls.length = 0;
+  // A espera pela reconexão começa zerada em todo caso: quem mede o TETO é o
+  // `channel_down_since`, e um resíduo do caso anterior mudaria a régua.
+  campaign.channel_down_since = null;
+  campaign.next_send_at = new Date(0);
   mocks.knobs.mockResolvedValue({ knobs: {} });
   mocks.open.mockReturnValue(true);
   mocks.preflight.mockResolvedValue({ permite: true });
@@ -313,11 +323,23 @@ describe("a reconexão de segundos não pausa a campanha (issue #3073)", () => {
 
     // O envio é ADIADO pelo mecanismo que o tick já usa (`next_send_at`), com a
     // retomada curta: a sessão volta em segundos.
-    const adiado = paramsDa(db, "set next_send_at=$3,updated_at=now()");
+    const adiado = paramsDa(db, "channel_down_since=coalesce(channel_down_since,now())");
     expect(adiado, "o envio não foi adiado — a rodada tentaria de novo a cada tick").not.toBeNull();
     const retomarEm = adiado?.[2];
     expect(retomarEm, "o adiamento não gravou um instante de retomada").toBeInstanceOf(Date);
     expect((retomarEm as Date).getTime()).toBeGreaterThan(Date.now());
+
+    // O ADIAMENTO NÃO REINICIA O RELÓGIO: ele grava o "desde quando" só na
+    // PRIMEIRA vez (`coalesce(channel_down_since, now())`). É o que faz o TETO
+    // medir a espera INTEIRA, e não o último tick — sem isto, um canal que
+    // alterna `STARTING`↔`STOPPED` reiniciaria a contagem a cada volta e nunca
+    // chegaria ao teto.
+    const adiamento = db.query.mock.calls.find(([q]) =>
+      String(q).includes("channel_down_since=coalesce(channel_down_since,now())"),
+    )?.[0];
+    expect(String(adiamento), "o adiamento reinicia o relógio do TETO a cada tick").toContain(
+      "channel_down_since=coalesce(channel_down_since,now())",
+    );
 
     // Nada saiu, nenhum candidato foi tentado e nenhum foi queimado: a checagem
     // do canal vem ANTES de `attempted_at`, então a lista não perdeu nada.
@@ -368,9 +390,97 @@ describe("a reconexão de segundos não pausa a campanha (issue #3073)", () => {
     const db = await rodarOTick();
 
     expect(motivoDaPausa(db), "a campanha foi pausada com o canal em WORKING").toBeNull();
-    expect(paramsDa(db, "set next_send_at=$3,updated_at=now()"), "o envio foi adiado sem motivo").toBeNull();
+    expect(paramsDa(db, "channel_down_since=coalesce(channel_down_since,now())"), "o envio foi adiado sem motivo").toBeNull();
     expect(envios.length, "nenhuma bolha saiu com o canal em WORKING").toBeGreaterThan(0);
     expect(mocks.audit.mock.calls[0]?.[0]).toMatchObject({ action: "prospecting.approach_sent" });
+  });
+
+  // ── O TETO DO ADIAMENTO (issue #3073) ────────────────────────────────────────
+  // O adiamento NÃO pode ser infinito: uma sessão presa fora do `WORKING` deixava
+  // a campanha "Ativa" sem enviar e SEM aviso (o `STARTING` não gera aviso de
+  // saúde). Passado o teto — medido desde a última vez em `WORKING`
+  // (`channel_down_since`) — a espera vira a recusa de canal DESCONECTADO e a
+  // campanha pausa, com o motivo no cartão.
+
+  it("abaixo do teto: a espera segue e NÃO pausa (o teto não regride para o defeito)", async () => {
+    statusDoCanal = "STARTING";
+    // 5 minutos de espera — bem dentro dos 30 de `TETO_DO_ADIAMENTO_MS`.
+    campaign.channel_down_since = new Date(Date.now() - 5 * 60_000);
+    const db = await rodarOTick();
+
+    expect(motivoDaPausa(db), "pausou ANTES do teto — é o defeito de novo").toBeNull();
+    expect(paramsDa(db, "channel_down_since=coalesce(channel_down_since,now())"), "não adiou com o canal fora do ar").not.toBeNull();
+  });
+
+  it("⭐ `STARTING` fora do `WORKING` há 2h: a campanha PAUSA (teto vencido)", async () => {
+    statusDoCanal = "STARTING";
+    campaign.channel_down_since = new Date(Date.now() - 2 * 3_600_000);
+    const db = await rodarOTick();
+
+    expect(
+      motivoDaPausa(db),
+      "a espera passou do teto e a campanha continuou ativa sem enviar",
+    ).toBe(MSG_CANAL_DESCONECTADO);
+    // Não adianta mais: a rodada terminou em PAUSA, e a marca do adiamento sai
+    // junto para a próxima espera começar do zero.
+    expect(paramsDa(db, "channel_down_since=coalesce(channel_down_since,now())"), "pausou pelo teto mas ainda adiou").toBeNull();
+    expect(envios).toHaveLength(0);
+  });
+
+  it("⭐ o ciclo `STARTING`→`STOPPED`→`STARTING` ao longo de 2h também PAUSA", async () => {
+    // O relógio do TETO não é o do canal: `channel_sessions.last_status_change_at`
+    // é regravado a cada evento, então o ciclo reiniciaria a contagem a cada
+    // volta. Aqui a espera acumula (a marca só é zerada quando o canal volta a
+    // `WORKING`), e o teto vale para os DOIS estados transitórios do ciclo.
+    campaign.channel_down_since = new Date(Date.now() - 2 * 3_600_000);
+    for (const status of ["STARTING", "STOPPED", "STARTING"] as const) {
+      statusDoCanal = status;
+      const db = await rodarOTick();
+      expect(
+        motivoDaPausa(db),
+        `o ciclo no estado ${status} passou do teto e não pausou`,
+      ).toBe(MSG_CANAL_DESCONECTADO);
+    }
+  });
+
+  it("o canal volta a `WORKING`: a espera ZERA (senão envelheceria e pausaria depois)", async () => {
+    statusDoCanal = "WORKING";
+    campaign.channel_down_since = new Date(Date.now() - 5 * 60_000);
+    const db = await rodarOTick();
+
+    expect(motivoDaPausa(db), "pausou com o canal de volta no ar").toBeNull();
+    expect(
+      paramsDa(db, "set channel_down_since=null"),
+      "o canal voltou a WORKING e a marca da espera não foi limpa",
+    ).not.toBeNull();
+  });
+});
+
+describe("a frase da ativação e da retomada é uma só (issue #3073)", () => {
+  /**
+   * A ativação (`activateCampaign`) e a retomada (`POST /api/v1/prospecting`,
+   * ação `resume`) recusam pela MESMA `validateConfig`, então a tela dos dois
+   * caminhos recebe a MESMA mensagem. A frase antiga ("o envio sai quando ela
+   * voltar") era FALSA ali: a ativação/retomada foi recusada e nada sai sozinho.
+   */
+  it("`validateConfig` recusa a reconexão com a frase que vale na ativação E na retomada", async () => {
+    statusDoCanal = "STARTING";
+    providerDoCanal = CHANNEL_PROVIDER_WAHA;
+    const erro = await validateConfig(banco() as never, id, campaign.config!).then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+    expect(erro).toBeInstanceOf(CanalReconectandoError);
+    expect((erro as ProspectingError).message).toBe(MSG_CANAL_RECONECTANDO);
+    expect((erro as ProspectingError).message).toContain("Tente de novo em instantes");
+    // A promessa falsa saiu: quem foi recusado não vê "o envio sai quando ela voltar".
+    expect((erro as ProspectingError).message).not.toContain("o envio sai quando ela voltar");
+  });
+
+  it("o teto é 30 minutos e o adiamento curto (1 min) segue curto", async () => {
+    expect(TETO_DO_ADIAMENTO_MS).toBe(30 * 60_000);
+    expect(new CanalReconectandoError(MSG_CANAL_RECONECTANDO).retomarEmMs).toBe(60_000);
   });
 });
 

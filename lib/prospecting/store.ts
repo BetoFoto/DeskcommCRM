@@ -42,6 +42,17 @@ export interface Campaign {
   next_send_at: Date;
   created_at: Date;
   error: string | null;
+  /**
+   * DESDE QUANDO ESTA CAMPANHA ESPERA O CANAL VOLTAR AO `WORKING` (issue #3073).
+   *
+   * `null` = não está esperando. É gravado no primeiro adiamento por reconexão
+   * (`coalesce(channel_down_since, now())`) e LIMPO quando o tick observa o canal
+   * em `WORKING` (ou ao iniciar/retomar a campanha). É esta a régua do teto do
+   * adiamento — `channel_sessions.last_status_change_at` não serve: a ingestão a
+   * regrava a cada evento, então um canal que alterna `STARTING`↔`STOPPED`
+   * reiniciaria o relógio a cada volta (`lib/waha/ingest.ts`).
+   */
+  channel_down_since: Date | null;
 }
 export interface Candidate {
   id: string;
@@ -287,6 +298,32 @@ function canalReconectando(status: string): boolean {
   return status === "STARTING" || status === "STOPPED";
 }
 
+/**
+ * A FRASE DA ATIVAÇÃO E DA RETOMADA — UMA SÓ, porque a origem é uma só (issue #3073).
+ *
+ * Quem recusa a ativação (`activateCampaign`) e quem recusa a retomada
+ * (`POST /api/v1/prospecting` ação `resume`) passa pela MESMA `validateConfig`,
+ * então a tela dos dois caminhos recebe esta mensagem. Ela substituiu "o envio
+ * sai quando ela voltar", que era FALSA ali: a ativação/retomada foi RECUSADA e
+ * nada sai sozinho — o operador é que tenta de novo. No caminho do tick (onde a
+ * campanha de fato ADIA), a mesma frase nunca chega à tela: só é logada, e o
+ * envio sai sozinho quando `next_send_at` vencer com o canal de volta.
+ */
+export const MSG_CANAL_RECONECTANDO =
+  "A conexão de saída está reconectando. Tente de novo em instantes.";
+
+/**
+ * A RECUSA DO CANAL QUE NÃO VOLTA SOZINHO — e o motivo do TETO do adiamento.
+ *
+ * Fonte única: é lançada para `SCAN_QR_CODE`/`FAILED` (as escaladas) logo abaixo
+ * e é o motivo gravado quando a espera pela reconexão estoura
+ * `TETO_DO_ADIAMENTO_MS` (`worker.ts`): passado o teto, o canal "reconectando há
+ * tempo demais" cai exatamente nesta recusa, e a campanha pausa com a frase — a
+ * mesma que o operador já conhece do canal caído de vez.
+ */
+export const MSG_CANAL_DESCONECTADO =
+  "A conexão de saída está desconectada e precisa ser reconectada antes de a campanha continuar.";
+
 export async function validateConfig(db: pg.PoolClient, org: string, input: CampaignConfig) {
   const config = campaignConfigSchema.parse(input);
   const agent = (
@@ -323,17 +360,13 @@ export async function validateConfig(db: pg.PoolClient, org: string, input: Camp
     );
   // O ÚNICO dos três que NÃO é defeito: a sessão está voltando sozinha.
   if (canalReconectando(channel.status))
-    throw new CanalReconectandoError(
-      "A conexão de saída está reconectando; o envio sai quando ela voltar.",
-    );
+    throw new CanalReconectandoError(MSG_CANAL_RECONECTANDO);
   if (channel.status !== "WORKING")
     // Fora dos estados que voltam sozinhos (reconexão em curso / sessão parada
     // que o vigia religa) e fora das escaladas: o canal está desconectado e
     // alguém precisa reconectá-lo. A recusa continua valendo — falhar fechado é
     // o certo para o que não se sabe explicar.
-    throw new ProspectingError(
-      "A conexão de saída está desconectada e precisa ser reconectada antes de a campanha continuar.",
-    );
+    throw new ProspectingError(MSG_CANAL_DESCONECTADO);
   const router = await loadActiveRouter(db as unknown as pg.Pool, org, config.channel_session_id);
   if (router) {
     if (!router.sticky || !router.members.some((m) => m.agentId === config.agent_id))
@@ -649,7 +682,7 @@ export async function activateCampaign(
     ).rows;
     await enfileirarCandidatos(db, admin, org, c, config, candidates);
     await db.query(
-      "update prospecting_campaigns set config=$3,status='running',next_send_at=now()+interval '1 minute',error=null,updated_at=now() where organization_id=$1 and id=$2",
+      "update prospecting_campaigns set config=$3,status='running',next_send_at=now()+interval '1 minute',error=null,channel_down_since=null,updated_at=now() where organization_id=$1 and id=$2",
       [org, id, config],
     );
     return { started: true };
