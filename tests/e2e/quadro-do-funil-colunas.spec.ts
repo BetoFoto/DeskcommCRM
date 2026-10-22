@@ -233,7 +233,8 @@ test.describe("Quadro do funil — coluna vazia acompanha a rolagem e cabeçalho
 
     const depois = await medirColunas(page);
     const comprida = depois.find((c) => c.id === etapas[0]!.id)!;
-    const vazias = depois.filter((c) => c.cards === 0);
+    const cardsPorId = new Map(etapas.map((e) => [e.id, e.cards]));
+    const vazias = depois.filter((c) => cardsPorId.get(c.id) === 0);
     expect(vazias.length, "há colunas VAZIAS no funil de prova").toBeGreaterThan(0);
 
     // A coluna comprida tem de passar da altura visível — senão não havia o que rolar.
