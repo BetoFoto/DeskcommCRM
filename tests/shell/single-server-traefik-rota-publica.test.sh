@@ -196,6 +196,8 @@ check "esgotadas as tentativas sem 2xx: a sonda devolve 2 (não provou — o cha
 check "…e a mensagem também cita o #2099" contem "$saida000" "#2099"
 check "…e é a mensagem do \"não consegui provar\", não a da assinatura" \
   contem "$saida000" "Não consegui provar"
+check "…e o aviso diz que a instalação segue (não manda rodar de novo uma instalação que não parou)" \
+  bash -c 'case "$1" in *"A instalação segue"*) case "$1" in *"rode a instalação de novo"*) exit 1 ;; esac ;; *) exit 1 ;; esac' _ "$saida000"
 check "…depois das 3 tentativas" igual "$(chamadas "$c000")" '3'
 
 csem="$WORK/caso-sem-chave"

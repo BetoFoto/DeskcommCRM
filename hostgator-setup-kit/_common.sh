@@ -1858,8 +1858,8 @@ wait_app_healthy() {
 # com `c_ylw` (2).
 #
 # O `curl` é o mesmo das outras provas HTTP do kit (a chave vai no cabeçalho
-# `apikey` do próprio curl — a anon key é pública, e ainda assim ela não passa
-# pelo argv de outro processo).
+# `apikey` do próprio curl, então aparece no argv dele; tudo bem, porque a anon
+# key é pública por desenho).
 sondar_rota_publica_do_supabase() {  # <URL pública> <anon key> [tentativas] [intervalo_s]
   local base="${1:-}" anon="${2:-}" tentativas="${3:-10}" intervalo="${4:-3}"
   if [ -z "$base" ] || [ -z "$anon" ]; then
@@ -1897,7 +1897,7 @@ sondar_rota_publica_do_supabase() {  # <URL pública> <anon key> [tentativas] [i
     printf '%s' "$(t "A rota pública do Supabase não pegou no Traefik: {1} devolveu {2}, e quem respondeu foi o CRM, não o GoTrue do Supabase. As etiquetas de /auth/v1/* não chegaram ao Envoy (issue #2099) — sem elas a instalação termina verde e o login só falha no primeiro acesso. Confira REVERSE_PROXY=traefik no .env e as etiquetas de hostgator-setup-kit/supabase-single-server.override.yml, e rode a instalação de novo." "$rota" "$devolveu")"
     return 1
   fi
-  printf '%s' "$(t "Não consegui provar a rota pública do Supabase: {1} devolveu {2}, e o esperado era 200 do GoTrue. Pode ser a rota do Supabase no Traefik que não pegou (issue #2099), ou o domínio ainda sem certificado/DNS. Confira REVERSE_PROXY=traefik no .env, o cadeado de {3} e as etiquetas de hostgator-setup-kit/supabase-single-server.override.yml, e rode a instalação de novo." "$rota" "$code" "$base")"
+  printf '%s' "$(t "Não consegui provar a rota pública do Supabase: {1} devolveu {2}, e o esperado era 200 do GoTrue. A instalação segue, porque isso costuma ser o domínio ainda sem certificado/DNS. Se o login falhar, pode ser a rota do Supabase no Traefik que não pegou (issue #2099): confira REVERSE_PROXY=traefik no .env, o cadeado de {3} e as etiquetas de hostgator-setup-kit/supabase-single-server.override.yml." "$rota" "$code" "$base")"
   return 2
 }
 
