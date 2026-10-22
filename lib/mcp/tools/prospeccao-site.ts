@@ -21,8 +21,6 @@
  * `trecho_do_site_dado_nao_instrucao`, e o nome do campo diz que é dado. A
  * estratégia, os problemas e os rótulos são texto DO PRODUTO, não raspado.
  */
-import { z } from "zod";
-
 import {
   OFERTAS_DA_CAMPANHA,
   siteEnrichmentSchema,
@@ -34,6 +32,7 @@ import {
   type ClasseDeSite,
   type ItemDoRaioX,
   type RaioXDoSite,
+  type SiteEnrichment,
 } from "@/lib/prospecting/site-classify";
 import {
   ROTULOS_DO_CHECKLIST,
@@ -125,7 +124,7 @@ function textoOuNulo(valor: unknown, teto: number): string | null {
 export function escolherAuditada(
   linhas: ReadonlyArray<LinhaDaAnalise>,
   agoraIso: string = new Date().toISOString(),
-): { linha: LinhaDaAnalise; site: z.infer<typeof siteEnrichmentSchema> } | null {
+): { linha: LinhaDaAnalise; site: SiteEnrichment } | null {
   for (const linha of linhas) {
     const dados = objetoDe(linha.data);
     const gravado = siteEnrichmentSchema.safeParse(dados.site);
@@ -133,7 +132,11 @@ export function escolherAuditada(
     // sem veredito gravado e sem a informação do site, não há o que derivar.
     if (!gravado.success && !Object.hasOwn(dados, "website")) continue;
     const site = siteEfetivo(
-      { website: textoOuNulo(dados.website, 500), site: gravado.success ? gravado.data : null },
+      {
+        website: textoOuNulo(dados.website, 500),
+        // O raio-X gravado vira o vocabulário fechado (`ItemDoRaioX`) aqui, na entrada.
+        site: gravado.success ? { ...gravado.data, checklist: raioXFechado(gravado.data) } : null,
+      },
       agoraIso,
     );
     if (site) return { linha, site };
@@ -142,7 +145,7 @@ export function escolherAuditada(
 }
 
 /** Só códigos do vocabulário fechado do raio-X; o resto não tem rótulo e cai fora. */
-function raioXFechado(site: z.infer<typeof siteEnrichmentSchema>): RaioXDoSite {
+function raioXFechado(site: { checklist: { tem: string[]; falta: string[] } }): RaioXDoSite {
   const aceito = (lista: string[]): ItemDoRaioX[] =>
     lista.filter(
       (item): item is ItemDoRaioX =>
@@ -158,7 +161,7 @@ function paraApresentacaoDoItem(itens: ItemDoRaioX[]) {
 
 /** Monta o resultado a partir da linha auditada. Função pura: o teste a chama direto. */
 export function montarAnaliseDoSite(
-  escolhida: { linha: LinhaDaAnalise; site: z.infer<typeof siteEnrichmentSchema> },
+  escolhida: { linha: LinhaDaAnalise; site: SiteEnrichment },
   campanha: ContextoDaCampanha,
 ): ResultadoDaAnalise {
   const { linha, site } = escolhida;
