@@ -6,6 +6,7 @@
  * Casos, um por modo de falha:
  *   - isolamento entre DUAS organizações, por JWT de um membro: lê a própria
  *     (controle positivo), zero do vizinho, e não escreve na linha dele;
+ *   - papel: o `viewer` lê, mas não anexa nem apaga na própria organização;
  *   - o arquivo de anexo VIVO não entra na fila (sem o `not exists` em
  *     `crm_lead_attachments`, a poda apagaria o voucher do cliente);
  *   - o órfão de negócio entra, com o bucket `internal-media`;
@@ -25,6 +26,7 @@ const ORG_A = "32290000-0000-4000-8000-00000000000a";
 const ORG_B = "32290000-0000-4000-8000-00000000000b";
 const USER_A = "32290000-1111-4000-8000-00000000000a";
 const USER_B = "32290000-1111-4000-8000-00000000000b";
+const VIEWER_A = "32290000-1111-4000-8000-0000000000a2";
 const FUNIL_A = "32290000-2222-4000-8000-00000000000a";
 const FUNIL_B = "32290000-2222-4000-8000-00000000000b";
 const ETAPA_A = "32290000-3333-4000-8000-00000000000a";
@@ -76,6 +78,9 @@ beforeEach(() => {
     delete from crm_lead_attachments where organization_id in ('${ORG_A}', '${ORG_B}');
     ${organizacao(ORG_A, USER_A, FUNIL_A, ETAPA_A, LEAD_A, "a")}
     ${organizacao(ORG_B, USER_B, FUNIL_B, ETAPA_B, LEAD_B, "b")}
+    insert into auth.users (id, email) values ('${VIEWER_A}', 'anexo-viewer-a@invariant.test') on conflict do nothing;
+    insert into user_organizations (user_id, organization_id, role, accepted_at)
+      values ('${VIEWER_A}', '${ORG_A}', 'viewer', now()) on conflict do nothing;
     ${anexo(ANEXO_A, ORG_A, LEAD_A, VIVO)}
     ${anexo(ANEXO_B, ORG_B, LEAD_B, DO_VIZINHO)}
   `);
@@ -99,6 +104,20 @@ describe("crm_lead_attachments — isolamento entre organizações", () => {
     expect(writeCountAs(USER_A, `update crm_lead_attachments set file_name = 'trocado' where id = '${ANEXO_B}'`)).toBe(0);
     expect(writeCountAs(USER_A, `delete from crm_lead_attachments where id = '${ANEXO_B}'`)).toBe(0);
     expect(lastLine(sql(`select file_name from crm_lead_attachments where id = '${ANEXO_B}';`))).toBe("voucher.pdf");
+  });
+
+  it("o viewer lê, mas não anexa nem apaga na própria organização", () => {
+    expect(countAs(VIEWER_A, "select count(*) from crm_lead_attachments;")).toBe(1);
+    expect(
+      writeCountAs(
+        VIEWER_A,
+        `insert into crm_lead_attachments (organization_id, lead_id, field_key, file_name, storage_path)
+           values ('${ORG_A}', '${LEAD_A}', 'comprovante', 'viewer.pdf', '${ORG_A}/leads/${LEAD_A}/x/v.pdf')`,
+      ),
+    ).toBe(0);
+    expect(writeCountAs(VIEWER_A, `delete from crm_lead_attachments where id = '${ANEXO_A}'`)).toBe(0);
+    // controle positivo do eixo: o agent da mesma organização apaga.
+    expect(writeCountAs(USER_A, `delete from crm_lead_attachments where id = '${ANEXO_A}'`)).toBe(1);
   });
 
   it("anon não tem privilégio de leitura na tabela", () => {

@@ -33,11 +33,25 @@ alter table public.crm_lead_attachments enable row level security;
 
 -- `drop` + `create` com o MESMO nome: o `update.sh` reaplica este arquivo sem
 -- ON_ERROR_STOP, e um `create policy` sem guarda erraria com `already exists`.
-drop policy if exists tenant_isolation_crm_lead_attachments_all on public.crm_lead_attachments;
-create policy tenant_isolation_crm_lead_attachments_all on public.crm_lead_attachments
+-- Leitura: qualquer membro. Escrita: `agent` para cima também na RLS — as
+-- rotas já exigem `agent`, e um `viewer` falando direto com o PostgREST não
+-- pode anexar nem apagar (a dívida de RBAC não cresce: rbac-config-ia-canais).
+drop policy if exists tenant_isolation_crm_lead_attachments_select on public.crm_lead_attachments;
+create policy tenant_isolation_crm_lead_attachments_select on public.crm_lead_attachments
+  for select to authenticated
+  using (organization_id in (select public.fn_user_org_ids()));
+
+drop policy if exists tenant_isolation_crm_lead_attachments_write on public.crm_lead_attachments;
+create policy tenant_isolation_crm_lead_attachments_write on public.crm_lead_attachments
   for all to authenticated
-  using (organization_id in (select public.fn_user_org_ids()))
-  with check (organization_id in (select public.fn_user_org_ids()));
+  using (
+    organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'agent')
+  )
+  with check (
+    organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'agent')
+  );
 
 -- O `alter default privileges` do baseline dá ALL a `anon` em tabela nova.
 revoke all on public.crm_lead_attachments from anon;
