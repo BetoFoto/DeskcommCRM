@@ -6,8 +6,10 @@
 #
 # O defeito original da issue: o psql roda SEM ON_ERROR_STOP, então ele devolve
 # rc=0 mesmo com 2.887 linhas `permission denied` — no single-server a conexão
-# era a do `postgres`, que não é dono de auth/storage/realtime —, e o `&&` de
-# antes só via o rc do pipe. Resultado: banco vazio, script verde.
+# da atualização (`postgres`) não é dona de auth/storage/realtime, e as linhas
+# do dump para esses schemas internos são recusadas até num restore que
+# funcionou —, e o `&&` de antes só via o rc do pipe. Resultado: banco vazio,
+# script verde.
 #
 # O que o mantenedor mediu em 16/10, e que derrubou a PRIMEIRA correção (a
 # lista de erros tolerados): os erros INOFENSIVOS mudam com o papel e com a
@@ -23,8 +25,14 @@
 #  1. erro de PERMISSÃO (o caso da issue) → rc ≠ 0, sem ✓, e o que a
 #     conferência acusa é o RESULTADO (tabela faltando), não o texto do erro;
 #  2. erro qualquer fora do que o dump explica, ou psql que sai ≠0 → idem;
-#  3. single-server → a conexão do restore é a de `supabase_admin`, montada
-#     com a senha do `.env` do Supabase (a causa raiz do item 1);
+#  3. single-server → a conexão do restore é a MESMA da atualização
+#     (`url_do_restore` → `url_do_schema`: a string de `SUPABASE_DB_URL`, a
+#     conta `postgres`), e NÃO mais a de `supabase_admin` que esta suíte exigia
+#     antes. É o ajuste pedido pelo mantenedor em 22/10: o dump volta sem dono
+#     (`--no-owner`) e, restaurando pela conta errada, as tabelas e funções de
+#     `public` ficavam com o dono errado — a atualização seguinte não reaplicava
+#     o banco (2.714 `must be owner`, todos em objetos admin_*); pela conta da
+#     atualização, 0;
 #  4. o FALSO NEGATIVO: o dublê imprime a saída do supabase_admin 17.6 (a
 #     fixture `tests/shell/fixtures/restore-supabase-admin-17.6.txt`) e a
 #     conferência fecha → rc 0 e ✓. É este caso que cai se alguém voltar a
@@ -161,8 +169,10 @@ dump() {
     '\.'; } | gzip > "$1"
 }
 
-# Single-server: a senha traz caracteres reservados de propósito, url_do_restore
-# tem de percent-encode-á-la, ou a connection string montada vira host errado.
+# Single-server: a conta do restore passa a ser a MESMA da atualização
+# (`url_do_schema` → a string de `SUPABASE_DB_URL`), então o antigo caminho que
+# lia a senha do `.env` do Supabase e montava um `supabase_admin` não existe
+# mais — a senha crua do `.env` do Supabase não deve aparecer em URL nenhuma.
 PROJ="$WORK/projeto"
 mkdir -p "$PROJ/.runtime/supabase" "$PROJ/backups"
 : > "$PROJ/docker-compose.prod.yml"
@@ -191,7 +201,7 @@ rodar_restore() {  # rodar_restore <saída> [DUBLE_PSQL] [ADMIN_URL] [PROJETO] �
   printf '%s' "$rc"
 }
 
-echo "single-server: a conexão do restore é a de supabase_admin (a causa raiz, #2381):"
+echo "single-server: a conexão do restore é a MESMA da atualização (o dono), não supabase_admin:"
 : > "$DUBLE_LOG"
 RC_DONO="$(rodar_restore "$WORK/dono.txt" benignos)"
 check "sai com rc 0 (só erros benignos de banco vazio)" igual "$RC_DONO" 0
@@ -199,14 +209,18 @@ check "imprime '✓ banco restaurado'" contem "$WORK/dono.txt" "✓ banco restau
 check "anuncia a conferência do resultado, com as tabelas e as linhas medidas" \
   contem "$WORK/dono.txt" "2 tabela(s) de public/auth.users conferidas contra os COPY do dump (3 linha(s))"
 # 4 chamadas com a MESMA conexão: a checagem de banco vazio, o restore e as
-# duas consultas da conferência. Conferir com uma role e restaurar com outra
-# mediria um banco que não é o do restore.
-check "a checagem, o restore e a conferência usam supabase_admin, não postgres" \
-  igual "$(grep -c 'postgresql://supabase_admin:s3nh%3A%40%2Fa@supabase-db:5432/postgres' "$DUBLE_LOG")" 4
-check "a senha do .env do Supabase foi percent-encoded (não vazou cru na URL)" \
-  nao_contem "$DUBLE_LOG" 'supabase_admin:s3nh:@/a@'
-check "não restou nenhum psql pela conexão antiga do postgres" \
-  igual "$(grep -c 'postgresql://postgres:' "$DUBLE_LOG")" 0
+# duas consultas da conferência. A conta é a de `url_do_schema` — a MESMA que o
+# update.sh passa ao psql do baseline. Restaurar por outra conta (o
+# `supabase_admin` de antes) devolvia as tabelas e funções de `public` com outro
+# dono, e a atualização seguinte não reaplicava o banco (2.714 `must be owner`).
+check "a checagem, o restore e a conferência usam a conta da atualização (postgres)" \
+  igual "$(grep -c 'psql postgresql://postgres:' "$DUBLE_LOG")" 4
+check "nenhum psql pela conexão de supabase_admin (o dono errado que a suíte prendia)" \
+  igual "$(grep -c 'supabase_admin' "$DUBLE_LOG")" 0
+check "a conta usada é a mesma que o update.sh passa ao psql do baseline" \
+  contem "$KIT_DIR/update.sh" 'psql "$(url_do_schema)"'
+check "a senha crua do .env do Supabase nem é lida (não vaza em URL nenhuma)" \
+  nao_contem "$DUBLE_LOG" 's3nh'
 
 echo "o log da issue: permission denied com psql saindo 0 → NUNCA verde:"
 : > "$DUBLE_LOG"

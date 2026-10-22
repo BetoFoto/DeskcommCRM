@@ -17,9 +17,9 @@
 # segue, saindo 0 também quando NÃO restaurou (#2381: 2.887 `permission
 # denied` e o script imprimia "✓ banco restaurado"). Por isso o veredito não é
 # o rc do psql — e, desde a reescrita pedida pelo mantenedor em 16/10, também
-# não é a leitura dos erros impressos: é a CONFERÊNCIA DO RESULTADO, logo
-# abaixo, contra os blocos COPY do próprio dump. A conexão é a de quem
-# consegue escrever (url_do_restore).
+# não é a leitura dos erros impressos: é a CONFERÊNCIA DO RESULTADO,
+# logo abaixo, contra os blocos COPY do próprio dump. A conexão é a MESMA da
+# atualização (url_do_restore → url_do_schema, #2381): o dono esperado.
 #
 #   bash hostgator-setup-kit/restore.sh backups/db-20260702-030000.sql.gz
 source "$(dirname "$0")/_common.sh"
@@ -40,8 +40,9 @@ c_ylw "   Ele também traz auth, storage e extensões — os erros de \"already 
 # existem até em banco recém-criado.
 # A contagem NÃO pode comer o stdin: o `restore.sh` pede a confirmação logo
 # abaixo, e quem chama alimenta tudo com printf 'RESTAURAR\n' | restore.sh.
-# A contagem e o restore usam a MESMA conexão (url_do_restore, #2381): conferir
-# com uma role e restaurar com outra mediria um banco que não é o do restore.
+# A contagem e o restore usam a MESMA conexão (url_do_restore → url_do_schema,
+# #2381): a conta do dono, a mesma que a atualização usa — conferir com uma role
+# e restaurar com outra mediria um banco que não é o do restore.
 if tabela="$(pg_container -i postgres:17-alpine psql "$(url_do_restore)" \
       -tAc "select count(*) from pg_tables where schemaname='public'" \
       </dev/null 2>/dev/null)"; then
