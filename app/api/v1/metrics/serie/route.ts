@@ -14,8 +14,14 @@
  * Nenhuma tabela nova, nenhuma migration, nenhuma RPC: a agregação sai de dados
  * que já existem (`closed_at` dos negócios ganhos), a mesma doutrina de
  * `funil/route.ts` e `lost/route.ts`. A janela é SEMIABERTA e o default de 30
- * dias é o mesmo da tabela por atendente — os dois números da tela saem do mesmo
- * recorte e por isso podem ser somados lado a lado.
+ * dias é o mesmo da tabela por atendente.
+ *
+ * ⚠️ O total NÃO é o `won` somado da tabela por atendente: aquela conta só
+ * negócio com responsável (`fn_attendant_metrics`) e segue o filtro de
+ * atendente da tela; esta série conta todo ganho visível, com ou sem dono.
+ *
+ * Os baldes viram no fuso da organização (`organizations.timezone`, via
+ * `fusoUtilizavel`): em UTC, o ganho das 23h30 de São Paulo cairia no dia seguinte.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -31,6 +37,7 @@ import {
   type Granularidade,
 } from "@/lib/metrics/serie-temporal";
 import { createClient } from "@/lib/supabase/server";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +96,16 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const supabase = await createClient();
 
+  // Falha ABERTA no fuso, como `fusoDaOrganizacao`: leitura que falha ou valor
+  // que o `Intl` recusa caem no padrão do produto — um dia de diferença na
+  // borda é melhor que o card não abrir.
+  const { data: organizacao } = await supabase
+    .from("organizations")
+    .select("timezone")
+    .eq("id", activeOrg.orgId)
+    .maybeSingle();
+  const fuso = fusoUtilizavel((organizacao as { timezone?: string | null } | null)?.timezone);
+
   // Ordem DESCENDENTE: se o teto cortar, sobra o período mais RECENTE. O fim é
   // provado pelo `count` exato ou por página VAZIA — nunca por página curta
   // (`max_rows` pode ser menor que a página).
@@ -114,15 +131,15 @@ export async function GET(req: NextRequest): Promise<Response> {
     acabou = lote.length === 0 || (totalNaJanela !== null && ganhos.length >= totalNaJanela);
   }
 
-  const baldes = agregarGanhos(ganhos, { from: de, to: ate }, granularidade);
+  const baldes = agregarGanhos(ganhos, { from: de, to: ate }, granularidade, fuso);
 
   return ok(
     {
       window: { from: de, to: ate },
       granularidade,
       baldes,
-      // O total é a SOMA dos baldes: a tela mostra os dois números lado a lado,
-      // então eles não podem divergir.
+      // O total é a SOMA dos baldes: o título do card e a tabela de baldes
+      // mostram os dois, então eles não podem divergir.
       total: totalDeGanhos(baldes),
       truncado: !acabou,
     },

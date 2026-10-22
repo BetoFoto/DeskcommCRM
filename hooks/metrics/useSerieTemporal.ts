@@ -8,16 +8,20 @@ export interface SerieTemporal {
   window: { from: string; to: string };
   granularidade: Granularidade;
   baldes: BaldeDeGanhos[];
-  /** A soma dos baldes — o mesmo número que a tabela por atendente soma em `won`. */
+  /**
+   * A soma dos baldes. NÃO é o `won` da tabela por atendente: aquela conta só
+   * negócio com responsável e segue o filtro de atendente; esta, todo ganho visível.
+   */
   total: number;
   /** `true` quando a leitura bateu no teto de páginas e a série está cortada. */
   truncado: boolean;
 }
 
 /**
- * A evolução dos ganhos no tempo. Mesma janela da tabela por atendente: sem
- * `from`/`to` a rota corta 30 dias, e a RLS continua escopando quem olha — agent
- * vê os próprios negócios, manager+ a organização. A granularidade é a única
+ * A evolução dos ganhos no tempo. Sem `from`/`to`, a mesma janela de 30 dias
+ * da tabela por atendente (não o mesmo conjunto — ver `total`), e a RLS
+ * continua escopando quem olha — agent vê os próprios negócios, manager+ a
+ * organização. A granularidade é a única
  * escolha da tela, e a série vem pronta da conta pura (`lib/metrics/serie-temporal`).
  */
 export function useSerieTemporal(granularidade: Granularidade) {
