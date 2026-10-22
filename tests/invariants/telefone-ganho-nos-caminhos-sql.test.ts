@@ -1,16 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
+import { GOV_MANAGER, GOV_ORG, seedGov } from "./gov-helpers";
+
 /**
- * #3315 — os DOIS caminhos em SQL que preenchem telefone de ficha vazia passam a
- * emitir `contact.phone_added`, e só na TRANSIÇÃO.
+ * #3315 — o caminho em SQL que preenche telefone de ficha vazia
+ * (`fn_upsert_wa_contact`) passa a emitir `contact.phone_added`, e só na
+ * TRANSIÇÃO; a junção de fichas (`fn_mesclar_contatos`) NÃO emite.
  *
- * A issue lista quatro caminhos que gravavam em silêncio; dois deles são
- * TypeScript (cobertos pelos dublês em `lib/channels/zernio/` e
- * `tests/unit/contacts/`) e dois moram DENTRO do banco, onde dublê nenhum
- * alcança: a RPC que a ingestão chama (`fn_upsert_wa_contact`) e a fusão de
- * fichas (`fn_mesclar_contatos`). Este arquivo é o único lugar onde a emissão
- * real — a linha em `event_log` — pode ser medida.
+ * Os caminhos em TypeScript estão cobertos pelos dublês em
+ * `lib/channels/zernio/` e `tests/unit/contacts/`. Os do banco, dublê nenhum
+ * alcança: este arquivo é o único lugar onde a emissão real — a linha em
+ * `event_log` — pode ser medida.
  *
  * O que ele prende, caminho por caminho:
  *
@@ -22,10 +23,13 @@ import pg from "pg";
  *      telefone: o contato já era alcançável naquele número, e a issue nomeia o
  *      evento como "ganhar um telefone", não "mudar a escrita dele".
  *   4. Contato NOVO não emite: ninguém ganhou nada — nasceu com o número.
- *   5. `fn_mesclar_contatos` com o vencedor VAZIO herda o número do perdedor →
- *      UM evento para o VENCEDOR (é ele que passa a ser alcançável).
- *   6. A fusão em que o vencedor JÁ tinha número não emite: o `coalesce` do passo
- *      dele descarta o número do perdedor, então não houve transição nenhuma.
+ *   5. `fn_mesclar_contatos` com o vencedor VAZIO herda o número do perdedor e
+ *      NÃO emite: as duas fichas já existiam e o número já estava no CRM, então
+ *      emitir repetiria a automação para a mesma pessoa e o mesmo número. A
+ *      junção roda sob a SESSÃO do usuário (rota `/api/v1/contacts/merge`), e o
+ *      `emit_event` recusa `contact.phone_added` vindo de `authenticated`
+ *      (0670) — por isso o caso chama a função como gerente autenticado: sem
+ *      sessão, um `emit_event` reintroduzido ali passaria despercebido.
  */
 const container = process.env.TEST_DB_CONTAINER;
 if (!container) {
@@ -49,26 +53,25 @@ const NUMERO_DA_FICHA_VAZIA = "+5541991234567";
 /** Mesmo número, escrito SEM o nono dígito: é o formato que a RPC promove. */
 const GRAFIA_CURTA = "+554198765432";
 const NUMERO_PROMOVIDO = "+5541998765432";
-const NUMERO_DO_SECUNDARIO = "+5541977776666";
-const NUMERO_DO_VENCEDOR = "+5541966665555";
+const NUMERO_DO_PERDEDOR = "+5541977776666";
 
 const LID_VAZIA = "3315001";
 const ID_VAZIA = "e3315000-0000-4000-8000-000000000101";
 const ID_PROMOCAO = "e3315000-0000-4000-8000-000000000102";
+/** A junção mora em GOV_ORG: é lá que o gerente da sessão é membro. */
 const ID_VENCEDOR_VAZIO = "e3315000-0000-4000-8000-000000000104";
-const ID_VENCEDOR_COM_NUMERO = "e3315000-0000-4000-8000-000000000105";
-const ID_SECUNDARIO = "e3315000-0000-4000-8000-000000000106";
+const ID_PERDEDOR = "e3315000-0000-4000-8000-000000000106";
 
 async function contato(
   id: string,
-  campos: { telefone?: string | null; lid?: string | null } = {},
+  campos: { telefone?: string | null; lid?: string | null; org?: string } = {},
 ): Promise<string> {
   await pool.query(
     `insert into contacts (id, organization_id, name, phone_number, source_metadata, is_anonymized)
      values ($1, $2, $3, $4, $5, false)`,
     [
       id,
-      ORG,
+      campos.org ?? ORG,
       "Ficha 3315",
       campos.telefone ?? null,
       campos.lid ? JSON.stringify({ waha_lid: campos.lid }) : "{}",
@@ -89,13 +92,14 @@ async function telefoneDe(id: string): Promise<string | null> {
 /** As emissões de `contact.phone_added` deste contato, na ordem em que saíram. */
 async function eventosDe(
   id: string,
+  org: string = ORG,
 ): Promise<Array<{ entity_kind: string; entity_id: string; organization_id: string; payload: Record<string, unknown>; metadata: Record<string, unknown> }>> {
   const { rows } = await pool.query(
     `select entity_kind, entity_id, organization_id, payload, metadata
        from event_log
       where organization_id = $1 and entity_id = $2 and event_type = 'contact.phone_added'
       order by created_at`,
-    [ORG, id],
+    [org, id],
   );
   return rows;
 }
@@ -112,15 +116,31 @@ async function upsertWaContato(
   return rows[0]!.id;
 }
 
-async function mesclar(principal: string, secundarios: string[]) {
-  const { rows } = await pool.query<{ r: Record<string, unknown> }>(
-    "select public.fn_mesclar_contatos($1, $2, $3) as r",
-    [ORG, principal, secundarios],
-  );
-  return rows[0]!.r;
+/** Como a rota `/api/v1/contacts/merge` chama: sessão autenticada de gerente. */
+async function mesclarComoGerente(principal: string, secundarios: string[]) {
+  const c = await pool.connect();
+  try {
+    await c.query("begin");
+    await c.query("set local role authenticated");
+    await c.query("select set_config('request.jwt.claims', $1, true)", [
+      JSON.stringify({ sub: GOV_MANAGER, role: "authenticated", aal: "aal1" }),
+    ]);
+    const { rows } = await c.query<{ r: Record<string, unknown> }>(
+      "select public.fn_mesclar_contatos($1, $2, $3) as r",
+      [GOV_ORG, principal, secundarios],
+    );
+    await c.query("commit");
+    return rows[0]!.r;
+  } catch (e) {
+    await c.query("rollback");
+    throw e;
+  } finally {
+    c.release();
+  }
 }
 
 beforeAll(async () => {
+  seedGov();
   await pool.query(
     `insert into organizations (id, slug, legal_name, display_name)
      values ($1, 'org-3315-telefone', 'Telefone LTDA', 'Telefone')
@@ -129,9 +149,8 @@ beforeAll(async () => {
   );
   await contato(ID_VAZIA, { lid: LID_VAZIA });
   await contato(ID_PROMOCAO, { telefone: GRAFIA_CURTA });
-  await contato(ID_VENCEDOR_VAZIO);
-  await contato(ID_VENCEDOR_COM_NUMERO, { telefone: NUMERO_DO_VENCEDOR });
-  await contato(ID_SECUNDARIO, { telefone: NUMERO_DO_SECUNDARIO });
+  await contato(ID_VENCEDOR_VAZIO, { org: GOV_ORG });
+  await contato(ID_PERDEDOR, { telefone: NUMERO_DO_PERDEDOR, org: GOV_ORG });
 });
 
 afterAll(async () => {
@@ -177,35 +196,18 @@ describe("#3315 — `fn_upsert_wa_contact` emite na transição", () => {
 
   it("contato NOVO não emite — ninguém ganhou um telefone, ele nasceu com um", async () => {
     const id = await upsertWaContato("phone", "+5541955554444", null);
-    // A função INSERE um contato novo (id aleatório): o que se afirma é que ninguém
-    // ganhou nada — e por isso não há evento nenhum para ele.
+    // O id é gerado pela função: o que importa é que NÃO caiu numa ficha que já existia.
     expect(id).not.toBe(ID_VAZIA);
+    expect(id).not.toBe(ID_PROMOCAO);
     expect(await telefoneDe(id)).toBe("+5541955554444");
     expect(await eventosDe(id)).toHaveLength(0);
   });
 });
 
-describe("#3315 — `fn_mesclar_contatos` emite para quem passa a ser alcançável", () => {
-  it("o vencedor VAZIO que herda o número do perdedor emite UMA vez", async () => {
-    await mesclar(ID_VENCEDOR_VAZIO, [ID_SECUNDARIO]);
-    expect(await telefoneDe(ID_VENCEDOR_VAZIO)).toBe(NUMERO_DO_SECUNDARIO);
-
-    const eventos = await eventosDe(ID_VENCEDOR_VAZIO);
-    expect(eventos).toHaveLength(1);
-    expect(eventos[0]).toMatchObject({
-      entity_kind: "contact",
-      entity_id: ID_VENCEDOR_VAZIO,
-      organization_id: ORG,
-      payload: { phone_number: NUMERO_DO_SECUNDARIO },
-    });
-  });
-
-  it("o vencedor que JÁ tinha número não emite — o `coalesce` descarta o do perdedor", async () => {
-    const perdedor = "e3315000-0000-4000-8000-000000000107";
-    await contato(perdedor, { telefone: "+5541944443333" });
-    await mesclar(ID_VENCEDOR_COM_NUMERO, [perdedor]);
-    // O vencedor ficou com o SEU número: nenhuma transição de vazio para cheio.
-    expect(await telefoneDe(ID_VENCEDOR_COM_NUMERO)).toBe(NUMERO_DO_VENCEDOR);
-    expect(await eventosDe(ID_VENCEDOR_COM_NUMERO)).toHaveLength(0);
+describe("#3315 — `fn_mesclar_contatos` NÃO emite", () => {
+  it("junção sob sessão manager sucede e não emite — o vencedor vazio herda o número em silêncio", async () => {
+    await expect(mesclarComoGerente(ID_VENCEDOR_VAZIO, [ID_PERDEDOR])).resolves.toBeTruthy();
+    expect(await telefoneDe(ID_VENCEDOR_VAZIO)).toBe(NUMERO_DO_PERDEDOR);
+    expect(await eventosDe(ID_VENCEDOR_VAZIO, GOV_ORG)).toHaveLength(0);
   });
 });
