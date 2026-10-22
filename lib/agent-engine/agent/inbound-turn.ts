@@ -1932,36 +1932,63 @@ function turnoVaiFalarComOLead(job: JobRow): boolean {
   return purpose === undefined || purpose === 'send_message';
 }
 
+/**
+ * Valores e negociação só com a equipe (#2877) — a passagem ANTES do roteador.
+ *
+ * Roda no handler, antes de `resolveConversationTurn`: o pedido de preço vai à
+ * equipe sem gastar a escolha de agente nem o redator. Ainda não há contexto do
+ * turno lido, então o aviso sai por `avisarLeadLendoOContato` (lê o contato do
+ * banco para os gates de LGPD e de parada). O aviso vem ANTES da passagem: é
+ * `performHumanHandoff` que arma o silêncio que a cadeia de envio lê.
+ *
+ * `comercialExigeHumano` lança quando a leitura falha, e aqui ninguém captura: o
+ * job volta para a fila em vez de deixar a IA responder sobre preço.
+ */
 async function escalarComercialAntesDoModelo(
-  pool: pg.Pool, tenantId: string, leadId: string, conversationId: string,
-  log: Logger, preview?: TurnPreview,
+  pool: pg.Pool,
+  deps: InboundTurnDeps,
+  job: JobRow,
+  turno: { leadId: string; conversationId: string; channelSessionId: string },
 ): Promise<boolean> {
-  if (!await comercialExigeHumano(pool, tenantId)) return false;
-  const textos = preview
-    ? inboundsNaoRespondidos(preview.context.context.messages)
-    : (await pool.query<{ body: string | null }>(
-        `select m.body from messages m
-         where m.organization_id = $1 and m.conversation_id = $2 and m.direction = 'inbound'
-           and m.created_at > coalesce((select max(o.created_at) from messages o
-             where o.organization_id = $1 and o.conversation_id = $2 and o.direction = 'outbound'), '-infinity')
-         order by m.created_at desc limit 100`, [tenantId, conversationId],
-      )).rows.map(m => m.body ?? '');
+  const tenantId = job.organization_id;
+  if (!(await comercialExigeHumano(pool, tenantId))) return false;
+  const textos = (await pool.query<{ body: string | null }>(
+    `select m.body from messages m
+     where m.organization_id = $1 and m.conversation_id = $2 and m.direction = 'inbound'
+       and m.created_at > coalesce((select max(o.created_at) from messages o
+         where o.organization_id = $1 and o.conversation_id = $2 and o.direction = 'outbound'), '-infinity')
+     order by m.created_at desc limit 100`, [tenantId, turno.conversationId],
+  )).rows.map((m) => m.body ?? '');
   if (!textos.some(contemAssuntoComercialRestrito)) return false;
-  if (preview) {
-    preview.result.proposals.push({ tool: 'crm_request_human_handoff', arguments: {
-      reason: 'Valores e negociação: atendimento exclusivamente humano.',
-    } });
-    preview.result.impediments.push({ code: 'commercial_requires_human',
-      message: 'Valores e negociação: a IA não pode responder. Atendimento humano necessário.' });
-  } else {
-    const briefing = montarBriefingDaPassagem({ checkpoint: null, pendentesDoCliente: textos,
-      motivo: { codigo: 'low_confidence', texto: 'Valores e negociação: fora do escopo da IA.' } });
-    await performHumanHandoff(pool, { tenantId, leadId, conversationId },
-      { reason: 'low_confidence', conversationSummary: briefing.body,
-        inboxTitle: 'Valores e negociação — atendimento humano necessário',
-        passagem: { origem: 'runtime_nativo', motivoCodigo: 'low_confidence', briefing }, log });
-  }
-  log.info('assunto comercial restrito encaminhado sem chamada ao redator', { preview: Boolean(preview) });
+  const log = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: turno.leadId });
+  const aviso = await avisarLeadLendoOContato(
+    pool,
+    {
+      tenantId,
+      leadId: turno.leadId,
+      conversationId: turno.conversationId,
+      channelSessionId: turno.channelSessionId,
+      jobId: job.id,
+      jobClaim: claimOfJob(job),
+    },
+    {
+      motivo: 'outro',
+      channel: (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(pool),
+      origem: tipoDeEnvio(eTurnoDeResposta(job)),
+      now: deps.clock?.() ?? new Date(),
+      log,
+      ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
+      ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+    },
+  );
+  const briefing = montarBriefingDaPassagem({ checkpoint: null, pendentesDoCliente: textos,
+    motivo: { codigo: 'low_confidence', texto: 'Valores e negociação: fora do escopo da IA.' } });
+  await performHumanHandoff(pool, { tenantId, leadId: turno.leadId, conversationId: turno.conversationId },
+    { reason: 'low_confidence', conversationSummary: briefing.body,
+      inboxTitle: 'Valores e negociação — atendimento humano necessário',
+      passagem: { origem: 'runtime_nativo', motivoCodigo: 'low_confidence', briefing },
+      avisoAoLead: aviso, log });
+  log.info('assunto comercial restrito encaminhado sem chamada ao redator', { lead_avisado: aviso.avisado });
   return true;
 }
 
@@ -2017,6 +2044,9 @@ async function executarTurnoDoAgente(
   // linhas de distância um do outro, e duas queries para a mesma pergunta viram,
   // com o tempo, duas respostas.
   const camadas = await lerCamadasDaOrg(pool, tenantId);
+  // Valores e negociação só com a equipe (#2877): lida à parte porque falha
+  // FECHADA (ver `comercialExigeHumano`) — e uma vez, para a prévia e para o envio.
+  const restricaoComercial = await comercialExigeHumano(pool, tenantId);
   // O fuso da ORGANIZAÇÃO — o que o bloco `## Agora` usa lá embaixo, na montagem
   // da abertura. Lido aqui pela mesma razão da linha acima: uma query por turno,
   // longe do ponto de uso, para não virar duas respostas para a mesma pergunta.
@@ -2161,9 +2191,22 @@ async function executarTurnoDoAgente(
     }
   }
 
-  if ((preview || job?.kind === 'inbound_turn') && await escalarComercialAntesDoModelo(
-    pool, tenantId, leadId, input.conversationId, runLog, preview,
-  )) return;
+  // A prévia faz a mesma passagem do handler (`escalarComercialAntesDoModelo`), mas
+  // só PROPÕE: nada é enviado nem silenciado no Testar. O turno real já passou por
+  // ela antes de escolher o agente.
+  if (
+    preview &&
+    restricaoComercial &&
+    inboundsNaoRespondidos(preview.context.context.messages).some(contemAssuntoComercialRestrito)
+  ) {
+    preview.result.proposals.push({ tool: 'crm_request_human_handoff', arguments: {
+      reason: 'Valores e negociação: atendimento exclusivamente humano.',
+    } });
+    preview.result.impediments.push({ code: 'commercial_requires_human',
+      message: 'Valores e negociação: a IA não pode responder. Atendimento humano necessário.' });
+    runLog.info('assunto comercial restrito: prévia propõe a passagem sem chamar o redator');
+    return;
+  }
 
   const routed = preview
     ? { config: preview.agent, routerId: null, intentName: null, confidence: null, outcome: 'preview' }
@@ -3673,7 +3716,7 @@ async function executarTurnoDoAgente(
             // `GateContext.clinicalClaimEnforced`. Sem linha, desligada: não há padrão de
             // ambiente para uma proteção que só faz sentido em saúde.
             enforceClinicalClaim: camadaLigada(camadas.afirmacao_clinica, false),
-            enforceCommercialRestriction: await comercialExigeHumano(pool, tenantId),
+            enforceCommercialRestriction: restricaoComercial,
             // Mesmo padrão do vocabulário interno: só o `send_message` arma — é o único
             // corpo escrito pelo modelo. `active` é ter QUALQUER ferramenta de agenda:
             // um agente que só CONSULTA promete "vou verificar" igual, e enquanto a
@@ -3860,12 +3903,19 @@ async function executarTurnoDoAgente(
             });
           }
           if (chain.status === 'vetoed' && chain.code === 'commercial_requires_human') {
+            // O contexto do turno já foi lido: o aviso sai com os insumos dele, e
+            // ANTES da passagem, que arma o silêncio que a cadeia lê.
+            const aviso = await avisarLeadDaEscalacao(pool, avisoDaEscalacao().ids, {
+              ...avisoDaEscalacao().base,
+              motivo: 'outro',
+            });
             const briefing = montarBriefingDaPassagem({ checkpoint: null, pendentesDoCliente: [],
               motivo: { codigo: 'low_confidence', texto: 'Resposta comercial barrada; valores e negociação são exclusivos da equipe.' } });
             await performHumanHandoff(pool, { tenantId, leadId, conversationId: input.conversationId },
               { reason: 'low_confidence', conversationSummary: briefing.body,
                 inboxTitle: 'Valores e negociação — atendimento humano necessário',
-                passagem: { origem: 'runtime_nativo', motivoCodigo: 'low_confidence', briefing }, log: runLog });
+                passagem: { origem: 'runtime_nativo', motivoCodigo: 'low_confidence', briefing },
+                avisoAoLead: aviso, log: runLog });
             return { ok: false, error: { code: chain.code,
               message: 'Resposta barrada e necessidade de atendimento humano registrada. Não envie valores nem negocie.' } };
           }
@@ -5801,8 +5851,11 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
         error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
       });
     }
-    if (await escalarComercialAntesDoModelo(pool, job.organization_id, job.contact_id,
-      payload.conversation_id, deps.log)) return;
+    if (await escalarComercialAntesDoModelo(pool, deps, job, {
+      leadId: job.contact_id,
+      conversationId: payload.conversation_id,
+      channelSessionId: payload.channel_session_id,
+    })) return;
 
     const resolvedAgent = await resolveConversationTurn(pool, deps.llmCfg, {
       tenantId: job.organization_id,
