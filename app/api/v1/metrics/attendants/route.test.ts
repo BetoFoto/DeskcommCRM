@@ -55,7 +55,7 @@ function fakeSupabase(rpc: Resposta) {
   return { chamadas, client };
 }
 
-/** A linha do atendente como a RPC (0720) devolve — média E mediana. */
+/** A linha do atendente como a RPC (0732) devolve — média E mediana. */
 function atendente(parcial: Record<string, unknown>): Record<string, unknown> {
   return {
     user_id: OWNER,

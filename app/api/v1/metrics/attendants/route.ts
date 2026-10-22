@@ -121,7 +121,7 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const attendants = metrics.attendants.map((a) => ({
     ...a,
-    // #3212: `?? null` é deliberado — linha sem o campo (banco anterior à 0720)
+    // #3212: `?? null` é deliberado — linha sem o campo (banco anterior à 0732)
     // vira "não medida", nunca `undefined` que some do JSON nem `0` que mente.
     median_first_response_seconds: a.median_first_response_seconds ?? null,
     name: names.get(a.user_id)?.name ?? null,
