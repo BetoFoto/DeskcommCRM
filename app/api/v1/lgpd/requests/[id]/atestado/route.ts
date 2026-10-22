@@ -46,7 +46,13 @@ export async function GET(
   const { id } = await params;
   const requestId = id;
 
-  const authz = await requireRole("admin", { requestId, resource: "lgpd_requests" });
+  // `permiteOrgSuspensa`: LGPD nunca é bloqueada por org suspensa (spec §1.3 —
+  // o titular pede o dado dele, e a suspensão é do contrato, não do direito).
+  const authz = await requireRole("admin", {
+    requestId,
+    resource: "lgpd_requests",
+    permiteOrgSuspensa: true,
+  });
   if (!authz.ok) return authz.response;
   const orgId = authz.org?.orgId;
   if (!orgId) return fail("no_active_org", "Nenhuma organização ativa.", 403, { requestId });
