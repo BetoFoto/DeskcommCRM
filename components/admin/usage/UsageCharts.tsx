@@ -101,6 +101,7 @@ export function UsageCharts({ series }: UsageChartsProps) {
                   borderRadius: "8px",
                   fontSize: "12px",
                   border: "1px solid var(--color-border)",
+                  background: "var(--color-surface)",
                 }}
               />
               <Area
@@ -156,6 +157,7 @@ export function UsageCharts({ series }: UsageChartsProps) {
                   borderRadius: "8px",
                   fontSize: "12px",
                   border: "1px solid var(--color-border)",
+                  background: "var(--color-surface)",
                 }}
               />
               <Area
@@ -214,6 +216,7 @@ export function UsageCharts({ series }: UsageChartsProps) {
                     borderRadius: "8px",
                     fontSize: "12px",
                     border: "1px solid var(--color-border)",
+                    background: "var(--color-surface)",
                   }}
                 />
                 <Area
