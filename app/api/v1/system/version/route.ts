@@ -269,7 +269,15 @@ export async function GET(_req: NextRequest): Promise<Response> {
           // (o `agent.sh` manda o fato, não um pedido). A tela usa isso para
           // dizer "voltou sozinho" em vez de "voltei" — a diferença importa
           // para quem lê, porque um houve clique e o outro não.
-          volta_automatica: run.requested_by === null,
+          // `requested_by` sozinho não basta: a FK é `on delete set null`, e
+          // um run pedido por alguém que depois saiu também fica nulo. O run
+          // da volta automática nasce já fechado (`dispatched_at` = `finished_at`,
+          // gravados juntos pela rota do agente); um run pedido pela tela
+          // nunca fecha no mesmo instante em que foi pedido.
+          volta_automatica:
+            run.requested_by === null &&
+            run.finished_at != null &&
+            run.finished_at === run.dispatched_at,
           log_tail: run.log_tail ?? "",
           superseded: falhaSuperada,
           // O que a rodada contou sobre o banco — disputa, retentativas e em
