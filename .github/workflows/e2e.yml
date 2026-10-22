@@ -1386,6 +1386,7 @@ jobs:
         sons-dos-avisos.spec.ts
         suspensao-administrativa.spec.ts
         integracao-dados-fontes-liberadas.spec.ts
+        atender-pelo-celular.spec.ts
 
       # ─── FORA_DO_CI — as que ficaram fora, e o motivo de cada uma ───
       #

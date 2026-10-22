@@ -24,6 +24,7 @@ import {
 } from "@/components/app/ImpersonateBanner";
 import { ConexaoCaidaBanner } from "@/components/app/ConexaoCaidaBanner";
 import { FaixaDaCobranca } from "@/components/cobranca/FaixaDaCobranca";
+import { FaixasDeCima } from "@/components/shell/FaixasDeCima";
 import { faixaDaCobranca, type FaixaDaCobranca as Faixa } from "@/lib/cobranca/faixa";
 import { logger } from "@/lib/logger";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
@@ -303,9 +304,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div data-marca-org="" className="contents">
         <EstiloDaMarcaDaOrganizacao css={cssDaOrganizacao} />
         <EstiloDoTemaDaExtensao css={cssDoTemaDaExtensao} />
-        <ImpersonateBanner impersonating={impersonating} />
-        <ConexaoCaidaBanner caidas={conexoesCaidas} />
-        {faixa !== null && <FaixaDaCobranca faixa={faixa} fuso={orgFuso} />}
+        {/* As faixas medidas: a casca e o Inbox descontam a altura delas. */}
+        <FaixasDeCima>
+          <ImpersonateBanner impersonating={impersonating} />
+          <ConexaoCaidaBanner caidas={conexoesCaidas} />
+          {faixa !== null && <FaixaDaCobranca faixa={faixa} fuso={orgFuso} />}
+        </FaixasDeCima>
         {needsMfaGate ? (
           // Gate always mounted for MFA-required roles; it latches the blocking
           // decision client-side so the enroll Server Action's revalidation
