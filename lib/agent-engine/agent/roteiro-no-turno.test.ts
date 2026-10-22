@@ -74,6 +74,8 @@ function banco(
     etapaDoContatoDesde?: string | null;
     /** `crm_leads.created_at` — a reserva, para o card criado direto na etapa. */
     cardCriadoEm?: string;
+    /** `crm_leads.status` (#3253): o card ganho/perdido pode ficar parado na etapa. */
+    statusDoCard?: string;
     /** Enrollments já nascidos do contato: (roteiro, quando nasceu). */
     enrollments?: Array<{ pointer_id: string; started_at: string }>;
   } = {},
@@ -110,17 +112,25 @@ function banco(
         : { rows: [], rowCount: 0 };
     }
     if (/select p\.id, p\.name as nome, v\.graph/.test(sql)) {
-      // #3253: a etapa só liga se a ENTRADA do card ainda não tiver sido gasta.
-      // Como no dublê de `atendimento.test.ts`, o `ja_comecou_nesta_entrada` é
-      // calculado aplicando SÓ os predicados que o SQL escreve: tirar a
-      // comparação com a entrada da consulta deixa o card parado rearmando o
-      // roteiro, e o caso novo fica VERMELHO.
-      const entrada = /e\.started_at > \$3/.test(sql) && typeof params[2] === 'string' ? params[2] : null;
-      const gastouNestaEntrada =
-        entrada !== null &&
-        (opts.enrollments ?? []).some((e) => Date.parse(e.started_at) > Date.parse(entrada as string));
+      // #3253: o NASCIMENTO mais recente do roteiro para o contato, quando o
+      // SELECT o pede (`max(e.started_at)`). A comparação com a ENTRADA do card
+      // é de `entradaJaGasta`; tirar o subselect da consulta deixa o card parado
+      // rearmando o roteiro, e o caso novo fica VERMELHO.
+      const pedeNascimento = /max\(e\.started_at\)/.test(sql);
+      const nascimentos = (opts.enrollments ?? [])
+        .filter((e) => e.pointer_id === 'ptr-1')
+        .map((e) => e.started_at)
+        .sort();
       return {
-        rows: [{ id: 'ptr-1', nome: 'Cadastro', graph: GRAFO_DO_BANCO, ja_comecou_nesta_entrada: gastouNestaEntrada }],
+        rows: [
+          {
+            id: 'ptr-1',
+            nome: 'Cadastro',
+            graph: GRAFO_DO_BANCO,
+            ja_concluiu: false,
+            ultimo_nascimento: pedeNascimento ? (nascimentos.at(-1) ?? null) : null,
+          },
+        ],
         rowCount: 1,
       };
     }
@@ -146,7 +156,12 @@ function banco(
     // ENTRADA nela (#3253): o carimbo da 0071, e o `created_at` de reserva.
     if (/from crm_leads/.test(sql)) {
       const etapa = opts.etapaDoContato ?? null;
-      if (etapa === null) return { rows: [], rowCount: 0 };
+      // O card FECHADO não conta (#3253): o filtro de status é do SQL, e sem ele
+      // o card ganho/perdido parado na etapa volta a ligar o roteiro.
+      const soAberto = /status = 'open'/.test(sql);
+      if (etapa === null || (soAberto && (opts.statusDoCard ?? 'open') !== 'open')) {
+        return { rows: [], rowCount: 0 };
+      }
       return {
         rows: [
           {
@@ -423,6 +438,38 @@ describe('prepararRoteiroDoTurno — entrada por etapa do funil (#2630)', () => 
     );
     expect(r).toBeNull();
     expect(b.sqls.some((s) => /insert into followup_enrollments/.test(s))).toBe(false);
+  });
+
+  // ─── O CARD FECHADO E A LEITURA ÚNICA (#3253, detalhes do mantenedor) ───────
+
+  it('⭐ card GANHO parado na etapa: o roteiro não começa por um negócio que já terminou', async () => {
+    const b = banco({
+      grafo: GRAFO_POR_ETAPA,
+      mensagem: semGatilho,
+      etapaDoContato: ETAPA,
+      statusDoCard: 'won',
+    });
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, texto: 'oi, tudo bem?' },
+    );
+    expect(r).toBeNull();
+    expect(b.sqls.some((s) => /insert into followup_enrollments/.test(s))).toBe(false);
+    // O card do contato é lido com o STATUS: o filtro é do SQL.
+    expect(b.sqls.find((s) => /from crm_leads/.test(s)) ?? '').toMatch(/status = 'open'/);
+  });
+
+  it('⭐ palavra-gatilho que NÃO casa: a lista de roteiros ativos é lida UMA vez no turno', async () => {
+    // Antes do arremate, a palavra-gatilho e a etapa pediam cada uma a sua
+    // consulta de roteiros ativos: o turno pagava a lista duas vezes.
+    const b = banco({ grafo: GRAFO_POR_ETAPA, mensagem: semGatilho, etapaDoContato: ETAPA });
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, texto: 'oi, tudo bem?' },
+    );
+    expect(r?.iniciadoNesteTurno).toBe(true);
+    expect(iniciadoCom(b, 'etapa')).toBe(true);
+    expect(b.sqls.filter((s) => /select p\.id, p\.name as nome, v\.graph/.test(s))).toHaveLength(1);
   });
 });
 

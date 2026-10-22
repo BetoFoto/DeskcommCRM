@@ -3,6 +3,7 @@ import type pg from "pg";
 
 import type { FlowEdge, FlowGraph, FlowNode } from "./graph-schema";
 import {
+  escolherFluxoDoTurno,
   escolherFluxoPelaEtapa,
   escolherFluxoPeloGatilho,
   finalizarFluxoDeAtendimento,
@@ -593,10 +594,10 @@ describe("roteiro já concluído: recomeça só se o roteiro permitir", () => {
    * O banco da entrada por etapa: a etapa do CARD do contato (com a ENTRADA
    * nela) + os roteiros ativos + os enrollments já nascidos do contato.
    *
-   * O `ja_comecou_nesta_entrada` é calculado aqui aplicando SÓ os predicados que
-   * o SQL escreve — mesma doutrina do dublê do encadeamento A→B, abaixo: se a
-   * comparação com a entrada, ou o `pointer_id` do roteiro, sumir da consulta,
-   * este dublê deixa de barrar o roteiro e o caso novo fica VERMELHO.
+   * O `ultimo_nascimento` é calculado aqui aplicando SÓ o que o SQL escreve —
+   * mesma doutrina do dublê do encadeamento A→B, abaixo: se o subselect do
+   * nascimento sumir da consulta (ou o filtro de status, no card), este dublê
+   * deixa de barrar o roteiro e o caso novo fica VERMELHO.
    */
   function bancoDaEtapa(
     etapa: string | null,
@@ -606,38 +607,45 @@ describe("roteiro já concluído: recomeça só se o roteiro permitir", () => {
       stageChangedAt?: string | null;
       /** `crm_leads.created_at` — a reserva do card criado direto na etapa. */
       createdAt?: string | null;
+      /** `crm_leads.status` — o card FECHADO (ganho/perdido) pode ficar na etapa. */
+      status?: string;
       /** Enrollments já nascidos: (roteiro, quando nasceu). */
       enrollments?: Array<{ pointer_id: string; started_at: string }>;
     } = {},
   ) {
     const stageChangedAt = opts.stageChangedAt === undefined ? ENTRADA : opts.stageChangedAt;
     const createdAt = opts.createdAt === undefined ? ENTRADA : opts.createdAt;
+    const status = opts.status ?? "open";
     const enrollments = opts.enrollments ?? [];
     const chamadas: Array<{ sql: string; params: unknown[] }> = [];
     const pool = {
       query: async (sql: string, params: unknown[] = []) => {
         chamadas.push({ sql, params });
         if (/from crm_leads/.test(sql)) {
-          return etapa === null
-            ? { rows: [], rowCount: 0 }
-            : {
-                rows: [{ stage_id: etapa, stage_changed_at: stageChangedAt, created_at: createdAt }],
-                rowCount: 1,
-              };
+          // O filtro de status é do SQL: sem `status = 'open'` o card fechado
+          // volta a ligar o roteiro — e o caso do card ganho/perdido fica VERMELHO.
+          const soAberto = /status = 'open'/.test(sql);
+          if (etapa === null || (soAberto && status !== "open")) return { rows: [], rowCount: 0 };
+          return {
+            rows: [{ stage_id: etapa, stage_changed_at: stageChangedAt, created_at: createdAt }],
+            rowCount: 1,
+          };
         }
         if (/from followup_flow_pointers p/.test(sql)) {
-          // A entrada só existe se o SQL a pede E o chamador a passou ($3).
-          const entrada = /e\.started_at > \$3/.test(sql) && typeof params[2] === "string" ? params[2] : null;
-          const linhasDaEntrada = linhas.map((l) => ({
-            ...l,
-            ja_comecou_nesta_entrada:
-              entrada !== null &&
-              enrollments.some(
-                (e) =>
-                  e.pointer_id === l.id &&
-                  Date.parse(e.started_at) > Date.parse(entrada as string),
-              ),
-          }));
+          // O NASCIMENTO mais recente do roteiro para o contato (#3253), quando o
+          // SELECT o pede: a comparação com a entrada do card é de
+          // `entradaJaGasta`, e sem o subselect nada gasta a entrada.
+          const pedeNascimento = /max\(e\.started_at\)/.test(sql);
+          const linhasDaEntrada = linhas.map((l) => {
+            const doRoteiro = enrollments
+              .filter((e) => e.pointer_id === l.id)
+              .map((e) => e.started_at)
+              .sort();
+            return {
+              ...l,
+              ultimo_nascimento: pedeNascimento ? (doRoteiro.at(-1) ?? null) : null,
+            };
+          });
           return { rows: linhasDaEntrada, rowCount: linhasDaEntrada.length };
         }
         return { rows: linhas, rowCount: linhas.length };
@@ -711,13 +719,14 @@ describe("roteiro já concluído: recomeça só se o roteiro permitir", () => {
       { enrollments: [{ pointer_id: "proposta", started_at: DEPOIS_DA_ENTRADA }] },
     );
     expect(await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
-    // A consulta lê a ENTRADA do card (os dois candidatos de âncora) e a compara
-    // com o nascimento do enrollment, com o contato e o roteiro do par.
+    // A consulta lê a ENTRADA do card (os dois candidatos de âncora) e a leitura
+    // dos roteiros ativos traz o NASCIMENTO mais recente de cada um, para o
+    // par (contato, roteiro) — a comparação é de `entradaJaGasta`.
     expect(chamadas[0]!.sql).toMatch(/stage_changed_at/);
     expect(chamadas[0]!.sql).toMatch(/created_at/);
-    expect(chamadas[1]!.sql).toMatch(/e\.started_at > \$3/);
+    expect(chamadas[1]!.sql).toMatch(/max\(e\.started_at\)/);
     expect(chamadas[1]!.sql).toMatch(/e\.pointer_id = p\.id/);
-    expect(chamadas[1]!.params).toEqual([ORG, "ct-1", ENTRADA]);
+    expect(chamadas[1]!.params).toEqual([ORG, "ct-1"]);
   });
 
   it("entrada NOVA: enrollment nascido antes de o card voltar à etapa não gasta esta entrada", async () => {
@@ -794,6 +803,82 @@ describe("roteiro já concluído: recomeça só se o roteiro permitir", () => {
     );
     expect(await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
     expect(chamadas).toHaveLength(1);
+  });
+
+  // ─── O CARD FECHADO NÃO LIGA A PORTA DA ETAPA (#3253, detalhe do mantenedor) ─
+  // Ganho ou perdido, o card pode ficar PARADO na etapa — e um negócio que já
+  // terminou não pode armar o roteiro de atendimento.
+
+  it("⭐ card GANHO parado na etapa não liga o roteiro — e a leitura dos roteiros nem acontece", async () => {
+    const { pool, chamadas } = bancoDaEtapa(
+      ETAPA_X,
+      [{ id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false }],
+      { status: "won" },
+    );
+    expect(await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
+    expect(await escolherFluxoDoTurno(pool, { organizationId: ORG, contactId: "ct-1", texto: "oi, tudo bem?" })).toBeNull();
+    // A consulta olha o STATUS do card: o filtro é do SQL, e sem ele o card
+    // fechado voltaria a ligar.
+    expect(chamadas[0]!.sql).toMatch(/status = 'open'/);
+  });
+
+  it("⭐ card PERDIDO parado na etapa também não liga o roteiro", async () => {
+    const { pool } = bancoDaEtapa(
+      ETAPA_X,
+      [{ id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false }],
+      { status: "lost" },
+    );
+    expect(await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
+  });
+
+  it("card ABERTO na mesma etapa segue ligando (o filtro não fechou a porta boa)", async () => {
+    const { pool } = bancoDaEtapa(
+      ETAPA_X,
+      [{ id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false }],
+      { status: "open" },
+    );
+    expect((await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" }))?.id).toBe("proposta");
+  });
+
+  // ─── UMA LEITURA POR TURNO (#3253, detalhe do mantenedor) ───────────────────
+  // A palavra-gatilho e a etapa leem o MESMO conjunto de roteiros ativos; ler por
+  // porta fazia o turno pagar a lista DUAS vezes sempre que a palavra não casava.
+
+  it("⭐ palavra-gatilho que NÃO casa: a lista de roteiros ativos é lida uma vez só, e a etapa a reaproveita", async () => {
+    const { pool, chamadas } = bancoDaEtapa(ETAPA_X, [
+      { id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false },
+    ]);
+    const r = await escolherFluxoDoTurno(pool, { organizationId: ORG, contactId: "ct-1", texto: "oi, tudo bem?" });
+    // A etapa decide, e as duas portas custaram UMA leitura de roteiros.
+    expect(r).toEqual({ id: "proposta", nome: "Proposta", origem: "etapa" });
+    expect(chamadas.filter((c) => /from followup_flow_pointers p/.test(c.sql))).toHaveLength(1);
+    // A ordem é a declarada: a palavra-gatilho lê os roteiros, e só então o card.
+    expect(chamadas[0]!.sql).toMatch(/from followup_flow_pointers p/);
+    expect(chamadas[1]!.sql).toMatch(/from crm_leads/);
+  });
+
+  it("palavra-gatilho que casa: nenhum card é lido — o pedido explícito encerra a disputa", async () => {
+    const { pool, chamadas } = bancoDaEtapa(ETAPA_X, [
+      {
+        id: "cadastro",
+        nome: "Cadastro",
+        graph: { ...grafoCom(), settings: { max_tentativas_pergunta: 3, gatilhos: ["quero"], etapas_do_funil: [ETAPA_X] } } as FlowGraph,
+        ja_concluiu: false,
+      },
+    ]);
+    const r = await escolherFluxoDoTurno(pool, { organizationId: ORG, contactId: "ct-1", texto: "quero" });
+    expect(r).toEqual({ id: "cadastro", nome: "Cadastro", origem: "gatilho" });
+    expect(chamadas.some((c) => /from crm_leads/.test(c.sql))).toBe(false);
+  });
+
+  it("contato sem card aberto: nenhuma leitura de roteiros é paga à toa", async () => {
+    const { pool, chamadas } = bancoDaEtapa(null, [
+      { id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false },
+    ]);
+    const r = await escolherFluxoDoTurno(pool, { organizationId: ORG, contactId: "ct-1", texto: "oi, tudo bem?" });
+    expect(r).toBeNull();
+    // Uma leitura de roteiros (a da palavra-gatilho); a etapa não paga a dela.
+    expect(chamadas.filter((c) => /from followup_flow_pointers p/.test(c.sql))).toHaveLength(1);
   });
 
   function bancoDoInicio(linha: { graph: FlowGraph; ja_concluiu: boolean }) {

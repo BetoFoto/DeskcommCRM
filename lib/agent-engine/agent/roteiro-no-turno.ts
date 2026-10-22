@@ -28,11 +28,12 @@
  * começava enquanto ele ESTAVA lá — todo turno sem roteiro vivo rearmava a etapa
  * —, e o mantenedor mediu o efeito: roteiro concluído com `pode_recomecar`
  * reabria na mensagem seguinte, e de novo a cada conclusão, com o card parado na
- * etapa. Quem decide isso é `escolherFluxoPelaEtapa` (a entrada é um evento,
- * `crm_leads.stage_changed_at`, com o `created_at` de reserva), e não este
- * arquivo: o turno continua lendo a etapa em TODO turno — o que mudou é que a
- * etapa só liga se a entrada dela ainda não tiver sido gasta. O mecanismo do
- * próximo turno segue como a issue propôs.
+ * etapa. Quem decide isso é `escolherFluxoDoTurno`/`entradaJaGasta` (a entrada é
+ * um evento, `crm_leads.stage_changed_at`, com o `created_at` de reserva), e não
+ * este arquivo: o turno continua lendo a etapa em TODO turno — o que mudou é que
+ * a etapa só liga se a entrada dela ainda não tiver sido gasta. O mecanismo do
+ * próximo turno segue como a issue propôs. A palavra-gatilho e a etapa entram
+ * pela MESMA chamada, que lê os roteiros ativos uma vez só (revisão do #3253).
  *
  * ─── Chave desligada = nada ─────────────────────────────────────────────────
  *
@@ -53,8 +54,7 @@ import type { LeituraDaResposta, MensagemDoContexto, PerguntaDoFluxo } from './f
 import type { EndFinish } from '@/lib/followup/graph-schema';
 import {
   carregarEstadoDeAtendimento,
-  escolherFluxoPelaEtapa,
-  escolherFluxoPeloGatilho,
+  escolherFluxoDoTurno,
   iniciarFluxoDeAtendimento,
   lerLoteParaORoteiro,
   processarInboundDoFluxo,
@@ -174,27 +174,22 @@ export async function prepararRoteiroDoTurno(
       // em "Proposta enviada" não disparava o roteiro daquela etapa (#2630). A
       // etapa é lida em todo turno, mas só LIGA uma vez por entrada do card nela
       // (revisão do #3253): quem já nasceu depois da entrada a gastou.
+      //
+      // A palavra-gatilho e a etapa são UMA decisão só (`escolherFluxoDoTurno`,
+      // revisão do #3253): as duas leem o mesmo conjunto de roteiros ativos, e
+      // lê-lo por porta fazia o turno ler a lista duas vezes quando a palavra não
+      // casava. O roteador segue separado, porque não lê roteiro nenhum.
       let alvo: string | null = t.flowPointerDoRoteador;
       let origem: "roteador" | "gatilho" | "etapa" = "roteador";
       if (alvo === null) {
-        const porGatilho = await escolherFluxoPeloGatilho(deps.pool, {
+        const porPortaDoMotor = await escolherFluxoDoTurno(deps.pool, {
           organizationId: t.organizationId,
           contactId: t.contactId,
           texto,
         });
-        if (porGatilho !== null) {
-          alvo = porGatilho.id;
-          origem = "gatilho";
-        }
-      }
-      if (alvo === null) {
-        const porEtapa = await escolherFluxoPelaEtapa(deps.pool, {
-          organizationId: t.organizationId,
-          contactId: t.contactId,
-        });
-        if (porEtapa !== null) {
-          alvo = porEtapa.id;
-          origem = "etapa";
+        if (porPortaDoMotor !== null) {
+          alvo = porPortaDoMotor.id;
+          origem = porPortaDoMotor.origem;
         }
       }
       if (alvo !== null) {

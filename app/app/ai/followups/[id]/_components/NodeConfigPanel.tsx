@@ -296,7 +296,7 @@ function ConfiguracoesDoRoteiro({
     <div className="space-y-4" data-testid="configuracoes-do-roteiro">
       <p className="text-sm text-text-muted">
         {t(
-          "O roteiro começa quando a mensagem do cliente tem uma palavra-gatilho, quando um roteador de intenção o aponta ou quando o card do cliente está numa etapa escolhida abaixo.",
+          "O roteiro começa quando a mensagem do cliente tem uma palavra-gatilho, quando um roteador de intenção o aponta ou quando o card do cliente entra numa etapa escolhida abaixo — uma vez por entrada na etapa, e não enquanto ele fica lá.",
         )}
       </p>
       <div className="space-y-2">
