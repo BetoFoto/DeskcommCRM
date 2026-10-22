@@ -392,6 +392,11 @@ export const AUDIT_ACTIONS = [
   "template.created",
   "template.updated",
   "template.deleted",
+  // A reordenação (#3244) é um ato próprio, e não `template.updated`: quem
+  // audita "quem mudou este texto?" não pode receber junto "quem mudou esta
+  // linha de lugar" — o conteúdo não foi tocado nenhuma vez (é o que a issue
+  // pede: preservar os cadastros).
+  "template.reordered",
   "auth.signup_requested",
   "auth.signup_failed",
   "auth.signup_confirmed",

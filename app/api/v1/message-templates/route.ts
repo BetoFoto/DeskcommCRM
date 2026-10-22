@@ -21,7 +21,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
 const COLS =
-  "id, organization_id, owner_user_id, title, body, shortcut, midias, created_by_user_id, created_at, updated_at";
+  "id, organization_id, owner_user_id, title, body, shortcut, midias, created_by_user_id, created_at, updated_at, ordem";
 /** Tag do endpoint no recibo de idempotência. Muda de rota muda de recibo. */
 const ENDPOINT = "/api/v1/message-templates";
 
@@ -33,11 +33,19 @@ export async function GET(_req: NextRequest): Promise<Response> {
 
   const supabase = await createClient();
   // RLS já limita a compartilhados + próprios da org ativa.
+  //
+  // A ordem é a que o OPERADOR escolheu (`ordem`, #3244), não a de edição: era
+  // `updated_at desc`, então editar o corpo de uma resposta a empurrava para o
+  // topo desta lista e do slash-menu do Inbox. `ordem desc` virou `ordem asc` +
+  // os dois desempates da 0729 (a resposta nova nasce em `0`, no topo; duas
+  // respostas novas empatadas saem mais recente primeiro, como saíam antes).
   const { data, error } = await supabase
     .from("message_templates")
     .select(COLS)
     .eq("organization_id", org.orgId)
-    .order("updated_at", { ascending: false });
+    .order("ordem", { ascending: true })
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: true });
   if (error) return fail("internal_error", "Erro ao listar templates.", 500, { requestId });
   return ok(data ?? [], { requestId });
 }
