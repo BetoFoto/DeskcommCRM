@@ -17,6 +17,12 @@ export interface MessageTemplate {
    * quebrar quem lê.
    */
   midias?: MidiaDeTemplate[] | null;
+  /**
+   * "Mostrar na barra do Inbox" (#3282) — `message_templates.mostrar_na_barra`.
+   * Opcional/lido como ligado por ausência: linha anterior à migration 0742 e
+   * fixture sem a chave aparecem na barra, como sempre.
+   */
+  mostrar_na_barra?: boolean | null;
 }
 
 /** Onda 5: templates de script (pessoais + compartilhados) para o slash-menu do composer. */

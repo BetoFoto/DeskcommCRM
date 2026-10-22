@@ -124,6 +124,13 @@ interface Props {
    * `draft_id` que o consumo usa depois do clique.
    */
   rascunho?: AvisoDeRascunho | null;
+  /**
+   * O usuário logado (#3282). A barra de recursos lembra o recolhimento POR
+   * usuário, e a chave da memória precisa do id. Vem de fora (o `InboxLayout`
+   * tem o `user` do `AuthProvider`) para o compositor não ganhar uma dependência
+   * de auth só por causa de uma preferência de tela.
+   */
+  usuarioId?: string | null;
 }
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
@@ -142,6 +149,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     respondendo,
     onCancelarResposta,
     rascunho = null,
+    usuarioId = null,
   },
   ref,
 ) {
@@ -780,6 +788,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             recursos={templates.data ?? []}
             disabled={respostaBarrada}
             onEscolher={escolherRecurso}
+            usuarioId={usuarioId}
           />
         )}
         <div className="flex items-end gap-2">

@@ -10803,6 +10803,13 @@ export const DICIONARIO: Traducoes = {
   "Prepara no compositor — você revisa e envia": {
     es: "Prepara en el compositor — tú revisas y envías",
   },
+  // ── "Mostrar na barra do Inbox" #3282 ──────────────────────────────────────
+  "Mostrar na barra do Inbox": { es: "Mostrar en la barra del Inbox" },
+  "Desmarcado, a resposta sai da barra do Inbox e continua no atalho /.": {
+    es: "Sin marcar, la respuesta sale de la barra del Inbox y sigue en el atajo /.",
+  },
+  // "mais (N)" e "menos" são os controles de recolher/abrir a barra do Inbox #3282.
+  "menos": { es: "menos" },
   "Recursos": { es: "Recursos" },
   "Insere no campo — você edita e envia": { es: "Inserta en el campo — tú editas y envías" },
   "áudio pendente; você decide quando enviar": {
