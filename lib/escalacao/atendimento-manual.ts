@@ -252,11 +252,12 @@ export async function pausarIaPorAtendimentoManual(
     if (atualMs >= propostoMs) return false;
 
     // A LINHA VOLTA. Um UPDATE pode devolver `error: null` sem ter tocado em
-    // nada — RLS que barra a conversa, ou uma corrida com um DELETE que apaga a
-    // linha entre a leitura de cima e esta escrita. Sem ler de volta, a função
-    // dizia "pausei" com o banco intacto, e a IA voltava a falar por cima do
-    // humano no turno seguinte. Pedir `select("id")` é o que torna a pausa
-    // OBSERVÁVEL: sem linha nenhuma afetada, não houve pausa — é falha.
+    // nada — uma corrida com um DELETE que apaga a linha entre a leitura de
+    // cima e esta escrita (o cliente é admin, então RLS não é a causa). Sem
+    // ler de volta, a função dizia "pausei" com o banco intacto, e a IA
+    // voltava a falar por cima do humano no turno seguinte. Pedir
+    // `select("id")` é o que torna a pausa OBSERVÁVEL: sem linha nenhuma
+    // afetada, não houve pausa — é falha.
     const { data: afetadas, error: updErr } = await admin
       .from("conversations")
       .update({
