@@ -19,6 +19,8 @@
  * organization_id check). The admin client bypasses RLS.
  */
 
+import { logger } from "@/lib/logger";
+import { isLeadAttachmentPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface CascadeResult {
@@ -213,7 +215,7 @@ export async function cascadeRedactContact(args: CascadeArgs): Promise<CascadeRe
   if (idsDosLeads.length > 0) {
     const { data: anexosDosLeads, error: anexosErro } = await admin
       .from("crm_lead_attachments")
-      .select("id, storage_path")
+      .select("id, lead_id, storage_path")
       .eq("organization_id", args.organizationId)
       .in("lead_id", idsDosLeads);
     if (anexosErro) {
@@ -221,6 +223,14 @@ export async function cascadeRedactContact(args: CascadeArgs): Promise<CascadeRe
     }
     for (const anexo of anexosDosLeads ?? []) {
       if (!anexo.storage_path) continue;
+      // A fila remove com o cliente admin: só o que mora sob o prefixo do negócio.
+      if (!isLeadAttachmentPathOwnedBy(anexo.storage_path, args.organizationId, anexo.lead_id)) {
+        logger.warn("[lgpd-redact-cascade] anexo com caminho fora do negócio; não enfileirado", {
+          attachmentId: anexo.id,
+          requestId: args.requestId,
+        });
+        continue;
+      }
       await enfileirarMidiaNaFila(admin, {
         organizationId: args.organizationId,
         requestId: args.requestId,

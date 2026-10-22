@@ -13,6 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { logger } from "@/lib/logger";
+import { isLeadAttachmentPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 
 export const dynamic = "force-dynamic";
 
@@ -192,7 +193,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const safeName = sanitizeFileName(file.name);
   const attachmentId = randomUUID();
   const ext = safeName.includes(".") ? safeName.split(".").pop() : "bin";
-  const storagePath = `${orgId}/leads/${leadId}/${fieldKey}/${attachmentId}.${ext}`;
+  // `lead.id` (do banco), não o parâmetro da URL: o banco confere o caminho
+  // contra `lead_id::text`, sempre minúsculo.
+  const storagePath = `${orgId}/leads/${lead.id}/${fieldKey}/${attachmentId}.${ext}`;
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const admin = createAdminClient();
@@ -288,6 +291,18 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx): Promise<Response>
 
   const supabase = await createClient();
 
+  // Mesmo portão do GET/POST/mídia: o negócio tem de ser visível para quem pede.
+  const { data: lead, error: leadErr } = await supabase
+    .from("crm_leads")
+    .select("id")
+    .eq("id", leadId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (leadErr || !lead) {
+    return fail("not_found", t("Lead não encontrado."), 404, { requestId });
+  }
+
   // Busca o anexo existente
   const { data: anexo, error: readErr } = await supabase
     .from("crm_lead_attachments")
@@ -298,6 +313,11 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx): Promise<Response>
     .maybeSingle();
 
   if (readErr || !anexo) {
+    return fail("not_found", t("Anexo não encontrado."), 404, { requestId });
+  }
+  // A remoção do arquivo é com o cliente admin: só sob o prefixo deste negócio.
+  if (anexo.storage_path && !isLeadAttachmentPathOwnedBy(anexo.storage_path, orgId, lead.id)) {
+    logger.warn("[leads/attachments] caminho fora do negócio; nada removido", { attachmentId, requestId });
     return fail("not_found", t("Anexo não encontrado."), 404, { requestId });
   }
 
