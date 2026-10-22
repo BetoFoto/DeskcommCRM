@@ -92,12 +92,17 @@ export function linhaDeAssinatura(
   config: ConfigAssinatura,
   origem: "user" | "ai",
   nomeHumano?: string | null,
+  /**
+   * O nome do AGENTE que enviou (#3310) — só para a IA, e só quando existe.
+   * Ausente/`null` = a mensagem não tem agente: `nome_ia`, como antes.
+   */
+  nomeDoAgente?: string | null,
 ): string | null {
   if (origem === "ai") {
     if (!config.ia) return null;
     // Para a IA o relato não pede capitalização — o nome é o que a organização
     // configurou ("Assistente Virtual", o nome do agente, uma marca).
-    return `*${config.nomeIa}*\n`;
+    return `*${nomeDaAssinaturaDaIA(config, nomeDoAgente)}*\n`;
   }
   if (!config.humanos) return null;
   const nome = nomeHumano?.trim();
@@ -137,6 +142,34 @@ export const assinaturaEntradaSchema = z
   .strict();
 
 const LINHA_DE_ASSINATURA = /^\*[^*\n]+\*\n/;
+
+/**
+ * O nome com que a IA assina (#3310).
+ *
+ * **O do AGENTE que enviou, e `nome_ia` como RESERVA.** `nome_ia` é um nome só
+ * para a organização: numa conta com dois agentes no mesmo número (roteador de
+ * intenção) o cliente lia o nome da agente A numa mensagem que a agente B
+ * escreveu — e a conversa seguia com outra pessoa. A reserva vale para a
+ * mensagem SEM agente (aviso do sistema, automação) e para quando a leitura do
+ * nome falha; assinatura genérica é melhor que assinatura nenhuma, e muito
+ * melhor que a errada.
+ *
+ * O nome do agente passa pela MESMA régua do `nome_ia` (`assinaturaEntradaSchema`):
+ * `*` ou quebra de linha desmontam a linha `*Nome*\n` — o negrito sai torto para
+ * o cliente e `semAssinatura` deixa de reconhecê-la na guarda de eco. A régua do
+ * cadastro não alcança o nome do agente, então ela é aplicada na hora de assinar.
+ */
+export function nomeDaAssinaturaDaIA(
+  config: ConfigAssinatura,
+  nomeDoAgente?: string | null,
+): string {
+  const doAgente = nomeDoAgente?.trim();
+  if (!doAgente || NOME_QUE_DESMONTA_A_LINHA.test(doAgente)) return config.nomeIa;
+  return doAgente;
+}
+
+/** `*` ou quebra de linha: qualquer um dos dois atrapalha a linha `*Nome*\n`. */
+const NOME_QUE_DESMONTA_A_LINHA = /[*\r\n]/;
 
 /**
  * O texto sem a linha de assinatura do começo, se houver. Quem precisa é a

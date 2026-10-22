@@ -8208,6 +8208,15 @@ export const DICIONARIO: Traducoes = {
   "Resposta segurada pela proteção do número": { es: "Respuesta retenida por la protección del número" },
   "Resposta bloqueada por conformidade": { es: "Respuesta bloqueada por cumplimiento normativo" },
   "Resposta retida para correção": { es: "Respuesta retenida para corrección" },
+  // #3310: a pausa por handoff humano ganhou família própria no aviso de
+  // retenção — as três frases acima descreviam outro caso, e a de conformidade
+  // acusava um opt-out que o cliente nunca pediu.
+  "Resposta pausada: a conversa está com a equipe": {
+    es: "Respuesta en pausa: la conversación está con el equipo",
+  },
+  "O atendimento automático está pausado porque a conversa foi passada para a equipe. Use “Devolver ao automático” para a IA voltar a responder.": {
+    es: "La atención automática está en pausa porque la conversación se pasó al equipo. Usa “Devolver al automático” para que la IA vuelva a responder.",
+  },
 
   // ─── Inbox: gaps achados na varredura completa (ambas as aspas) ───
   "Você não tem nenhuma organização ativa. Aceite um convite ou contate o admin.": {

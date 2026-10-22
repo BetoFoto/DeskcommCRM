@@ -92,6 +92,23 @@ export interface GateContext {
    */
   optedOut: boolean;
   /**
+   * O `stop` está armado SÓ pelo `force_human` — a conversa foi passada para a
+   * equipe (#3310), e o contato não pediu para sair.
+   *
+   * Existe porque `optedOut` funde quatro travas (`is_blocked or force_human or
+   * is_personal or ai_opt_out`) num booleano, e o CÓDIGO do veto é lido por quem
+   * atende: dizer "o contato pediu para não receber mensagens" para quem só
+   * pediu ajuda faz a equipe tratar um cliente vivo como descadastrado.
+   *
+   * ⚠️ **A DECISÃO não muda em nada** — o veto continua irrevogável e do mesmo
+   * jeito (regra dura nº 2); o que muda é QUAL nome o veto tem. Ausente =
+   * comportamento de antes: `contato_bloqueado`. Opt-out real (`is_blocked`, ou
+   * `is_personal`/`ai_opt_out`) NUNCA é marcado aqui — quando as duas valem,
+   * vence o opt-out, que é a ação que decide (`lib/inbox/comando-da-conversa.ts`
+   * usa a mesma ordem).
+   */
+  stopPorHandoff?: boolean;
+  /**
    * Canal desta tentativa. Nenhum gate pergunta QUEM é o provider (invariante 1
    * de `docs/doctrine/restricao-de-canal.md`) — só o entrega a `capabilitiesOf`
    * para perguntar o que o canal permite.
@@ -346,13 +363,25 @@ const stopGate: Gate = {
   name: 'stop',
   evaluate: (ctx) =>
     ctx.optedOut
-      ? {
-          pass: false,
-          code: 'contato_bloqueado',
-          reason:
-            'o lead optou por sair do atendimento (bloqueio/opt-out irrevogável) — não é ' +
-            'possível enviar nada a ele; encerre o turno sem tentar de novo.',
-        }
+      ? ctx.stopPorHandoff === true
+        ? {
+            // #3310: a conversa foi passada para a EQUIPE. O cliente não pediu
+            // para sair — chamar isto de opt-out faz quem atende tratar um
+            // cliente vivo como descadastrado, e é o oposto do que aconteceu.
+            pass: false,
+            code: 'atendimento_com_humano',
+            reason:
+              'o atendimento automático está pausado porque a conversa foi passada para a equipe ' +
+              '(handoff humano/direcionamento manual) — o contato NÃO pediu para sair; a IA volta a ' +
+              'responder com "Devolver ao automático".',
+          }
+        : {
+            pass: false,
+            code: 'contato_bloqueado',
+            reason:
+              'o lead optou por sair do atendimento (bloqueio/opt-out irrevogável) — não é ' +
+              'possível enviar nada a ele; encerre o turno sem tentar de novo.',
+          }
       : { pass: true },
 };
 
@@ -1359,14 +1388,20 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     )
       throw new Error('reply_scope_mismatch');
 
-    const optedOut =
-      args.optedOutThisTurn ||
-      (await readStopFlags(
-        client,
-        args.tenantId,
-        args.leadId,
-        meetingPolicy?.humanCommand === true || replyPolicy !== null,
-      ));
+    // ⚠️ `optedOutThisTurn` é `contacts.is_blocked` lido no `get_lead_context`
+    // deste turno — ou seja, a marca do OPT-OUT REAL. Quando ele já respondeu, a
+    // fonte não é reconsultada (como sempre), e `stopPorHandoff` fica falso: o
+    // código do veto é o `contato_bloqueado` de sempre. Só o caminho que lê as
+    // travas DIRETO da fonte (#3310) sabe separar o handoff do opt-out.
+    const stop = args.optedOutThisTurn
+      ? { stopped: true, stopPorHandoff: false }
+      : await readStopFlags(
+          client,
+          args.tenantId,
+          args.leadId,
+          meetingPolicy?.humanCommand === true || replyPolicy !== null,
+        );
+    const optedOut = stop.stopped;
     const pacingCfg = await loadChannelKnobs(
       client,
       args.tenantId,
@@ -1413,6 +1448,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       now: args.now,
       body: bodyDoModelo,
       optedOut,
+      ...(stop.stopPorHandoff ? { stopPorHandoff: true as const } : {}),
       provider,
       messagingWindow: { lastInboundAt, ...(args.isTemplate === true ? { isTemplate: true } : {}) },
       pacing: {
@@ -1601,25 +1637,49 @@ export async function loadChannelProvider(
   return provider === undefined ? DEFAULT_CHANNEL_PROVIDER : (provider as ChannelProvider);
 }
 
+/**
+ * POR QUE o STOP está armado, e não só SE está (#3310).
+ *
+ * O predicado do STOP continua idêntico — `is_blocked or force_human or
+ * is_personal or ai_opt_out` —, mas a leitura devolve a diferença que o banco
+ * sempre teve e que um `boolean` apagava: `force_human` SOZINHO é a conversa
+ * passada para a EQUIPE (handoff humano), não um pedido do contato para sair.
+ * Quem lê o código do veto é quem atende (`lib/inbox/retention-copy.ts`), e
+ * acusar opt-out num cliente que só pediu ajuda o faz tratar um cliente vivo
+ * como descadastrado.
+ *
+ * `stopPorHandoff` é `false` para `is_blocked`, `is_personal` e `ai_opt_out` —
+ * as três sobrevivem a "Devolver ao automático" e continuam sendo, com todas as
+ * letras, o `contato_bloqueado` de sempre. Quando o handoff e uma delas valem
+ * juntas, vence o opt-out: é a trava que decide a AÇÃO, e a mesma ordem que
+ * `lib/inbox/comando-da-conversa.ts` usa para não acender um botão decorativo.
+ */
 async function readStopFlags(
   db: Queryable,
   organizationId: string,
   contactId: string,
   humanMeetingCommand = false,
-): Promise<boolean> {
+): Promise<{ stopped: boolean; stopPorHandoff: boolean }> {
   // Pessoal não recebe nem via encontro (spec 21, etapa 11): o `or is_personal`
   // vale nos DOIS ramos — o veto segue o bloqueio até aqui.
-  const { rows } = await db.query<{ stopped: boolean }>(
+  const { rows } = await db.query<{ stopped: boolean; stop_por_handoff: boolean }>(
     humanMeetingCommand
-      ? 'select (is_blocked or is_personal) as stopped from contacts where organization_id = $1 and id = $2'
+      ? 'select (is_blocked or is_personal) as stopped, false as stop_por_handoff from contacts where organization_id = $1 and id = $2'
       // `ai_opt_out` (issue 2379): a marca permanente "sempre atendimento
       // humano" entra no MESMO stop, e não numa nova consulta — o custo é
       // nulo e a garantia é que nenhum escritor futuro de `force_human` consegue
-      // devolver a IA para um contato que a operação trancou.
-      : 'select (is_blocked or force_human or is_personal or ai_opt_out) as stopped from contacts where organization_id = $1 and id = $2',
+      // devolver a IA para um contato que a operação trancou. E ela fica FORA do
+      // `stop_por_handoff`: é trava permanente, não passagem para a equipe.
+      : 'select (is_blocked or force_human or is_personal or ai_opt_out) as stopped, ' +
+          '(force_human and not (is_blocked or is_personal or ai_opt_out)) as stop_por_handoff ' +
+          'from contacts where organization_id = $1 and id = $2',
     [organizationId, contactId],
   );
-  return rows[0]?.stopped === true;
+  const linha = rows[0];
+  return {
+    stopped: linha?.stopped === true,
+    stopPorHandoff: linha?.stopped === true && linha.stop_por_handoff === true,
+  };
 }
 
 /**

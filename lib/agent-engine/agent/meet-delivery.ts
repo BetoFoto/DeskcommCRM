@@ -139,11 +139,16 @@ export function createMeetDeliveryHandler(deps: {
           const reason =
             result.code === "contato_bloqueado"
               ? "opt_out"
-              : result.code.startsWith("lgpd_")
-                ? "lgpd"
-                : result.code === "messaging_window_closed"
-                  ? "limits"
-                  : "guardrail";
+              : // #3310: a pausa por handoff não é opt-out. O motivo gravado no
+                // job (`blocked:<reason>`) é lido por quem opera a entrega, e
+                // "opt_out" mandava procurar um descadastro que não existe.
+                result.code === "atendimento_com_humano"
+                ? "handoff"
+                : result.code.startsWith("lgpd_")
+                  ? "lgpd"
+                  : result.code === "messaging_window_closed"
+                    ? "limits"
+                    : "guardrail";
           await settle(result.nextAllowedAt ? "queued" : `blocked:${reason}`, result.nextAllowedAt);
           return;
         }
