@@ -63,6 +63,23 @@ describe("a cadeia REAL barra a resposta comercial — e só quando armada", () 
       expect(r.status).toBe("vetoed");
     });
 
+  // Rodada 2: preço sem moeda nem vírgula, que saía com a restrição ligada.
+  it.each(["O investimento é de 2.500", "Consigo fazer por 1.800 se fechar hoje",
+    "Consigo fazer por 1800 se fechar hoje", "Te faço 1800 se fechar hoje", "10 vezes sem juros",
+    "Em 12 vezes no cartão", "A mensalidade é 199", "Son 500 pesos"])
+    ("armada: barra preço sem moeda — %s", async (body) => {
+      const { run, send } = chamaCadeiaReal({ body, armado: true });
+      const r = await run;
+      expect(r.status).toBe("vetoed");
+      if (r.status === "vetoed") expect(r.code).toBe("commercial_requires_human");
+      expect(send).not.toHaveBeenCalled();
+    });
+
+  it.each(["Seu retorno ficou para 15 de outubro de 2026, às 14.30.", "Tome 2 vezes ao dia."])
+    ("armada: data e frequência continuam saindo — %s", async (body) => {
+      expect((await chamaCadeiaReal({ body, armado: true }).run).status).toBe("sent");
+    });
+
   it("DESARMADA: o MESMO corpo é enviado", async () => {
     const r = await chamaCadeiaReal({ body: RESPOSTA, armado: false }).run;
     expect(r.status).toBe("sent");
@@ -110,7 +127,7 @@ describe("sem o argumento, a cadeia lê a restrição da organização (falha fe
       send,
       ...extra,
     });
-    return { run, send, leituras };
+    return { run, send, leituras, client };
   }
 
   // Os dois formatos de chamada que ficaram de fora: o do follow-up (texto fixo,
@@ -147,6 +164,29 @@ describe("sem o argumento, a cadeia lê a restrição da organização (falha fe
   it("corpo sem cara de preço não consulta a organização", async () => {
     const { run, leituras } = cadeia("falha", { body: "Seu horário ficou para dia 15.10 às 14.30." });
     expect((await run).status).toBe("sent");
+    expect(leituras).toEqual([]);
+  });
+
+  // Texto que um humano aprovou (ou o link do Meet) não é texto da IA: com preço e
+  // camada ligada ele SAI, e a cadeia nem consulta a organização.
+  it.each(["approvedReply", "meetingDelivery"] as const)("%s com preço e camada ligada: sai sem ler a camada", async (via) => {
+    const claim = { worker_id: "w", acquired_at: "2026-07-28T12:59:00Z" };
+    const escopo = { organizationId: ORG, jobId: "00000000-0000-4000-8000-000000000003", jobClaim: claim };
+    const politica = via === "approvedReply"
+      ? { current: true, context_current: true, contact_id: "00000000-0000-4000-8000-000000000002",
+          conversation_id: "00000000-0000-4000-8000-000000000005",
+          channel_session_id: "00000000-0000-4000-8000-000000000004",
+          draft_id: "00000000-0000-4000-8000-000000000006", body: RESPOSTA,
+          agent_id: "00000000-0000-4000-8000-000000000007" }
+      : { current: true, human_command: true, contact_id: "00000000-0000-4000-8000-000000000002",
+          channel_session_id: "00000000-0000-4000-8000-000000000004", force_human: null, ai_opt_out: false,
+          ai_gate: null, ai_authorized_at: null, assignee_kind: null, bot_silenced_until: null };
+    const { run, send, leituras, client } = cadeia(true, via === "approvedReply" ? { approvedReply: escopo } : { meetingDelivery: escopo });
+    client.query.mockImplementation(async (sql: string) =>
+      /fn_reply_delivery_policy|fn_meet_delivery_policy/.test(sql) ? { rows: [{ policy: politica }] } : { rows: [] });
+    const r = await run;
+    expect(r.status).toBe("sent");
+    expect(send).toHaveBeenCalledOnce();
     expect(leituras).toEqual([]);
   });
 

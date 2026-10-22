@@ -12,11 +12,13 @@ const normalizar = (texto: string): string => texto.toLowerCase().normalize("NFD
 
 export function contemAssuntoComercialRestrito(texto: string): boolean {
   const normal = normalizar(texto);
-  return /\b(?:precos?|prec[io]+s?|custa\w*|custos?|quanto (?:fica|sai|e|seria)|descont\w*|negoci\w*|parcel\w*|pagamento\w*|pagar|pag[ao]s?|pix|boleto\w*|credito|debito|promoc\w*|oferta\w*|orcamento\w*|reais|gratis|gratuit\w*|barat\w*|caro|cobran\w*|cobra(?:m|r|mos)?|reembolso\w*|estorno\w*)\b/u.test(normal)
+  return /\b(?:precos?|prec[io]+s?|custa\w*|custos?|quanto (?:fica|sai|e|seria)|descont\w*|negoci\w*|parcel\w*|pagamento\w*|pagar|pag[ao]s?|pix|boleto\w*|credito|debito|promoc\w*|oferta\w*|orcamento\w*|reais|gratis|gratuit\w*|barat\w*|caro|cobran\w*|cobra(?:m|r|mos)?|reembolso\w*|estorno\w*|investimentos?|mensalidades?|anuidades?|sem juros)\b/u.test(normal)
     // "valor" só quando é o do produto: "qual o valor?", "valor da consulta" — não "valor nutricional".
     || /\bvalor(?:es)?(?=\s*(?:$|[?!.,;]|d[aeo]s?\b|total\b|final\b|a vista\b|pra\b|para\b|com desconto\b))/u.test(normal)
     || /(?:r\$|us\$|\$|€|£)\s*\d/u.test(normal)
     || /\b(?:em|ate|de)\s+\d{1,2}\s*x\b|\b\d{1,2}\s*x\s*(?:de\b|sem juros\b|no cartao\b)/u.test(normal)
+    // "em 10 vezes" é parcela; "2 vezes ao dia" é remédio e não chega aqui.
+    || /\b(?:em|ate)\s+\d{1,2}\s*vezes\b|\b\d{1,2}\s*vezes\s+no cartao\b/u.test(normal)
     || /\b\d+(?:[.,]\d+)?\s*%\s*off\b/u.test(normal)
     // ponytail: vírgula com 2 casas é preço ("299,90"); com ponto é data/hora, e não conta.
     || /\b\d+,\d{2}\b/u.test(normal)
@@ -31,14 +33,24 @@ export function contemAssuntoComercialRestrito(texto: string): boolean {
  * aqui, só barra uma resposta que a IA escreveu e passa a conversa adiante. O que
  * entra só aqui: moeda sem número colado ("R$", "BRL", "USD", "EUR"), "valor" e
  * "à vista" soltos, as palavras de preço em espanhol e inglês, moeda por extenso
- * ("cem euros") e decimal com ponto em posição de preço ("por 299.90", "299.90
- * cada"). Data e hora com ponto continuam fora: sem palavra de preço por perto,
- * "15.10 às 14.30" não é dinheiro.
+ * ("cem euros"), decimal com ponto em posição de preço ("por 299.90", "299.90
+ * cada"), honorários/abatimento/cupom/pesos, parcela por extenso ("10 vezes de 29")
+ * e inteiro ou milhar depois de verbo de preço ("faço 1800", "por 1.800"). Data e
+ * hora com ponto continuam fora: sem palavra de preço por perto, "15.10 às 14.30"
+ * não é dinheiro.
  */
 const PRECO_SO_NA_SAIDA: readonly RegExp[] = [
   /(?:r|us)\$|€|£|\b(?:brl|usd|eur)\b/u,
   /\b(?:valor(?:es)?|a vista|descuent\w*|cuotas?|cuesta\w*|precios?|prices?|pricing|costs?|costos?|discounts?|dolar(?:es)?|dollars?|euros?)\b/u,
   /\b(?:por|cada)\s+\d+[.,]\d{2}\b|\b\d+[.,]\d{2}\s*(?:cada|por mes|ao mes|mensais)\b/u,
+  /\b(?:honorarios?|abatimentos?|cupo(?:m|ns))\b|\b\d[\d.,]*\s*pesos\b/u,
+  // Parcela por extenso, menos a frequência de remédio e de sessão ("2 vezes ao dia").
+  /\b\d{1,2}\s*vezes\b(?!\s*(?:ao|por|na|no|a)\s+(?:dia|semana|mes|ano|hora))/u,
+  // Inteiro ou milhar com ponto depois de verbo/preposição de preço ("por 1.800",
+  // "faço 1800"). Ano, hora, telefone e porcentagem ficam de fora; "mais de 1.000
+  // clientes" também. ponytail: a lista de quantificadores antes de "de" é a régua; contagem
+  // que vier com outra palavra ("turma de 300 alunos") barra o envio e vai à equipe.
+  /(?:\b(?:por|faco|fazer|sai a|saindo a)|(?<!\b(?:mais|menos|cerca|acima|alem)\s)\bde)\s+(?!(?:19|20)\d{2}\b)(?:\d{1,3}(?:\.\d{3})+|\d{3,})(?![\d,]|[-/:.]\d|\s*%)/u,
 ];
 
 export function contemAssuntoComercialNaSaida(texto: string): boolean {

@@ -60,6 +60,11 @@ vi.mock('@/lib/agent-engine/edge/crm/get-lead-context', async (importOriginal) =
   ...(await importOriginal<Record<string, unknown>>()),
   getLeadContext: mocks.leadContext,
 }));
+// Só o automático chega aqui: o turno monta o prompt antes das detecções.
+vi.mock('@/lib/agent-engine/agent/playbook', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  loadPlaybook: vi.fn(async () => ({ prompt: '## Identidade\nTeste.', versionIds: {} })),
+}));
 vi.mock('@/lib/agent-engine/agent/fuso-da-org', () => ({ fusoDaOrganizacao: vi.fn(async () => 'UTC') }));
 vi.mock('@/lib/ai/elegibilidade/consulta-pg', () => ({ decidirElegibilidadeDaConversa: vi.fn(async () => null) }));
 
@@ -136,6 +141,23 @@ describe('restrição comercial cede ao opt-out e ao pedido de humano', () => {
     expect(mocks.avisoLendo).not.toHaveBeenCalled();
     expect(passagemComercial()).toEqual([]);
     expect(mocks.passagem.mock.calls[0]?.[2]).toMatchObject({ reason: 'requested_human' });
+  });
+
+  // O automático não tem a detecção no handler: ela mora DENTRO do turno
+  // (`executarTurnoDoAgente`). A passagem comercial precisa ceder até lá.
+  it('modo AUTOMÁTICO: a mensagem mista chega ao ramo de suspeita de opt-out dentro do turno', async () => {
+    mocks.agente.mockResolvedValue({ ...assistido, operationMode: 'automatic', toolIds: [], knowledgeSourceIds: [],
+      systemPrompt: '', provider: 'anthropic', model: 'claude-teste', credentialId: null, maxSteps: 4,
+      historyMessageWindow: 10, historyTokenWindow: 1000, handoffToolEnabled: false, splitMessages: false,
+      casesEnabled: false, multimodalInput: false });
+    await rodar('Quanto custa? Para de me mandar mensagem');
+    expect(mocks.avisoLendo).not.toHaveBeenCalled();
+    expect(passagemComercial()).toEqual([]);
+    expect(mocks.aviso.mock.calls[0]?.[2]).toMatchObject({ motivo: 'suspeita_de_opt_out' });
+    expect(mocks.passagem).toHaveBeenCalledOnce();
+    expect(mocks.passagem.mock.calls[0]?.[2]).toMatchObject({ reason: 'suspected_optout' });
+    expect(vi.mocked(deps.log.info).mock.calls.map((c) => c[0]))
+      .toContain('possível opt-out detectado no inbound — bot silenciado e escalado ao humano');
   });
 
   it('CONTROLE: só preço, com a camada ligada → passagem comercial (a restrição está armada aqui)', async () => {

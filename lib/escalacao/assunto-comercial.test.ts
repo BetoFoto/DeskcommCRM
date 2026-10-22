@@ -50,3 +50,22 @@ describe("valores e negociação somente humanos", () => {
     "Seu horário ficou para 14.30, combinado?", "Temos 3 unidades"])
     ("a saída não confunde rotina com preço: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(false));
 });
+
+// Rodada 2 do #3270: preço que passava pelas duas réguas com a restrição ligada.
+describe("valores que o redator escreve sem moeda nem vírgula", () => {
+  const PASSAVAM = ["O investimento é de 2.500", "Consigo fazer por 1.800 se fechar hoje",
+    "Consigo fazer por 1800 se fechar hoje", "Te faço 1800 se fechar hoje", "10 vezes sem juros",
+    "Em 12 vezes no cartão", "A mensalidade é 199", "Son 500 pesos"];
+  it.each(PASSAVAM)("a saída barra: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(true));
+  it.each(["Qual o investimento?", "Qual a mensalidade?", "Dá pra fazer em 10 vezes?", "Tem anuidade?"])
+    ("a entrada desvia antes do roteador: %s", s => expect(contemAssuntoComercialRestrito(s)).toBe(true));
+  it.each(["Os honorários ficam com o escritório", "Tem cupom?", "Dá um abatimento?", "São 10 vezes de 29"])
+    ("termos de preço só da saída: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(true));
+  // Controle negativo de cada termo novo: contagem, ano, hora, frequência e academia.
+  it.each(["Nossa taxa de sucesso é de 90%", "dia 15.10 às 14.30", "Seu retorno é 15 de outubro de 2026",
+    "Já atendemos mais de 1.000 clientes", "Tome 2 vezes ao dia", "Venha 3 vezes por semana",
+    "Treino com pesos livres", "Ligue (11) 4000-0000", "Atendemos de 14.30 às 18.00"])
+    ("a saída não barra: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(false));
+  it.each(["Tome 2 vezes ao dia", "Já vim aqui 3 vezes", "Nossa taxa de sucesso é de 90%"])
+    ("a entrada não desvia: %s", s => expect(contemAssuntoComercialRestrito(s)).toBe(false));
+});
