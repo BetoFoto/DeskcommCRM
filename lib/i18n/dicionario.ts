@@ -1933,6 +1933,12 @@ export const DICIONARIO: Traducoes = {
   "Menu do usuário": { es: "Menú del usuario" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
+  // O que a tela diz a quem NÃO alcança a Central (#3147): a frase verdadeira
+  // no lugar do estado vazio, que era falso para quem não pode ver aviso nenhum.
+  "A Central de avisos é para quem atende": { es: "La Central de avisos es para quienes atienden" },
+  "Os avisos são pedidos do assistente para as pessoas que atendem. Se precisar deles, peça a quem administra para revisar seu acesso.": {
+    es: "Los avisos son pedidos del asistente para las personas que atienden. Si los necesitas, pide a quien administra que revise tu acceso.",
+  },
   "em aberto": { es: "abiertos" },
   // ─── Agentes de IA: lista ───
   "Agentes de IA": { es: "Agentes de IA" },
