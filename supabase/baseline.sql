@@ -7575,7 +7575,7 @@ create policy "message_templates_write" on message_templates
   );
 
 -- ---- ordem da resposta rápida (migration 0729) ----
--- Espelho exato da migration 20261022051428_0729_ordem_da_resposta_rapida.sql.
+-- Espelho exato da migration 20261023120003_0729_ordem_da_resposta_rapida.sql.
 -- Fica colado ao bloco da tabela (migration 0060), e não no fim do arquivo, para
 -- não disputar a cauda com toda migration nova de outro PR.
 

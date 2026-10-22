@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const RAIZ = join(__dirname, "..", "..");
-const MIGRATION = "supabase/migrations/20261022051428_0729_ordem_da_resposta_rapida.sql";
+const MIGRATION = "supabase/migrations/20261023120003_0729_ordem_da_resposta_rapida.sql";
 
 describe("o apêndice do baseline espelha a migration 0729 (ordem da resposta rápida)", () => {
   it("controle: os dois arquivos existem e não estão vazios", () => {
