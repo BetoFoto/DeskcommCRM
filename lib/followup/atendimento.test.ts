@@ -584,18 +584,61 @@ describe("roteiro já concluído: recomeça só se o roteiro permitir", () => {
   // #2630 — A ENTRADA POR ETAPA DO FUNIL (irmã da entrada por palavra-gatilho).
   const ETAPA_X = "11111111-1111-4111-8111-111111111111";
   const ETAPA_Y = "22222222-2222-4222-8222-222222222222";
+  /** A entrada do card na etapa, fixa: o dublê não pode depender do relógio. */
+  const ENTRADA = "2026-10-01T10:00:00.000Z";
+  const ANTES_DA_ENTRADA = "2026-09-01T10:00:00.000Z";
+  const DEPOIS_DA_ENTRADA = "2026-10-02T10:00:00.000Z";
 
-  /** O banco da entrada por etapa: a etapa do CARD do contato + os roteiros ativos. */
+  /**
+   * O banco da entrada por etapa: a etapa do CARD do contato (com a ENTRADA
+   * nela) + os roteiros ativos + os enrollments já nascidos do contato.
+   *
+   * O `ja_comecou_nesta_entrada` é calculado aqui aplicando SÓ os predicados que
+   * o SQL escreve — mesma doutrina do dublê do encadeamento A→B, abaixo: se a
+   * comparação com a entrada, ou o `pointer_id` do roteiro, sumir da consulta,
+   * este dublê deixa de barrar o roteiro e o caso novo fica VERMELHO.
+   */
   function bancoDaEtapa(
     etapa: string | null,
     linhas: Array<{ id: string; nome: string; graph: FlowGraph; ja_concluiu: boolean }>,
+    opts: {
+      /** `crm_leads.stage_changed_at` — o carimbo da 0071. `null` = sem carimbo. */
+      stageChangedAt?: string | null;
+      /** `crm_leads.created_at` — a reserva do card criado direto na etapa. */
+      createdAt?: string | null;
+      /** Enrollments já nascidos: (roteiro, quando nasceu). */
+      enrollments?: Array<{ pointer_id: string; started_at: string }>;
+    } = {},
   ) {
+    const stageChangedAt = opts.stageChangedAt === undefined ? ENTRADA : opts.stageChangedAt;
+    const createdAt = opts.createdAt === undefined ? ENTRADA : opts.createdAt;
+    const enrollments = opts.enrollments ?? [];
     const chamadas: Array<{ sql: string; params: unknown[] }> = [];
     const pool = {
       query: async (sql: string, params: unknown[] = []) => {
         chamadas.push({ sql, params });
         if (/from crm_leads/.test(sql)) {
-          return etapa === null ? { rows: [], rowCount: 0 } : { rows: [{ stage_id: etapa }], rowCount: 1 };
+          return etapa === null
+            ? { rows: [], rowCount: 0 }
+            : {
+                rows: [{ stage_id: etapa, stage_changed_at: stageChangedAt, created_at: createdAt }],
+                rowCount: 1,
+              };
+        }
+        if (/from followup_flow_pointers p/.test(sql)) {
+          // A entrada só existe se o SQL a pede E o chamador a passou ($3).
+          const entrada = /e\.started_at > \$3/.test(sql) && typeof params[2] === "string" ? params[2] : null;
+          const linhasDaEntrada = linhas.map((l) => ({
+            ...l,
+            ja_comecou_nesta_entrada:
+              entrada !== null &&
+              enrollments.some(
+                (e) =>
+                  e.pointer_id === l.id &&
+                  Date.parse(e.started_at) > Date.parse(entrada as string),
+              ),
+          }));
+          return { rows: linhasDaEntrada, rowCount: linhasDaEntrada.length };
         }
         return { rows: linhas, rowCount: linhas.length };
       },
@@ -653,6 +696,104 @@ describe("roteiro já concluído: recomeça só se o roteiro permitir", () => {
       { id: "a", nome: "Alfa", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false },
     ]);
     expect((await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" }))?.id).toBe("a");
+  });
+
+  // ─── A ENTRADA, e não o estado (#3253, revisão do mantenedor) ──────────────
+  // "Começar quando o card ENTRAR na etapa": a etapa vale UMA VEZ POR ENTRADA.
+  // A âncora da entrada é `stage_changed_at` (carimbo da 0071), com o
+  // `created_at` de reserva para o card criado direto na etapa — o caso que o
+  // mantenedor nomeou, em que não há movimento nenhum para carimbar.
+
+  it("⭐ ENTRADA JÁ GASTA: o enrollment nascido depois de o card entrar na etapa tira o roteiro da disputa", async () => {
+    const { pool, chamadas } = bancoDaEtapa(
+      ETAPA_X,
+      [{ id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false }],
+      { enrollments: [{ pointer_id: "proposta", started_at: DEPOIS_DA_ENTRADA }] },
+    );
+    expect(await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
+    // A consulta lê a ENTRADA do card (os dois candidatos de âncora) e a compara
+    // com o nascimento do enrollment, com o contato e o roteiro do par.
+    expect(chamadas[0]!.sql).toMatch(/stage_changed_at/);
+    expect(chamadas[0]!.sql).toMatch(/created_at/);
+    expect(chamadas[1]!.sql).toMatch(/e\.started_at > \$3/);
+    expect(chamadas[1]!.sql).toMatch(/e\.pointer_id = p\.id/);
+    expect(chamadas[1]!.params).toEqual([ORG, "ct-1", ENTRADA]);
+  });
+
+  it("entrada NOVA: enrollment nascido antes de o card voltar à etapa não gasta esta entrada", async () => {
+    const { pool } = bancoDaEtapa(
+      ETAPA_X,
+      [{ id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false }],
+      { enrollments: [{ pointer_id: "proposta", started_at: ANTES_DA_ENTRADA }] },
+    );
+    expect((await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" }))?.id).toBe("proposta");
+  });
+
+  it("⭐ com `pode_recomecar`, o card PARADO na etapa não rearma a cada turno: a entrada já foi gasta", async () => {
+    // O roteiro está armado para recomeçar e o contato o concluiu — pela regra
+    // do `pode_recomecar` ele voltaria; mas o enrollment desta entrada já
+    // nasceu, então não há entrada nova para consumir.
+    const { pool } = bancoDaEtapa(
+      ETAPA_X,
+      [
+        {
+          id: "agenda",
+          nome: "Agenda",
+          graph: { ...grafoCom(), settings: { ...porEtapa(ETAPA_X), pode_recomecar: true } } as FlowGraph,
+          ja_concluiu: true,
+        },
+      ],
+      { enrollments: [{ pointer_id: "agenda", started_at: DEPOIS_DA_ENTRADA }] },
+    );
+    expect(await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
+  });
+
+  it("⭐ card criado DIRETO na etapa (sem `stage_changed_at`): a entrada é o `created_at` do card", async () => {
+    const roteiro = {
+      id: "proposta",
+      nome: "Proposta",
+      graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph,
+      ja_concluiu: false,
+    };
+    // Enrollment nascido depois da criação: a entrada (a criação) já foi gasta.
+    const depois = bancoDaEtapa(ETAPA_X, [roteiro], {
+      stageChangedAt: null,
+      createdAt: ENTRADA,
+      enrollments: [{ pointer_id: "proposta", started_at: DEPOIS_DA_ENTRADA }],
+    });
+    expect(await escolherFluxoPelaEtapa(depois.pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
+    // Enrollment nascido ANTES da criação não é desta entrada: o roteiro liga.
+    const antes = bancoDaEtapa(ETAPA_X, [roteiro], {
+      stageChangedAt: null,
+      createdAt: ENTRADA,
+      enrollments: [{ pointer_id: "proposta", started_at: ANTES_DA_ENTRADA }],
+    });
+    expect((await escolherFluxoPelaEtapa(antes.pool, { organizationId: ORG, contactId: "ct-1" }))?.id).toBe("proposta");
+  });
+
+  it("o carimbo da 0071 ganha do `created_at`: a entrada é o ÚLTIMO movimento do card", async () => {
+    // Card criado em 01/09 e movido para a etapa em 01/10: um enrollment nascido
+    // entre as duas datas é ANTERIOR à entrada e não a gasta.
+    const { pool } = bancoDaEtapa(
+      ETAPA_X,
+      [{ id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false }],
+      {
+        stageChangedAt: ENTRADA,
+        createdAt: ANTES_DA_ENTRADA,
+        enrollments: [{ pointer_id: "proposta", started_at: "2026-09-15T10:00:00.000Z" }],
+      },
+    );
+    expect((await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" }))?.id).toBe("proposta");
+  });
+
+  it("etapa: card sem data de entrada legível — nada liga, e nenhum roteiro é consultado", async () => {
+    const { pool, chamadas } = bancoDaEtapa(
+      ETAPA_X,
+      [{ id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false }],
+      { stageChangedAt: null, createdAt: null },
+    );
+    expect(await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
+    expect(chamadas).toHaveLength(1);
   });
 
   function bancoDoInicio(linha: { graph: FlowGraph; ja_concluiu: boolean }) {

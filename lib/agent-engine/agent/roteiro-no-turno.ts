@@ -22,6 +22,18 @@
  * contexto do card, não da mensagem). A terceira é o #2630: sem ela, um card em
  * "Proposta enviada" não disparava o roteiro daquela etapa.
  *
+ * ─── A etapa vale UMA VEZ POR ENTRADA, não por turno (revisão do #3253) ──────
+ *
+ * A #2630 pede "começar quando o card ENTRAR na etapa". O primeiro desenho
+ * começava enquanto ele ESTAVA lá — todo turno sem roteiro vivo rearmava a etapa
+ * —, e o mantenedor mediu o efeito: roteiro concluído com `pode_recomecar`
+ * reabria na mensagem seguinte, e de novo a cada conclusão, com o card parado na
+ * etapa. Quem decide isso é `escolherFluxoPelaEtapa` (a entrada é um evento,
+ * `crm_leads.stage_changed_at`, com o `created_at` de reserva), e não este
+ * arquivo: o turno continua lendo a etapa em TODO turno — o que mudou é que a
+ * etapa só liga se a entrada dela ainda não tiver sido gasta. O mecanismo do
+ * próximo turno segue como a issue propôs.
+ *
  * ─── Chave desligada = nada ─────────────────────────────────────────────────
  *
  * A primeira coisa é a chave da instalação. Desligada, a função devolve `null`
@@ -159,7 +171,9 @@ export async function prepararRoteiroDoTurno(
       // roteiro) e ganha de todo o resto; a palavra-gatilho é o cliente pedindo
       // agora, com todas as letras; e a etapa do funil é contexto do CARD, não
       // da mensagem — entra quando ninguém falou nada. Sem a terceira, um card
-      // em "Proposta enviada" não disparava o roteiro daquela etapa (#2630).
+      // em "Proposta enviada" não disparava o roteiro daquela etapa (#2630). A
+      // etapa é lida em todo turno, mas só LIGA uma vez por entrada do card nela
+      // (revisão do #3253): quem já nasceu depois da entrada a gastou.
       let alvo: string | null = t.flowPointerDoRoteador;
       let origem: "roteador" | "gatilho" | "etapa" = "roteador";
       if (alvo === null) {

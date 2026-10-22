@@ -43,6 +43,13 @@ const GRAFO_SIM_NAO: FlowGraph = {
 
 /** #2630: o roteiro que liga pela ETAPA do funil — sem palavra-gatilho nenhuma. */
 const ETAPA = '11111111-1111-4111-8111-111111111111';
+/**
+ * #3253 — a ENTRADA do card na etapa (`crm_leads.stage_changed_at`, carimbo da
+ * 0071), fixa: o dublê não pode depender do relógio de quem roda a suíte.
+ */
+const ENTRADA_DO_CARD = '2026-10-01T10:00:00.000Z';
+const ANTES_DA_ENTRADA = '2026-09-01T10:00:00.000Z';
+const DEPOIS_DA_ENTRADA = '2026-10-02T10:00:00.000Z';
 const GRAFO_POR_ETAPA: FlowGraph = {
   ...GRAFO,
   settings: { max_tentativas_pergunta: 3, etapas_do_funil: [ETAPA] },
@@ -63,6 +70,12 @@ function banco(
     lote?: Array<{ id: string; body: string | null; media_derived_text?: string | null }>;
     /** A etapa do funil do card do contato (#2630): `crm_leads.stage_id`. */
     etapaDoContato?: string | null;
+    /** `crm_leads.stage_changed_at` (#3253): a ENTRADA do card na etapa. */
+    etapaDoContatoDesde?: string | null;
+    /** `crm_leads.created_at` — a reserva, para o card criado direto na etapa. */
+    cardCriadoEm?: string;
+    /** Enrollments já nascidos do contato: (roteiro, quando nasceu). */
+    enrollments?: Array<{ pointer_id: string; started_at: string }>;
   } = {},
 ) {
   const GRAFO_DO_BANCO = opts.grafo ?? GRAFO;
@@ -97,7 +110,19 @@ function banco(
         : { rows: [], rowCount: 0 };
     }
     if (/select p\.id, p\.name as nome, v\.graph/.test(sql)) {
-      return { rows: [{ id: 'ptr-1', nome: 'Cadastro', graph: GRAFO_DO_BANCO }], rowCount: 1 };
+      // #3253: a etapa só liga se a ENTRADA do card ainda não tiver sido gasta.
+      // Como no dublê de `atendimento.test.ts`, o `ja_comecou_nesta_entrada` é
+      // calculado aplicando SÓ os predicados que o SQL escreve: tirar a
+      // comparação com a entrada da consulta deixa o card parado rearmando o
+      // roteiro, e o caso novo fica VERMELHO.
+      const entrada = /e\.started_at > \$3/.test(sql) && typeof params[2] === 'string' ? params[2] : null;
+      const gastouNestaEntrada =
+        entrada !== null &&
+        (opts.enrollments ?? []).some((e) => Date.parse(e.started_at) > Date.parse(entrada as string));
+      return {
+        rows: [{ id: 'ptr-1', nome: 'Cadastro', graph: GRAFO_DO_BANCO, ja_comecou_nesta_entrada: gastouNestaEntrada }],
+        rowCount: 1,
+      };
     }
     if (/select p\.active_version_id, v\.graph/.test(sql)) {
       return { rows: [{ active_version_id: 'ver-1', graph: GRAFO_DO_BANCO }], rowCount: 1 };
@@ -117,10 +142,21 @@ function banco(
       const linhas = opts.lote ?? (mensagem === null ? [] : [{ id: 'msg-1', ...mensagem }]);
       return { rows: linhas, rowCount: linhas.length };
     }
-    // #2630: a etapa do card do contato, que a entrada por etapa lê.
+    // #2630: a etapa do card do contato, que a entrada por etapa lê — com a
+    // ENTRADA nela (#3253): o carimbo da 0071, e o `created_at` de reserva.
     if (/from crm_leads/.test(sql)) {
       const etapa = opts.etapaDoContato ?? null;
-      return etapa === null ? { rows: [], rowCount: 0 } : { rows: [{ stage_id: etapa }], rowCount: 1 };
+      if (etapa === null) return { rows: [], rowCount: 0 };
+      return {
+        rows: [
+          {
+            stage_id: etapa,
+            stage_changed_at: opts.etapaDoContatoDesde === undefined ? ENTRADA_DO_CARD : opts.etapaDoContatoDesde,
+            created_at: opts.cardCriadoEm ?? ENTRADA_DO_CARD,
+          },
+        ],
+        rowCount: 1,
+      };
     }
     if (/select custom_fields from contacts/.test(sql)) return { rows: [{ custom_fields: {} }], rowCount: 1 };
     if (/insert into followup_enrollment_events|update /.test(sql)) return { rows: [], rowCount: 1 };
@@ -332,6 +368,61 @@ describe('prepararRoteiroDoTurno — entrada por etapa do funil (#2630)', () => 
     expect(r?.iniciadoNesteTurno).toBe(true);
     expect(b.sqls.some((s) => /from crm_leads/.test(s))).toBe(false);
     expect(iniciadoCom(b, 'gatilho')).toBe(true);
+  });
+
+  // ─── A ENTRADA, e não o estado (#3253, revisão do mantenedor) ──────────────
+  // Dois turnos seguidos com o card PARADO na etapa não podem reiniciar: a etapa
+  // vale uma vez por ENTRADA do card nela.
+
+  it('⭐ card PARADO na etapa com a entrada já gasta: o turno seguinte NÃO recomeça', async () => {
+    // O roteiro já nasceu depois da entrada (e não está vivo — venceu pelo prazo
+    // e virou terminal, que o `ja_concluiu` não conta). O card segue na etapa.
+    const b = banco({
+      grafo: GRAFO_POR_ETAPA,
+      mensagem: semGatilho,
+      etapaDoContato: ETAPA,
+      enrollments: [{ pointer_id: 'ptr-1', started_at: DEPOIS_DA_ENTRADA }],
+    });
+    const deps = { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never };
+    const primeira = await prepararRoteiroDoTurno(deps, { ...turno, texto: 'oi, tudo bem?' });
+    const segunda = await prepararRoteiroDoTurno(deps, { ...turno, texto: 'oi de novo' });
+    expect(primeira).toBeNull();
+    expect(segunda).toBeNull();
+    expect(b.sqls.some((s) => /insert into followup_enrollments/.test(s))).toBe(false);
+  });
+
+  it('entrada NOVA: o roteiro nascido antes de o card voltar à etapa não gasta esta entrada', async () => {
+    const b = banco({
+      grafo: GRAFO_POR_ETAPA,
+      mensagem: semGatilho,
+      etapaDoContato: ETAPA,
+      enrollments: [{ pointer_id: 'ptr-1', started_at: ANTES_DA_ENTRADA }],
+    });
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, texto: 'oi, tudo bem?' },
+    );
+    expect(r?.iniciadoNesteTurno).toBe(true);
+    expect(iniciadoCom(b, 'etapa')).toBe(true);
+  });
+
+  it('⭐ card criado DIRETO na etapa, sem `stage_changed_at`: a entrada é o `created_at` do card', async () => {
+    // Sem movimento não há carimbo (o caso que o mantenedor nomeou): a data
+    // honesta da entrada é a criação do card.
+    const b = banco({
+      grafo: GRAFO_POR_ETAPA,
+      mensagem: semGatilho,
+      etapaDoContato: ETAPA,
+      etapaDoContatoDesde: null,
+      cardCriadoEm: ENTRADA_DO_CARD,
+      enrollments: [{ pointer_id: 'ptr-1', started_at: DEPOIS_DA_ENTRADA }],
+    });
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, texto: 'oi, tudo bem?' },
+    );
+    expect(r).toBeNull();
+    expect(b.sqls.some((s) => /insert into followup_enrollments/.test(s))).toBe(false);
   });
 });
 

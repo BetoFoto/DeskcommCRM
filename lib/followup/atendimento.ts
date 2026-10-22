@@ -956,6 +956,27 @@ const jaConcluiuSql = (parametroDoContato: string) => `exists (
             and e.status = 'completed'
        ) as ja_concluiu`;
 
+/**
+ * `exists` do enrollment DESTE roteiro para o contato que NASCEU DEPOIS da
+ * entrada do card na etapa (último parâmetro). É o que faz a etapa valer UMA VEZ
+ * POR ENTRADA, e não em todo turno enquanto o card fica lá (#2630, pedido do
+ * mantenedor na revisão do #3253). Quem nasceu depois da entrada JÁ É a
+ * resposta daquela entrada — não importa por qual porta ele nasceu (etapa,
+ * palavra-gatilho, roteador, encadeamento) nem como terminou: 'coletando' segue
+ * pelo turno, e o concluído/cancelado/expirado já cumpriu o que a entrada pedia.
+ *
+ * `started_at` é o nascimento do enrollment (não há `created_at` nesta tabela) —
+ * a única data que responde "depois da entrada?". Ela é do ENROLLMENT, e não do
+ * turno: por isso o card parado não rearma o roteiro a cada mensagem.
+ */
+const jaComecouNestaEntradaSql = (parametroDoContato: string, parametroDaEntrada: string) => `exists (
+         select 1 from followup_enrollments e
+          where e.organization_id = p.organization_id
+            and e.pointer_id = p.id
+            and e.contact_id = ${parametroDoContato}
+            and e.started_at > ${parametroDaEntrada}::timestamptz
+       ) as ja_comecou_nesta_entrada`;
+
 /** Um roteiro ATIVO de atendimento, já com o grafo da versão publicada. */
 interface RoteiroAtivo {
   id: string;
@@ -970,20 +991,40 @@ interface RoteiroAtivo {
  * do contato. As três entradas do motor (palavra-gatilho, etapa e — pelo turno —
  * o que o roteador aponta) leem o MESMO conjunto; a disputa entre elas é que é
  * diferente, e mora em quem chama.
+ *
+ * `entradaNaEtapa` é a janela da porta da ETAPA (#2630): com ela, o roteiro que
+ * já tem enrollment NASCIDO DEPOIS da entrada do card na etapa sai do conjunto —
+ * a entrada é um evento, e quem já nasceu depois dela a gastou. Sem ela (palavra
+ * e roteador) nada muda: essas duas portas são eventos POR MENSAGEM, e quem
+ * decide se repetem é o `pode_recomecar`.
  */
 async function roteirosAtivosDeAtendimento(
   db: BancoDoRoteiro,
-  args: { organizationId: string; contactId: string },
+  args: { organizationId: string; contactId: string; entradaNaEtapa?: string },
 ): Promise<RoteiroAtivo[]> {
-  const { rows } = await db.query<{ id: string; nome: string; graph: unknown; ja_concluiu: boolean }>(
+  const entrada = args.entradaNaEtapa;
+  const { rows } = await db.query<{
+    id: string;
+    nome: string;
+    graph: unknown;
+    ja_concluiu: boolean;
+    ja_comecou_nesta_entrada: boolean;
+  }>(
     `select p.id, p.name as nome, v.graph,
-       ${jaConcluiuSql("$2")}
+       ${jaConcluiuSql("$2")},
+       ${
+         entrada === undefined
+           ? "false as ja_comecou_nesta_entrada"
+           : jaComecouNestaEntradaSql("$2", "$3")
+       }
        from followup_flow_pointers p
        join followup_flow_versions v on v.id = p.active_version_id and v.organization_id = p.organization_id
       where p.organization_id = $1
         and p.surface = 'atendimento'
         and p.status = 'active'`,
-    [args.organizationId, args.contactId],
+    entrada === undefined
+      ? [args.organizationId, args.contactId]
+      : [args.organizationId, args.contactId, entrada],
   );
   const ativos: RoteiroAtivo[] = [];
   for (const row of rows) {
@@ -994,6 +1035,9 @@ async function roteirosAtivosDeAtendimento(
     // palavra (ou a etapa) e não começaria — e outro roteiro com a mesma palavra
     // nunca teria a vez.
     if (!podeComecarParaOContato(parsed.data.settings, row.ja_concluiu === true)) continue;
+    // ...e o que JÁ NASCEU depois desta entrada do card na etapa sai também: a
+    // etapa vale uma vez por entrada, e não enquanto o card ficar parado lá.
+    if (row.ja_comecou_nesta_entrada === true) continue;
     ativos.push({ id: row.id, nome: row.nome, graph: parsed.data, jaConcluiu: row.ja_concluiu === true });
   }
   return ativos;
@@ -1019,7 +1063,7 @@ export async function escolherFluxoPeloGatilho(
 
 /**
  * ENTRADA POR ETAPA DO FUNIL (motor): entre os roteiros ativos, qual LIGA porque
- * o card do contato ESTÁ numa etapa listada em `settings.etapas_do_funil` —
+ * o card do contato ENTROU numa etapa listada em `settings.etapas_do_funil` —
  * irmã da entrada por palavra-gatilho, e sem depender do que foi escrito.
  *
  * ⚠️ O CARD QUE ENTRA NA ETAPA NÃO CHEGA COMO EVENTO AQUI. O roteiro de
@@ -1030,7 +1074,25 @@ export async function escolherFluxoPeloGatilho(
  * de um minuto) e não alcança a superfície `atendimento` — lá o `trigger_config`
  * é obrigado a `manual` (0394) e o `enrollFollowupFlow` recusa a superfície.
  * Nenhum evento novo nasce daqui, e o `lead.stage_changed` continua com o dono
- * que já tem.
+ * que já tem. O que o turno lê NÃO é "o card está na etapa": é a ÚLTIMA ENTRADA
+ * dele lá — o carimbo que o banco já mantém.
+ *
+ * ─── UMA VEZ POR ENTRADA, e não enquanto o card está lá (#2630, revisão do #3253)
+ *
+ * A #2630 pede "começar quando o card ENTRAR na etapa". A primeira versão
+ * começava enquanto o card ESTAVA na etapa — em todo turno sem roteiro vivo —, e
+ * o mantenedor mediu o resultado: o roteiro concluído com `pode_recomecar`
+ * reabria na mensagem seguinte, e de novo a cada conclusão, enquanto o card não
+ * saísse da etapa; e o roteiro que venceu pelo prazo (vira `cancelled`, que o
+ * `ja_concluiu` não conta) recomeçava do zero semanas depois.
+ *
+ * A entrada é um EVENTO, com data: `crm_leads.stage_changed_at`, carimbada pelo
+ * trigger da 0071 (a MESMA âncora de "tempo na etapa" do card, do relatório e do
+ * gatilho de etapa parada), com o `created_at` de reserva — o card criado direto
+ * na etapa não grava movimento nenhum, e nesse caso a data honesta é a criação
+ * dele. A etapa só liga se o roteiro NÃO tiver enrollment nascido depois dessa
+ * entrada (`ja_comecou_nesta_entrada`): quem nasceu depois já é a resposta
+ * daquela entrada.
  *
  * ⚠️ EMPATE. Dois roteiros armados na MESMA etapa (ou um contato com mais de um
  * card) dão no mesmo. O card lido é o de `updated_at` mais recente, como em
@@ -1041,8 +1103,13 @@ export async function escolherFluxoPelaEtapa(
   db: BancoDoRoteiro,
   args: { organizationId: string; contactId: string },
 ): Promise<{ id: string; nome: string } | null> {
-  const { rows } = await db.query<{ stage_id: string | null }>(
-    `select stage_id from crm_leads
+  const { rows } = await db.query<{
+    stage_id: string | null;
+    stage_changed_at: string | null;
+    created_at: string | null;
+  }>(
+    `select stage_id, stage_changed_at, created_at
+       from crm_leads
       where organization_id = $1 and contact_id = $2
       order by updated_at desc
          limit 1`,
@@ -1052,7 +1119,12 @@ export async function escolherFluxoPelaEtapa(
   // Contato sem card (ou card sem etapa): nenhuma etapa liga — e nenhuma
   // consulta de roteiro é feita à toa.
   if (etapa === null) return null;
-  const candidatos = (await roteirosAtivosDeAtendimento(db, args))
+  // A ENTRADA nesta etapa. Sem data de entrada não há evento que ligue a etapa
+  // (linha legada sem carimbo e sem criação legível): devolve `null` em vez de
+  // inventar um instante — é a mesma escolha da 0071 e do `ancoraDaEtapa`.
+  const entrada = rows[0]?.stage_changed_at ?? rows[0]?.created_at ?? null;
+  if (entrada === null) return null;
+  const candidatos = (await roteirosAtivosDeAtendimento(db, { ...args, entradaNaEtapa: entrada }))
     .filter((ativo) => (ativo.graph.settings?.etapas_do_funil ?? []).includes(etapa))
     .sort((a, b) => a.nome.localeCompare(b.nome));
   const escolhido = candidatos[0];
