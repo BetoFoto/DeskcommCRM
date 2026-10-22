@@ -146,6 +146,11 @@ const ANEXO = "88888888-8888-4888-8888-888888888888";
 const ANEXO_OUTRA = "88888888-8888-4888-8888-000000000002";
 const CAMINHO = `${ORG}/leads/${LEAD}/comprovante/${ANEXO}.pdf`;
 const CAMINHO_OUTRA = `${OUTRA}/leads/${LEAD_OUTRA}/comprovante/${ANEXO_OUTRA}.pdf`;
+// Linha da PRÓPRIA organização cujo caminho não está sob o prefixo do negócio.
+const ANEXO_FORA = "88888888-8888-4888-8888-000000000003";
+// Negócio que o usuário não enxerga (no falso: não está em `crm_leads`).
+const LEAD_INVISIVEL = "22222222-2222-4222-8222-000000000003";
+const ANEXO_INVISIVEL = "88888888-8888-4888-8888-000000000004";
 
 const CAMPOS = [
   { key: "comprovante", label: "Comprovante", type: "file", obrigatorio_em: { etapas: [ETAPA] } },
@@ -215,6 +220,15 @@ describe("GET da mídia do anexo", () => {
     expect(h.assinar).not.toHaveBeenCalled();
   });
 
+  it("caminho fora do prefixo do negócio: 404 e nenhum link é assinado", async () => {
+    h.db.crm_lead_attachments?.push(anexo(ANEXO_FORA, ORG, LEAD, CAMINHO_OUTRA));
+    const res = await GET_MIDIA(new NextRequest("http://localhost/x"), {
+      params: Promise.resolve({ id: LEAD, attachmentId: ANEXO_FORA }),
+    });
+    expect(res.status).toBe(404);
+    expect(h.assinar).not.toHaveBeenCalled();
+  });
+
   it("anexo da própria organização: 302 para o link curto, sem cache", async () => {
     const res = await GET_MIDIA(new NextRequest("http://localhost/x"), {
       params: Promise.resolve({ id: LEAD, attachmentId: ANEXO }),
@@ -264,6 +278,23 @@ describe("DELETE do anexo", () => {
     expect(h.db.crm_lead_attachments?.some((l) => l.id === ANEXO_OUTRA)).toBe(true);
   });
 
+  it("caminho fora do prefixo do negócio: 404, nada sai do Storage e a linha fica", async () => {
+    h.db.crm_lead_attachments?.push(anexo(ANEXO_FORA, ORG, LEAD, CAMINHO_OUTRA));
+    const res = await DELETE(deleteAnexo(LEAD, ANEXO_FORA), ctx(LEAD));
+    expect(res.status).toBe(404);
+    expect(h.remove).not.toHaveBeenCalled();
+    expect(h.db.crm_lead_attachments?.some((l) => l.id === ANEXO_FORA)).toBe(true);
+  });
+
+  it("negócio que o usuário não enxerga: 404, nada sai do Storage e a linha fica", async () => {
+    const caminho = `${ORG}/leads/${LEAD_INVISIVEL}/comprovante/${ANEXO_INVISIVEL}.pdf`;
+    h.db.crm_lead_attachments?.push(anexo(ANEXO_INVISIVEL, ORG, LEAD_INVISIVEL, caminho));
+    const res = await DELETE(deleteAnexo(LEAD_INVISIVEL, ANEXO_INVISIVEL), ctx(LEAD_INVISIVEL));
+    expect(res.status).toBe(404);
+    expect(h.remove).not.toHaveBeenCalled();
+    expect(h.db.crm_lead_attachments?.some((l) => l.id === ANEXO_INVISIVEL)).toBe(true);
+  });
+
   it("anexo da própria organização: sai do Storage e da tabela", async () => {
     const res = await DELETE(deleteAnexo(LEAD, ANEXO), ctx(LEAD));
     expect(res.status).toBe(200);
@@ -283,6 +314,17 @@ describe("cascata de anonimização (LGPD)", () => {
     ]);
     expect(h.db.crm_lead_attachments?.map((l) => l.id)).toEqual([ANEXO_OUTRA]);
     expect(h.deletes).toContainEqual({ tabela: "crm_lead_attachments", filtros: ["organization_id", "lead_id"] });
+  });
+
+  it("caminho fora do prefixo do negócio não vai para a fila de remoção", async () => {
+    h.db.crm_lead_attachments?.push(anexo(ANEXO_FORA, ORG, LEAD, CAMINHO_OUTRA));
+    await cascadeRedactContact({ organizationId: ORG, contactId: CONTATO, requestId: "pedido-2" });
+
+    // controle positivo: o anexo legítimo do mesmo negócio entra.
+    expect(h.db.storage_redaction_queue).toEqual([
+      expect.objectContaining({ organization_id: ORG, bucket: "internal-media", object_path: CAMINHO }),
+    ]);
+    expect(h.db.crm_lead_attachments?.map((l) => l.id)).toEqual([ANEXO_OUTRA]);
   });
 });
 
