@@ -22,6 +22,7 @@ function formatError(err: unknown, t: (texto: string) => string): string {
 }
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { CalendarioDoFunil } from "@/components/kanban/CalendarioDoFunil";
+import { ListaDoFunil } from "@/components/kanban/ListaDoFunil";
 import { FilterBar } from "@/components/kanban/FilterBar";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
@@ -72,13 +73,18 @@ export function PipelinePageClient({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
   /**
-   * A visão do funil (#2770). Quadro é o padrão — é o que todo mundo já
+   * A visão do funil (#2770, #3172). Quadro é o padrão — é o que todo mundo já
    * conhece, e a aba nova não pode sequestrar a tela de quem só quer mover
    * card. O estado é LOCAL e não vai na URL: diferente do filtro (que é
    * compartilhável e sobrevive a um refresh), a vista é um olhar momentâneo —
    * e o quadro de volta no mesmo lugar onde ficou é o que se espera ao voltar.
+   *
+   * `lista` é a terceira aba (#3172): uma linha por negócio, paginada no banco
+   * pela rota `…/leads`. Ela NÃO reaproveita a lista que o quadro já leu — é
+   * justamente o funil grande, que não cabe numa leitura só, que ela existe
+   * para atender.
    */
-  const [visao, setVisao] = useState<"quadro" | "calendario">("quadro");
+  const [visao, setVisao] = useState<"quadro" | "calendario" | "lista">("quadro");
 
   /**
    * Motivo e categoria da perda (#1537): a categoria NÃO vem no lead — ela é
@@ -199,10 +205,11 @@ export function PipelinePageClient({
           </Select>
         )}
         {/*
-          A TERCEIRA ABA DO FUNIL (#2770), ao lado do quadro. O seletor fica no
+          AS ABAS DO FUNIL (#2770, #3172), ao lado do quadro. O seletor fica no
           cabeçalho e não dentro do conteúdo: quem troca de visão está mudando
           COMO olha o funil, e a pergunta é anterior a qualquer filtro ou card —
           é a mesma lógica do interruptor Lista/Calendário da tela de Tarefas.
+          As três olham o MESMO funil e não discordam sobre quem está nele.
         */}
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <div className="flex items-center gap-0.5 rounded-md border bg-muted p-0.5">
@@ -219,6 +226,20 @@ export function PipelinePageClient({
               )}
             >
               {t("Quadro")}
+            </button>
+            <button
+              type="button"
+              data-testid="visao-lista"
+              aria-pressed={visao === "lista"}
+              onClick={() => setVisao("lista")}
+              className={cn(
+                "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                visao === "lista"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t("Lista")}
             </button>
             <button
               type="button"
@@ -274,6 +295,12 @@ export function PipelinePageClient({
           stages={data.stages}
           leads={filteredLeads}
         />
+      ) : visao === "lista" ? (
+        // A lista NÃO recebe `filteredLeads`: ela pagina no banco a partir da
+        // página 1, e o filtro em memória da barra não tem o que filtrar antes
+        // de a página chegar (fatia 2 leva os filtros para a consulta — ver o
+        // cabeçalho de `ListaDoFunil`).
+        <ListaDoFunil pipelineId={pipelineId} pipeline={data.pipeline} stages={data.stages} />
       ) : (
         <KanbanBoard
           pipelineId={pipelineId}

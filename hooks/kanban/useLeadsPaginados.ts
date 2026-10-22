@@ -1,0 +1,85 @@
+"use client";
+/**
+ * A PÁGINA DA LISTA DO FUNIL (#3172, fatia 1).
+ *
+ * ─── Por que uma consulta por página, e não o funil inteiro ─────────────────
+ *
+ * O quadro já lê o funil todo (`useBoard`) porque precisa de todas as colunas
+ * montadas. A lista existe justamente para o funil que NÃO cabe numa leitura
+ * só: uma linha por negócio, uma página por vez, paginada no BANCO. Por isso o
+ * hook busca `?page=`, e não fatia em memória um array que veio completo — a
+ * diferença não é de estilo, é o custo que a issue mede (o quadro levou 19 s
+ * num funil migrado, e a lista não tem esse teto).
+ *
+ * ─── O que ele faz com o envelope ───────────────────────────────────────────
+ *
+ * `apiClient.get` devolve o corpo como veio (`{ data, meta }`), então quem
+ * traduz o envelope é este hook: a tela recebe `leads` e o `has_more` já
+ * lidos, e não precisa saber a forma da rota. `meta` ausente NÃO vira `hasMore:
+ * true`: prometer próxima página a partir de uma resposta sem `meta` mandaria a
+ * tela buscar uma página que ninguém disse que existe. Ausente é `false`, que
+ * degrada para "só esta página" — nunca para uma lista infinitamente vazia.
+ */
+import { useQuery } from "@tanstack/react-query";
+
+import { apiClient } from "@/lib/api/client";
+import type { Lead } from "@/lib/types/leads";
+
+/** O tamanho de página padrão — o mesmo que a rota usa quando não vem `per_page`. */
+export const LEADS_POR_PAGINA = 50;
+
+export interface PaginaDeLeads {
+  leads: Lead[];
+  total: number;
+  page: number;
+  perPage: number;
+  hasMore: boolean;
+}
+
+/** O envelope da rota, com tudo opcional: o hook é quem decide o que fazer sem ele. */
+type RespostaDaRota = {
+  data?: Lead[];
+  meta?: {
+    page?: number;
+    per_page?: number;
+    total?: number | null;
+    has_more?: boolean;
+  };
+};
+
+/**
+ * A chave de cache POR PÁGINA — e exportada.
+ *
+ * A página faz parte da chave de propósito: com a chave pelo funil apenas,
+ * voltar para a página 1 mostraria a 2 do cache, e avançar pediria refetch de
+ * uma página que já estava na mão. Escrita como literal nos dois lados, mudar a
+ * daqui faria quem observa devolver cache frio em silêncio.
+ */
+export function chaveDosLeadsPaginados(pipelineId: string | null, pagina: number) {
+  return ["leads-paginados", pipelineId, pagina] as const;
+}
+
+export function useLeadsPaginados(
+  pipelineId: string | null,
+  pagina: number,
+  porPagina: number = LEADS_POR_PAGINA,
+) {
+  return useQuery({
+    queryKey: chaveDosLeadsPaginados(pipelineId, pagina),
+    enabled: !!pipelineId,
+    queryFn: async (): Promise<PaginaDeLeads> => {
+      const res = await apiClient.get<RespostaDaRota>(
+        `/api/v1/pipelines/${pipelineId}/leads?page=${pagina}&per_page=${porPagina}`,
+      );
+      const leads = res?.data ?? [];
+      const meta = res?.meta ?? {};
+      return {
+        leads,
+        total: meta.total ?? leads.length,
+        page: meta.page ?? pagina,
+        perPage: meta.per_page ?? porPagina,
+        hasMore: meta.has_more ?? false,
+      };
+    },
+  });
+}
