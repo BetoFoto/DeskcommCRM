@@ -17006,6 +17006,9 @@ export const DICIONARIO: Traducoes = {
   },
   "Não foi possível carregar os anexos.": { es: "No se pudieron cargar los adjuntos." },
   "Os anexos ficam no negócio.": { es: "Los adjuntos quedan en el negocio." },
+  "Este funil não tem um campo de arquivo com essa chave.": {
+    es: "Este embudo no tiene un campo de archivo con esa clave.",
+  },
   "Requisição multipart inválida.": {
     es: "Solicitud multipart no válida.",
   },

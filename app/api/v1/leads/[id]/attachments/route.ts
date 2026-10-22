@@ -6,6 +6,9 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { audit } from "@/lib/audit";
+import { settingsDoFunil } from "@/lib/leads/campos-exigidos";
+import { camposDoFunil, escopoDoCampo } from "@/lib/leads/campos-do-funil";
+import { customFieldSchema } from "@/lib/schemas/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -39,12 +42,10 @@ export interface LeadAttachment {
   uploaded_at?: string;
 }
 
+// A MESMA régua da chave que o funil aceita ao cadastrar o campo: a chave entra
+// no caminho do objeto no Storage.
 const PostSchema = z.object({
-  field_key: z
-    .string()
-    .trim()
-    .min(1, "field_key não pode ser vazio.")
-    .max(100, "field_key muito longo."),
+  field_key: customFieldSchema.shape.key,
 });
 
 const DeleteSchema = z.object({
@@ -168,13 +169,24 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const supabase = await createClient();
   const { data: lead, error: leadErr } = await supabase
     .from("crm_leads")
-    .select("id")
+    .select("id, pipeline_id")
     .eq("id", leadId)
     .eq("organization_id", orgId)
     .maybeSingle();
 
   if (leadErr || !lead) {
     return fail("not_found", t("Lead não encontrado."), 404, { requestId });
+  }
+
+  // Só se anexa a um campo `file` do NEGÓCIO que o funil deste lead declara.
+  const settings = await settingsDoFunil(supabase, lead.pipeline_id);
+  const campo = camposDoFunil(settings as Record<string, unknown> | null).find(
+    (c) => c.key === fieldKey,
+  );
+  if (!campo || campo.type !== "file" || escopoDoCampo(campo) !== "negocio") {
+    return fail("validation_failed", t("Este funil não tem um campo de arquivo com essa chave."), 422, {
+      requestId,
+    });
   }
 
   const safeName = sanitizeFileName(file.name);
