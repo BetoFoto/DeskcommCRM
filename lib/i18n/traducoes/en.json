@@ -1261,7 +1261,7 @@
   ". Publish bloqueado até validar.": ". Publish blocked until validated.",
   "Por qual número ele atende": "Which number it handles",
   "Este agente é acionado pelo roteador": "This agent is triggered by the router",
-  "— o campo de número abaixo não se aplica.": "— the number field below doesn't apply.",
+  "— a publicação usa o canal do roteador, sem número próprio neste especialista.": "— publishing uses the router's channel; this specialist has no number of its own.",
   "Número conectado": "Connected number",
   "Selecione um número": "Select a number",
   "Nenhum número conectado": "No number connected",
