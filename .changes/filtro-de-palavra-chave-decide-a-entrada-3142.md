@@ -10,4 +10,4 @@ Agora o filtro decide a ENTRADA do agente na conversa, como a tela sempre promet
 
 Se algum agente seu tem esse campo preenchido, agora não é mais preciso ficar atento às respostas no meio da conversa: basta a mensagem de entrada trazer uma das palavras. Nada a fazer na atualização.
 
-Corrigido por @webtecnica (#PR) para a issue #3142, aberta por @melgarafael.
+Corrigido por @webtecnica (#3240) para a issue #3142, aberta por @melgarafael.
