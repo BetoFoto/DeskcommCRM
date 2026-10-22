@@ -156,6 +156,7 @@ import { validarRespostaDoFluxo } from './flow-validate';
 import { moduloLigadoComMemo } from '@/lib/instalacao/modulos';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { turnoDisparaNasMensagens } from './palavra-chave-do-gatilho';
+import { agenteJaRespondeuNoAtendimento } from './agente-ja-respondeu';
 import { enviaAvisoForaDoHorario, portasDeProducao } from './aviso-fora-do-horario';
 import { enviarComSaidaConfiguravel } from "@/lib/prospecting/saida-configuravel";
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
@@ -2140,11 +2141,6 @@ async function executarTurnoDoAgente(
   // objeto literal SEM estes campos: sem a guarda, o tipo da união recusa a leitura.
   const destinoPipelineId = 'destinationPipelineId' in routed ? (routed.destinationPipelineId ?? null) : null;
   const destinoStageId = 'destinationStageId' in routed ? (routed.destinationStageId ?? null) : null;
-  // #3142 — o "já engajado" que o filtro de palavra-chave lê. Vem da PRÓPRIA
-  // resolução (o sticky que `resolveConversationTurn` leu no início do turno),
-  // não de uma segunda consulta: a resolução já está em mãos aqui, ANTES do
-  // portão. `in` porque o ramo de preview devolve um objeto literal sem o campo.
-  const agenteJaEngajado = 'agenteJaEngajado' in routed && routed.agenteJaEngajado === true;
   if (
     !preview &&
     agentConfig?.operationMode === 'assisted' &&
@@ -2627,12 +2623,28 @@ async function executarTurnoDoAgente(
   // promete "só entra quando a mensagem contiver uma dessas palavras": isso
   // fala da ENTRADA do agente na conversa, não de cada turno seguinte.
   //
-  // A âncora do "já engajado" é o STICKY do roteador — a MESMA coluna, lida do
-  // MESMO lugar (`resolveConversationTurn` → `conversations.active_ai_agent_id`,
-  // migration 0085). A resolução já está em mãos aqui (`routed`), então o gate
-  // a consulta sem segunda consulta ao banco e sem mover nada de lugar:
-  // `agenteJaEngajado`. Nenhum segundo conceito de engajamento existe — e
-  // nenhum deve ser inventado.
+  // A âncora do "já engajado" é uma OUTBOUND DESTE AGENTE NESTE ATENDIMENTO
+  // (`agente-ja-respondeu.ts`): `messages` com `sent_via='ai'`,
+  // `metadata->>'ai_actor_id' = agentConfig.agentId` e dentro da fronteira do
+  // atendimento corrente — a MESMA linha que o caminho de envio grava DEPOIS
+  // deste portão, portanto a única testemunha que não existe antes de o agente
+  // responder. O sticky do roteador NÃO serve (CR do #3240): sem roteador ele
+  // nunca é gravado, e com roteador é gravado no INÍCIO do turno, antes deste
+  // portão — ali o filtro seguraria só a primeira mensagem, não a entrada. E a
+  // âncora é do agente que VAI responder, não da conversa: fala do suporte não
+  // engaja o agente de vendas que o roteador acabou de escolher (ponto 2).
+  //
+  // A leitura só acontece quando há filtro configurado — quem não usa o campo
+  // não paga a consulta — e falha ABERTA (erro de leitura ⇒ `false` ⇒ o filtro
+  // vale, como antes deste conserto; nunca inventa engajamento).
+  const agenteJaEngajado =
+    !preview && liveJob().kind === 'inbound_turn' && agentConfig?.filtroDePalavraChave != null
+      ? await agenteJaRespondeuNoAtendimento(pool, {
+          organizationId: tenantId,
+          conversationId: input.conversationId,
+          agentId: agentConfig.agentId,
+        })
+      : false;
   //
   // O QUE NÃO MUDA: a janela logo abaixo segue valendo para o turno engajado
   // (ela é sobre QUANDO o lojista atende, não sobre palavras), a ordem do início

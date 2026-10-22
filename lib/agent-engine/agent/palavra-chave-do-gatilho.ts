@@ -65,15 +65,17 @@
  *
  * A promessa da tela é sobre a ENTRADA do agente na conversa ("só entra quando
  * a mensagem contiver uma dessas palavras"), não sobre cada turno seguinte.
- * Numa conversa em que o agente JÁ está engajado — o STICKY do roteador,
- * `conversations.active_ai_agent_id`, que `resolveConversationTurn` lê no início
- * do turno e que a resolução expõe em `agenteJaEngajado` — o turno segue SEM
- * filtro: o cliente que responde "camiseta azul, tamanho M" à pergunta do
- * agente não pode ficar sem retorno (o exemplo medido no #2696). O miss na
- * ENTRADA continua calando, como sempre.
+ * Numa conversa em que o MESMO agente já respondeu neste atendimento o turno
+ * segue SEM filtro: o cliente que responde "camiseta azul, tamanho M" à
+ * pergunta do agente não pode ficar sem retorno (o exemplo medido no #2696). O
+ * miss na ENTRADA continua calando, como sempre.
  *
- * Este arquivo não sabe de engajamento — ele julga mensagens. Quem lê o sinal e
- * decide pular o portão é o próprio portão, em `inbound-turn.ts`.
+ * A âncora do "já respondeu" NÃO é o sticky do roteador (CR do #3240: sem
+ * roteador ele nunca é gravado, e com roteador é gravado no início do turno,
+ * antes deste portão) — é uma outbound DESTE agente neste atendimento, a linha
+ * de `messages` que o caminho de envio só grava depois de o agente responder.
+ * O desenho inteiro está em `agente-ja-respondeu.ts`; quem lê o sinal e decide
+ * pular o portão é o próprio portão, em `inbound-turn.ts`.
  *
  * ## Onde isto é aplicado
  *
