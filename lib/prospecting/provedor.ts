@@ -34,9 +34,9 @@
  * coluna, mesmo endereçamento, mesma cifra. Ela NÃO está presa a um provedor:
  * a escolha mora em `organizations.settings` e a chave em `prospecting_settings`,
  * e nada liga uma à outra. Trocar a escolha sem regravar a chave mandaria a
- * chave antiga ao provedor novo. Hoje só a Apify é escolhível em produção; a
- * fatia que trouxer um provedor real precisa prender a chave ao provedor dela
- * (#2174).
+ * chave antiga ao provedor novo. Com o `local-http` da #2942 o catálogo de
+ * produção deixou de ser só a Apify — prender a chave ao provedor dela segue
+ * pendente (#2174).
  */
 import {
   ProspectingError,
@@ -45,6 +45,7 @@ import {
   readSearch as readSearchDaApify,
   startSearch as startSearchDaApify,
 } from "./provider";
+import { provedorLocalHttp, validarCredencialLocalHttp } from "./provedor-local-http";
 import { provedorDeTeste } from "./provedor-teste";
 import type { SearchInput } from "./schema";
 
@@ -104,6 +105,16 @@ const REGISTRO: Record<string, RegistroDoProvedor> = {
       if (!chave.trim())
         throw new ProspectingError("Informe a chave de busca do provedor de teste.");
     },
+  },
+  /**
+   * #2942: o engine de scraping self-hosted da organização. A "chave" é a URL
+   * do engine, no mesmo canal cifrado de sempre, e a régua é o health check
+   * dele. Diferente de `teste`, ele NÃO é de ambiente: existe em produção, que
+   * é justamente quem precisa dele.
+   */
+  "local-http": {
+    provedor: provedorLocalHttp,
+    validarCredencial: validarCredencialLocalHttp,
   },
 };
 
