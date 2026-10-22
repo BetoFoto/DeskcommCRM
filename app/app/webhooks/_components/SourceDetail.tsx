@@ -434,15 +434,18 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
                 {t("Reaproveitar o card aberto do contato")}
               </label>
               <Switch id="reuse-open-lead-on-capture" checked={Boolean(reusaCardAberto)}
-                disabled={!podeGerirWebhooks || update.isPending}
+                disabled={!podeGerirWebhooks || update.isPending || (!temAssinatura && !reusaCardAberto)}
                 onCheckedChange={(ativa) => update.mutate(
                   { id: source.id, reuse_open_lead_on_capture: ativa },
                   { onSuccess: (res) => setReusoDoCardAberto({ id: source.id, ativa: res.data.reuse_open_lead_on_capture }) },
                 )} />
             </div>
             <p className="text-sm text-muted-foreground">
-              {t("Ligado, um envio de quem já tem card aberto neste funil atualiza esse card — os campos novos e a etapa da fonte — em vez de abrir um segundo card. Desligado, o padrão, cada envio continua virando um card novo.")}
+              {t("Só para fontes com assinatura: ligado, um envio de quem já tem card aberto neste funil atualiza esse card — os campos novos e a etapa da fonte, sempre para a frente — em vez de abrir um segundo card. Desligado, o padrão, cada envio continua virando um card novo.")}
             </p>
+            {!temAssinatura && <p className="text-sm text-muted-foreground">
+              {t("Configure a assinatura da fonte antes de reaproveitar o card aberto do contato. Para remover a assinatura, desligue primeiro o reaproveitamento do card aberto.")}
+            </p>}
           </section>
 
           <section className="space-y-2">

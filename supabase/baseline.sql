@@ -60589,20 +60589,18 @@ grant select on public.external_db_connections_safe to authenticated;
 -- da fonte — o mesmo que a ação `create_or_move_lead` já procura para o gatilho
 -- de contato desde o #958 (`lib/leads/negocio-aberto-do-contato.ts`). A consulta
 -- é uma só para os dois consumidores, e o índice que a serve já existe
--- (`crm_leads` por `contact_id` + `pipeline_id` + `status`): nenhuma estrutura
--- nova é necessária, e duas implementações da mesma pergunta divergem na
--- primeira mudança de uma delas.
+-- (`idx_crm_leads_org_contact`, em `organization_id` + `contact_id`): nenhuma
+-- estrutura nova é necessária, e duas implementações da mesma pergunta divergem
+-- na primeira mudança de uma delas.
 --
--- ─── Por que NÃO há CHECK exigindo segredo para ligar a opção ──────────────
+-- ─── Ligar a opção exige assinatura na fonte, e a regra mora na BORDA ──────
 --
--- A opção irmã (`update_existing_lead_on_capture`, 0683) exige assinatura
--- configurada porque ela casa o card por `external_id` — integração entre
--- sistemas. Esta casa o card pelo CONTATO (telefone/e-mail), que é exatamente o
--- que o formulário HTML público já traz; cobrar assinatura aqui bloquearia o
--- caso que a issue mediu (um formulário de site abrindo cards repetidos) sem
--- proteger nada que o cadastro do contato já não exponha. A régua de origem
--- continua sendo a do caminho de captação: `path_token` resolve o tenant, e a
--- assinatura, quando existe, é conferida acima de qualquer escrita.
+-- Mesma régua da opção irmã (`update_existing_lead_on_capture`, 0683): reescrever
+-- um card que já existe é integração entre sistemas, e a opção só liga em fonte
+-- com assinatura configurada. A regra é exigida no PATCH da fonte
+-- (`opcaoSemAssinatura`, em `lib/webhooks/assinatura-autorizacao.ts`), e não num
+-- CHECK, pelo mesmo motivo da 0683: um CHECK impediria REMOVER o segredo de uma
+-- fonte com a opção ligada, e a tela promete "desligue primeiro".
 --
 -- ─── O desfecho, na mesma passada ─────────────────────────────────────────
 --
@@ -60615,6 +60613,6 @@ alter table public.webhook_sources
   add column if not exists reuse_open_lead_on_capture boolean not null default false;
 
 comment on column public.webhook_sources.reuse_open_lead_on_capture is
-  'Opção da fonte (issue #3101), DESLIGADA por padrão: quando um envio NÃO traz external_id e o contato casado já tem card ABERTO no mesmo funil, o card é atualizado (campos e etapa da fonte) em vez de a captação abrir outro. O desfecho da linha de captação é `atualizado`. Desligada, cada envio continua virando um card novo, como sempre.';
+  'Opção da fonte (issue #3101), DESLIGADA por padrão: quando um envio NÃO traz external_id e o contato casado já tem card ABERTO no mesmo funil, o card é atualizado (campos e etapa da fonte, só para a frente) em vez de a captação abrir outro. Só liga em fonte com assinatura configurada, como a opção irmã. O desfecho da linha de captação é `atualizado`. Desligada, cada envio continua virando um card novo, como sempre.';
 
 notify pgrst, 'reload schema';

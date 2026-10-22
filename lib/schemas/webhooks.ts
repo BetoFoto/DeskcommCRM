@@ -558,10 +558,10 @@ export const updateWebhookSourceSchema = createWebhookSourceSchema.partial().ext
    * (migration 0722), e quem nunca mexer aqui segue exatamente como antes —
    * cada envio vira um card novo.
    *
-   * Diferente de `update_existing_lead_on_capture`, NÃO exige assinatura na
-   * fonte: a captação acha o card pelo CONTATO (telefone/e-mail), que é
-   * exatamente o que o formulário HTML público já traz — não é integração entre
-   * sistemas por `external_id`.
+   * Como `update_existing_lead_on_capture`, só liga em fonte com assinatura
+   * configurada — mesma régua da opção irmã (`opcaoSemAssinatura`, conferida
+   * na rota do PATCH): reescrever um card que já existe é integração entre
+   * sistemas.
    */
   reuse_open_lead_on_capture: z.boolean().optional(),
 });
