@@ -753,6 +753,14 @@ export const AUDIT_ACTIONS = [
   "crm_task.updated",
   "crm_task.deleted",
 
+  // A meta mensal da empresa (migration 0717, #3025): o número pelo qual a
+  // empresa cobra o próprio time. Quem mudou o alvo, de quanto para quanto e
+  // quando é a disputa clássica do fim do mês — o metadata leva `alvo` e
+  // `alvo_anterior` justamente para a resposta ser "de 40 para 25", e não só
+  // "existe um 25".
+  "crm_meta.created",
+  "crm_meta.updated",
+
   // A proposta comercial. Rascunho, edição, ajuste pelo assistente, envio e
   // decisão do cliente — cada um muda o que o negócio vale ou o que foi
   // oferecido, e é disputa comum entre quem atende e quem fecha.
