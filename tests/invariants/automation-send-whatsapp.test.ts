@@ -776,7 +776,7 @@ describe("send_whatsapp_message — gatilhos de aniversário e de agenda (#2326)
  * que o par novo entrou SEM afrouxar os que já funcionavam (`contact.birthday`,
  * `contact.tag_added`, `appointment.created`) nem os desconhecidos.
  *
- * Sem a linha da migration 0741, o caso 11 termina `failed` e o 12 acusa
+ * Sem a linha da migration 0743, o caso 11 termina `failed` e o 12 acusa
  * `suportado=false` no par novo.
  */
 describe("send_whatsapp_message — gatilho de data do funil (#3286)", () => {

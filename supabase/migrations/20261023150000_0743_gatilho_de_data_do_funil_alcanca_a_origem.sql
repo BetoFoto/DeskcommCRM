@@ -1,7 +1,7 @@
 -- manifest: **O gatilho de data do funil (`lead.date_field_due`, entidade `crm_lead`) passa a alcançar a origem do atendimento — a mesma classe que o #2330 consertou para `contact.birthday` e os seis `appointment.*` (issue #3286).** O cron `app/api/v1/cron/lead-date-field-due` emite o evento com `p_entity_kind='crm_lead'` e SEM `service_origin` no payload, e `fn_service_event_contact` — a tabela única `(tipo, entidade) → contato` que o carimbo do `emit_event` e a resolução de `fn_service_event_origin` leem — não conhecia o par: nenhum ramo da função o alcançava, a resolução recusava com `service_event_origin_unsupported` (40001), `serviceForEvent` devolvia `null` e `serviceForAutomation` lançava `StaleServiceBoundaryError` — a ação de WhatsApp terminava `failed` sem erro em lugar nenhum. O par novo entra na lista `crm_lead` que a função já mantinha, ao lado de `lead.created/stage_changed/tag_added`: as DUAS pontas passam a reconhecê-lo pela mesma linha. Não se toca no emissor (a origem é DERIVADA pelo par, não inventada no cron) e nenhum par existente é afrouxado. Idempotente: `create or replace`; apêndice igual no fim do `baseline.sql`, antes da VARREDURA anon (0116).
 
 -- ============================================================================
--- 0741 — O GATILHO DE DATA DO FUNIL ALCANÇA A ORIGEM (#3286)
+-- 0743 — O GATILHO DE DATA DO FUNIL ALCANÇA A ORIGEM (#3286)
 --
 -- O defeito medido na #3286, numa instalação real (1.87.0): TODA regra cujo
 -- gatilho é "data do funil" (`lead.date_field_due`) e cuja ação é enviar
