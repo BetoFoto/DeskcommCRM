@@ -32,12 +32,18 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createClient } from "@/lib/supabase/server";
-import { GET } from "@/app/api/v1/leads/[id]/contatos-relacionados/route";
+import { requireRole } from "@/lib/auth/require-role";
+import { DELETE, GET, POST } from "@/app/api/v1/leads/[id]/contatos-relacionados/route";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/auth/server", () => ({
   loadAuthUser: vi.fn(async () => ({ idioma: "pt-BR" })),
 }));
+// As duas portas da ESCRITA: a guarda de efeito do suporte e o papel mínimo.
+// Nenhuma das duas é o que este arquivo julga — o que ele julga é a defesa de
+// organização do alvo.
+vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
+vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 
 const ORG_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ORG_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -90,16 +96,27 @@ function link(target_id: string, extra: Partial<Record<string, unknown>> = {}): 
  * `const { data } = await …`, e uma lista nua deixaria `data` indefinido em
  * silêncio. Sem essa disciplina, apagar `.eq("target_kind", "contact")` da
  * rota continuaria verde.
+ *
+ * Desde a #3083 o dublê também ESCREVE: `upsert` grava na tabela em memória
+ * (respeitando a identidade do índice único) e `delete` apaga as linhas que os
+ * filtros alcançam. Sem isso o teste do escritor provaria só o status HTTP — e
+ * "o POST respondeu 201 e não gravou nada" passaria verde.
  */
-function montarBanco(
-  tabelas: Record<string, Linha[]>,
+function montarBanco<T extends Record<string, Linha[]>>(
+  tabelas: T,
   sessao: { id: string } | null = { id: "usuario-1" },
-) {
+): T {
+  // O armazém é o MESMO objeto recebido (e as listas dentro dele, as mesmas
+  // referências): quem chama guarda a lista e enxerga o que a rota gravou.
+  const armazem = tabelas as Record<string, Linha[]>;
+  /** A identidade do índice único `uniq_crm_lead_links_lead_target_link`. */
+  const identidade = (l: Linha) => [l.lead_id, l.target_kind, l.target_id, l.link_kind].join("|");
   const from = (nome: string) => {
-    const base = tabelas[nome] ?? [];
+    const base = armazem[nome] ?? [];
     const eqs: [string, unknown][] = [];
     const ins: [string, unknown[]][] = [];
     let ordem: [string, boolean] | null = null;
+    let modo: "select" | "delete" = "select";
     const elo: Record<string, unknown> = {
       select: () => elo,
       order: (coluna: string, opcoes?: { ascending?: boolean }) => {
@@ -114,14 +131,27 @@ function montarBanco(
         ins.push([coluna, valores]);
         return elo;
       },
+      delete: () => {
+        modo = "delete";
+        return elo;
+      },
+      upsert: (linha: Linha) => {
+        armazem[nome] = base;
+        const i = base.findIndex((l) => identidade(l) === identidade(linha));
+        if (i >= 0) base[i] = { ...base[i], ...linha };
+        else base.push({ ...linha });
+        return Promise.resolve({ data: null, error: null });
+      },
     };
-    const linhas = () => {
-      const filtradas = base.filter(
+    const filtradas = () =>
+      base.filter(
         (l) => eqs.every(([c, v]) => l[c] === v) && ins.every(([c, v]) => v.includes(l[c])),
       );
-      if (!ordem) return filtradas;
+    const linhas = () => {
+      const encontradas = filtradas();
+      if (!ordem) return encontradas;
       const [coluna, crescente] = ordem;
-      return [...filtradas].sort(
+      return [...encontradas].sort(
         (a, b) => String(a[coluna]).localeCompare(String(b[coluna])) * (crescente ? 1 : -1),
       );
     };
@@ -129,7 +159,17 @@ function montarBanco(
     elo.then = (
       aoOk?: (valor: { data: Linha[]; error: null }) => unknown,
       aoErr?: (erro: unknown) => unknown,
-    ) => Promise.resolve({ data: linhas(), error: null }).then(aoOk, aoErr);
+    ) => {
+      if (modo === "delete") {
+        for (const l of linhas()) {
+          const i = base.indexOf(l);
+          if (i >= 0) base.splice(i, 1);
+        }
+        return Promise.resolve({ data: [], error: null }).then(aoOk, aoErr);
+      }
+      return Promise.resolve({ data: linhas(), error: null }).then(aoOk, aoErr);
+    };
+    armazem[nome] = base;
     return elo;
   };
   vi.mocked(createClient).mockResolvedValue({
@@ -141,11 +181,29 @@ function montarBanco(
     },
     from,
   } as never);
+  return tabelas;
 }
 
 function chamar(id = LEAD) {
   const req = new NextRequest(`http://localhost/api/v1/leads/${id}/contatos-relacionados`);
   return GET(req, { params: Promise.resolve({ id }) });
+}
+
+function chamarPost(id: string, corpo: unknown) {
+  const req = new NextRequest(`http://localhost/api/v1/leads/${id}/contatos-relacionados`, {
+    method: "POST",
+    body: JSON.stringify(corpo),
+    headers: { "content-type": "application/json" },
+  });
+  return POST(req, { params: Promise.resolve({ id }) });
+}
+
+function chamarDelete(id: string, contactId: string | null) {
+  const qs = contactId === null ? "" : `?contact_id=${contactId}`;
+  const req = new NextRequest(`http://localhost/api/v1/leads/${id}/contatos-relacionados${qs}`, {
+    method: "DELETE",
+  });
+  return DELETE(req, { params: Promise.resolve({ id }) });
 }
 
 async function corpo(resposta: Response) {
@@ -154,6 +212,13 @@ async function corpo(resposta: Response) {
 
 beforeEach(() => {
   vi.mocked(createClient).mockReset();
+  // Sessão de escrita com papel `agent` na org A: o que está em julgamento aqui
+  // é a defesa de organização, não o RBAC.
+  vi.mocked(requireRole).mockResolvedValue({
+    ok: true,
+    user: { id: "usuario-1", idioma: "pt-BR" },
+    org: { id: ORG_A },
+  } as never);
 });
 
 describe("GET contatos-relacionados — a F1 da #1506", () => {
@@ -283,5 +348,146 @@ describe("GET contatos-relacionados — a F1 da #1506", () => {
 
     expect(resposta.status).toBe(401);
     expect((await corpo(resposta)).error?.code).toBe("unauthenticated");
+  });
+});
+
+describe("POST/DELETE contatos-relacionados — o escritor da #3083 F1", () => {
+  it("⭐ o POST adiciona o participante com papel e o GET passa a devolvê-lo", async () => {
+    const banco = montarBanco({
+      crm_leads: [{ id: LEAD, organization_id: ORG_A, contact_id: null }],
+      crm_lead_links: [],
+      contacts: [contato(MARIA, ORG_A, { name: "Maria Silva" })],
+    });
+
+    const resposta = await chamarPost(LEAD, { contact_id: MARIA, papel: "Responsável financeiro" });
+
+    expect(resposta.status).toBe(201);
+    // O vínculo existe no banco, com o vocabulário do leitor: é o que faz a
+    // mesma rota devolvê-lo logo abaixo.
+    expect(banco.crm_lead_links).toEqual([
+      expect.objectContaining({
+        organization_id: ORG_A,
+        lead_id: LEAD,
+        target_kind: "contact",
+        target_id: MARIA,
+        link_kind: "related",
+        metadata: { papel: "Responsável financeiro" },
+        created_by_user_id: "usuario-1",
+      }),
+    ]);
+
+    const { data } = await corpo(await chamar());
+    expect(data).toEqual([
+      {
+        contact_id: MARIA,
+        nome: "Maria Silva",
+        papel: "Responsável financeiro",
+        anonimizado: false,
+      },
+    ]);
+  });
+
+  it("⭐ recusa alvo de OUTRA organização — a mesma defesa do leitor, do lado da escrita", async () => {
+    const banco = montarBanco({
+      crm_leads: [{ id: LEAD, organization_id: ORG_A, contact_id: null }],
+      crm_lead_links: [],
+      // O contato existe, mas é do tenant B: a RLS do `crm_lead_links` não
+      // alcança esta linha (ela só confere a org do NEGÓCIO, que é a do
+      // caller), porque `target_id` não é FK. Quem derruba é a checagem do
+      // alvo — sabote-a e este teste fica vermelho nas duas asserções.
+      contacts: [contato(DE_OUTRA_ORG, ORG_B, { name: "João de Outra Empresa" })],
+    });
+
+    const resposta = await chamarPost(LEAD, { contact_id: DE_OUTRA_ORG });
+
+    expect(resposta.status).toBe(404);
+    expect((await corpo(resposta)).error?.code).toBe("not_found");
+    expect(banco.crm_lead_links).toEqual([]);
+  });
+
+  it("⭐ o DELETE remove o vínculo, e o GET deixa de devolvê-lo", async () => {
+    const banco = montarBanco({
+      crm_leads: [{ id: LEAD, organization_id: ORG_A, contact_id: null }],
+      crm_lead_links: [link(MARIA)].concat([
+        { ...link(ANON), lead_id: LEAD_DE_LA, organization_id: ORG_B },
+      ]),
+      contacts: [
+        contato(MARIA, ORG_A, { name: "Maria Silva" }),
+        contato(ANON, ORG_B, { name: "De Outro Negócio" }),
+      ],
+    });
+
+    const resposta = await chamarDelete(LEAD, MARIA);
+
+    expect(resposta.status).toBe(200);
+    // Só o vínculo DESTE negócio saiu: o do negócio de outra org sobrevive,
+    // porque o filtro de organização é explícito no DELETE.
+    expect(banco.crm_lead_links).toHaveLength(1);
+    expect(banco.crm_lead_links[0]).toMatchObject({ lead_id: LEAD_DE_LA });
+
+    const { data } = await corpo(await chamar());
+    expect(data).toEqual([]);
+  });
+
+  it("não deixa o contato PRINCIPAL virar participante de si mesmo", async () => {
+    const banco = montarBanco({
+      crm_leads: [{ id: LEAD, organization_id: ORG_A, contact_id: MARIA }],
+      crm_lead_links: [],
+      contacts: [contato(MARIA, ORG_A, { name: "Maria Silva" })],
+    });
+
+    const resposta = await chamarPost(LEAD, { contact_id: MARIA });
+
+    expect(resposta.status).toBe(409);
+    expect((await corpo(resposta)).error?.code).toBe("contact_is_principal");
+    expect(banco.crm_lead_links).toEqual([]);
+  });
+
+  it("o segundo POST do mesmo contato DÁ PAPEL, em vez de estourar o índice único", async () => {
+    const banco = montarBanco({
+      crm_leads: [{ id: LEAD, organization_id: ORG_A, contact_id: null }],
+      crm_lead_links: [link(MARIA, { metadata: { papel: "Pagante" }, created_at: "2026-10-01" })],
+      contacts: [contato(MARIA, ORG_A, { name: "Maria Silva" })],
+    });
+
+    const resposta = await chamarPost(LEAD, { contact_id: MARIA, papel: "Passageira" });
+
+    expect(resposta.status).toBe(201);
+    expect(banco.crm_lead_links).toHaveLength(1);
+    expect(banco.crm_lead_links[0]).toMatchObject({ metadata: { papel: "Passageira" } });
+    // Papel em branco LIMPA o papel sem tirar a pessoa.
+    await chamarPost(LEAD, { contact_id: MARIA, papel: "   " });
+    expect(banco.crm_lead_links[0]).toMatchObject({ metadata: {} });
+  });
+
+  it("recusa 404 para negócio que o caller não enxerga, sem escrever nada", async () => {
+    const banco = montarBanco({
+      crm_leads: [{ id: LEAD_DE_LA, organization_id: ORG_B, contact_id: null }],
+      crm_lead_links: [],
+      contacts: [contato(MARIA, ORG_B)],
+    });
+
+    const resposta = await chamarPost(LEAD, { contact_id: MARIA });
+
+    expect(resposta.status).toBe(404);
+    expect(banco.crm_lead_links).toEqual([]);
+  });
+
+  it("recusa papel acima de 40 e corpo sem contact_id válido", async () => {
+    montarBanco({
+      crm_leads: [{ id: LEAD, organization_id: ORG_A, contact_id: null }],
+      crm_lead_links: [],
+      contacts: [contato(MARIA, ORG_A)],
+    });
+
+    const semId = await chamarPost(LEAD, { papel: "Pagante" });
+    expect(semId.status).toBe(422);
+    expect((await corpo(semId)).error?.code).toBe("validation_failed");
+
+    const papelLongo = await chamarPost(LEAD, { contact_id: MARIA, papel: "x".repeat(41) });
+    expect(papelLongo.status).toBe(422);
+
+    const semAlvo = await chamarDelete(LEAD, null);
+    expect(semAlvo.status).toBe(422);
   });
 });
