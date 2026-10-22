@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { enviarPushAoUsuario } from "@/lib/notifications/web_push";
+
 import { criarTarefaInterna, interpolarTitulo } from "./criar-tarefa";
+import { HREF_MINHAS_TAREFAS } from "./tipos";
 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 // Push de verdade gravaria em `web_push_subscriptions` no meio do teste.
@@ -210,5 +213,24 @@ describe("a tarefa automática entra na linha do tempo do lead", () => {
 
     expect(resultado.ok).toBe(true);
     expect(db.escritas.filter((e) => e.tabela === "crm_lead_activities")).toEqual([]);
+  });
+});
+
+describe("o push de tarefa criada", () => {
+  it("abre as tarefas do responsável, não a lista da organização", async () => {
+    await criarTarefaInterna(dbCom() as unknown as SupabaseClient, {
+      organizationId: ORG,
+      titulo: "Ligar de volta",
+      venceEmDias: 1,
+      atribuirA: { usuario_id: DONO },
+      prioridade: "medium",
+      origem: "automation:regra-1",
+    });
+
+    expect(vi.mocked(enviarPushAoUsuario)).toHaveBeenCalledWith(
+      ORG,
+      DONO,
+      expect.objectContaining({ href: HREF_MINHAS_TAREFAS }),
+    );
   });
 });

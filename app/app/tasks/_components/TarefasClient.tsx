@@ -23,10 +23,17 @@ import { ListaDeTarefas } from "./ListaDeTarefas";
 /** "aberto" não é uma situação do banco: é o filtro que a tela abre por padrão. */
 type FiltroDeSituacao = "aberto" | SituacaoDaTarefa;
 
-export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
+export function TarefasClient({
+  podeEditar,
+  minhasDeInicio = false,
+}: {
+  podeEditar: boolean;
+  minhasDeInicio?: boolean;
+}) {
   const t = useT();
   const [modo, setModo] = useState<"lista" | "calendario">("lista");
   const [situacao, setSituacao] = useState<FiltroDeSituacao>("aberto");
+  const [minhas, setMinhas] = useState(minhasDeInicio);
   const [emEdicao, setEmEdicao] = useState<Tarefa | null>(null);
   const [formAberto, setFormAberto] = useState(false);
   const [prazoSugerido, setPrazoSugerido] = useState<string | undefined>();
@@ -46,7 +53,7 @@ export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
     apagarTarefa,
     alternarConcluida,
   } = useTasks(
-    situacao === "aberto" ? { aberto: true } : { status: situacao },
+    situacao === "aberto" ? { aberto: true, minhas } : { status: situacao, minhas },
   );
 
   function abrirNova(dia?: string) {
@@ -85,7 +92,7 @@ export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
             value={situacao}
             onValueChange={(v) => setSituacao(v as FiltroDeSituacao)}
           >
-            <SelectTrigger className="h-9 w-[168px] text-xs">
+            <SelectTrigger className="h-11 w-[168px] text-xs lg:h-9">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -98,12 +105,35 @@ export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
           </Select>
 
           <div className="flex items-center gap-0.5 rounded-md border bg-muted p-0.5">
+            {([
+              [true, t("Minhas")],
+              [false, t("Todas")],
+            ] as const).map(([valor, rotulo]) => (
+              <button
+                key={rotulo}
+                type="button"
+                onClick={() => setMinhas(valor)}
+                aria-pressed={minhas === valor}
+                className={cn(
+                  "min-h-11 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors lg:min-h-0",
+                  minhas === valor
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
+
+          {/* O calendário tem 7 colunas: a 390px não cabe, e no celular fica a lista. */}
+          <div className="hidden items-center gap-0.5 rounded-md border bg-muted p-0.5 md:flex">
             <button
               type="button"
               onClick={() => setModo("lista")}
               aria-pressed={modo === "lista"}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                "flex min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors lg:min-h-0",
                 modo === "lista"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -117,7 +147,7 @@ export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
               onClick={() => setModo("calendario")}
               aria-pressed={modo === "calendario"}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                "flex min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors lg:min-h-0",
                 modo === "calendario"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -131,7 +161,7 @@ export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
           <Button
             variant="outline"
             size="sm"
-            className="h-9 gap-1.5 text-xs"
+            className="gap-1.5 text-xs lg:h-9"
             onClick={() => recarregar()}
             disabled={carregando}
           >
@@ -140,7 +170,7 @@ export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
           </Button>
 
           {podeEditar && (
-            <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={() => abrirNova()}>
+            <Button size="sm" className="gap-1.5 text-xs lg:h-9" onClick={() => abrirNova()}>
               <Plus size={14} aria-hidden />
               {t("Nova tarefa")}
             </Button>
