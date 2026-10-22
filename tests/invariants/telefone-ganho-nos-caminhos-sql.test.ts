@@ -55,7 +55,6 @@ const NUMERO_DO_VENCEDOR = "+5541966665555";
 const LID_VAZIA = "3315001";
 const ID_VAZIA = "e3315000-0000-4000-8000-000000000101";
 const ID_PROMOCAO = "e3315000-0000-4000-8000-000000000102";
-const ID_NOVO = "e3315000-0000-4000-8000-000000000103";
 const ID_VENCEDOR_VAZIO = "e3315000-0000-4000-8000-000000000104";
 const ID_VENCEDOR_COM_NUMERO = "e3315000-0000-4000-8000-000000000105";
 const ID_SECUNDARIO = "e3315000-0000-4000-8000-000000000106";
@@ -178,7 +177,9 @@ describe("#3315 — `fn_upsert_wa_contact` emite na transição", () => {
 
   it("contato NOVO não emite — ninguém ganhou um telefone, ele nasceu com um", async () => {
     const id = await upsertWaContato("phone", "+5541955554444", null);
-    expect(id).toBe(ID_NOVO);
+    // A função INSERE um contato novo (id aleatório): o que se afirma é que ninguém
+    // ganhou nada — e por isso não há evento nenhum para ele.
+    expect(id).not.toBe(ID_VAZIA);
     expect(await telefoneDe(id)).toBe("+5541955554444");
     expect(await eventosDe(id)).toHaveLength(0);
   });
