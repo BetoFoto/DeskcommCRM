@@ -3,6 +3,7 @@ import type pg from "pg";
 
 import type { FlowEdge, FlowGraph, FlowNode } from "./graph-schema";
 import {
+  escolherFluxoPelaEtapa,
   escolherFluxoPeloGatilho,
   finalizarFluxoDeAtendimento,
   iniciarFluxoDeAtendimento,
@@ -578,6 +579,80 @@ describe("roteiro já concluído: recomeça só se o roteiro permitir", () => {
     ]);
     const r = await escolherFluxoPeloGatilho(pool, { organizationId: ORG, contactId: "ct-1", texto: "quero agendar" });
     expect(r?.id).toBe("agenda");
+  });
+
+  // #2630 — A ENTRADA POR ETAPA DO FUNIL (irmã da entrada por palavra-gatilho).
+  const ETAPA_X = "11111111-1111-4111-8111-111111111111";
+  const ETAPA_Y = "22222222-2222-4222-8222-222222222222";
+
+  /** O banco da entrada por etapa: a etapa do CARD do contato + os roteiros ativos. */
+  function bancoDaEtapa(
+    etapa: string | null,
+    linhas: Array<{ id: string; nome: string; graph: FlowGraph; ja_concluiu: boolean }>,
+  ) {
+    const chamadas: Array<{ sql: string; params: unknown[] }> = [];
+    const pool = {
+      query: async (sql: string, params: unknown[] = []) => {
+        chamadas.push({ sql, params });
+        if (/from crm_leads/.test(sql)) {
+          return etapa === null ? { rows: [], rowCount: 0 } : { rows: [{ stage_id: etapa }], rowCount: 1 };
+        }
+        return { rows: linhas, rowCount: linhas.length };
+      },
+    } as unknown as pg.Pool;
+    return { pool, chamadas };
+  }
+
+  const porEtapa = (...etapas: string[]) =>
+    ({ max_tentativas_pergunta: 3, etapas_do_funil: etapas }) as FlowGraph["settings"];
+
+  it("etapa: o card na etapa do roteiro liga o roteiro, e a etapa é lida do CARD do contato", async () => {
+    const { pool, chamadas } = bancoDaEtapa(ETAPA_X, [
+      { id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false },
+    ]);
+    const r = await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" });
+    expect(r).toEqual({ id: "proposta", nome: "Proposta" });
+    // O card vem do contato DESTA organização, pela mesma leitura que o motor usa.
+    expect(chamadas[0]!.params).toEqual([ORG, "ct-1"]);
+    expect(chamadas[0]!.sql).toMatch(/from crm_leads/);
+    expect(chamadas[0]!.sql).toMatch(/order by updated_at desc/);
+    // E a disputa é entre roteiros da superfície de atendimento, ativos.
+    expect(chamadas[1]!.sql).toMatch(/p\.surface = 'atendimento'/);
+  });
+
+  it("etapa: o card em OUTRA etapa não liga este roteiro", async () => {
+    const { pool } = bancoDaEtapa(ETAPA_Y, [
+      { id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false },
+    ]);
+    expect(await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
+  });
+
+  it("etapa: contato sem card não liga nada — e nem paga a consulta dos roteiros", async () => {
+    const { pool, chamadas } = bancoDaEtapa(null, [
+      { id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false },
+    ]);
+    expect(await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
+    expect(chamadas).toHaveLength(1);
+  });
+
+  it("etapa: roteiro já concluído sai da disputa; com `pode_recomecar`, ele volta", async () => {
+    const concluido = { id: "antigo", nome: "Antigo", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: true };
+    // Sozinho e concluído: não liga (o padrão é não recomeçar).
+    const semRecomeco = bancoDaEtapa(ETAPA_X, [concluido]);
+    expect(await escolherFluxoPelaEtapa(semRecomeco.pool, { organizationId: ORG, contactId: "ct-1" })).toBeNull();
+    // Com `pode_recomecar`, liga.
+    const comRecomeco = bancoDaEtapa(ETAPA_X, [
+      { ...concluido, graph: { ...grafoCom(), settings: { ...porEtapa(ETAPA_X), pode_recomecar: true } } as FlowGraph },
+    ]);
+    expect((await escolherFluxoPelaEtapa(comRecomeco.pool, { organizationId: ORG, contactId: "ct-1" }))?.id).toBe("antigo");
+  });
+
+  it("etapa: dois roteiros na MESMA etapa — o desempate é o nome, não a ordem do banco", async () => {
+    const { pool } = bancoDaEtapa(ETAPA_X, [
+      { id: "z", nome: "Zebra", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false },
+      { id: "a", nome: "Alfa", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false },
+    ]);
+    expect((await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" }))?.id).toBe("a");
   });
 
   function bancoDoInicio(linha: { graph: FlowGraph; ja_concluiu: boolean }) {

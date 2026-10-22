@@ -41,6 +41,13 @@ const GRAFO_SIM_NAO: FlowGraph = {
   ),
 };
 
+/** #2630: o roteiro que liga pela ETAPA do funil — sem palavra-gatilho nenhuma. */
+const ETAPA = '11111111-1111-4111-8111-111111111111';
+const GRAFO_POR_ETAPA: FlowGraph = {
+  ...GRAFO,
+  settings: { max_tentativas_pergunta: 3, etapas_do_funil: [ETAPA] },
+};
+
 /** Banco fake: um roteiro 'coletando' passa a existir quando alguém o insere. */
 function banco(
   opts: {
@@ -54,6 +61,8 @@ function banco(
     tentativas?: Record<string, number>;
     /** O LOTE inteiro (rajada): vence `mensagem` quando presente. */
     lote?: Array<{ id: string; body: string | null; media_derived_text?: string | null }>;
+    /** A etapa do funil do card do contato (#2630): `crm_leads.stage_id`. */
+    etapaDoContato?: string | null;
   } = {},
 ) {
   const GRAFO_DO_BANCO = opts.grafo ?? GRAFO;
@@ -107,6 +116,11 @@ function banco(
     if (/from messages/.test(sql)) {
       const linhas = opts.lote ?? (mensagem === null ? [] : [{ id: 'msg-1', ...mensagem }]);
       return { rows: linhas, rowCount: linhas.length };
+    }
+    // #2630: a etapa do card do contato, que a entrada por etapa lê.
+    if (/from crm_leads/.test(sql)) {
+      const etapa = opts.etapaDoContato ?? null;
+      return etapa === null ? { rows: [], rowCount: 0 } : { rows: [{ stage_id: etapa }], rowCount: 1 };
     }
     if (/select custom_fields from contacts/.test(sql)) return { rows: [{ custom_fields: {} }], rowCount: 1 };
     if (/insert into followup_enrollment_events|update /.test(sql)) return { rows: [], rowCount: 1 };
@@ -231,6 +245,93 @@ describe('prepararRoteiroDoTurno', () => {
     );
     expect(r).toBeNull();
     expect(l.warn).toHaveBeenCalled();
+  });
+});
+
+/**
+ * #2630 — A ENTRADA POR ETAPA DO FUNIL.
+ *
+ * O defeito medido: um card que entra em "Proposta enviada" não dispara o
+ * roteiro daquela etapa, porque as únicas entradas do turno eram o roteador e a
+ * palavra-gatilho. O conserto é a terceira porta (`settings.etapas_do_funil`),
+ * com a precedência preservada: roteador → palavra-gatilho → etapa.
+ */
+describe('prepararRoteiroDoTurno — entrada por etapa do funil (#2630)', () => {
+  const semGatilho = { body: 'oi, tudo bem?' };
+
+  /** A origem gravada no evento `roteiro_iniciado` da trilha. */
+  function iniciadoCom(b: ReturnType<typeof banco>, origem: string): boolean {
+    return b.query.mock.calls
+      .filter(([sql]) => /insert into followup_enrollment_events/.test(String(sql)))
+      .map(([, params]) => params as unknown[])
+      .filter((p) => p[3] === 'roteiro_iniciado')
+      .some((p) => (JSON.parse(String(p[4])) as { origem?: string }).origem === origem);
+  }
+
+  it('⭐ card na etapa e mensagem sem palavra-gatilho: o roteiro começa, com origem etapa na trilha', async () => {
+    const b = banco({ grafo: GRAFO_POR_ETAPA, mensagem: semGatilho, etapaDoContato: ETAPA });
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, texto: 'oi, tudo bem?' },
+    );
+    expect(r?.iniciadoNesteTurno).toBe(true);
+    expect(b.sqls.some((s) => /insert into followup_enrollments/.test(s))).toBe(true);
+    expect(
+      iniciadoCom(b, 'etapa'),
+      'a trilha precisa dizer que quem armou foi a etapa, e não a palavra-gatilho',
+    ).toBe(true);
+  });
+
+  it('card em OUTRA etapa: nada começa — quem liga é a etapa do roteiro', async () => {
+    const b = banco({
+      grafo: GRAFO_POR_ETAPA,
+      mensagem: semGatilho,
+      etapaDoContato: '22222222-2222-4222-8222-222222222222',
+    });
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, texto: 'oi, tudo bem?' },
+    );
+    expect(r).toBeNull();
+    expect(b.sqls.some((s) => /insert into followup_enrollments/.test(s))).toBe(false);
+  });
+
+  it('contato sem card: nenhuma etapa liga, e a busca de roteiros não é repetida à toa', async () => {
+    const b = banco({ grafo: GRAFO_POR_ETAPA, mensagem: semGatilho });
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, texto: 'oi, tudo bem?' },
+    );
+    expect(r).toBeNull();
+    // Uma leitura de roteiros (a da palavra-gatilho); a etapa não paga a dela,
+    // porque não há etapa nenhuma no card.
+    expect(b.sqls.filter((s) => /select p\.id, p\.name as nome, v\.graph/.test(s))).toHaveLength(1);
+  });
+
+  it('⭐ o ROTEADOR ganha da etapa: com roteiro apontado, a etapa nem é lida', async () => {
+    const b = banco({ grafo: GRAFO_POR_ETAPA, mensagem: semGatilho, etapaDoContato: ETAPA });
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, texto: 'oi', flowPointerDoRoteador: 'ptr-1' },
+    );
+    expect(r?.iniciadoNesteTurno).toBe(true);
+    expect(b.sqls.some((s) => /from crm_leads/.test(s))).toBe(false);
+    expect(iniciadoCom(b, 'roteador')).toBe(true);
+  });
+
+  it('a palavra-gatilho ganha da etapa: o pedido explícito vence o contexto do card', async () => {
+    const grafo: FlowGraph = {
+      ...GRAFO_POR_ETAPA,
+      settings: { max_tentativas_pergunta: 3, gatilhos: ['financiar'], etapas_do_funil: [ETAPA] },
+    };
+    const b = banco({ grafo, mensagem: { body: 'quero financiar' }, etapaDoContato: ETAPA });
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, texto: 'quero financiar' },
+    );
+    expect(r?.iniciadoNesteTurno).toBe(true);
+    expect(b.sqls.some((s) => /from crm_leads/.test(s))).toBe(false);
+    expect(iniciadoCom(b, 'gatilho')).toBe(true);
   });
 });
 

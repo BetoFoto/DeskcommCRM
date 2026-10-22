@@ -13,6 +13,15 @@
  * E abria um roteiro para ele. A ordem é o conserto; o teste de ordem
  * (`roteiro-no-turno.test.ts`) a vigia no texto do turno.
  *
+ * ─── As entradas do turno ───────────────────────────────────────────────────
+ *
+ * Um roteiro sem roteiro vivo começa, neste turno, por uma de três portas, em
+ * precedência: o ROTEADOR (o membro aponta um roteiro — decisão já tomada sobre
+ * a mensagem), a PALAVRA-GATILHO (`settings.gatilhos`, o cliente pedindo) e a
+ * ETAPA DO FUNIL (`settings.etapas_do_funil`, o card do contato numa etapa —
+ * contexto do card, não da mensagem). A terceira é o #2630: sem ela, um card em
+ * "Proposta enviada" não disparava o roteiro daquela etapa.
+ *
  * ─── Chave desligada = nada ─────────────────────────────────────────────────
  *
  * A primeira coisa é a chave da instalação. Desligada, a função devolve `null`
@@ -32,6 +41,7 @@ import type { LeituraDaResposta, MensagemDoContexto, PerguntaDoFluxo } from './f
 import type { EndFinish } from '@/lib/followup/graph-schema';
 import {
   carregarEstadoDeAtendimento,
+  escolherFluxoPelaEtapa,
   escolherFluxoPeloGatilho,
   iniciarFluxoDeAtendimento,
   lerLoteParaORoteiro,
@@ -143,22 +153,43 @@ export async function prepararRoteiroDoTurno(
       contactId: t.contactId,
     });
     if (estado === null) {
-      const porGatilho =
-        t.flowPointerDoRoteador === null
-          ? await escolherFluxoPeloGatilho(deps.pool, {
-              organizationId: t.organizationId,
-              contactId: t.contactId,
-              texto,
-            })
-          : null;
-      const alvo = t.flowPointerDoRoteador ?? porGatilho?.id ?? null;
+      // AS ENTRADAS DO TURNO, em ordem de precedência declarada:
+      //   roteador → palavra-gatilho → etapa do funil.
+      // O roteador é a decisão já tomada sobre ESTA mensagem (o membro aponta um
+      // roteiro) e ganha de todo o resto; a palavra-gatilho é o cliente pedindo
+      // agora, com todas as letras; e a etapa do funil é contexto do CARD, não
+      // da mensagem — entra quando ninguém falou nada. Sem a terceira, um card
+      // em "Proposta enviada" não disparava o roteiro daquela etapa (#2630).
+      let alvo: string | null = t.flowPointerDoRoteador;
+      let origem: "roteador" | "gatilho" | "etapa" = "roteador";
+      if (alvo === null) {
+        const porGatilho = await escolherFluxoPeloGatilho(deps.pool, {
+          organizationId: t.organizationId,
+          contactId: t.contactId,
+          texto,
+        });
+        if (porGatilho !== null) {
+          alvo = porGatilho.id;
+          origem = "gatilho";
+        }
+      }
+      if (alvo === null) {
+        const porEtapa = await escolherFluxoPelaEtapa(deps.pool, {
+          organizationId: t.organizationId,
+          contactId: t.contactId,
+        });
+        if (porEtapa !== null) {
+          alvo = porEtapa.id;
+          origem = "etapa";
+        }
+      }
       if (alvo !== null) {
         await iniciarFluxoDeAtendimento(deps.pool, {
           organizationId: t.organizationId,
           contactId: t.contactId,
           flowPointerId: alvo,
           conversationId: t.conversationId,
-          origem: t.flowPointerDoRoteador !== null ? 'roteador' : 'gatilho',
+          origem,
         });
         estado = await carregarEstadoDeAtendimento(deps.pool, {
           organizationId: t.organizationId,
