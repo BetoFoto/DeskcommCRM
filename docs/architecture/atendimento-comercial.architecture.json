@@ -32,21 +32,21 @@
       "lane": "ui",
       "col": 1,
       "type": "service",
-      "label": "Configurações → Distribuição: valores preservados em PATCH"
+      "label": "Agente › Segurança: camada restricao_comercial (org inteira)"
     },
     {
       "id": "inbound",
       "lane": "core",
       "col": 2,
       "type": "service",
-      "label": "Automático / assistido / prévia: triagem antes do roteador"
+      "label": "Automático / assistido: triagem no handler antes do roteador; prévia só propõe"
     },
     {
       "id": "human",
       "lane": "data",
       "col": 3,
       "type": "service",
-      "label": "performHumanHandoff: briefing, fila, silêncio e cancelamento de crons"
+      "label": "Aviso ao cliente, depois performHumanHandoff: briefing, fila, silêncio e crons"
     },
     {
       "id": "model",
