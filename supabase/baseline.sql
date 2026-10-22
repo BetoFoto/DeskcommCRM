@@ -60570,3 +60570,31 @@ create view public.external_db_connections_safe
 
 revoke all on public.external_db_connections_safe from anon;
 grant select on public.external_db_connections_safe to authenticated;
+
+-- ---- 0728: tipo de contato — cliente ou fornecedor (issue 3005, fatia 1) ----
+-- Espelho idempotente da migration 0728. É este apêndice que chega a todo
+-- self-host: o install.sh aplica o baseline num banco novo e o update.sh o
+-- re-aplica num banco existente; nenhum dos dois roda as migrations.
+--
+-- `contact_type` nasce 'cliente': contato novo é cliente até alguém dizer o
+-- contrário. Coluna nova, e não `is_personal`: aquela VETA todo envio
+-- (`readStopFlags` em `lib/agent-engine/guardrails/before-send.ts`), e o
+-- fornecedor da issue 3005 conversa normalmente.
+alter table public.contacts
+  add column if not exists contact_type text default 'cliente' not null;
+
+comment on column public.contacts.contact_type is
+  'Tipo do contato (issue 3005): cliente (padrão) ou fornecedor. Fornecedor conversa normalmente — ao contrário de is_personal, NÃO veta envio; o que muda é o painel/lista de campos (fatias seguintes). Quem mudou/quando fica em auditoria + timeline, nunca aqui.';
+
+alter table public.contacts
+  drop constraint if exists contacts_contact_type_check;
+
+alter table public.contacts
+  add constraint contacts_contact_type_check
+    check (contact_type in ('cliente', 'fornecedor'));
+
+create index if not exists idx_contacts_org_fornecedor
+  on public.contacts (organization_id)
+  where (contact_type = 'fornecedor');
+
+notify pgrst, 'reload schema';
