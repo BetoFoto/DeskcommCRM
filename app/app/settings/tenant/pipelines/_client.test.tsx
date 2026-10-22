@@ -549,21 +549,18 @@ describe("lista pesquisável: o controle de múltipla escolha no funil (#3182)",
   const salvar = () =>
     fireEvent.click(screen.getByRole("button", { name: /Salvar vocabulário e campos/i }));
 
+  const CAMPO_FORNECEDORES = {
+    key: "fornecedores",
+    label: "Fornecedores",
+    type: "searchable_select" as const,
+    options: [{ value: "consolidadora-a", label: "Consolidadora A" }],
+  };
   const FUNIL_FORNECEDORES: PipelineRow = {
     id: "55555555-5555-4555-8555-555555555555",
     name: "Fornecedores",
     slug: "fornecedores",
     vocabulary: null,
-    settings: {
-      fields: [
-        {
-          key: "fornecedores",
-          label: "Fornecedores",
-          type: "searchable_select",
-          options: [{ value: "consolidadora-a", label: "Consolidadora A" }],
-        },
-      ],
-    },
+    settings: { fields: [CAMPO_FORNECEDORES] },
   };
 
   it("nasce desligado e ligar grava `multiple: true` no patch salvo", () => {
@@ -584,9 +581,8 @@ describe("lista pesquisável: o controle de múltipla escolha no funil (#3182)",
   it("campo JÁ múltiplo abre marcado, e desmarcar apaga a chave", () => {
     const jaMultiplo: PipelineRow = {
       ...FUNIL_FORNECEDORES,
-      settings: {
-        fields: [{ ...FUNIL_FORNECEDORES.settings.fields[0]!, multiple: true }],
-      },
+      // O campo JÁ gravado como múltiplo: é o estado de quem abre para desligar.
+      settings: { fields: [{ ...CAMPO_FORNECEDORES, multiple: true }] },
     };
     render(<PipelinesClient pipelines={[jaMultiplo]} podeEditarConfig />);
     const caixa = screen.getByLabelText(/Permitir várias escolhas 1/i);
