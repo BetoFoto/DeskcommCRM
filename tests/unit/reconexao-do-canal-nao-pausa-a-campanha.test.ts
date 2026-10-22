@@ -276,6 +276,26 @@ function paramsDa(db: Banco, trecho: string): unknown[] | null {
   return chamada?.[1] ?? null;
 }
 
+/**
+ * Aplica à `campaign` o que os `update prospecting_campaigns` do tick gravaram em
+ * `channel_down_since`, NA ORDEM: é o que faz a próxima rodada ler a marca que a
+ * anterior deixou. A semântica é a do Postgres — `coalesce(...)` só preenche o
+ * nulo, `now()` sobrescreve, `null` zera. Escrita em forma desconhecida reprova,
+ * em vez de passar calada como "não mexeu".
+ */
+function aplicarAsEscritasNaCampanha(db: Banco) {
+  for (const [q] of db.query.mock.calls) {
+    const sql = String(q);
+    if (!sql.startsWith("update prospecting_campaigns set") || !sql.includes("channel_down_since="))
+      continue;
+    if (sql.includes("channel_down_since=coalesce(channel_down_since,now())"))
+      campaign.channel_down_since ??= new Date();
+    else if (sql.includes("channel_down_since=now()")) campaign.channel_down_since = new Date();
+    else if (sql.includes("channel_down_since=null")) campaign.channel_down_since = null;
+    else throw new Error(`escrita de channel_down_since que o dublê não conhece: ${sql}`);
+  }
+}
+
 /** A mensagem gravada quando a campanha é PAUSADA, ou `null` se ela seguiu. */
 function motivoDaPausa(db: Banco): unknown {
   return paramsDa(db, "update prospecting_campaigns set status='paused'")?.[2] ?? null;
@@ -398,7 +418,7 @@ describe("a reconexão de segundos não pausa a campanha (issue #3073)", () => {
   // ── O TETO DO ADIAMENTO (issue #3073) ────────────────────────────────────────
   // O adiamento NÃO pode ser infinito: uma sessão presa fora do `WORKING` deixava
   // a campanha "Ativa" sem enviar e SEM aviso (o `STARTING` não gera aviso de
-  // saúde). Passado o teto — medido desde a última vez em `WORKING`
+  // saúde). Passado o teto — contado desde o primeiro adiamento da espera
   // (`channel_down_since`) — a espera vira a recusa de canal DESCONECTADO e a
   // campanha pausa, com o motivo no cartão.
 
@@ -427,19 +447,43 @@ describe("a reconexão de segundos não pausa a campanha (issue #3073)", () => {
     expect(envios).toHaveLength(0);
   });
 
-  it("⭐ o ciclo `STARTING`→`STOPPED`→`STARTING` ao longo de 2h também PAUSA", async () => {
+  it("⭐ o ciclo `STARTING`→`STOPPED`→`STARTING` ao longo de 2h: a espera ACUMULA e pausa só no teto", async () => {
     // O relógio do TETO não é o do canal: `channel_sessions.last_status_change_at`
     // é regravado a cada evento, então o ciclo reiniciaria a contagem a cada
-    // volta. Aqui a espera acumula (a marca só é zerada quando o canal volta a
-    // `WORKING`), e o teto vale para os DOIS estados transitórios do ciclo.
-    campaign.channel_down_since = new Date(Date.now() - 2 * 3_600_000);
-    for (const status of ["STARTING", "STOPPED", "STARTING"] as const) {
-      statusDoCanal = status;
-      const db = await rodarOTick();
+    // volta. A espera tem de ACUMULAR de um tick para o outro — por isso este
+    // caso guarda a marca entre as rodadas: o dublê aplica a semântica do SET
+    // que o tick pediu, e o tick seguinte lê o resultado. Conferir o TEXTO do
+    // SQL não prova o acúmulo; percorrer as 2h prova.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const inicio = new Date("2026-10-22T12:00:00Z").getTime();
+      let pausouNoMinuto: number | null = null;
+      let motivo: unknown = null;
+      for (let minuto = 0; minuto <= 120; minuto += 10) {
+        vi.setSystemTime(inicio + minuto * 60_000);
+        statusDoCanal = (minuto / 10) % 2 === 0 ? "STARTING" : "STOPPED";
+        const db = await rodarOTick();
+        aplicarAsEscritasNaCampanha(db);
+        motivo = motivoDaPausa(db);
+        if (motivo !== null) {
+          pausouNoMinuto = minuto;
+          break;
+        }
+      }
+
       expect(
-        motivoDaPausa(db),
-        `o ciclo no estado ${status} passou do teto e não pausou`,
-      ).toBe(MSG_CANAL_DESCONECTADO);
+        pausouNoMinuto,
+        "a espera nunca chegou ao teto em 2h — o adiamento está reiniciando o relógio",
+      ).not.toBeNull();
+      expect(
+        pausouNoMinuto,
+        "a campanha pausou ANTES do teto (ou depois dele) com o canal só reconectando",
+      ).toBe(TETO_DO_ADIAMENTO_MS / 60_000);
+      expect(motivo).toBe(MSG_CANAL_DESCONECTADO);
+      // A pausa zera a marca: a próxima espera, depois de "Retomar fila", conta do zero.
+      expect(campaign.channel_down_since).toBeNull();
+    } finally {
+      vi.useRealTimers();
     }
   });
 
