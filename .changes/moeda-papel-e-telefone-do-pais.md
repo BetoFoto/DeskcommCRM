@@ -16,4 +16,8 @@ agent »); agora diz pelo nome (« Atendente »).
 O exemplo dos campos de telefone (discador, conexão por código, campanhas, avisos
 de caso, lembrete por WhatsApp, telefonia, conversões, acesso da IA, teste do
 agente, escolha de contato) era um celular brasileiro em toda empresa. Agora é um
-número do país da empresa. Numa empresa brasileira, nada muda.
+número do país da empresa.
+
+Numa empresa brasileira, o campo de moeda continua em real e o exemplo de
+telefone continua brasileiro, agora o mesmo número em todos os campos; o
+convite passa a dizer o papel pelo nome também em português.
