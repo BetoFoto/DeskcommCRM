@@ -33,6 +33,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { audit } from "@/lib/audit";
 import { DELETE, GET, POST } from "@/app/api/v1/leads/[id]/contatos-relacionados/route";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
@@ -44,6 +45,8 @@ vi.mock("@/lib/auth/server", () => ({
 // organização do alvo.
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
+// A trilha de auditoria: toda escrita bem-sucedida grava uma linha, e só ela.
+vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
 
 const ORG_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ORG_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -99,7 +102,8 @@ function link(target_id: string, extra: Partial<Record<string, unknown>> = {}): 
  *
  * Desde a #3083 o dublê também ESCREVE: `upsert` grava na tabela em memória
  * (respeitando a identidade do índice único) e `delete` apaga as linhas que os
- * filtros alcançam. Sem isso o teste do escritor provaria só o status HTTP — e
+ * filtros alcançam, devolvendo-as em `data` como o `.delete().select()` do
+ * PostgREST. Sem isso o teste do escritor provaria só o status HTTP — e
  * "o POST respondeu 201 e não gravou nada" passaria verde.
  */
 function montarBanco<T extends Record<string, Linha[]>>(
@@ -161,11 +165,12 @@ function montarBanco<T extends Record<string, Linha[]>>(
       aoErr?: (erro: unknown) => unknown,
     ) => {
       if (modo === "delete") {
-        for (const l of linhas()) {
+        const apagadas = linhas();
+        for (const l of apagadas) {
           const i = base.indexOf(l);
           if (i >= 0) base.splice(i, 1);
         }
-        return Promise.resolve({ data: [], error: null }).then(aoOk, aoErr);
+        return Promise.resolve({ data: apagadas, error: null }).then(aoOk, aoErr);
       }
       return Promise.resolve({ data: linhas(), error: null }).then(aoOk, aoErr);
     };
@@ -212,6 +217,7 @@ async function corpo(resposta: Response) {
 
 beforeEach(() => {
   vi.mocked(createClient).mockReset();
+  vi.mocked(audit).mockClear();
   // Sessão de escrita com papel `agent` na org A: o que está em julgamento aqui
   // é a defesa de organização, não o RBAC.
   vi.mocked(requireRole).mockResolvedValue({
@@ -362,6 +368,18 @@ describe("POST/DELETE contatos-relacionados — o escritor da #3083 F1", () => {
     const resposta = await chamarPost(LEAD, { contact_id: MARIA, papel: "Responsável financeiro" });
 
     expect(resposta.status).toBe(201);
+    // A trilha registra o vínculo no NEGÓCIO, e o papel só como "havia papel":
+    // o texto é livre e não vai para o audit.
+    expect(audit).toHaveBeenCalledTimes(1);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "lead.participant_added",
+        organizationId: ORG_A,
+        resourceType: "crm_lead",
+        resourceId: LEAD,
+        metadata: { contact_id: MARIA, com_papel: true },
+      }),
+    );
     // O vínculo existe no banco, com o vocabulário do leitor: é o que faz a
     // mesma rota devolvê-lo logo abaixo.
     expect(banco.crm_lead_links).toEqual([
@@ -403,6 +421,7 @@ describe("POST/DELETE contatos-relacionados — o escritor da #3083 F1", () => {
     expect(resposta.status).toBe(404);
     expect((await corpo(resposta)).error?.code).toBe("not_found");
     expect(banco.crm_lead_links).toEqual([]);
+    expect(audit).not.toHaveBeenCalled();
   });
 
   it("⭐ o DELETE remove o vínculo, e o GET deixa de devolvê-lo", async () => {
@@ -410,6 +429,9 @@ describe("POST/DELETE contatos-relacionados — o escritor da #3083 F1", () => {
       crm_leads: [{ id: LEAD, organization_id: ORG_A, contact_id: null }],
       crm_lead_links: [link(MARIA)].concat([
         { ...link(ANON), lead_id: LEAD_DE_LA, organization_id: ORG_B },
+        // Mesmo lead_id e mesmo alvo, organização diferente: só o filtro de
+        // organização EXPLÍCITO do DELETE a poupa (o de lead_id não basta).
+        { ...link(MARIA), organization_id: ORG_B },
       ]),
       contacts: [
         contato(MARIA, ORG_A, { name: "Maria Silva" }),
@@ -420,10 +442,27 @@ describe("POST/DELETE contatos-relacionados — o escritor da #3083 F1", () => {
     const resposta = await chamarDelete(LEAD, MARIA);
 
     expect(resposta.status).toBe(200);
-    // Só o vínculo DESTE negócio saiu: o do negócio de outra org sobrevive,
-    // porque o filtro de organização é explícito no DELETE.
-    expect(banco.crm_lead_links).toHaveLength(1);
-    expect(banco.crm_lead_links[0]).toMatchObject({ lead_id: LEAD_DE_LA });
+    expect(((await corpo(resposta)).data as unknown as { removido: boolean }).removido).toBe(
+      true,
+    );
+    // Só o vínculo DESTE negócio na org do caller saiu. O do outro negócio
+    // sobrevive pelo `lead_id`; o de mesmo `lead_id` em outra org sobrevive
+    // pelo filtro de organização explícito — apague-o e este teste cai.
+    expect(banco.crm_lead_links).toHaveLength(2);
+    expect(banco.crm_lead_links).toEqual([
+      expect.objectContaining({ lead_id: LEAD_DE_LA }),
+      expect.objectContaining({ lead_id: LEAD, organization_id: ORG_B }),
+    ]);
+    expect(audit).toHaveBeenCalledTimes(1);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "lead.participant_removed",
+        organizationId: ORG_A,
+        resourceType: "crm_lead",
+        resourceId: LEAD,
+        metadata: { contact_id: MARIA },
+      }),
+    );
 
     const { data } = await corpo(await chamar());
     expect(data).toEqual([]);
@@ -441,6 +480,7 @@ describe("POST/DELETE contatos-relacionados — o escritor da #3083 F1", () => {
     expect(resposta.status).toBe(409);
     expect((await corpo(resposta)).error?.code).toBe("contact_is_principal");
     expect(banco.crm_lead_links).toEqual([]);
+    expect(audit).not.toHaveBeenCalled();
   });
 
   it("o segundo POST do mesmo contato DÁ PAPEL, em vez de estourar o índice único", async () => {
@@ -458,6 +498,9 @@ describe("POST/DELETE contatos-relacionados — o escritor da #3083 F1", () => {
     // Papel em branco LIMPA o papel sem tirar a pessoa.
     await chamarPost(LEAD, { contact_id: MARIA, papel: "   " });
     expect(banco.crm_lead_links[0]).toMatchObject({ metadata: {} });
+    expect(audit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ metadata: { contact_id: MARIA, com_papel: false } }),
+    );
   });
 
   it("recusa 404 para negócio que o caller não enxerga, sem escrever nada", async () => {
@@ -471,6 +514,7 @@ describe("POST/DELETE contatos-relacionados — o escritor da #3083 F1", () => {
 
     expect(resposta.status).toBe(404);
     expect(banco.crm_lead_links).toEqual([]);
+    expect(audit).not.toHaveBeenCalled();
   });
 
   it("recusa papel acima de 40 e corpo sem contact_id válido", async () => {
@@ -489,5 +533,23 @@ describe("POST/DELETE contatos-relacionados — o escritor da #3083 F1", () => {
 
     const semAlvo = await chamarDelete(LEAD, null);
     expect(semAlvo.status).toBe(422);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("DELETE de vínculo que não existe não afirma remoção nem audita", async () => {
+    const banco = montarBanco({
+      crm_leads: [{ id: LEAD, organization_id: ORG_A, contact_id: null }],
+      crm_lead_links: [link(ANON)],
+      contacts: [contato(MARIA, ORG_A), contato(ANON, ORG_A)],
+    });
+
+    const resposta = await chamarDelete(LEAD, MARIA);
+
+    expect(resposta.status).toBe(200);
+    expect(((await corpo(resposta)).data as unknown as { removido: boolean }).removido).toBe(
+      false,
+    );
+    expect(banco.crm_lead_links).toHaveLength(1);
+    expect(audit).not.toHaveBeenCalled();
   });
 });

@@ -344,7 +344,16 @@ describe("ContatoDoNegocio — o escritor das pessoas relacionadas (a #3083 F1)"
     expect(screen.getByText("(Pagante)")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Remover João Souza" }));
 
-    expect(removerParticipante).toHaveBeenCalledWith("c-2");
+    expect(removerParticipante).toHaveBeenCalledWith(
+      "c-2",
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    // A confirmação só sai depois que o servidor removeu: é o onSuccess da
+    // mutação que a dispara, não o clique.
+    expect(toast.success).not.toHaveBeenCalled();
+    const [, opcoes] = removerParticipante.mock.calls[0] ?? [];
+    opcoes?.onSuccess();
+    expect(toast.success).toHaveBeenCalledWith("Participante removido.");
   });
 });
 

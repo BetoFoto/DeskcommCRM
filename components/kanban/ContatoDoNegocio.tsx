@@ -200,7 +200,11 @@ function RemoverParticipante({ leadId, pessoa }: { leadId: string; pessoa: Conta
       className="ml-auto h-6 px-2 text-[11px] text-text-muted hover:text-destructive"
       disabled={remover.isPending}
       aria-label={`${t("Remover")} ${alvo}`.trim()}
-      onClick={() => remover.mutate(pessoa.contact_id)}
+      onClick={() =>
+        remover.mutate(pessoa.contact_id, {
+          onSuccess: () => toast.success(t("Participante removido.")),
+        })
+      }
     >
       {t("Remover")}
     </Button>

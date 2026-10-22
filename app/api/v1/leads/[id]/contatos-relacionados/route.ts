@@ -1,4 +1,3 @@
-import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * /api/v1/leads/[id]/contatos-relacionados — as outras pessoas do negócio.
  *
@@ -42,10 +41,12 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
+import { audit } from "@/lib/audit";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { loadAuthUser } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -322,6 +323,17 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   );
   if (upsertErr) return fail("internal_error", upsertErr.message, 500, { requestId });
 
+  // O papel é texto livre: a trilha guarda só SE havia papel, nunca o texto.
+  await audit({
+    action: "lead.participant_added",
+    actorUserId: authz.user.id,
+    organizationId: lead.organization_id,
+    resourceType: "crm_lead",
+    resourceId: leadId,
+    requestId,
+    metadata: { contact_id: contactId, com_papel: !!papel },
+  });
+
   return ok({ contact_id: contactId, papel: papel || null }, { status: 201, requestId });
 }
 
@@ -356,15 +368,31 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx): Promise<Response>
 
   // O filtro de organização EXPLÍCITO, como no leitor: o DELETE apaga o vínculo
   // do negócio que o caller provou — nunca "todo vínculo com este contato".
-  const { error: delErr } = await supabase
+  const { data: apagadas, error: delErr } = await supabase
     .from("crm_lead_links")
     .delete()
     .eq("lead_id", leadId)
     .eq("organization_id", lead.organization_id)
     .eq("target_kind", ALVO_DE_CONTATO)
     .eq("link_kind", VINCULO_DE_CONTATO)
-    .eq("target_id", contactId);
+    .eq("target_id", contactId)
+    .select("target_id");
   if (delErr) return fail("internal_error", delErr.message, 500, { requestId });
 
-  return ok({ contact_id: contactId, removido: true }, { requestId });
+  // DELETE de vínculo que não existe não é mutação: não audita, e a resposta
+  // não afirma uma remoção que não houve.
+  const removido = (apagadas ?? []).length > 0;
+  if (removido) {
+    await audit({
+      action: "lead.participant_removed",
+      actorUserId: authz.user.id,
+      organizationId: lead.organization_id,
+      resourceType: "crm_lead",
+      resourceId: leadId,
+      requestId,
+      metadata: { contact_id: contactId },
+    });
+  }
+
+  return ok({ contact_id: contactId, removido }, { requestId });
 }
