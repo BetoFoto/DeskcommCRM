@@ -8838,6 +8838,21 @@ export const DICIONARIO: Traducoes = {
   "O agente interpretou a resposta": { es: "El agente interpretó la respuesta" },
   "Fluxo concluído": { es: "Flujo concluido" },
   "O fluxo parou de tentar": { es: "El flujo dejó de intentarlo" },
+  "Esperando o outro acompanhamento deste contato terminar": {
+    es: "Esperando a que termine el otro seguimiento de este contacto",
+  },
+  "tenta de novo a cada hora, por até 7 dias": {
+    es: "intenta de nuevo cada hora, hasta 7 días",
+  },
+  "Cancelado: outro acompanhamento ocupou o contato por 7 dias": {
+    es: "Cancelado: otro seguimiento ocupó el contacto durante 7 días",
+  },
+  "esperou 7 dias pelo outro acompanhamento deste contato terminar": {
+    es: "esperó 7 días a que terminara el otro seguimiento de este contacto",
+  },
+  "Outro acompanhamento ocupou o contato por 7 dias": {
+    es: "Otro seguimiento ocupó el contacto durante 7 días",
+  },
   "Falhou neste passo": { es: "Falló en este paso" },
   "Não conseguiu mover o card para a etapa escolhida": {
     es: "No pudo mover la tarjeta a la etapa elegida",
