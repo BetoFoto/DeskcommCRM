@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: O provedor "OpenAI pela assinatura" deixa de exigir chave no cadastro
+titulo: O cadastro da assinatura do ChatGPT explica que a conta se conecta pelo login, em vez de pedir uma chave
 ---
 
 No formulário de credenciais (IA › Credenciais), o provedor "OpenAI pela
