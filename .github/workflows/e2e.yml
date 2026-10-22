@@ -1261,6 +1261,11 @@ jobs:
       # service role, sobe o dublê em 127.0.0.1:3995 (nenhuma outra spec desta
       # parte o sobe) e devolve as chaves da instalação no `finally`.
       # PREVISÃO, não medida: ~1,5 min de caso.
+      #
+      # `contatos-em-cartao-no-celular` entrou em 2026-10-21 (F3 da ADR-0006):
+      # a lista de contatos a 390px, com toque emulado e login `agent`. Semeia
+      # dois contatos pelo service role e os apaga no fim; não depende de WAHA
+      # nem de vizinha. PREVISÃO, não medida: ~1 min de caso.
       SPECS_PARTE_6: >-
         agenda-google-meet.spec.ts
         agenda-presenca-recuperacao.spec.ts
@@ -1269,6 +1274,7 @@ jobs:
         cobranca-desligada.spec.ts
         cobranca-link-pelo-dono.spec.ts
         cobranca-suspensao-e-limites.spec.ts
+        contatos-em-cartao-no-celular.spec.ts
         filtro-por-marcador-pela-tela.spec.ts
         fonte-de-captacao-assina-os-envios.spec.ts
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
