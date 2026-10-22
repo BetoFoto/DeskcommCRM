@@ -151,13 +151,19 @@ export function SeriePanel() {
                     contentStyle={{
                       borderRadius: "8px",
                       fontSize: "12px",
-                      border: "1px solid hsl(var(--border))",
+                      // Tokens de verdade do globals.css: `--border` resolve
+                      // para hex e `hsl()` não aceita hex — a borda sumia.
+                      border: "1px solid var(--color-border)",
+                      background: "var(--color-surface)",
                     }}
                   />
                   <Line
                     type="monotone"
                     dataKey="ganhos"
-                    stroke="hsl(var(--accent))"
+                    // `--accent` não existe no globals.css: `hsl(var(--accent))`
+                    // computava `none` e a linha não aparecia. `--color-accent`
+                    // segue a marca do revendedor.
+                    stroke="var(--color-accent)"
                     strokeWidth={2}
                     dot={false}
                   />
@@ -175,12 +181,19 @@ export function SeriePanel() {
               <TableBody>
                 {baldes.map((b) => (
                   <TableRow key={b.balde}>
-                    <TableCell className="font-medium tabular-nums">{b.balde}</TableCell>
+                    <TableCell className="font-medium tabular-nums">
+                      {rotuloDoBalde(b.balde, tagDoIdioma)}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{formatar(b.ganhos)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            {serie.truncado && (
+              <p className="text-xs text-muted-foreground">
+                {t("Série cortada no teto de leitura.")}
+              </p>
+            )}
           </>
         )}
       </CardContent>

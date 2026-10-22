@@ -50,11 +50,12 @@ describe("a evolução dos ganhos no Desempenho", () => {
     const grafico = screen.getByTestId("ganhos-no-tempo");
 
     // A tabela dos baldes, com o dia PARADO (02) presente e zerado — não sumiu.
-    const linhaParada = screen.getByText("2026-10-02").closest("tr");
+    // A célula mostra o rótulo no idioma da sessão (`02/10`), não a chave ISO.
+    const linhaParada = screen.getByText("02/10").closest("tr");
     const celulas = Array.from(linhaParada?.querySelectorAll("td") ?? []).map(
       (td) => td.textContent ?? "",
     );
-    expect(celulas).toEqual(["2026-10-02", "0"]);
+    expect(celulas).toEqual(["02/10", "0"]);
 
     // O mesmo `Card` para os dois: o ancestral comum é o próprio Cartão.
     const cartaoDoGrafico = grafico.closest("div.rounded-lg");
@@ -74,9 +75,20 @@ describe("a evolução dos ganhos no Desempenho", () => {
       Array.from(tr.querySelectorAll("td")).map((td) => td.textContent ?? ""),
     );
     expect(linhas).toEqual([
-      ["2026-10-01", "2"],
-      ["2026-10-02", "0"],
-      ["2026-10-03", "1"],
+      ["01/10", "2"],
+      ["02/10", "0"],
+      ["03/10", "1"],
     ]);
+  });
+
+  it("série cortada no teto de leitura avisa, e a inteira não", () => {
+    serie = serieDeExemplo();
+    const { unmount } = render(<SeriePanel />);
+    expect(screen.queryByText("Série cortada no teto de leitura.")).toBeNull();
+    unmount();
+
+    serie = { ...serieDeExemplo(), truncado: true };
+    render(<SeriePanel />);
+    expect(screen.getByText("Série cortada no teto de leitura.")).toBeTruthy();
   });
 });

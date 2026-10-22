@@ -16954,6 +16954,7 @@ export const DICIONARIO: Traducoes = {
   "Erro ao carregar a evolução dos ganhos.": {
     es: "No se pudo cargar la evolución de las ganancias.",
   },
+  "Série cortada no teto de leitura.": { es: "Serie cortada en el límite de lectura." },
 };
 
 /**
