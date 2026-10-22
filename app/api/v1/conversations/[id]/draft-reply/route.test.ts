@@ -43,6 +43,13 @@ function ctx(id = CONVERSA) {
   return { params: Promise.resolve({ id }) };
 }
 
+/** O tipo do GET admite `undefined` (o `response` do contexto é opcional); o teste exige resposta. */
+async function chamarGet() {
+  const res = await GET(req(), ctx());
+  if (!res) throw new Error("o GET não devolveu resposta");
+  return res;
+}
+
 /** Cadeia do Supabase que a rota usa: from().select().eq().eq().maybeSingle(). */
 function conversaNoBanco(encontrada: boolean) {
   const eq = vi.fn(() => chain);
@@ -71,7 +78,7 @@ describe("GET /api/v1/conversations/[id]/draft-reply", () => {
     const linhas = [{ id: "d1", status: "failed" }];
     deps.listar.mockResolvedValue(linhas);
 
-    const res = await GET(req(), ctx());
+    const res = await chamarGet();
 
     expect(res.status).toBe(200);
     expect(eq).toHaveBeenCalledWith("organization_id", ORG);
@@ -84,7 +91,7 @@ describe("GET /api/v1/conversations/[id]/draft-reply", () => {
   it("conversa de outra organização responde 404 e não consulta as sugestões", async () => {
     conversaNoBanco(false);
 
-    const res = await GET(req(), ctx(CONVERSA));
+    const res = await chamarGet();
 
     expect(res.status).toBe(404);
     expect(deps.listar).not.toHaveBeenCalled();
