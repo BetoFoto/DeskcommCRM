@@ -758,3 +758,147 @@ describe("send_whatsapp_message — gatilhos de aniversário e de agenda (#2326)
     }
   });
 });
+
+/**
+ * #3286 — a ação de WhatsApp disparada pelo gatilho de DATA DO FUNIL
+ * (`lead.date_field_due`, entidade `crm_lead`) nunca enviava, e é o MESMO
+ * defeito do #2326 num tipo que ficou de fora do conserto da 0551: o evento
+ * nasce pelo cron `app/api/v1/cron/lead-date-field-due` sem `service_origin`
+ * (correto — origem é campo do servidor), e o par `(tipo, entidade)` não estava
+ * na tabela que as duas pontas leem (`fn_service_event_contact`). O evento
+ * nascia sem carimbo E `fn_service_event_origin` recusava o tipo com
+ * `service_event_origin_unsupported` (40001) — que `serviceForEvent` engole
+ * como origem obsoleta —, então o run terminava `failed` com
+ * `service_boundary_stale`.
+ *
+ * O caso 11 exercita a AÇÃO inteira (carimbo + `serviceForAutomation` +
+ * `sendMessageHandler`); o 12 mede a tabela de pares direto, e é ele quem prova
+ * que o par novo entrou SEM afrouxar os que já funcionavam (`contact.birthday`,
+ * `contact.tag_added`, `appointment.created`) nem os desconhecidos.
+ *
+ * Sem a linha da migration 0741, o caso 11 termina `failed` e o 12 acusa
+ * `suportado=false` no par novo.
+ */
+describe("send_whatsapp_message — gatilho de data do funil (#3286)", () => {
+  // Namespace próprio (44444444-), ao lado do que o arquivo já usa.
+  const PIPELINE_ID = "44444444-8888-4000-8000-000000000001";
+  const STAGE_ID = "44444444-8888-4000-8000-000000000002";
+  const LEAD_ID = "44444444-8888-4000-8000-000000000003";
+  const COMPROMISSO_ID = "44444444-5555-4000-8000-000000000003";
+
+  /** Semeia funil + negócio do contato e o compromisso usado como par de controle. */
+  function semearNegocio(): void {
+    sql(`
+      insert into public.crm_pipelines (id, organization_id, name, slug)
+        values ('${PIPELINE_ID}', '${GOV_ORG}', 'Funil T11', 'funil-t11')
+        on conflict (id) do nothing;
+      insert into public.crm_stages (id, organization_id, pipeline_id, name, slug, position)
+        values ('${STAGE_ID}', '${GOV_ORG}', '${PIPELINE_ID}', 'Véspera do embarque', 'vespera-t11', 1000)
+        on conflict (id) do nothing;
+      insert into public.crm_leads (id, organization_id, pipeline_id, stage_id, contact_id, title, custom_fields)
+        values ('${LEAD_ID}', '${GOV_ORG}', '${PIPELINE_ID}', '${STAGE_ID}', '${CONTACT_ID}', 'Negócio T11', '{"data_inicio":"2026-07-18"}'::jsonb)
+        on conflict (id) do nothing;
+      insert into public.calendar_appointments (id, organization_id, contact_id, title, starts_at, ends_at)
+        values ('${COMPROMISSO_ID}', '${GOV_ORG}', '${CONTACT_ID}', 'Compromisso T11 (controle)',
+                now() + interval '30 days', now() + interval '30 days 1 hour')
+        on conflict (id) do nothing;
+    `);
+  }
+
+  /** `(tipo, entidade) → contato` como o banco resolve — a MESMA tabela das duas pontas. */
+  function par(
+    tipo: string,
+    kind: string,
+    id: string,
+  ): { suportado: boolean; contact_id: string | null } {
+    return rows(
+      `select suportado, contact_id from public.fn_service_event_contact(
+         '${GOV_ORG}'::uuid, ${sqlString(tipo)}, ${sqlString(kind)}, ${sqlString(id)}::uuid)`,
+    )[0] as { suportado: boolean; contact_id: string | null };
+  }
+
+  it("11. lead.date_field_due sem origem: emit_event carimba e a ação envia (não morre em service_boundary_stale)", async () => {
+    // 13:00Z = 10:00 em São Paulo: dentro da janela do canal.
+    vi.setSystemTime(new Date("2026-07-17T13:00:00Z"));
+    await ensureConversation(admin, GOV_ORG, CONTACT_ID, SESSION_ID);
+    semearNegocio();
+
+    // O cron emite SEM `service_origin` — o carimbo é responsabilidade do servidor.
+    const eventoId = emitirSemOrigem("lead.date_field_due", "crm_lead", LEAD_ID, {
+      rule_id: RULE_ID,
+      pipeline_id: PIPELINE_ID,
+      campo: "data_inicio",
+      dias: 1,
+      local_date: new Date("2026-07-17T13:00:00Z").toISOString().slice(0, 10),
+      date: "2026-07-18",
+    });
+
+    // O carimbo resolveu o par novo: o evento nasce COM origem.
+    const carimbo = rows(
+      `select payload->'service_origin'->>'kind' as kind from public.event_log where id = '${eventoId}'`,
+    );
+    expect(carimbo[0]?.kind, "o emit_event não carimbou o par novo").toBe("command");
+
+    const executor = getAction("send_whatsapp_message")!;
+    const result = await executor.execute(
+      baseCtx({
+        event: { id: eventoId } as unknown as EventRow,
+        context: {
+          contact: {
+            id: CONTACT_ID,
+            is_blocked: false,
+            phone_number: "+551****0001",
+            name: "Ana",
+          },
+        },
+      }),
+      { channel_session_id: SESSION_ID, template: "Falta 1 dia, {{contact.name}}!" },
+    );
+
+    // O desfecho do defeito era `failed` com `service_boundary_stale`.
+    expect(result.status).toBe("postponed");
+    expect(result.detail?.reason).toBe("waha_not_configured");
+    const mensagemId = String(result.detail?.message_id);
+    expect(mensagemId).toBeTruthy();
+    const encontradas = rows(
+      `select body, direction, contact_id from public.messages where id = '${mensagemId}'`,
+    );
+    expect(encontradas.length).toBe(1);
+    expect(encontradas[0]!.body).toBe("Falta 1 dia, Ana!");
+    expect(encontradas[0]!.direction).toBe("outbound");
+    expect(encontradas[0]!.contact_id).toBe(CONTACT_ID);
+  });
+
+  it("12. o par (tipo, entidade) reconhece o novo e mantém os antigos — desconhecido segue recusado", () => {
+    semearNegocio();
+
+    // O NOVO: o gatilho de data do funil, entidade crm_lead.
+    expect(par("lead.date_field_due", "crm_lead", LEAD_ID)).toMatchObject({
+      suportado: true,
+      contact_id: CONTACT_ID,
+    });
+
+    // Os que já funcionavam seguem reconhecidos (nenhum foi afrouxado nem perdido).
+    expect(par("contact.birthday", "contact", CONTACT_ID)).toMatchObject({
+      suportado: true,
+      contact_id: CONTACT_ID,
+    });
+    expect(par("contact.tag_added", "contact", CONTACT_ID)).toMatchObject({
+      suportado: true,
+      contact_id: CONTACT_ID,
+    });
+    expect(par("appointment.created", "calendar_appointment", COMPROMISSO_ID)).toMatchObject({
+      suportado: true,
+      contact_id: CONTACT_ID,
+    });
+    expect(par("lead.created", "crm_lead", LEAD_ID)).toMatchObject({
+      suportado: true,
+      contact_id: CONTACT_ID,
+    });
+
+    // E o reconhecimento NÃO foi afrouxado: tipo desconhecido e `entity_kind`
+    // incompatível continuam recusados (o ramo `else` da função).
+    expect(par("lead.date_field_due", "contact", CONTACT_ID).suportado).toBe(false);
+    expect(par("lead.silent_for", "crm_lead", LEAD_ID).suportado).toBe(false);
+  });
+});
