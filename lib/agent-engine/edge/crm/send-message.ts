@@ -5,7 +5,7 @@ import type { JobClaim } from '../../queue/claim';
 import { assertAgendaEffectPg } from '@/lib/agenda/efeito';
 import { AgendaDeferredError } from '@/lib/agenda/protecao-followup';
 import { StaleServiceBoundaryError } from '@/lib/atendimento/fronteira';
-import { requireCurrentServiceBoundary } from '@/lib/atendimento/fronteira-server';
+import { requireCurrentAutonomousTurn, requireCurrentServiceBoundary } from '@/lib/atendimento/fronteira-server';
 import { parseServiceBoundary } from '@/lib/atendimento/fronteira';
 /**
  * Borda de saída pós-fusão: envio de mensagem SEMPRE via `sendMessageHandler` do
@@ -62,8 +62,17 @@ export interface SendMessageInput {
    * colidirem no ledger e o segundo virar `already_sent` sem ter saído.
    */
   template?: { name: string; language: string; values: Record<string, string> };
-  /** Presente = imagem da pasta da conversa em `whatsapp-media`; `body` é a legenda. */
-  media?: { storagePath: string; mime: string };
+  /**
+   * Presente = o envio sai como MÍDIA e o `body` é a LEGENDA.
+   *
+   * Duas procedências, um caminho só (o handler de envio): `storagePath` é a imagem
+   * que já mora na pasta da conversa (`whatsapp-media/...`, foto de produto — assinada
+   * curta por quem conhece o provider), e `url` é a mídia de um passo automático
+   * (#2734), que o operador aponta direto e o handler confere antes de buscar.
+   */
+  media?:
+    | { storagePath: string; mime: string }
+    | { url: string; mime: string; type: 'image' | 'document' };
 }
 
 /**
@@ -85,11 +94,19 @@ export function corpoDoEnvio(
           template_values: input.template.values,
         }
       : input.media
-        ? {
-            type: 'image' as const,
-            media_storage_path: input.media.storagePath,
-            media_mime: input.media.mime,
-          }
+        ? 'url' in input.media
+          ? {
+              // #2734 — mídia por URL de um passo automático: o `type` vem decidido
+              // (imagem × PDF) e o handler é quem busca e confere o arquivo.
+              type: input.media.type,
+              media_url: input.media.url,
+              media_mime: input.media.mime,
+            }
+          : {
+              type: 'image' as const,
+              media_storage_path: input.media.storagePath,
+              media_mime: input.media.mime,
+            }
         : { type: 'text' as const }),
     // Foto sem legenda vai sem `body`: o schema do envio pede corpo não vazio.
     ...(input.body !== '' || !input.media ? { body: input.body } : {}),
@@ -114,7 +131,7 @@ export async function sendTurnMessage(
   // Antes do ledger, não só no handler: recusada lá dentro, a bolha deixa uma
   // linha 'requested' que o disjuntor de saúde conta como envio (total_sends).
   if (input.agentOperation) await assertAgentOperationPg(db, input.agentOperation);
-  const { rows: sourceJobs } = await db.query<{ kind: string; payload: Record<string, unknown> }>(
+  const { rows: sourceJobs } = await db.query<Pick<JobRow, 'kind' | 'payload'>>(
     'select payload,kind from job_queue where id=$1 and organization_id=$2 and contact_id=$3',
     [input.jobId, input.tenantId, input.leadId],
   );
@@ -122,6 +139,14 @@ export async function sendTurnMessage(
     db,
     parseServiceBoundary(sourceJobs[0]?.payload.service_boundary),
   );
+  if (sourceJobs[0]) await requireCurrentAutonomousTurn(db, {
+    id: input.jobId,
+    organization_id: input.tenantId,
+    contact_id: input.leadId,
+    kind: sourceJobs[0].kind,
+    locked_by: input.jobClaim?.worker_id ?? null,
+    claim_acquired_at: input.jobClaim?.acquired_at,
+  });
   const proactiveContext =
     sourceJobs[0]?.kind === 'followup_turn' && input.leadId
       ? {
