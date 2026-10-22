@@ -339,7 +339,7 @@ const MARCA_CONGELADA: Record<string, EntradaDeMarca> = {
   "app/actions/settings/smtp.test.ts": {
     categoria: "DEV",
     motivo:
-      "o caso medido da issue #2804 usa o nome do contêiner da stack local (que carrega a marca do produto) para provar que o `_` é recusado ANTES da escrita; é fixture de teste e não embarca na imagem",
+      "o caso medido da issue #2804 usa o nome do contêiner da stack local (que carrega a marca do produto) para provar que o `_` do nome de contêiner é ACEITO e chega à escrita; é fixture de teste e não embarca na imagem",
     marcas: ["supabase_inbucket_deskcomm-crm"],
   },
   "lib/agent-engine/agent/draft-reply.test.ts": {
