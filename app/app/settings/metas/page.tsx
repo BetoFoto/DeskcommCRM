@@ -8,7 +8,7 @@
  * Análise, e se ajusta em Configurações.
  *
  * ─── `manager+`, e a tela diz por quê ───────────────────────────────────────
- * `podeAdministrarEmpresa` é quem autoriza na action; aqui o gate é a MESMA
+ * `definirMetaMensal` é quem autoriza na action; aqui o gate é a MESMA
  * régua (o dono da instalação entra), e quem estiver abaixo vai para /403 em vez
  * de ver um formulário que não salva. O ponto de leitura é o client de SESSÃO:
  * a RLS de `crm_metas` deixa qualquer membro LER a meta da empresa, então o
@@ -17,7 +17,7 @@
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
-import { ROLE_RANK } from "@/lib/auth/types";
+import { ROLE_RANK, escreveComoPlatformAdmin } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { mesLocal } from "@/lib/metas/periodo";
 import { createClient } from "@/lib/supabase/server";
@@ -32,7 +32,7 @@ export default async function MetaDeVendasPage() {
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/app");
   // O dono da instalação (sem modo suporte) passa; o resto precisa de manager.
-  if (!(user.is_platform_admin && !user.support) && ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
+  if (!(escreveComoPlatformAdmin(user) && !user.support) && ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
     redirect("/403");
   }
 

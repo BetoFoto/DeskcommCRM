@@ -9,8 +9,8 @@
  * com mês, indicador e alvo — e a leitura do progresso vira conta, não memória.
  *
  * ─── Quem escreve, e por quê ────────────────────────────────────────────────
- * `manager+` (`podeAdministrarEmpresa`), o mesmo grau de `updatePipelineConfig`
- * e das vizinhas de Configurações: o alvo é o número pelo qual a empresa cobra
+ * `manager+`, o mesmo grau de `definirMeetAberto` e da porta da tela
+ * (`minRole: "manager"`): o alvo é o número pelo qual a empresa cobra
  * o próprio time, e quem o define não é quem o persegue. A RLS da tabela cobra
  * o mesmo papel — duas linhas de defesa, e a de baixo é a que vale.
  *
@@ -32,7 +32,7 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
-import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
+import { ROLE_RANK, escreveComoPlatformAdmin } from "@/lib/auth/types";
 import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { createClient } from "@/lib/supabase/server";
 
@@ -75,7 +75,10 @@ export async function definirMetaMensal(
   if (supportWriteError(authUser.support)) return { ok: false, error: "forbidden_role" };
   const activeOrg = await resolveActiveOrg(authUser);
   if (!activeOrg) return { ok: false, error: "forbidden_tenant" };
-  if (!podeAdministrarEmpresa(authUser, activeOrg)) {
+  // `podeAdministrarEmpresa` NÃO serve aqui: ela cobra `admin`, e o gerente que a
+  // porta, a página e a RLS deixam entrar veria o formulário recusar o salvar.
+  const donoDaInstalacao = escreveComoPlatformAdmin(authUser) && !authUser.support;
+  if (!donoDaInstalacao && ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
     return { ok: false, error: "forbidden_role" };
   }
 
