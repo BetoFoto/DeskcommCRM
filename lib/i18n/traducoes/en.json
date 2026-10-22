@@ -9192,11 +9192,7 @@
   "Resumo do lead para a equipe": "Lead summary for the team",
   "Resumo automático": "Automatic summary",
   "Regra": "Rule",
-  "O que o lead pediu": "What the lead asked for",
   "Pontuação": "Score",
-  "Compromissos": "Commitments",
-  "Objeções": "Objections",
-  "Próxima ação": "Next action",
   "Membro da equipe": "Team member",
   "Valor fora do formato esperado para este campo.": "Value does not match the expected format for this field.",
   "Padrão inválido configurado neste campo: a gravação está bloqueada até a correção.": "Invalid pattern configured for this field: saving is blocked until it is fixed.",
@@ -9333,10 +9329,11 @@
   "Lista pesquisável": "Searchable list",
   "Sim ou não": "Yes or no",
   "Link (URL)": "Link (URL)",
-  "O resumo vai para o WhatsApp cadastrado em Avisos, com a pontuação e o motivo do negócio, montados na hora do disparo.": "The summary goes to the WhatsApp number registered under Alerts, with the score and the reason for the deal, built at send time.",
   "E-mail de uma pessoa da equipe": "A team member's email",
   "Resumo do negócio": "Deal summary",
   "A pessoa recebe no e-mail cadastrado no acesso dela, e o vínculo com a empresa é conferido no momento do envio.": "The person receives it at the email registered in their login, and their link to the company is checked at send time.",
   "WhatsApp da equipe": "Team WhatsApp",
-  "Pessoa da equipe": "Team member"
+  "Pessoa da equipe": "Team member",
+  "Vai para o WhatsApp cadastrado em Avisos.": "It goes to the WhatsApp number registered under Alerts.",
+  "O resumo leva o cliente, o telefone, o negócio, o valor, a pontuação e um atalho para abrir o negócio no CRM. O que foi conversado com o cliente fica na ficha, fora da mensagem.": "The summary carries the customer, the phone, the deal, the value, the score and a shortcut to open the deal in the CRM. What was said in the conversation with the customer stays on the record, out of the message."
 }

@@ -42,15 +42,14 @@
  * `messages`, sem conversa nova, sem timeline de ninguém. A ingestão tem um
  * corte (`numero-interno-de-aviso`) que descarta o que vem do número interno
  * justamente para um aviso não virar conversa — e este aviso respeita o mesmo
- * corte. O trigger desta ação é a virada para ganho, e a passagem para o
- * humano é tratada no MESMO corpo: compromissos, objeções e próxima ação saem
- * do checkpoint, que é o que o closer precisa ler antes de ligar.
+ * corte. O trigger desta ação é a virada para ganho; o que a conversa
+ * combinou fica na ficha, e a mensagem leva o atalho para ela (doc 176, A).
  *
  * ─── O resumo é LIDO AGORA, nunca gravado ──────────────────────────────────
  *
  * Nada de texto fixo gravado na regra: `carregarResumoParaAEquipe`
- * (`resumo-do-evento.ts`) lê o lead, o contato, a pontuação (número E motivo,
- * do jeito que `crm_lead_scores` grava) e a passagem no MOMENTO do disparo, e
+ * (`resumo-do-evento.ts`) lê o lead, o contato e a pontuação numérica no
+ * MOMENTO do disparo, e
  * `montarResumoParaAEquipe` escreve o texto. É o MESMO carregador que alimenta
  * a variável `{{resumo}}` do `send_email` — uma régua de limpeza só.
  */

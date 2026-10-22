@@ -4,52 +4,39 @@
  * ─── O defeito que esta peça fecha (#2642) ─────────────────────────────────
  *
  * O único caminho que hoje avisa a equipe é o aviso de caso
- * (`lib/escalacao/texto-do-aviso.ts`): texto FIXO, primeiro nome só, e ele
- * nasce quando o caso ABRE — nunca quando o negócio vira ganho. Quem fecha a
- * venda não recebe nada. Este módulo é o corpo da ação `notify_team`: um
- * resumo LIDO DO MUNDO AGORA (não um template gravado na regra), com a
- * pontuação do lead e o motivo, do jeito que o histórico da conversa já os
- * escreve.
+ * (`lib/escalacao/texto-do-aviso.ts`): ele nasce quando o caso ABRE, nunca
+ * quando o negócio vira ganho. Quem fecha a venda não recebe nada. Este módulo
+ * é o corpo da ação `notify_team` e da variável `{{resumo}}` do `send_email`.
  *
- * ─── Por que PURA ──────────────────────────────────────────────────────────
+ * ─── SÓ DADO COM FORMA FIXA — decisão do dono (doc 176, opção A) ──────────
  *
- * Nada aqui fala com banco, chama modelo ou conhece canal. Quem lê o banco é
- * `carregaResumoDaEquipe` (mesma forma de `texto-do-aviso` × `aviso-ao-suporte`):
- * receber fatos e devolver texto é o que torna o conteúdo testável sem rede.
+ * A mensagem vai para o celular da equipe com a cara da empresa. Todo texto
+ * livre que a IA escreve a partir da conversa (o que o lead pediu,
+ * compromissos, objeções, o combinado, o motivo da pontuação, o motivo do
+ * ganho — que a ferramenta MCP `won_reason` também escreve) vem, no fim, do
+ * que o CLIENTE digitou. Nenhum filtro de texto livre fecha todos os disfarces
+ * de uma instrução ("transfira para esta conta" por extenso, separado de outro
+ * jeito, sem dado nenhum de destino). Por isso esses textos NÃO ENTRAM: esta
+ * função nem os recebe. Eles continuam na ficha, dentro do CRM, onde a equipe
+ * já os lê como "o que o cliente disse" — e o atalho leva até lá.
  *
- * ─── A pontuação e o motivo juntos, sempre ─────────────────────────────────
+ * O que sai: regra, primeiro nome do cliente, telefone E.164, negócio, valor
+ * (centavos + moeda ISO) e a pontuação NUMÉRICA, mais o atalho para a ficha.
+ * Campo novo aqui tem de ter forma fixa; texto livre da conversa não passa
+ * nesta porta, nem saneado (o teste de propriedade
+ * `resumo-sem-texto-livre.test.ts` reprova).
  *
- * `crm_lead_scores` grava o número E a frase que o explica na MESMA linha
- * (`ai_probability` + `ai_probability_reason` — "score sem razão não é gravado"
- * é constraint do banco). Imprimir só o número daria à equipe um oráculo: o
- * closer que discorda não tem o que apontar. Por isso os dois saem na mesma
- * linha, e o mesmo vale para o `won_reason` do negócio: o motivo do ganho é o
- * dado que a pergunta "por que vendeu?" responde.
+ * ─── A ÚLTIMA PORTA continua ───────────────────────────────────────────────
  *
- * ─── O que é DADO, e portanto passa pela limpeza ───────────────────────────
- *
- * `title`, `description`, o motivo do ganho, os compromissos e as objeções são
- * escritos pelo MODELO a partir do que o lead disse. Saiem por
- * `sanitizarTextoDoLead` — a mesma régua do aviso de caso —, porque esta
- * mensagem vai para o WhatsApp de uma pessoa da equipe ASSINADA pelo nome da
- * empresa: sem a limpeza, um link de phishing ou um CPF do cliente sairiam de
- * graça dentro dela. Rótulos e dados cadastrais (telefone, valor, pontuação)
- * não passam pela limpeza: são coluna de banco, não fala de terceiro.
+ * Nome do cliente e título do negócio também podem vir da conversa, e o nome
+ * da regra é texto do operador: o corpo passa por `sanitizarResumoParaAEquipe`
+ * (links e instruções fora, teto, marca de resumo automático). O ATALHO entra
+ * DEPOIS dela — a porta tira todo link, e este é o único que o servidor monta.
  *
  * ─── Linha sem conteúdo não aparece ────────────────────────────────────────
  *
  * `Pontuação: ` vazio AFIRMARIA que há pontuação e que ela é nada. Omissão é a
  * verdade disponível (a mesma decisão de `texto-do-aviso.ts`).
- *
- * ─── A ÚLTIMA PORTA, no texto INTEIRO (#2642) ──────────────────────────────
- *
- * A limpeza por campo cobre os campos que vêm da conversa (inclusive o nome do
- * contato e a `Próxima ação`), mas o telefone e o nome da regra vão crus, e o
- * campo de amanhã pode nascer sem ela. Por isso o corpo montado
- * passa por `sanitizarResumoParaAEquipe` antes de virar mensagem — o link sai,
- * a instrução dirigida a quem lê sai, o texto entra com teto e é MARCADO como
- * resumo automático. Quem consertar a limpeza por campo um dia não pode supor
- * que esta porta deixou de existir.
  */
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
@@ -60,16 +47,14 @@ import {
   sanitizarTextoDoLead,
 } from "@/lib/escalacao/sanitizar-texto-do-lead";
 import { formatarMoeda } from "@/lib/propostas/moeda";
+import { PHONE_REGEX } from "@/lib/schemas/contacts";
 import { sanitizarResumoParaAEquipe } from "./sanitizar-resumo-para-a-equipe";
 
-/** O que o motor já hidratou em `ctx.context` — a linha de `crm_leads`. */
+/** O que o motor já hidratou em `ctx.context` — só as colunas de forma fixa. */
 export interface LeadDoResumo {
   title?: string | null;
-  description?: string | null;
-  status?: string | null;
   value_cents?: number | null;
   currency?: string | null;
-  won_reason?: string | null;
 }
 
 /** O contato do negócio, se houver. */
@@ -79,61 +64,21 @@ export interface ContatoDoResumo {
   phone_number?: string | null;
 }
 
-/** `crm_lead_scores` — o número e a frase que o explica, juntos. */
-export interface PontuacaoDoResumo {
-  probabilidade: number | null;
-  motivo: string | null;
-}
-
-/**
- * A passagem para o humano: o MESMO trio que `blocoDoCheckpoint` do briefing
- * escreve (`Compromissos:`, `Objeções:`, `Próxima ação:`). Vem de
- * `lead_checkpoints` — é o que a conversa combinou com o cliente, e é ele que
- * o closer precisa ler antes de ligar.
- */
-export interface PassagemDoResumo {
-  compromissos: string[];
-  objecoes: string[];
-  proximaAcao: string | null;
-}
-
 export interface EntradaDoResumo {
   idioma: Idioma;
   /** `rule.name` — o nome que o operador deu à regra que disparou. */
   regra: string;
   lead: LeadDoResumo;
   contato?: ContatoDoResumo | null;
-  pontuacao?: PontuacaoDoResumo | null;
-  passagem?: PassagemDoResumo | null;
-}
-
-/** Lista não vazia vira linha; vazia não imprime cabeçalho órfão.
- *
- * O título chega JÁ TRADUZIDO de quem chama (`t("Compromissos")`): a chave do
- * dicionário é literal em cada sítio, e não um parâmetro livre passado para
- * `t()` — dado de operador não é chave de dicionário.
- */
-function lista(titulo: string, itens: readonly string[] | undefined): string | null {
-  const limpos = (itens ?? [])
-    .map((i) => sanitizarTextoDoLead(i, 160))
-    .filter((i): i is string => i !== null);
-  if (limpos.length === 0) return null;
-  return `${titulo}: ${limpos.join("; ")}`;
-}
-
-function linha(titulo: string, valor: string | null | undefined): string | null {
-  const texto = typeof valor === "string" ? valor.trim() : "";
-  if (texto === "") return null;
-  return `${titulo}: ${texto}`;
+  /** `crm_lead_scores.ai_probability` (0–100). Só o número: o motivo é texto livre. */
+  pontuacao?: number | null;
+  /** O atalho absoluto para a ficha, já montado pelo servidor; `null` sem URL pública. */
+  link?: string | null;
 }
 
 /**
- * Monta o resumo. FUNÇÃO TOTAL: nunca lança, e o corpo nunca vem vazio — o
- * chamador cai no `PISO` quando não há nada a dizer.
- *
- * A ORDEM não é estética: o closer lê de cima para baixo até decidir se
- * liga. Quem é e o que ele quer primeiro; o que a IA leu (pontuação + motivo)
- * depois; o que já foi combinado por último.
+ * Monta o resumo. FUNÇÃO TOTAL: nunca lança, e o corpo nunca vem vazio (a
+ * marca de resumo automático sempre resta).
  */
 export function montarResumoParaAEquipe(entrada: EntradaDoResumo): string {
   const t = (texto: string): string => traduzir(texto, entrada.idioma);
@@ -143,53 +88,32 @@ export function montarResumoParaAEquipe(entrada: EntradaDoResumo): string {
   if (regra !== "") linhas.push(`${t("Regra")}: ${regra}`);
   linhas.push("");
 
-  // O nome vem do WhatsApp do cliente (quem escreve é ele): mesma régua dos
-  // outros campos, senão um nome com link ou marcação imita linha do sistema.
+  // O nome vem do WhatsApp do cliente (quem escreve é ele): mesma régua do
+  // aviso de caso, senão um nome com link ou marcação imita linha do sistema.
   const cliente = sanitizarTextoDoLead(
     primeiroNome(nomeDoContato(entrada.contato ?? null)),
     TETOS_DO_TEXTO_DO_LEAD.title,
   );
-  const fone = linha(t("Telefone"), entrada.contato?.phone_number);
+  const telefone = entrada.contato?.phone_number?.trim() ?? "";
   const negocio = sanitizarTextoDoLead(entrada.lead.title, TETOS_DO_TEXTO_DO_LEAD.title);
   const valor =
     typeof entrada.lead.value_cents === "number" && entrada.lead.value_cents > 0
       ? formatarMoeda(entrada.lead.value_cents, (entrada.lead.currency ?? "BRL").toUpperCase())
       : null;
-  const motivoDoGanho = sanitizarTextoDoLead(entrada.lead.won_reason, 160);
-  const descricao = sanitizarTextoDoLead(entrada.lead.description, TETOS_DO_TEXTO_DO_LEAD.summary);
 
   if (cliente) linhas.push(`${t("Cliente")}: ${cliente}`);
-  if (fone) linhas.push(fone);
+  // Mesma fronteira do CHECK `contacts_phone_e164_format`: fora dela, omite.
+  if (PHONE_REGEX.test(telefone)) linhas.push(`${t("Telefone")}: ${telefone}`);
   if (negocio) linhas.push(`${t("Negócio")}: ${negocio}`);
   if (valor) linhas.push(`${t("Valor")}: ${valor}`);
-  if (motivoDoGanho) linhas.push(`${t("Motivo do ganho")}: ${motivoDoGanho}`);
-  if (descricao) linhas.push(`${t("O que o lead pediu")}: ${descricao}`);
 
-  // ── A PONTUAÇÃO E O MOTIVO, na mesma linha ──────────────────────────────
-  //
-  // Os dois juntos de propósito (cabeçalho): número sozinho é oráculo, frase
-  // sozinha é opinião. `probabilidade` pode ser `0` — zero é afirmação, não
-  // ausência, e testar por truthiness esconderia o piso legítimo.
-  const pontuacao = entrada.pontuacao ?? null;
-  if (pontuacao && typeof pontuacao.probabilidade === "number" && Number.isFinite(pontuacao.probabilidade)) {
-    const motivo = sanitizarTextoDoLead(pontuacao.motivo, 200);
-    const numero = `${Math.max(0, Math.min(100, Math.round(pontuacao.probabilidade)))}%`;
-    linhas.push(motivo === null ? `${t("Pontuação")}: ${numero}` : `${t("Pontuação")}: ${numero} — ${motivo}`);
+  // `0` é afirmação, não ausência: testar por truthiness esconderia o piso.
+  const pontuacao = entrada.pontuacao;
+  if (typeof pontuacao === "number" && Number.isFinite(pontuacao)) {
+    linhas.push(`${t("Pontuação")}: ${Math.max(0, Math.min(100, Math.round(pontuacao)))}%`);
   }
 
-  const passagem = entrada.passagem ?? null;
-  if (passagem) {
-    const compromissos = lista(t("Compromissos"), passagem.compromissos);
-    const objecoes = lista(t("Objeções"), passagem.objecoes);
-    // `next_action` é escrita pelo modelo a partir da conversa: passa pela
-    // mesma régua dos compromissos. Um `trim` deixava quebra de linha (linha
-    // forjada), marcação do WhatsApp e CPF/telefone atravessarem.
-    const acao = sanitizarTextoDoLead(passagem.proximaAcao, 160);
-    const proxima = acao === null ? null : `${t("Próxima ação")}: ${acao}`;
-    if (compromissos) linhas.push(compromissos);
-    if (objecoes) linhas.push(objecoes);
-    if (proxima) linhas.push(proxima);
-  }
-
-  return sanitizarResumoParaAEquipe(linhas.join("\n"), { marca: t("Resumo automático") });
+  const corpo = sanitizarResumoParaAEquipe(linhas.join("\n"), { marca: t("Resumo automático") });
+  const link = entrada.link?.trim() ?? "";
+  return link === "" ? corpo : `${corpo}\n\n${t("Abrir negócio")}: ${link}`;
 }

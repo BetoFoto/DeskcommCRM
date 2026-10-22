@@ -23,8 +23,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * 3. NÃO abre conversa com o lead: o `sendMessageHandler` (o caminho que cria
  *    `messages` e conversa) tem de ficar INTACTO em todo o arquivo. É a prova
  *    negativa — e é ela que separa esta ação de `send_whatsapp_message`.
- * 4. O resumo é MONTADO NO DISPARO, com a pontuação E o motivo, do jeito que
- *    `crm_lead_scores` grava (número + frase na mesma linha).
+ * 4. O resumo é MONTADO NO DISPARO, só com dado de forma fixa (pontuação
+ *    NUMÉRICA, sem o motivo em texto — doc 176, A). A propriedade "nenhum
+ *    texto livre da conversa" mora em `resumo-sem-texto-livre.test.ts`.
  *
  * ─── O dublê ───────────────────────────────────────────────────────────────
  *
@@ -229,7 +230,7 @@ describe("notify_team — a ação que NÃO EXISTE ainda (#2642)", () => {
 });
 
 describe("notify_team — WhatsApp, pelo número que o ADMIN cadastrou", () => {
-  it("entrega o resumo no número cadastrado, com a pontuação E o motivo", async () => {
+  it("entrega o resumo no número cadastrado, com a pontuação numérica", async () => {
     const acao = getAction("notify_team")!;
     const admin = adminFake(tabelasComTudo());
     const r = await acao.execute(ctx(admin), { canal: "whatsapp" });
@@ -244,14 +245,9 @@ describe("notify_team — WhatsApp, pelo número que o ADMIN cadastrou", () => {
       string,
     ];
     expect(destino, "o destino é o número do ADMIN, não o do lead").toBe("+5511999990000");
-    // A pontuação E o motivo, juntos — é o critério 4 da issue.
-    expect(corpo).toContain("Pontuação: 72%");
-    expect(corpo).toContain("dois compromissos marcados e nenhum orçamento enviado");
-    // O motivo do ganho, que a pergunta da issue pede.
-    expect(corpo).toContain("Motivo do ganho: renovação com desconto de fidelidade");
-    // E o que a conversa combinou com o cliente (a passagem tratada junto).
-    expect(corpo).toContain("Compromissos: enviar proposta até sexta");
-    expect(corpo).toContain("Próxima ação: ligar para fechar o pagamento");
+    // Só o número: o motivo é texto livre da IA e fica na ficha (doc 176, A).
+    expect(corpo.split("\n")).toContain("Pontuação: 72%");
+    expect(corpo).not.toContain("dois compromissos marcados");
     expect(corpo).toContain("Cliente: Maria");
     // O valor sai pelo formatador do produto (`lib/propostas/moeda.ts`), que
     // usa o espaço NÃO-QUEBRÁVEL do `toLocaleString` — comparar com um literal
@@ -322,13 +318,12 @@ describe("notify_team — o resumo é MONTADO, não gravado", () => {
     const texto = montarResumoParaAEquipe({
       idioma: "pt-BR",
       regra: "Avisa o closer",
-      lead: { ...LEAD_DO_CONTEXTO, value_cents: null, won_reason: null },
+      lead: { ...LEAD_DO_CONTEXTO, value_cents: null },
       contato: CONTATO_DO_CONTEXTO,
       pontuacao: null,
-      passagem: null,
     });
     expect(texto).not.toContain("Pontuação");
-    expect(texto).not.toContain("Motivo do ganho");
+    expect(texto).not.toContain("Valor");
   });
 
   it("0% é afirmação, não ausência: o piso legítimo continua saindo", () => {
@@ -336,9 +331,9 @@ describe("notify_team — o resumo é MONTADO, não gravado", () => {
       idioma: "pt-BR",
       regra: "Avisa o closer",
       lead: LEAD_DO_CONTEXTO,
-      pontuacao: { probabilidade: 0, motivo: "sem interação desde a primeira mensagem" },
+      pontuacao: 0,
     });
-    expect(texto).toContain("Pontuação: 0% — sem interação desde a primeira mensagem");
+    expect(texto.split("\n")).toContain("Pontuação: 0%");
   });
 
   it("número fora da faixa é cortado nos 0–100 do banco", () => {
@@ -346,32 +341,32 @@ describe("notify_team — o resumo é MONTADO, não gravado", () => {
       idioma: "pt-BR",
       regra: "Avisa o closer",
       lead: LEAD_DO_CONTEXTO,
-      pontuacao: { probabilidade: 137, motivo: "cálculo torto" },
+      pontuacao: 137,
     });
     expect(texto).toContain("Pontuação: 100%");
   });
 
-  it("a fala do MODELO passa pela limpeza antes de virar mensagem", () => {
+  it("o título do negócio passa pela limpeza antes de virar mensagem", () => {
     const texto = montarResumoParaAEquipe({
       idioma: "pt-BR",
       regra: "Avisa o closer",
       lead: { ...LEAD_DO_CONTEXTO, title: "meu site é http://phish.example.com/paga e meu CPF é 529.982.247-25" },
-      pontuacao: { probabilidade: 80, motivo: "veja https://oferta.example.com/boleto agora" },
+      pontuacao: 80,
     });
     expect(texto, "um link de phishing não pode sair na mensagem da equipe").not.toContain("http");
     expect(texto, "telefone com 8+ dígitos é removido da fala do modelo").not.toContain("529.982.247-25");
   });
 
-  it("falas vazias não viram linha: `Pontuação: ` vazio afirmaria pontuação nenhuma", () => {
+  it("campo vazio não vira linha: `Pontuação: ` vazio afirmaria pontuação nenhuma", () => {
     const texto = montarResumoParaAEquipe({
       idioma: "pt-BR",
       regra: "",
       lead: LEAD_DO_CONTEXTO,
-      pontuacao: { probabilidade: null, motivo: "   " },
-      passagem: { compromissos: [], objecoes: [], proximaAcao: null },
+      pontuacao: null,
+      link: "   ",
     });
     expect(texto).not.toContain("Pontuação:");
-    expect(texto).not.toContain("Compromissos:");
+    expect(texto).not.toContain("Abrir negócio:");
     expect(texto).not.toContain("Regra:");
   });
 });

@@ -4,7 +4,7 @@
  * ─── Por que este arquivo existe, separado do texto ────────────────────────
  *
  * `resumo-para-a-equipe.ts` é a função PURA que monta o texto; este módulo é
- * quem LÊ o banco (pontuação, passagem, idioma) e entrega os fatos para ela.
+ * quem LÊ o banco (pontuação, idioma) e entrega os fatos para ela.
  * A separação é a mesma de `texto-do-aviso` × `aviso-ao-suporte`: o texto é
  * testável sem rede, e a leitura é testável com o dublê de PostgREST.
  *
@@ -19,21 +19,22 @@
  *
  * ─── O resumo é LIDO AGORA, nunca gravado ─────────────────────────────────
  *
- * Nada de texto fixo na regra: `lead`, `contact`, a pontuação (número E motivo,
- * do jeito que `crm_lead_scores` grava) e a passagem no checkpoint mais novo
- * são lidos no disparo. A régua de limpeza do que o MODELO escreveu mora em
- * `montarResumoParaAEquipe`.
+ * Nada de texto fixo na regra: `lead`, `contact` e a pontuação NUMÉRICA são
+ * lidos no disparo. O que a IA escreveu a partir da conversa (motivo da
+ * pontuação, checkpoint, descrição, motivo do ganho) NÃO é lido aqui — decisão
+ * do dono, doc 176 (A): esse texto fica na ficha, e a mensagem leva o atalho
+ * para ela. Ver o cabeçalho de `resumo-para-a-equipe.ts`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { env } from "@/lib/env";
+import { linkDoNegocio, urlPublicaUsavel } from "@/lib/escalacao/url-publica";
 import { IDIOMAS, type Idioma } from "@/lib/i18n/idiomas";
 
 import {
   montarResumoParaAEquipe,
   type ContatoDoResumo,
   type LeadDoResumo,
-  type PassagemDoResumo,
-  type PontuacaoDoResumo,
 } from "./resumo-para-a-equipe";
 
 type Admin = SupabaseClient;
@@ -41,22 +42,17 @@ type Admin = SupabaseClient;
 /**
  * Contexto de um evento: o motor monta `lead` e `contact` (`buildContext`),
  * mas o tipo é `Record<string, unknown>` — então quem lê tem de estreitar com
- * as MESMAS colunas que o banco devolve. Nomes que batem com
- * `database.types.ts`, e não com o que parece bom.
+ * as MESMAS colunas que o banco devolve, e só as de forma fixa.
  */
-export function leadDoContexto(bruto: unknown): (LeadDoResumo & { id: string; contact_id: string | null }) | null {
+export function leadDoContexto(bruto: unknown): (LeadDoResumo & { id: string }) | null {
   if (typeof bruto !== "object" || bruto === null) return null;
   const l = bruto as Record<string, unknown>;
   if (typeof l.id !== "string" || l.id === "") return null;
   return {
     id: l.id,
-    contact_id: typeof l.contact_id === "string" && l.contact_id !== "" ? l.contact_id : null,
     title: typeof l.title === "string" ? l.title : null,
-    description: typeof l.description === "string" ? l.description : null,
-    status: typeof l.status === "string" ? l.status : null,
     value_cents: typeof l.value_cents === "number" ? l.value_cents : null,
     currency: typeof l.currency === "string" ? l.currency : null,
-    won_reason: typeof l.won_reason === "string" ? l.won_reason : null,
   };
 }
 
@@ -79,56 +75,16 @@ async function idiomaDaOrganizacao(admin: Admin, organizationId: string): Promis
     : "pt-BR";
 }
 
-/**
- * `crm_lead_scores` — número E motivo na mesma linha.
- *
- * Os dois vêm juntos porque a própria constraint do banco não deixa número sem
- * frase ("score sem razão não é gravado"). A coluna é `integer`, de 0 a 100.
- */
-async function pontuacaoDoLead(
-  admin: Admin,
-  organizationId: string,
-  leadId: string,
-): Promise<PontuacaoDoResumo | null> {
+/** `crm_lead_scores.ai_probability` — só o número (`integer`, 0 a 100). */
+async function pontuacaoDoLead(admin: Admin, organizationId: string, leadId: string): Promise<number | null> {
   const { data } = await admin
     .from("crm_lead_scores")
-    .select("ai_probability, ai_probability_reason")
+    .select("ai_probability")
     .eq("organization_id", organizationId)
     .eq("lead_id", leadId)
     .maybeSingle();
-  if (data === null) return null;
-  const linha = data as { ai_probability?: number | null; ai_probability_reason?: string | null };
-  return {
-    probabilidade: typeof linha.ai_probability === "number" ? linha.ai_probability : null,
-    motivo: typeof linha.ai_probability_reason === "string" ? linha.ai_probability_reason : null,
-  };
-}
-
-/** O checkpoint mais novo do contato: o que a conversa COMBINOU com o cliente. */
-async function passagemDoContato(
-  admin: Admin,
-  organizationId: string,
-  contactId: string,
-): Promise<PassagemDoResumo | null> {
-  const { data } = await admin
-    .from("lead_checkpoints")
-    .select("commitments, objections, next_action")
-    .eq("organization_id", organizationId)
-    .eq("contact_id", contactId)
-    .order("seq", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (data === null) return null;
-  const linha = data as {
-    commitments?: string[] | null;
-    objections?: string[] | null;
-    next_action?: string | null;
-  };
-  return {
-    compromissos: Array.isArray(linha.commitments) ? linha.commitments : [],
-    objecoes: Array.isArray(linha.objections) ? linha.objections : [],
-    proximaAcao: typeof linha.next_action === "string" ? linha.next_action : null,
-  };
+  const numero = (data as { ai_probability?: number | null } | null)?.ai_probability;
+  return typeof numero === "number" ? numero : null;
 }
 
 /**
@@ -151,15 +107,15 @@ export async function carregarResumoParaAEquipe(entrada: {
   const lead = leadDoContexto(contexto.lead);
   if (lead === null) return null;
 
+  // Sem endereço público (o padrão `localhost`, o placeholder do build) não há
+  // atalho: um link que não abre no celular é pior que nenhum.
+  const base = env.NEXT_PUBLIC_APP_URL;
   return montarResumoParaAEquipe({
     idioma: await idiomaDaOrganizacao(admin, organizationId),
     regra: entrada.regra,
     lead,
     contato: contatoDoContexto(contexto.contact),
     pontuacao: await pontuacaoDoLead(admin, organizationId, lead.id),
-    passagem:
-      lead.contact_id !== null
-        ? await passagemDoContato(admin, organizationId, lead.contact_id)
-        : null,
+    link: urlPublicaUsavel(base) ? linkDoNegocio(base, lead.id) : null,
   });
 }

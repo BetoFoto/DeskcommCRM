@@ -17,8 +17,9 @@
  *      (`{{nome}}`, `{{primeiro_nome}}`, `{{lead.*}}` e os campos do funil
  *      como `{{destino}}`) — `renderTemplate` é o mesmo de sempre —, mais a
  *      variável `{{resumo}}`, que é desta ação: o resumo automático do negócio
- *      (pontuação com o motivo, valor, motivo do ganho e o que a passagem
- *      combinou), montado no disparo pelo MESMO carregador do `notify_team`;
+ *      (cliente, telefone, negócio, valor, pontuação e o atalho para a ficha —
+ *      nenhum texto livre da conversa, doc 176 A), montado no disparo pelo
+ *      MESMO carregador do `notify_team`;
  *   3. entrega o pedido pronto e registra o desfecho honesto: sucesso só com
  *      o resultado do provedor na mão, recusa de configuração/destinatário
  *      como `skipped`, e falha do transporte como `failed` com o CÓDIGO no
@@ -254,8 +255,8 @@ function corpoParaTexto(corpo: string, formato: string): string {
  *
  * ─── Por que só quando o modelo USA a variável ─────────────────────────────
  *
- * Montar o resumo custa três consultas (`organizations`, `crm_lead_scores`,
- * `lead_checkpoints`). Fazer isso em TODO e-mail de automação seria pagar esse
+ * Montar o resumo custa duas consultas (`organizations`, `crm_lead_scores`).
+ * Fazer isso em TODO e-mail de automação seria pagar esse
  * preço por um texto que a maioria dos modelos não usa — e a ação já tem o teto
  * de envios como parte mais cara. O gatilho é o próprio modelo, e o teste de
  * `{{resumo}}` cobre os dois lados (usa → resolvido; não usa → nenhuma leitura).

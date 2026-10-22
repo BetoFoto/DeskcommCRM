@@ -3,13 +3,11 @@
  *
  * ─── Por que esta peça existe, se o texto já sai limpo campo a campo ───────
  *
- * `resumo-para-a-equipe.ts` já manda a fala do MODELO por
- * `sanitizarTextoDoLead` (a régua do aviso de caso). Isso não basta, e a razão
- * é medida: nem todo campo que chega à mensagem passa pela limpeza por campo.
- * O `telefone` e o nome da `regra` vão crus, e a `Próxima ação` já foi um
- * `trim` só — bastava o modelo escrever um link no `next_action` do checkpoint
- * para ele aterrissar dentro de uma mensagem assinada pela empresa, no WhatsApp
- * de quem atende. Campo novo pode repetir o descuido.
+ * Desde a decisão do dono (doc 176, opção A) o resumo só leva dado de forma
+ * fixa — nenhum texto livre que a IA escreveu a partir da conversa entra nele.
+ * Ainda assim sobram textos que alguém de fora escreve (o primeiro nome do
+ * cliente, o título do negócio) e o nome da regra, que vai cru. Esta porta é a
+ * defesa em profundidade sobre o que sobrou, e sobre o campo de amanhã.
  *
  * A resposta não é limpar cada campo novo, um a um, para sempre — é ter UMA
  * última porta no TEXTO INTEIRO, logo antes de ele virar mensagem. Quem

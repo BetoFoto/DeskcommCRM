@@ -445,9 +445,9 @@ function SendEmailForm({
           {[
             ...TEMPLATE_VARS.map((v) => ({ ...v, label: t(v.label) })),
             // #2642 — a variável desta ação: o resumo do negócio montado no
-            // disparo (pontuação com o motivo, valor, motivo do ganho e o que a
-            // passagem combinou). Fica só no e-mail de propósito: no WhatsApp da
-            // equipe o corpo É o resumo, sem modelo.
+            // disparo (só dado de forma fixa + atalho para a ficha; doc 176 A).
+            // Fica só no e-mail de propósito: no WhatsApp da equipe o corpo É
+            // o resumo, sem modelo.
             { token: "{{resumo}}", label: t("Resumo do negócio") },
             ...camposDoFormulario,
           ].map((v) => (
@@ -485,6 +485,11 @@ function SendEmailForm({
       <p className="text-xs text-muted-foreground">
         {t(
           "As variáveis do WhatsApp valem aqui: {{nome}}, {{primeiro_nome}}, {{lead.title}} e os campos do formulário como {{destino}}.",
+        )}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        {t(
+          "O resumo leva o cliente, o telefone, o negócio, o valor, a pontuação e um atalho para abrir o negócio no CRM. O que foi conversado com o cliente fica na ficha, fora da mensagem.",
         )}
       </p>
       <p className="text-xs text-muted-foreground">
@@ -1136,7 +1141,7 @@ function ApplyTaskPlanForm({ config, onChange }: FormProps<{ plano_id: string }>
  *
  * Depois do recorte do PR #2834 não há escolha nenhuma aqui: o resumo vai para
  * o WhatsApp que o ADMIN cadastrou em Avisos, e o corpo é montado no disparo
- * com a pontuação, o motivo e o que a passagem combinou. O formulário NÃO
+ * só com dado de forma fixa e o atalho para a ficha. O formulário NÃO
  * oferece destino colado, pessoa nem texto — um campo de texto seria um
  * template, que é exatamente o defeito do aviso de caso que esta ação fecha, e
  * "quem recebe" virou pergunta sem resposta útil (o destino é o da empresa).
@@ -1150,8 +1155,9 @@ function NotifyTeamForm() {
     <div className="space-y-1">
       <Label>{t("WhatsApp da equipe")}</Label>
       <p className="text-xs text-muted-foreground">
+        {t("Vai para o WhatsApp cadastrado em Avisos.")}{" "}
         {t(
-          "O resumo vai para o WhatsApp cadastrado em Avisos, com a pontuação e o motivo do negócio, montados na hora do disparo.",
+          "O resumo leva o cliente, o telefone, o negócio, o valor, a pontuação e um atalho para abrir o negócio no CRM. O que foi conversado com o cliente fica na ficha, fora da mensagem.",
         )}
       </p>
     </div>

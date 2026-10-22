@@ -5707,11 +5707,7 @@
   "Resumo do lead para a equipe": "发给团队的线索摘要",
   "Resumo automático": "自动摘要",
   "Regra": "规则",
-  "O que o lead pediu": "线索的诉求",
   "Pontuação": "评分",
-  "Compromissos": "承诺事项",
-  "Objeções": "异议",
-  "Próxima ação": "下一步行动",
   "Membro da equipe": "团队成员",
   "Motivo do ganho": "赢单原因",
   "Valor fora do formato esperado para este campo.": "此字段的值不符合预期格式。",
@@ -5818,10 +5814,11 @@
   "A automação foi alterada e não tem mais o rodízio que disparou esta ação. Nada foi atribuído.": "该自动化已被修改，不再包含触发此动作的轮流。未进行任何分配。",
   "O lead deste evento não foi encontrado nesta organização, então ninguém foi atribuído.": "在此组织中未找到该事件的线索，因此未分配任何人。",
   "Vez de {nome}, posição {posicao} da fila do rodízio.": "轮到 {nome}，轮流队列第 {posicao} 位。",
-  "O resumo vai para o WhatsApp cadastrado em Avisos, com a pontuação e o motivo do negócio, montados na hora do disparo.": "摘要会发送到提醒中登记的 WhatsApp 号码，包含评分与赢单原因，并在发送时即时生成。",
   "E-mail de uma pessoa da equipe": "团队成员的邮箱",
   "Resumo do negócio": "业务摘要",
   "A pessoa recebe no e-mail cadastrado no acesso dela, e o vínculo com a empresa é conferido no momento do envio.": "收件人使用其账号中登记的邮箱接收，与公司的关联会在发送时校验。",
   "WhatsApp da equipe": "团队 WhatsApp",
-  "Pessoa da equipe": "团队成员"
+  "Pessoa da equipe": "团队成员",
+  "Vai para o WhatsApp cadastrado em Avisos.": "发送到提醒中登记的 WhatsApp 号码。",
+  "O resumo leva o cliente, o telefone, o negócio, o valor, a pontuação e um atalho para abrir o negócio no CRM. O que foi conversado com o cliente fica na ficha, fora da mensagem.": "摘要包含客户、电话、业务、金额、评分，以及在 CRM 中打开该业务的快捷链接。与客户的对话内容保留在档案中，不放进消息。"
 }

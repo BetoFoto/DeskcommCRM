@@ -488,15 +488,12 @@ export const DICIONARIO: Traducoes = {
   },
   "Regra": { es: "Regla" },
   "Telefone": { es: "Teléfono" },
-  "O que o lead pediu": { es: "Lo que pidió el lead" },
   "Pontuação": { es: "Puntuación" },
-  "Compromissos": { es: "Compromisos" },
-  "Objeções": { es: "Objeciones" },
-  "Próxima ação": { es: "Próxima acción" },
   // #2642 — formulário da ação notify_team, depois do recorte: o destino é o
   // número de Avisos e não há mais escolha de pessoa nem de canal.
-  "O resumo vai para o WhatsApp cadastrado em Avisos, com a pontuação e o motivo do negócio, montados na hora do disparo.": {
-    es: "El resumen va al WhatsApp registrado en Avisos, con la puntuación y el motivo del negocio, armados en el momento del envío.",
+  "Vai para o WhatsApp cadastrado em Avisos.": { es: "Va al WhatsApp registrado en Avisos." },
+  "O resumo leva o cliente, o telefone, o negócio, o valor, a pontuação e um atalho para abrir o negócio no CRM. O que foi conversado com o cliente fica na ficha, fora da mensagem.": {
+    es: "El resumen lleva el cliente, el teléfono, el negocio, el valor, la puntuación y un atajo para abrir el negocio en el CRM. Lo conversado con el cliente queda en la ficha, fuera del mensaje.",
   },
   // #2642 — o destinatário "membro da equipe" e a variável `{{resumo}}` do
   // `send_email`.

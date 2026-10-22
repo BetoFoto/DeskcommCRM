@@ -598,7 +598,7 @@ describe("send_email — o destinatário \"membro da equipe\" (#2642)", () => {
 });
 
 describe("send_email — a variável {{resumo}} (#2642)", () => {
-  it("resolve com a pontuação, o motivo, o valor e o que a passagem combinou", async () => {
+  it("resolve só com dado de forma fixa: a pontuação sai sem o motivo, e a passagem não sai", async () => {
     enviar.mockResolvedValue({ ok: true, id: "e-mail-resumo", via: "smtp" });
     const leitura: Leitura = { tabelas: tabelasDoResumo(), lidas: [] };
 
@@ -609,27 +609,23 @@ describe("send_email — a variável {{resumo}} (#2642)", () => {
 
     const pedido = enviar.mock.calls[0]![0];
     expect(pedido.to).toBe("pessoa@estudio.com");
-    // O resumo vem do MESMO montador do WhatsApp da equipe: número e motivo na
-    // mesma linha, e a passagem (compromissos/próxima ação) logo abaixo.
-    expect(pedido.text).toContain("Pontuação: 72% — dois compromissos marcados e nenhum orçamento enviado");
-    expect(pedido.text).toContain("Compromissos: enviar proposta até sexta");
-    expect(pedido.text).toContain("Próxima ação: ligar para fechar o pagamento");
+    // O resumo vem do MESMO montador do WhatsApp da equipe: só o número da
+    // pontuação; o texto livre da conversa fica na ficha (doc 176, A).
+    expect(pedido.text.split("\n")).toContain("Pontuação: 72%");
+    expect(pedido.text).not.toContain("dois compromissos marcados");
+    expect(pedido.text).not.toContain("enviar proposta até sexta");
     expect(pedido.subject).toBe("Negócio ganho: Lua de mel");
     // Nada de marcação sobrando no que sai.
     expect(JSON.stringify(pedido)).not.toContain("{{");
-    // As três leituras do resumo aconteceram, e só elas.
-    expect([...new Set(leitura.lidas)].sort()).toEqual([
-      "crm_lead_scores",
-      "lead_checkpoints",
-      "organizations",
-    ]);
+    // As duas leituras do resumo aconteceram, e só elas: o checkpoint nem é lido.
+    expect([...new Set(leitura.lidas)].sort()).toEqual(["crm_lead_scores", "organizations"]);
   });
 
   it("modelo SEM {{resumo}} não lê as tabelas do resumo", async () => {
     enviar.mockResolvedValue({ ok: true, id: "e-mail-simples", via: "smtp" });
     const leitura: Leitura = { tabelas: tabelasDoResumo(), lidas: [] };
 
-    // Montar o resumo custa três consultas: quem não usa a variável não paga
+    // Montar o resumo custa duas consultas: quem não usa a variável não paga
     // por elas. (Nos outros testes do bloco o `resumo` é `null`, e o dublê
     // ESTOURA em qualquer tabela que não seja `user_organizations` — é a mesma
     // prova, pelo lado de quem carrega demais.)
