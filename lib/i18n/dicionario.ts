@@ -7275,6 +7275,11 @@ export const DICIONARIO: Traducoes = {
   // O um-clique de voltar (#2757) — o "2 minutos" não é promessa de tempo de
   // execução, é o mesmo aviso do botão de atualizar, agora com o destino dito.
   "Voltar para a versão anterior": { es: "Volver a la versión anterior" },
+  // O aviso da volta automática (#2757) — a frase é montada em pedaços com a versão e a hora.
+  "O sistema voltou sozinho para a versão": { es: "El sistema volvió solo a la versión" },
+  ", porque o site não respondeu logo depois da atualização para a versão": {
+    es: ", porque el sitio no respondió justo después de la actualización a la versión",
+  },
   "Voltando…": { es: "Volviendo…" },
   "O sistema sai do ar por cerca de 2 minutos e volta para a versão": {
     es: "El sistema queda fuera de servicio unos 2 minutos y vuelve a la versión",
