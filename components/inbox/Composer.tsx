@@ -16,6 +16,7 @@ import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentP
 import { ContactPickerDialog } from "@/components/inbox/composer/ContactPickerDialog";
 import { AudioRecorder } from "@/components/inbox/composer/AudioRecorder";
 import { ReplyReviewPanel } from "@/components/inbox/composer/ReplyReviewPanel";
+import { DraftReplyButton } from "@/components/inbox/composer/DraftReplyButton";
 import { EmojiButton } from "@/components/inbox/composer/EmojiButton";
 import {
   MentionMenu,
@@ -31,6 +32,7 @@ import { X } from "lucide-react";
 import { toast } from "sonner";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia, type DestinoDoUpload } from "@/hooks/inbox/useUploadMedia";
+import { useRascunhoAssistido } from "@/hooks/inbox/useRascunhoAssistido";
 import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
 import {
   interpolateTemplate,
@@ -215,6 +217,31 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   // campo vazio), o próximo `/` volta a abrir o menu.
   if (menuDismissed && !slash.open) setMenuDismissed(false);
   const menuOpen = mode === "reply" && slash.open && !menuDismissed;
+
+  /**
+   * QUAL DAS DUAS FORMAS DA ASSISTÊNCIA APARECE (issue #3027).
+   *
+   * O `ReplyReviewPanel` era montado SEMPRE em modo resposta — com borda, título
+   * "Assistência do agente" e o botão "Sugerir resposta" —, mesmo sem sugestão
+   * nenhuma, e comia 2-3 linhas do histórico da conversa em tela de notebook.
+   *
+   * O sinal de "há sugestão" é o MESMO que o painel já usava para escolher o
+   * texto (`sugestaoParaMostrar`): a consulta é uma só, com uma chave só, lida
+   * pelos dois (ver `hooks/inbox/useRascunhoAssistido.ts`). Não há um segundo
+   * estado para divergir do primeiro.
+   *
+   * `mode === "reply"`: em nota o compositor não oferece sugestão de resposta, e
+   * a consulta nem sai.
+   *
+   * `!blockedReason`: compositor bloqueado (suporte somente leitura, papel sem
+   * escrita) devolve só o aviso, lá embaixo — e antes o painel, que fazia esta
+   * consulta, nem chegava a montar. Com a consulta aqui em cima ela sairia mesmo
+   * assim, a cada 4s, e o `GET` exige papel `agent`: 403 em loop para quem só lê.
+   */
+  const { sugestao, invalidar } = useRascunhoAssistido(
+    conversationId,
+    mode === "reply" && !blockedReason,
+  );
 
   /**
    * O contato da conversa, do jeito que a interpolação e o gate do curinga
@@ -656,7 +683,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           mode === "note" && "border-warning/40 bg-warning-bg",
         )}
       >
-        {mode === "reply" && (
+        {/* O BLOCO DA ASSISTÊNCIA SÓ COM SUGESTÃO (issue #3027): sem rascunho
+            para mostrar, ele não é montado e não ocupa faixa nenhuma; o botão de
+            ícone (`DraftReplyButton`), que é o mesmo gesto, fica na linha de
+            ações do compositor (ver abaixo). Com sugestão, o bloco aparece
+            inteiro, como sempre — e sai quando ela é enviada ou descartada. */}
+        {mode === "reply" && sugestao && (
           <ReplyReviewPanel conversationId={conversationId} disabled={isDisabled} />
         )}
         <TemplateMenu
@@ -814,6 +846,30 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               });
             }}
           />
+          {/*
+            O BOTÃO DE ÍCONE DA ASSISTÊNCIA (issue #3027) — "Sugerir resposta",
+            o mesmo gesto do bloco, no lugar onde ele NÃO custa faixa nenhuma:
+            junto do "+" e do emoji, na linha do campo.
+
+            Os dois nunca aparecem juntos: com sugestão montada, o bloco traz o
+            próprio botão de texto; sem sugestão, fica só este ícone. Ninguém
+            escolhe entre dois botões iguais.
+
+            O clique gera pelo MESMO `POST /conversations/:id/draft-reply` do
+            bloco; o rascunho criado entra pelo `invalidateQueries` da chave
+            compartilhada, e é isso que monta o bloco com o texto e as ações. O
+            texto NÃO é despejado no campo: quem revisa e decide é o bloco, e ter
+            o mesmo texto nos dois lugares diria duas vezes a mesma coisa.
+          */}
+          {mode === "reply" && !sugestao && (
+            <DraftReplyButton
+              conversationId={conversationId}
+              disabled={isDisabled}
+              onDraft={() => {
+                void invalidar();
+              }}
+            />
+          )}
           <textarea
             ref={taRef}
             value={text}

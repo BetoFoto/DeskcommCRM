@@ -74,6 +74,16 @@ vi.mock("@/hooks/inbox/useUploadMedia", () => ({
   useUploadMedia: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+// A consulta do rascunho assistido (issue #3027) mora num hook próprio, e este
+// arquivo não monta `QueryClientProvider`: mockar aqui é o mesmo tratamento que
+// outros hooks do compositor recebem. O bloco passa a ser decidido por
+// `sugestao` (o mesmo sinal do painel), e quem prova a decisão é
+// `Composer.sugestao.test.tsx`, com o painel REAL montado sobre uma consulta
+// de verdade.
+vi.mock("@/hooks/inbox/useRascunhoAssistido", () => ({
+  useRascunhoAssistido: () => ({ sugestao: undefined, invalidar: () => {} }),
+}));
+
 vi.mock("@/hooks/inbox/useAssignableMembers", () => ({
   useAssignableMembers: () => ({ data: [] }),
 }));
@@ -104,6 +114,14 @@ vi.mock("@/lib/messaging/contact-card", () => ({
 // SAI do `handleSubmit`, então cada um vira um placeholder sem comportamento.
 vi.mock("@/components/inbox/composer/ReplyReviewPanel", () => ({
   ReplyReviewPanel: () => null,
+}));
+// Os dois lados da assistência viram placeholders aqui: este arquivo mede o
+// corpo que SAI do `handleSubmit`, e o `DraftReplyButton` real traria uma
+// `useMutation` (e o `QueryClient` que este arquivo não monta) para dentro da
+// medição. A decisão de qual dos dois aparece — com o painel e o botão REAIS —
+// é medida em `Composer.sugestao.test.tsx`.
+vi.mock("@/components/inbox/composer/DraftReplyButton", () => ({
+  DraftReplyButton: () => null,
 }));
 vi.mock("@/components/inbox/composer/TemplateMenu", () => ({
   resolveSlash: (text: string) => {
