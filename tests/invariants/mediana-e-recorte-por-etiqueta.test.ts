@@ -251,18 +251,28 @@ function como(actor: string): string {
 /** A linha do atendente na saída da função — `null` quando ele não aparece. */
 function linhaDe(func: string, owner: string | null, etiqueta: string | null): Record<string, unknown> | null {
   const args = owner === null ? "null" : `'${owner}'`;
-  const tag = etiqueta === null ? "null" : `'${etiqueta}'`;
+  // A régua de REFERÊNCIA tem QUATRO argumentos (é o corpo de `origin/main`): a
+  // etiqueta só existe na função nova.
+  const quinto =
+    func === "fn_attendant_metrics" ? `, ${etiqueta === null ? "null::text" : `'${etiqueta}'`}` : "";
   const out = sql(`
     ${como(MANAGER)}
     with r as (
-      select public.${func}('${ORG}', '${DE}', '${ATE}', ${args}, ${tag}) as j
+      select public.${func}('${ORG}', '${DE}', '${ATE}', ${args}${quinto}) as j
     )
     select coalesce(
       (select x::text from r, jsonb_array_elements(r.j -> 'attendants') x
         where x ->> 'user_id' = '${AGENT}'),
       'NULO');
   `);
-  const linha = out.trim().split("\n").find((l) => l.trim().length > 0) ?? "NULO";
+  // O psql com `-tA` imprime o command tag das instruções anteriores ("SET",
+  // "DO"): o valor do SELECT é a ÚLTIMA linha não vazia — pegar a PRIMEIRA
+  // devolveria "SET" e o JSON.parse estourava.
+  const linhas = out
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  const linha = linhas[linhas.length - 1] ?? "NULO";
   return linha === "NULO" ? null : (JSON.parse(linha) as Record<string, unknown>);
 }
 
