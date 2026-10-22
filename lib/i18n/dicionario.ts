@@ -14480,6 +14480,15 @@ export const DICIONARIO: Traducoes = {
   "Não consegui carregar as pessoas relacionadas.": {
     es: "No pude cargar las personas relacionadas.",
   },
+  // ─── #3083 F1: o ESCRITOR do vínculo (adicionar, remover, dar papel) ───
+  "Adicionar participante": { es: "Agregar participante" },
+  "Nenhuma pessoa relacionada ainda.": { es: "Todavía no hay personas relacionadas." },
+  "Pagante, passageiro…": { es: "Pagador, pasajero…" },
+  "Participante adicionado.": { es: "Participante agregado." },
+  "Participante removido.": { es: "Participante eliminado." },
+  "Este contato já é o contato principal do negócio.": {
+    es: "Este contacto ya es el contacto principal del negocio.",
+  },
   "Confira os links marcados: só endereços http(s) valem.": {
     es: "Revisa los enlaces marcados: solo son válidas las direcciones http(s).",
   },
