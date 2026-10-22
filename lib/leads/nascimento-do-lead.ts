@@ -53,7 +53,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { marcaDaOrigem, origemDeCampanhaDaConversa } from "@/lib/campanhas/origem-do-lead";
-import { pipelineConfigPatchSchema } from "@/lib/schemas/settings";
+import { entradaDoInboxDeclarada } from "@/lib/leads/entrada-do-inbox";
 
 import { logger } from "@/lib/logger";
 import { ORIGEM_DO_WHATSAPP } from "@/lib/channels/origem-do-negocio";
@@ -162,27 +162,23 @@ async function primeiraEtapa(
  * A etapa de entrada DECLARADA nas configurações do funil (issue #3011, fatia 1).
  *
  * O valor bruto é jsonb, escrito por fora do zod que o PATCH usa — script,
- * seed, API antiga —, então ele é lido pela MESMA régua da gravação
- * (`pipelineConfigPatchSchema.shape.entrada_do_inbox`), como
- * `lib/leads/motivos-de-perda-do-funil.ts` já faz com `lost_reasons`. Um
- * `stage_id` que não passa aqui não vira etapa nenhuma: quem chama cai na
- * primeira do funil, que é o comportamento de antes desta fatia.
+ * seed, API antiga —, então a leitura é delegada a
+ * `lib/leads/entrada-do-inbox.ts`, que a faz pela MESMA régua da gravação e é a
+ * mesma que a TELA usa para abrir o seletor no valor escolhido. Uma leitura só:
+ * duas divergiriam. Um `stage_id` que não passa lá não vira etapa nenhuma: quem
+ * chama cai na primeira do funil, que é o comportamento de antes desta fatia.
  *
- * ⚠️ IDENTIFICADOR COM FORMA NÃO É ETAPA QUE EXISTE. Este `safeParse` só diz
- * que o valor *parece* um uuid. Que ele seja etapa DESTE funil, desta
- * organização e aberta é conferido contra o banco em `etapaDeEntrada` — sem
- * isso, uma configuração apontando para o funil do vizinho, para uma etapa
- * arquivada ou para "Perdido" faria o card nascer no lugar errado, ou não
- * nascer: é a falha que este arquivo inteiro existe para impedir.
+ * ⚠️ IDENTIFICADOR COM FORMA NÃO É ETAPA QUE EXISTE. O `safeParse` só diz que o
+ * valor *parece* um uuid. Que ele seja etapa DESTE funil, desta organização e
+ * aberta é conferido contra o banco em `etapaDeEntrada` — sem isso, uma
+ * configuração apontando para o funil do vizinho, para uma etapa arquivada ou
+ * para "Perdido" faria o card nascer no lugar errado, ou não nascer: é a falha
+ * que este arquivo inteiro existe para impedir.
  */
 export function stageDeEntradaDeclarado(settings: unknown): string | null {
-  const bruto = (settings as { entrada_do_inbox?: unknown } | null | undefined)?.entrada_do_inbox;
-  const lido = pipelineConfigPatchSchema.shape.entrada_do_inbox.safeParse(bruto);
-  if (!lido.success || !lido.data) return null;
+  const lido = entradaDoInboxDeclarada(settings);
   // Só o `true` explícito liga — a régua de `settings.crm.cliente_pela_agenda`.
-  if (lido.data.ativa !== true) return null;
-  const stageId = lido.data.stage_id;
-  return typeof stageId === "string" && stageId !== "" ? stageId : null;
+  return lido.ativa ? lido.stage_id : null;
 }
 
 /**
@@ -220,6 +216,17 @@ async function etapaDeEntrada(
       .eq("is_lost", false)
       .maybeSingle();
     if (etapa?.id) return etapa.id as string;
+    // A etapa declarada NÃO VALE MAIS: arquivada, apagada, de outro funil, ou
+    // fechada como ganho/perdido. O card entra na primeira etapa, como antes
+    // deste ajuste — a decisão é a certa (errar a etapa é visível, não nascer é
+    // a pessoa sumir), mas ela não pode ser SILENCIOSA: o log fica para quem
+    // opera e a tela do funil mostra a escolha como indisponível, com o aviso
+    // de que as conversas estão caindo na primeira etapa.
+    logger.warn("[nascimento-do-lead] etapa de entrada do Inbox não vale mais", {
+      organizationId,
+      pipelineId,
+      stage_id_declarado: declarada,
+    });
   }
   return primeiraEtapa(db, organizationId, pipelineId);
 }
