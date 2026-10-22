@@ -81,23 +81,32 @@ function tempoDe(iso: string | null): number {
  *
  * Ausente vira `null` — quem monta a linha decide se mostra ou esconde, e ninguém
  * inventa travessão aqui. Listas (multiselect) entram separadas por vírgula.
+ * Campo de opções (select/multiselect) grava o `value`; a tela mostra o `label`
+ * da opção — valor sem opção correspondente (opção removida) segue cru.
  */
-export function valorLegivel(valor: unknown): string | null {
+export function valorLegivel(
+  valor: unknown,
+  opcoes: CustomFieldDef["options"] = undefined,
+): string | null {
   if (valor == null) return null;
   if (Array.isArray(valor)) {
-    const partes = valor.map((v) => valorLegivel(v)).filter((v): v is string => !!v);
+    const partes = valor.map((v) => valorLegivel(v, opcoes)).filter((v): v is string => !!v);
     return partes.length > 0 ? partes.join(", ") : null;
   }
   if (typeof valor === "boolean") return valor ? "Sim" : "Não";
   if (typeof valor === "number") return String(valor);
-  if (typeof valor === "string") return valor.trim() === "" ? null : valor.trim();
+  if (typeof valor === "string") {
+    const texto = valor.trim();
+    if (texto === "") return null;
+    return opcoes?.find((opcao) => opcao.value === texto)?.label ?? texto;
+  }
   return null;
 }
 
-/** Os rótulos das definições do funil, por chave. Chave sem definição usa a própria chave. */
-function rotulosDoFunil(embed: unknown): Map<string, string> {
+/** As definições de campo do NEGÓCIO no funil, por chave. */
+function definicoesDoFunil(embed: unknown): Map<string, CustomFieldDef> {
   const campos: CustomFieldDef[] = camposPorEscopo(camposDoFunil(settingsDoEmbed(embed)), "negocio");
-  return new Map(campos.map((campo) => [campo.key, campo.label]));
+  return new Map(campos.map((campo) => [campo.key, campo]));
 }
 
 /**
@@ -133,13 +142,14 @@ export function montarCompras(
 ): CompraDoContato[] {
   const chaves = chavesEscolhidas.slice(0, 3);
   return somenteCompras(rows).map((row) => {
-    const rotulos = rotulosDoFunil(row.crm_pipelines);
+    const definicoes = definicoesDoFunil(row.crm_pipelines);
     const valores = row.custom_fields ?? {};
     const campos: CampoDaCompra[] = [];
     for (const chave of chaves) {
-      const valor = valorLegivel(valores[chave]);
+      const definicao = definicoes.get(chave);
+      const valor = valorLegivel(valores[chave], definicao?.options);
       if (valor === null) continue;
-      campos.push({ chave, rotulo: rotulos.get(chave) ?? chave, valor });
+      campos.push({ chave, rotulo: definicao?.label ?? chave, valor });
     }
     return {
       id: row.id,

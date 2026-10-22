@@ -124,6 +124,47 @@ describe("a regra: só negócio GANHO é compra", () => {
     expect(comDois!.campos.map((c) => c.rotulo)).toEqual(["Destino", "Hospedagem"]);
   });
 
+  it("campo de opções mostra o LABEL da opção, não o value gravado", () => {
+    const funil = {
+      settings: {
+        fields: [
+          {
+            key: "pacote",
+            label: "Pacote",
+            type: "select",
+            options: [{ value: "ouro", label: "Pacote Ouro" }],
+          },
+          {
+            // Foi o tipo que falhou na prova pela tela (lista pesquisável).
+            key: "cidade",
+            label: "Cidade",
+            type: "searchable_select",
+            options: [{ value: "maceio-al", label: "Maceió - AL" }],
+          },
+          {
+            key: "extras",
+            label: "Extras",
+            type: "multiselect",
+            options: [
+              { value: "seguro", label: "Seguro viagem" },
+              { value: "traslado", label: "Traslado" },
+            ],
+          },
+        ],
+      },
+    };
+    const [compra] = montarCompras(
+      [{ ...ganhaNatal, custom_fields: { pacote: "ouro", cidade: "maceio-al", extras: ["seguro", "removida"] }, crm_pipelines: funil }],
+      ["pacote", "cidade", "extras"],
+    );
+    expect(compra!.campos).toEqual([
+      { chave: "pacote", rotulo: "Pacote", valor: "Pacote Ouro" },
+      { chave: "cidade", rotulo: "Cidade", valor: "Maceió - AL" },
+      // Opção apagada do funil depois do ganho: o value cru segue visível.
+      { chave: "extras", rotulo: "Extras", valor: "Seguro viagem, removida" },
+    ]);
+  });
+
   it("valorLegivel trata lista, booleano e vazio", () => {
     expect(valorLegivel(["A", "B"])).toBe("A, B");
     expect(valorLegivel(true)).toBe("Sim");
