@@ -2508,13 +2508,21 @@ fi
 # `/auth/v1/settings` no domínio do CRM responderia 404 — o mesmo 404 de
 # "chave inválida" que o #2933 tirou da fase 2. Sem esta condição, a sonda
 # reprovaria uma instalação correta, que é pior que não sondar.
+#
+# A sonda devolve 0 (provado), 1 (a ASSINATURA do app: 404, ou o 3xx para
+# /login — a instalação PARA, com o diagnóstico do #2099) ou 2 (não provei, e
+# o motivo pode ser só o certificado do domínio ainda saindo). O 2 AVISA e
+# SEGUE (#2945): parar uma instalação certa por um `curl` que não provou nada
+# é o defeito que o próprio kit consertou no #2933, do outro lado da moeda.
 if [ "${REVERSE_PROXY:-caddy}" = "traefik" ] && [ -n "${SUPABASE_INTERNAL_URL:-}" ] && [ "${APP_SAUDAVEL:-0}" = 1 ]; then
   step "$(t "Conferindo a rota pública do Supabase no Traefik")"
-  if rota_publica_msg="$(sondar_rota_publica_do_supabase "https://${DOMAIN}" "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}" 10 3)"; then
-    c_grn "$(t "✓ a rota pública /auth/v1/* chega ao GoTrue do Supabase (o Traefik está publicando as APIs)")"
-  else
-    die "$rota_publica_msg"
-  fi
+  rota_publica_rc=0
+  rota_publica_msg="$(sondar_rota_publica_do_supabase "https://${DOMAIN}" "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}" 10 3)" || rota_publica_rc=$?
+  case "$rota_publica_rc" in
+    0) c_grn "$(t "✓ a rota pública /auth/v1/* chega ao GoTrue do Supabase (o Traefik está publicando as APIs)")" ;;
+    1) die "$rota_publica_msg" ;;
+    *) c_ylw "⚠ $rota_publica_msg" ;;
+  esac
 fi
 
 # O catálogo dos provedores diretos vem no baseline, mas a OpenRouter é grande

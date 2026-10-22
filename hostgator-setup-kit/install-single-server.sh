@@ -190,8 +190,10 @@ set_env_var "$supabase_env" SINGLE_SERVER_NETWORK "$SINGLE_SERVER_NETWORK"
 # ── #2099: o Traefik da hospedagem também publica as APIs do Supabase ───────
 # O Caddyfile.single-server roteia as seis prefixos do Supabase para o Envoy
 # (`@supabase`); o docker-compose.traefik.yml foi escrito para Supabase
-# EXTERNO e manda tudo para o app. Sem a rota, `/auth/v1/*` chega ao app e vem
-# 404 — e o login do CRM só falha depois, com a instalação já verde.
+# EXTERNO e manda tudo para o app. Sem a rota, `/auth/v1/*` chega ao app — e o
+# app não responde 404 por acaso: o pedido cai no CRM, que devolve 307 para
+# `/login` com o `next` de volta (medido numa instalação real). O login do CRM
+# só falha depois, com a instalação já verde.
 #
 # Até o #2933 quem denunciava isso era, SEM QUERER, o `v_sb_key()` do
 # install.sh: ele batia na URL PÚBLICA e o 404 do app virava "chave inválida".
@@ -201,7 +203,7 @@ set_env_var "$supabase_env" SINGLE_SERVER_NETWORK "$SINGLE_SERVER_NETWORK"
 # devolve agora é a sonda `sondar_rota_publica_do_supabase` (`_common.sh`),
 # chamada no FIM do install.sh só quando `REVERSE_PROXY=traefik`: ela bate em
 # `${DOMAIN}/auth/v1/settings` com a anon key e morre, citando o #2099, se quem
-# responder for o app (#2945).
+# responder for o app — 404 ou o 3xx para `/login` (#2945).
 #
 # As etiquetas moram em supabase-single-server.override.yml e existem em todo
 # modo; quem decide se o Traefik enxerga o Envoy é a chave gravada AQUI, ANTES
