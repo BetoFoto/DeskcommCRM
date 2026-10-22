@@ -86,7 +86,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   // ele NÃO tem responsável (decisão do mantenedor no #3216): esta rota também
   // atende "Iniciar conversa" e "Continuar por outro número", e nenhum desses
   // cliques tira o card de um colega. O card sem dono é visível a quem assume
-  // em qualquer `visibility_mode`. Mesma doutrina da transferência: o cliente
+  // em `all` e `own_and_unassigned`. Em `own`, o `agent` não o enxerga
+  // (fn_can_view_lead), e a sincronia devolve `sem_negocio_aberto`.
+  // manager/admin enxergam sempre. Mesma doutrina da transferência: o cliente
   // é o da SESSÃO, a conversa já é dele, e o motivo da recusa não derruba nada.
   const sincronia = await sincronizarNegocioAbertoDoContato(supabase, {
     organizationId: conv.organization_id,
