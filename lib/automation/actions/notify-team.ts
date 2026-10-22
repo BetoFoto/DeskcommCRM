@@ -43,7 +43,8 @@
  * corte (`numero-interno-de-aviso`) que descarta o que vem do número interno
  * justamente para um aviso não virar conversa — e este aviso respeita o mesmo
  * corte. O trigger desta ação é a virada para ganho; o que a conversa
- * combinou fica na ficha, e a mensagem leva o atalho para ela (doc 176, A).
+ * combinou fica no registro do lead e não vai na mensagem, que leva o atalho
+ * para o negócio (doc 176, A).
  *
  * ─── O resumo é LIDO AGORA, nunca gravado ──────────────────────────────────
  *

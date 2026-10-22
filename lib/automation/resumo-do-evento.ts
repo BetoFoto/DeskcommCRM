@@ -21,9 +21,9 @@
  *
  * Nada de texto fixo na regra: `lead`, `contact` e a pontuação NUMÉRICA são
  * lidos no disparo. O que a IA escreveu a partir da conversa (motivo da
- * pontuação, checkpoint, descrição, motivo do ganho) NÃO é lido aqui — decisão
- * do dono, doc 176 (A): esse texto fica na ficha, e a mensagem leva o atalho
- * para ela. Ver o cabeçalho de `resumo-para-a-equipe.ts`.
+ * pontuação, checkpoint, descrição, motivo do ganho, título) NÃO é lido aqui —
+ * decisão do dono, doc 176 (A): esse texto fica no registro do lead e não vai
+ * na mensagem. Ver o cabeçalho de `resumo-para-a-equipe.ts`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -50,7 +50,6 @@ export function leadDoContexto(bruto: unknown): (LeadDoResumo & { id: string }) 
   if (typeof l.id !== "string" || l.id === "") return null;
   return {
     id: l.id,
-    title: typeof l.title === "string" ? l.title : null,
     value_cents: typeof l.value_cents === "number" ? l.value_cents : null,
     currency: typeof l.currency === "string" ? l.currency : null,
   };

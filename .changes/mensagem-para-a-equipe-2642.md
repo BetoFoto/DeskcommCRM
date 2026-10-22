@@ -5,11 +5,11 @@ titulo: Automação nova « Mensagem para a equipe », e o e-mail da automação
 ---
 Nas automações, a ação nova « Mensagem para a equipe » manda para o WhatsApp
 cadastrado em Avisos um resumo do negócio, pensado para a virada para ganho: o
-nome da regra, o primeiro nome do cliente, o telefone, o negócio, o valor, a
-pontuação e um atalho para abrir o negócio no CRM (o atalho aparece quando a
-instalação tem endereço público). O que foi conversado com o cliente não vai na
-mensagem: continua na ficha do negócio. A ação não pede número nem pessoa: o
-destino é sempre o de Avisos.
+nome da regra, o primeiro nome do cliente, o telefone, o valor, a pontuação e
+um atalho para o negócio no CRM (o atalho aparece quando a instalação tem
+endereço público). O título do negócio e o que foi conversado com o cliente não
+vão na mensagem. A ação não pede número nem pessoa: o destino é sempre o de
+Avisos.
 
 Na ação « Enviar e-mail », o destinatário ganha a opção « E-mail de uma pessoa
 da equipe ». O endereço vem do acesso da pessoa, e o vínculo com a empresa é

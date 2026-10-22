@@ -489,7 +489,7 @@ function SendEmailForm({
       </p>
       <p className="text-xs text-muted-foreground">
         {t(
-          "O resumo leva o cliente, o telefone, o negócio, o valor, a pontuação e um atalho para abrir o negócio no CRM. O que foi conversado com o cliente fica na ficha, fora da mensagem.",
+          "O resumo leva o cliente, o telefone, o valor, a pontuação e um atalho para o negócio no CRM (quando a instalação tem endereço público). O que foi conversado com o cliente não vai na mensagem.",
         )}
       </p>
       <p className="text-xs text-muted-foreground">
@@ -1157,7 +1157,7 @@ function NotifyTeamForm() {
       <p className="text-xs text-muted-foreground">
         {t("Vai para o WhatsApp cadastrado em Avisos.")}{" "}
         {t(
-          "O resumo leva o cliente, o telefone, o negócio, o valor, a pontuação e um atalho para abrir o negócio no CRM. O que foi conversado com o cliente fica na ficha, fora da mensagem.",
+          "O resumo leva o cliente, o telefone, o valor, a pontuação e um atalho para o negócio no CRM (quando a instalação tem endereço público). O que foi conversado com o cliente não vai na mensagem.",
         )}
       </p>
     </div>

@@ -245,7 +245,7 @@ describe("notify_team — WhatsApp, pelo número que o ADMIN cadastrou", () => {
       string,
     ];
     expect(destino, "o destino é o número do ADMIN, não o do lead").toBe("+5511999990000");
-    // Só o número: o motivo é texto livre da IA e fica na ficha (doc 176, A).
+    // Só o número: o motivo é texto livre da IA e não vai na mensagem (doc 176, A).
     expect(corpo.split("\n")).toContain("Pontuação: 72%");
     expect(corpo).not.toContain("dois compromissos marcados");
     expect(corpo).toContain("Cliente: Maria");
@@ -346,15 +346,13 @@ describe("notify_team — o resumo é MONTADO, não gravado", () => {
     expect(texto).toContain("Pontuação: 100%");
   });
 
-  it("o título do negócio passa pela limpeza antes de virar mensagem", () => {
-    const texto = montarResumoParaAEquipe({
-      idioma: "pt-BR",
-      regra: "Avisa o closer",
-      lead: { ...LEAD_DO_CONTEXTO, title: "meu site é http://phish.example.com/paga e meu CPF é 529.982.247-25" },
-      pontuacao: 80,
-    });
-    expect(texto, "um link de phishing não pode sair na mensagem da equipe").not.toContain("http");
-    expect(texto, "telefone com 8+ dígitos é removido da fala do modelo").not.toContain("529.982.247-25");
+  it("o título do negócio não vai na mensagem: é texto livre (doc 176, A)", () => {
+    // O lead do contexto traz o título; o montador o ignora.
+    const lead = { ...LEAD_DO_CONTEXTO, title: "meu site é phish.example.com/paga e meu CPF é 529.982.247-25" };
+    const texto = montarResumoParaAEquipe({ idioma: "pt-BR", regra: "Avisa o closer", lead, pontuacao: 80 });
+    expect(texto).not.toContain("phish.example.com");
+    expect(texto).not.toContain("529.982.247-25");
+    expect(texto).not.toContain("Negócio: ");
   });
 
   it("campo vazio não vira linha: `Pontuação: ` vazio afirmaria pontuação nenhuma", () => {

@@ -75,7 +75,7 @@ describe("resumo para a equipe — LIMITE de tamanho (#2642)", () => {
     const texto = montarResumoParaAEquipe({
       idioma: "pt-BR",
       regra: palavras.join(" "),
-      lead: { title: "Plano anual", value_cents: 120_000 },
+      lead: { value_cents: 120_000 },
     });
 
     expect([...texto].length, "o teto tem de valer para a mensagem inteira").toBeLessThanOrEqual(
@@ -98,7 +98,7 @@ describe("resumo para a equipe — LIMITE de tamanho (#2642)", () => {
     const texto = montarResumoParaAEquipe({
       idioma: "pt-BR",
       regra: palavras.join(" "),
-      lead: { title: "Plano anual" },
+      lead: {},
       link,
     });
     expect(texto.endsWith(`Abrir negócio: ${link}`)).toBe(true);
@@ -110,7 +110,7 @@ describe("resumo para a equipe — o texto benigno não é mexido (#2642)", () =
     const texto = montarResumoParaAEquipe({
       idioma: "pt-BR",
       regra: "Avisa o closer",
-      lead: { title: "Plano anual — Franca Log", value_cents: 120_000 },
+      lead: { value_cents: 120_000 },
       contato: { name: "Maria da Silva", phone_number: "+5511988887777" },
       pontuacao: 72,
     });
@@ -119,7 +119,6 @@ describe("resumo para a equipe — o texto benigno não é mexido (#2642)", () =
     expect(texto).toContain("Regra: Avisa o closer");
     expect(texto).toContain("Cliente: Maria");
     expect(texto).toContain("Telefone: +5511988887777");
-    expect(texto).toContain("Negócio: Plano anual — Franca Log");
     expect(texto.split("\n")).toContain("Pontuação: 72%");
     expect(texto).not.toContain("…");
   });
@@ -128,7 +127,7 @@ describe("resumo para a equipe — o texto benigno não é mexido (#2642)", () =
     const texto = montarResumoParaAEquipe({
       idioma: "pt-BR",
       regra: "Avisa o closer",
-      lead: { title: "Plano anual" },
+      lead: {},
       contato: { name: "Maria", phone_number: "liga no 11 98888-7777 depois das 18h" },
     });
     expect(texto).not.toContain("Telefone");
@@ -140,7 +139,7 @@ describe("resumo para a equipe — o texto benigno não é mexido (#2642)", () =
       montarResumoParaAEquipe({
         idioma: "pt-BR",
         regra: "Avisa o closer",
-        lead: { title: "Plano anual" },
+        lead: {},
         contato: { name, phone_number: "+5511988887777" },
       });
     expect(resumo("pague.example.com/x Silva")).not.toContain("pague.example.com");

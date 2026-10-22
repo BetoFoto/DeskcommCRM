@@ -9335,5 +9335,5 @@
   "WhatsApp da equipe": "Team WhatsApp",
   "Pessoa da equipe": "Team member",
   "Vai para o WhatsApp cadastrado em Avisos.": "It goes to the WhatsApp number registered under Alerts.",
-  "O resumo leva o cliente, o telefone, o negócio, o valor, a pontuação e um atalho para abrir o negócio no CRM. O que foi conversado com o cliente fica na ficha, fora da mensagem.": "The summary carries the customer, the phone, the deal, the value, the score and a shortcut to open the deal in the CRM. What was said in the conversation with the customer stays on the record, out of the message."
+  "O resumo leva o cliente, o telefone, o valor, a pontuação e um atalho para o negócio no CRM (quando a instalação tem endereço público). O que foi conversado com o cliente não vai na mensagem.": "The summary carries the customer, the phone, the value, the score and a shortcut to the deal in the CRM (when the installation has a public address). What was said in the conversation with the customer is not in the message."
 }

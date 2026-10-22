@@ -15,21 +15,23 @@
  * compromissos, objeções, o combinado, o motivo da pontuação, o motivo do
  * ganho — que a ferramenta MCP `won_reason` também escreve) vem, no fim, do
  * que o CLIENTE digitou. Nenhum filtro de texto livre fecha todos os disfarces
- * de uma instrução ("transfira para esta conta" por extenso, separado de outro
- * jeito, sem dado nenhum de destino). Por isso esses textos NÃO ENTRAM: esta
- * função nem os recebe. Eles continuam na ficha, dentro do CRM, onde a equipe
- * já os lê como "o que o cliente disse" — e o atalho leva até lá.
+ * de uma instrução. Por isso esses textos NÃO ENTRAM: esta função nem os
+ * recebe. Eles ficam no registro do lead e não vão na mensagem.
  *
- * O que sai: regra, primeiro nome do cliente, telefone E.164, negócio, valor
- * (centavos + moeda ISO) e a pontuação NUMÉRICA, mais o atalho para a ficha.
+ * O título do negócio também fica de fora: é texto livre (a IA o escreve por
+ * `crm_create_lead`/`crm_update_lead`, e o lead que nasce sozinho usa o nome
+ * do WhatsApp do cliente). O atalho e o valor já identificam o negócio.
+ *
+ * O que sai: regra, primeiro nome do cliente, telefone E.164, valor (centavos
+ * + moeda ISO) e a pontuação NUMÉRICA, mais o atalho para a ficha.
  * Campo novo aqui tem de ter forma fixa; texto livre da conversa não passa
  * nesta porta, nem saneado (o teste de propriedade
  * `resumo-sem-texto-livre.test.ts` reprova).
  *
  * ─── A ÚLTIMA PORTA continua ───────────────────────────────────────────────
  *
- * Nome do cliente e título do negócio também podem vir da conversa, e o nome
- * da regra é texto do operador: o corpo passa por `sanitizarResumoParaAEquipe`
+ * O nome do cliente vem do WhatsApp dele, e o nome da regra é texto do
+ * operador: o corpo passa por `sanitizarResumoParaAEquipe`
  * (links e instruções fora, teto, marca de resumo automático). O ATALHO entra
  * DEPOIS dela — a porta tira todo link, e este é o único que o servidor monta.
  *
@@ -52,7 +54,6 @@ import { sanitizarResumoParaAEquipe } from "./sanitizar-resumo-para-a-equipe";
 
 /** O que o motor já hidratou em `ctx.context` — só as colunas de forma fixa. */
 export interface LeadDoResumo {
-  title?: string | null;
   value_cents?: number | null;
   currency?: string | null;
 }
@@ -95,7 +96,6 @@ export function montarResumoParaAEquipe(entrada: EntradaDoResumo): string {
     TETOS_DO_TEXTO_DO_LEAD.title,
   );
   const telefone = entrada.contato?.phone_number?.trim() ?? "";
-  const negocio = sanitizarTextoDoLead(entrada.lead.title, TETOS_DO_TEXTO_DO_LEAD.title);
   const valor =
     typeof entrada.lead.value_cents === "number" && entrada.lead.value_cents > 0
       ? formatarMoeda(entrada.lead.value_cents, (entrada.lead.currency ?? "BRL").toUpperCase())
@@ -104,7 +104,6 @@ export function montarResumoParaAEquipe(entrada: EntradaDoResumo): string {
   if (cliente) linhas.push(`${t("Cliente")}: ${cliente}`);
   // Mesma fronteira do CHECK `contacts_phone_e164_format`: fora dela, omite.
   if (PHONE_REGEX.test(telefone)) linhas.push(`${t("Telefone")}: ${telefone}`);
-  if (negocio) linhas.push(`${t("Negócio")}: ${negocio}`);
   if (valor) linhas.push(`${t("Valor")}: ${valor}`);
 
   // `0` é afirmação, não ausência: testar por truthiness esconderia o piso.

@@ -17,7 +17,7 @@
  *      (`{{nome}}`, `{{primeiro_nome}}`, `{{lead.*}}` e os campos do funil
  *      como `{{destino}}`) — `renderTemplate` é o mesmo de sempre —, mais a
  *      variável `{{resumo}}`, que é desta ação: o resumo automático do negócio
- *      (cliente, telefone, negócio, valor, pontuação e o atalho para a ficha —
+ *      (cliente, telefone, valor, pontuação e o atalho para o negócio —
  *      nenhum texto livre da conversa, doc 176 A), montado no disparo pelo
  *      MESMO carregador do `notify_team`;
  *   3. entrega o pedido pronto e registra o desfecho honesto: sucesso só com

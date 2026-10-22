@@ -5,9 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * (#2642, decisão do dono no doc 176, opção A).
  *
  * Todo campo de texto livre que a IA escreve a partir da conversa é preenchido
- * com um MARCADOR único — descrição, motivo do ganho, motivo da pontuação, o
- * checkpoint inteiro (resumo, compromissos, objeções, próxima ação,
- * declaração). O teste dirige as DUAS saídas reais — o corpo que `notify_team`
+ * com um MARCADOR único — título, descrição, motivo do ganho, tags, campos
+ * personalizados, motivo e evidência da pontuação, o checkpoint inteiro
+ * (resumo, compromissos, objeções, próxima ação, declaração). O teste dirige as DUAS saídas reais — o corpo que `notify_team`
  * entrega ao transporte e o `{{resumo}}` que `send_email` entrega ao roteador —
  * e afirma que nenhum marcador aparece, que os dados de forma fixa e o atalho
  * aparecem, e que toda linha do texto tem um rótulo conhecido. A última
@@ -64,13 +64,23 @@ const M = {
   proximaAcao: "MKR_NEXT_ACTION_q7",
   declaracao: "MKR_DECLARACAO_q8",
   motivoDaPerda: "MKR_LOST_REASON_q9",
+  titulo: "MKR_TITULO_q10",
+  tag: "MKR_TAG_q11",
+  campoPersonalizado: "MKR_CUSTOM_FIELD_q12",
+  evidenciaDaPontuacao: "MKR_EVIDENCIA_q13",
 } as const;
 
 const TABELAS: Record<string, Array<Record<string, unknown>>> = {
   organizations: [{ id: ORG, locale: "pt-BR" }],
   user_organizations: [{ organization_id: ORG, user_id: MEMBRO, revoked_at: null }],
   crm_lead_scores: [
-    { organization_id: ORG, lead_id: LEAD, ai_probability: 72, ai_probability_reason: M.motivoDaPontuacao },
+    {
+      organization_id: ORG,
+      lead_id: LEAD,
+      ai_probability: 72,
+      ai_probability_reason: M.motivoDaPontuacao,
+      ai_probability_evidence: { sinais: [M.evidenciaDaPontuacao] },
+    },
   ],
   lead_checkpoints: [
     {
@@ -132,8 +142,10 @@ function ctx(): ActionCtx {
       lead: {
         id: LEAD,
         contact_id: CONTATO,
-        title: "Plano anual Franca Log",
+        title: M.titulo,
         description: M.descricao,
+        tags: [M.tag],
+        custom_fields: { observacao: M.campoPersonalizado },
         status: "won",
         value_cents: 120_000,
         currency: "BRL",
@@ -171,7 +183,6 @@ const ROTULOS = [
   "Regra: ",
   "Cliente: ",
   "Telefone: ",
-  "Negócio: ",
   "Valor: ",
   "Pontuação: ",
   "Abrir negócio: ",
@@ -200,7 +211,7 @@ describe.each([
     expect(saida).toContain("Cliente: Maria");
     expect(saida).not.toContain("da Silva");
     expect(saida).toContain("Telefone: +5511988887777");
-    expect(saida).toContain("Negócio: Plano anual Franca Log");
+    expect(saida, "o título do negócio é texto livre").not.toContain("Negócio: ");
     expect(saida).toContain(`Valor: ${formatarMoeda(120_000, "BRL")}`);
     expect(saida.split("\n")).toContain("Pontuação: 72%");
     expect(saida).toContain(`Abrir negócio: https://crm.acme.com.br/app/leads/${LEAD}`);
