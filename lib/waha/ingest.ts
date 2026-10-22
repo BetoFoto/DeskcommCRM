@@ -1964,6 +1964,13 @@ async function handleMessageRevoked(
     .update({ revoked_at: new Date().toISOString() })
     .eq("organization_id", session.organization_id)
     .in("external_id", formasDaMensagemOriginal(p.revokedMessageId, chat, fromMe))
+    // Só a linha que AINDA não estava apagada. O WAHA ecoa o que o próprio
+    // número faz: apagar pela tela do CRM carimba a linha na rota (e audita
+    // `message.revoked`, com o ator) e, depois, o eco `message.revoked` chega
+    // aqui. Sem este filtro o eco recarimbava a hora e gravava uma segunda
+    // trilha dizendo que alguém apagou pelo celular — numa tabela append-only.
+    // Pelo mesmo filtro, a reentrega do mesmo evento não duplica a trilha.
+    .is("revoked_at", null)
     .select("id, conversation_id, direction, external_id");
   if (erroDoCarimbo) {
     // Sem este ramo o evento "some" em silêncio e a mensagem apagada segue
@@ -1975,9 +1982,12 @@ async function handleMessageRevoked(
     });
     return;
   }
-  // Uma trilha por linha carimbada: `direction` já diz quem apagou (recebida é o
-  // contato; enviada é o próprio número, apagando pelo celular — o apagamento
-  // feito pela tela do CRM tem a própria ação, `message.revoked`).
+  // Uma trilha por linha carimbada AGORA: `direction` diz quem apagou (recebida
+  // é o contato; enviada é o próprio número, apagando pelo aplicativo do
+  // WhatsApp). O eco de um apagar feito pela tela não chega até aqui, porque a
+  // rota já carimbou a linha. Limite conhecido: se o eco chegar ANTES de a rota
+  // carimbar (a rota carimba logo depois de o WAHA responder), sai uma trilha
+  // aqui além da `message.revoked` da rota — a do ator vem dela.
   for (const linha of apagadas ?? []) {
     await audit({
       action: "message.revoked_in_channel",

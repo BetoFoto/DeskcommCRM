@@ -121,6 +121,11 @@ function makeAdmin(rows: Linha[]) {
         filtros.push([k, v]);
         return chain;
       },
+      // `.is(col, null)` casa por igualdade estrita, como `eq` — basta aqui.
+      is: (k: string, v: unknown) => {
+        filtros.push([k, v]);
+        return chain;
+      },
       limit: () => chain,
       maybeSingle: () => Promise.resolve({ data: null, error: null }),
       // A cadeia é aguardada (thenable): é aqui que o UPDATE acontece.
@@ -190,6 +195,16 @@ const enviadaEditada = (chat: string, bare: string, corpo: string) => ({
   },
 });
 
+/** Revogação do PRÓPRIO número (fromMe): o eco da tela e o apagar pelo celular chegam assim. */
+const enviadaApagada = (chat: string, bare: string) => ({
+  event: "message.revoked",
+  payload: {
+    after: { id: `true_${chat}_3EB0PROTOCOLO`, from: chat, fromMe: true },
+    before: null,
+    revokedMessageId: bare,
+  },
+});
+
 const CHAT_A = "5511999999999@lid";
 const CHAT_B = "5521888888888@lid";
 
@@ -249,6 +264,34 @@ describe("edição e apagar de mensagem RECEBIDA chegam ao CRM", () => {
     const rows = [linha("m-a", `false_${CHAT_A}_3EB0X`, "fica como está")];
     await dispatchWahaEvent(makeAdmin(rows), SESSION, recebidaApagada(CHAT_B, "3EB0X"), "req-8");
     expect(vi.mocked(audit)).not.toHaveBeenCalled();
+  });
+
+  it("eco de um apagar feito pela TELA não grava trilha nem recarimba a hora", async () => {
+    // A rota já carimbou a linha (e auditou `message.revoked`, com o ator); o
+    // WAHA ecoa a revogação do próprio número. O eco não pode virar uma segunda
+    // linha dizendo que alguém apagou pelo celular.
+    const carimboDaTela = "2026-10-22T10:00:00.000Z";
+    const rows = [{ ...linha("m-env", "3EB0ENVIADA", "valor errado", "outbound"), revoked_at: carimboDaTela }];
+    await dispatchWahaEvent(makeAdmin(rows), SESSION, enviadaApagada(CHAT_A, "3EB0ENVIADA"), "req-9");
+    expect(vi.mocked(audit)).not.toHaveBeenCalled();
+    expect(rows[0]!.revoked_at).toBe(carimboDaTela);
+  });
+
+  it("apagar pelo APLICATIVO (o próprio número) grava UMA trilha, e a reentrega não duplica", async () => {
+    const rows = [linha("m-env", "3EB0ENVIADA", "valor errado", "outbound")];
+    const admin = makeAdmin(rows);
+    await dispatchWahaEvent(admin, SESSION, enviadaApagada(CHAT_A, "3EB0ENVIADA"), "req-10");
+    expect(vi.mocked(audit)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(audit)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "message.revoked_in_channel",
+        resourceId: "m-env",
+        metadata: expect.objectContaining({ direction: "outbound" }),
+      }),
+    );
+    // O WAHA reentrega o mesmo evento (503, replay): a linha já está apagada.
+    await dispatchWahaEvent(admin, SESSION, enviadaApagada(CHAT_A, "3EB0ENVIADA"), "req-10b");
+    expect(vi.mocked(audit)).toHaveBeenCalledTimes(1);
   });
 
   it("apagar na forma flat (chat no topo) também carimba `revoked_at`", async () => {
