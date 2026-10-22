@@ -174,14 +174,15 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
   // o próprio roteador pertence à organização ativa antes de liberar a publicação.
   const routerDaOrg =
     routerMemberRow?.ai_routers?.organization_id === activeOrg.orgId
-      ? routerMemberRow.ai_routers
+      ? { routerId: routerMemberRow.router_id, roteador: routerMemberRow.ai_routers }
       : null;
   const routerMembership = routerDaOrg
     ? {
-        routerId: routerMemberRow!.router_id,
-        routerName: routerDaOrg.name,
-        channelSessionId: routerDaOrg.channel_session_id,
-        channelStatus: channelSessions.find((c) => c.id === routerDaOrg.channel_session_id)?.status ?? null,
+        routerId: routerDaOrg.routerId,
+        routerName: routerDaOrg.roteador.name,
+        channelSessionId: routerDaOrg.roteador.channel_session_id,
+        channelStatus:
+          channelSessions.find((c) => c.id === routerDaOrg.roteador.channel_session_id)?.status ?? null,
       }
     : null;
 
