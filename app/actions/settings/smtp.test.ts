@@ -18,6 +18,9 @@
  * A action roda de VERDADE (com o `lib/email/config` real): o banco é a única
  * borda dublada, então o caminho testado é o mesmo que a tela percorre.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const deps = vi.hoisted(() => ({
@@ -50,6 +53,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 import {
+  FONTE_DO_FORMATO_DO_ENDERECO,
   MENSAGEM_DA_FALHA_AO_SALVAR_SMTP,
   MENSAGEM_DO_ENDERECO_DE_SERVIDOR,
   MENSAGEM_DO_REMETENTE_INVALIDO,
@@ -175,5 +179,35 @@ describe("o endereço do servidor SMTP não chega cru à tela (issue #2804)", ()
       expect.objectContaining({ smtp_host: null }),
       expect.anything(),
     );
+  });
+});
+
+/**
+ * A régua da tela e a do banco são a MESMA (guarda trazida do #3227, de
+ * @webtecnica). São três cópias — `lib/email/config.ts`, a migration 0669 e o
+ * apêndice do baseline — e uma que ande sozinha devolve o defeito da #2804: a
+ * tela aceita, o banco recusa, ou o contrário.
+ *
+ * No baseline há DUAS ocorrências da constraint: a do dump (velha, sem `_`) e a
+ * do apêndice (a que vale, porque o apêndice roda por último). Só a ÚLTIMA é
+ * comparada. A 0333 fica de fora: é a régua antiga, que a 0669 substitui.
+ */
+describe("a régua da tela e a do banco são a mesma (#2804)", () => {
+  const CHECK_DO_HOST =
+    /(?:add )?constraint platform_smtp_settings_host\s+check \(smtp_host is null or smtp_host ~ '([^']+)'\)/g;
+
+  function ultimoFormatoNoSql(arquivo: string): string | undefined {
+    const conteudo = readFileSync(join(process.cwd(), arquivo), "utf8");
+    return [...conteudo.matchAll(CHECK_DO_HOST)].at(-1)?.[1];
+  }
+
+  it.each([
+    "supabase/baseline.sql",
+    "supabase/migrations/20261015090000_0669_o_endereco_do_servidor_aceita_sublinhado.sql",
+  ])("%s declara, por último, o mesmo formato que lib/email/config.ts", (arquivo) => {
+    const formato = ultimoFormatoNoSql(arquivo);
+    // Controle positivo: varredura que não acha nada não pode passar por "em ordem".
+    expect(formato).toBeDefined();
+    expect(formato).toBe(FONTE_DO_FORMATO_DO_ENDERECO);
   });
 });

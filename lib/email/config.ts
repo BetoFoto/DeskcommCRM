@@ -15,7 +15,14 @@ export type SmtpSecurity = "starttls" | "tls" | "none";
  * `supabase_inbucket_…`) é o público do self-host. Segue recusando espaço,
  * barra e esquema — o que não é nome de máquina.
  */
-export const FORMATO_DO_ENDERECO_DE_SERVIDOR = /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/;
+export const FONTE_DO_FORMATO_DO_ENDERECO = "^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$";
+
+/**
+ * A régua vem da FONTE em string, e não de uma regex literal, para que o teste
+ * compare letra a letra com o CHECK do SQL (`app/actions/settings/smtp.test.ts`).
+ * A guarda de divergência veio do #3227, de @webtecnica.
+ */
+export const FORMATO_DO_ENDERECO_DE_SERVIDOR = new RegExp(FONTE_DO_FORMATO_DO_ENDERECO);
 
 export const MENSAGEM_DO_ENDERECO_DE_SERVIDOR =
   "Endereço de servidor inválido. Use o nome da máquina, como smtp.suaempresa.com ou meu_relay — sem espaço, sem barra e sem http://.";
