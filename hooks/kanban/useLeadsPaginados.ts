@@ -19,6 +19,11 @@
  * true`: prometer próxima página a partir de uma resposta sem `meta` mandaria a
  * tela buscar uma página que ninguém disse que existe. Ausente é `false`, que
  * degrada para "só esta página" — nunca para uma lista infinitamente vazia.
+ *
+ * ⚠️ NÃO HÁ `total`. A rota deixou de contar (a contagem exata varria o funil
+ * inteiro, e só servia para o "página X de Y"): o que a página sabe é o
+ * `per_page` que pediu e o `has_more` que voltou. Por isso a tela mostra a
+ * página ATUAL — um número verdadeiro — e não um "de Y" aproximado.
  */
 import { useQuery } from "@tanstack/react-query";
 
@@ -30,7 +35,6 @@ export const LEADS_POR_PAGINA = 50;
 
 export interface PaginaDeLeads {
   leads: Lead[];
-  total: number;
   page: number;
   perPage: number;
   hasMore: boolean;
@@ -42,7 +46,6 @@ type RespostaDaRota = {
   meta?: {
     page?: number;
     per_page?: number;
-    total?: number | null;
     has_more?: boolean;
   };
 };
@@ -75,7 +78,6 @@ export function useLeadsPaginados(
       const meta = res?.meta ?? {};
       return {
         leads,
-        total: meta.total ?? leads.length,
         page: meta.page ?? pagina,
         perPage: meta.per_page ?? porPagina,
         hasMore: meta.has_more ?? false,

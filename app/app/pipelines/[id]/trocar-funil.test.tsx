@@ -105,7 +105,8 @@ const PAGINA = {
       last_activity_at: null,
     },
   ],
-  total: 3,
+  // Sem `total` (a rota não conta mais; ver o cabeçalho de `ListaDoFunil`):
+  // o que a tela sabe é o `perPage` que pediu e o `hasMore` que voltou.
   page: 1,
   perPage: 2,
   hasMore: true,
@@ -221,6 +222,18 @@ describe("a terceira aba do funil (Lista)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Próxima" }));
 
     expect(useLeadsPaginados).toHaveBeenLastCalledWith("p-1", 2);
+  });
+
+  it("⭐ a tela diz a página ATUAL, e não promete um total exato", async () => {
+    montar();
+
+    await userEvent.click(screen.getByTestId("visao-lista"));
+
+    // "página 1", e só: o "de {total}" saiu porque a rota parou de contar (a
+    // contagem exata varria o funil inteiro — ver o cabeçalho da rota). O que
+    // não pode voltar é a promessa de um total que ninguém mediu.
+    expect(screen.getByText("página 1")).toBeTruthy();
+    expect(screen.queryByText(/de \d/)).toBeNull();
   });
 
   it("sem `has_more` não há botão de Próxima — a última página não promete outra", async () => {

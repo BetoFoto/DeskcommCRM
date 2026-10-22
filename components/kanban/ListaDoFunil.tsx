@@ -31,10 +31,14 @@ interface Props {
  *
  * Com 100+ cards numa coluna o quadro vira uma pilha: não dá para ver de
  * relance quem está parado há dias. Uma linha por negócio cabe dez vezes mais
- * na tela — e, principalmente, a leitura custa O DA PÁGINA, não O DO FUNIL. O
- * quadro lê o funil inteiro de uma vez (e cada linha passa por
- * `fn_can_view_lead`); num funil migrado com milhares de negócios isso levou
- * 19 s, até estourar o `statement_timeout` do papel `authenticated`.
+ * na tela — e, principalmente, a leitura é a DA PÁGINA: a rota pede `per_page`
+ * linhas com `range`, e o índice `idx_crm_leads_org_pipeline_position_id`
+ * (migration 0734) é o que faz o banco parar na página em vez de avaliar o
+ * funil inteiro. O quadro, esse sim, lê o funil inteiro de uma vez (e cada
+ * linha passa por `fn_can_view_lead`); num funil migrado com milhares de
+ * negócios isso levou 19 s, até estourar o `statement_timeout` do papel
+ * `authenticated`. Sem o índice, o `range` cortaria só o que VOLTA: o custo
+ * continuaria sendo o do funil.
  *
  * ─── As colunas desta fatia, e o que ficou FORA ────────────────────────────
  *
@@ -66,9 +70,6 @@ export function ListaDoFunil({ pipelineId, pipeline: funil, stages }: Props) {
   const { data, isLoading, error } = useLeadsPaginados(pipelineId, pagina);
 
   const leads = data?.leads ?? [];
-  const total = data?.total ?? leads.length;
-  const porPagina = data?.perPage ?? leads.length;
-  const totalDePaginas = Math.max(1, porPagina > 0 ? Math.ceil(total / porPagina) : 1);
   const leadDoDossie = leads.find((l) => l.id === dossieId) ?? null;
 
   const campoDefs = useMemo(
@@ -172,13 +173,13 @@ export function ListaDoFunil({ pipelineId, pipeline: funil, stages }: Props) {
           >
             {t("Anterior")}
           </Button>
-          {/* `página {atual} de {total}` é chave de dicionário com placeholder —
+          {/* A página ATUAL, e só ela: o "de {total}" prometia um total exato,
+              que a rota parou de contar (a contagem varria o funil inteiro —
+              ver o cabeçalho da rota). Chave de dicionário com placeholder,
               literal, nunca template: chave montada em runtime não existe em
               dicionário nenhum e sairia em português para quem lê espanhol. */}
           <span className="text-xs text-muted-foreground">
-            {t("página {atual} de {total}")
-              .replace("{atual}", String(pagina))
-              .replace("{total}", String(totalDePaginas))}
+            {t("página {atual}").replace("{atual}", String(pagina))}
           </span>
           <Button
             variant="outline"
