@@ -183,7 +183,11 @@ async function ehEcoDeEnvioNosso(
     // sempre. Qual status vale para qual das duas marcas é o laço abaixo — aqui é
     // só o recorte de linhas que a decisão pode usar.
     .in("status", STATUS_DE_ENVIO_NOSSO)
-    .gte("created_at", desde)
+    // `updated_at`, e não `created_at`: o reenvio (`POST /messages/{id}/retry`)
+    // põe na fila uma linha criada há muito tempo, e o eco dele tem de casar do
+    // mesmo jeito. Para o envio novo dá no mesmo (`updated_at` nasce igual a
+    // `created_at` e só cresce), então a janela só fica mais larga, nunca mais estreita.
+    .gte("updated_at", desde)
     .limit(20);
 
   if (error) {
