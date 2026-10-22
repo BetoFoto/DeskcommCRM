@@ -26,7 +26,9 @@
 //   1. opção DESLIGADA (o padrão da coluna) com contato casado e card aberto:
 //      continua criando card novo — o comportamento de hoje, byte a byte;
 //   2. opção LIGADA, contato casado e card aberto no funil da fonte: ATUALIZA os
-//      campos que mudaram e MOVE o card de etapa — não cria;
+//      campos que mudaram e MOVE o card para a etapa da fonte, que está à frente
+//      — não cria. Card que já está ADIANTE da etapa da fonte não volta: a etapa
+//      só anda para a frente, como no reenvio do #2316;
 //   3. opção LIGADA, mas o contato NÃO tem card aberto no funil: cria — o reuso
 //      não pode virar "não entra nada";
 //   4. envio COM `external_id`: quem identifica o card continua sendo o id do
@@ -69,6 +71,12 @@ const FUNIL = "pipe-1";
 const ETAPA_DA_FONTE = "stage-1";
 /** Onde o card aberto do contato está — outra etapa, para o MOVE ser visível. */
 const ETAPA_DO_CARD = "stage-9";
+
+/** O funil com a etapa da fonte À FRENTE da do card: o MOVE é para a frente. */
+const FONTE_A_FRENTE = [
+  { id: ETAPA_DO_CARD, name: "Em conversa", position: 1 },
+  { id: ETAPA_DA_FONTE, name: "Conta criada", position: 2 },
+];
 
 const FONTE = {
   id: "fonte-1",
@@ -190,6 +198,7 @@ describe("a captação por webhook reusa o card aberto do contato (#3101)", () =
   it("⭐ CONTROLE 2 — opção LIGADA: ATUALIZA o card aberto (só o que mudou) e MOVE, em vez de criar", async () => {
     h.leituras.set("webhook_sources", [{ data: FONTE, error: null }]);
     h.leituras.set("crm_leads", [{ data: CARD_ABERTO, error: null }]);
+    h.leituras.set("crm_stages", [{ data: FONTE_A_FRENTE, error: null }]);
 
     const res = await enviar(ENVIO_SEM_EXTERNAL_ID);
 
@@ -220,6 +229,47 @@ describe("a captação por webhook reusa o card aberto do contato (#3101)", () =
 
     expect(h.atualizarLead).toHaveBeenCalledTimes(1);
     expect(h.moverLead).not.toHaveBeenCalled();
+    expect(desfecho()).toBe("atualizado");
+  });
+
+  it("⭐ card aberto numa etapa MAIS À FRENTE não é puxado de volta para a etapa da fonte", async () => {
+    h.leituras.set("webhook_sources", [{ data: FONTE, error: null }]);
+    h.leituras.set("crm_leads", [{ data: CARD_ABERTO, error: null }]);
+    h.leituras.set("crm_stages", [{ data: [
+      { id: ETAPA_DA_FONTE, name: "Novo", position: 1 },
+      { id: ETAPA_DO_CARD, name: "Proposta", position: 9 },
+    ], error: null }]);
+
+    await enviar(ENVIO_SEM_EXTERNAL_ID);
+
+    expect(h.moverLead, "o card voltou de 'Proposta' para 'Novo'").not.toHaveBeenCalled();
+    expect(h.atualizarLead, "os campos novos deixaram de chegar ao card").toHaveBeenCalledTimes(1);
+    expect(desfecho()).toBe("atualizado");
+  });
+
+  it("⭐ Respondi: o título do card (\"Empresa — Nome\") não é reescrito para só o nome", async () => {
+    h.leituras.set("webhook_sources", [{ data: FONTE, error: null }]);
+    h.leituras.set("crm_leads", [
+      { data: { ...CARD_ABERTO, title: "Fazenda Boa Vista — Joana", stage_id: ETAPA_DA_FONTE }, error: null },
+    ]);
+
+    await enviar({
+      form: { form_name: "Diagnóstico" },
+      respondent: {
+        answers: {
+          "Qual é o seu nome?": "Joana",
+          "Qual é o melhor WhatsApp para falarmos sobre essa análise?": "+5532999990000",
+          "Qual é o nome da sua empresa?": "Fazenda Boa Vista",
+        },
+      },
+    });
+
+    expect(h.criarLead).not.toHaveBeenCalled();
+    const escritas = h.atualizarLead.mock.calls.map((c) => c[3] as Record<string, unknown>);
+    expect(
+      escritas.some((e) => "title" in e),
+      "o envio do Respondi reescreveu o título do card para só o nome",
+    ).toBe(false);
     expect(desfecho()).toBe("atualizado");
   });
 

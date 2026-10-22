@@ -825,8 +825,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
    *
    * A régua é a MESMA que a ação `create_or_move_lead` já usa para o gatilho de
    * contato (#958): o negócio ABERTO do contato no funil da fonte é ATUALIZADO
-   * com o que este envio trouxe e MOVIDO para a etapa da fonte, em vez de nascer
-   * outro. O degrau é o mesmo módulo (`negocioAbertoDoContato`) — duas
+   * com o que este envio trouxe e MOVIDO para a etapa da fonte quando ela está
+   * à frente, em vez de nascer outro. O degrau é o mesmo módulo (`negocioAbertoDoContato`) — duas
    * implementações de "card aberto do contato" divergiriam na primeira mudança
    * de uma delas.
    *
@@ -844,6 +844,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
    *    em OUTRO funil seria trocar de quadro sem passar pela transferência
    *    (#992), que encerra a origem com motivo próprio.
    *
+   * Ligar a opção exige assinatura configurada na fonte — a mesma régua da
+   * opção irmã (`lib/webhooks/assinatura-autorizacao.ts`), conferida no PATCH.
+   *
+   * Não há aqui o portão de titular anonimizado da opção irmã: o card é achado
+   * pelo contato que ESTE envio casou, e a anonimização apaga telefone e e-mail
+   * do contato (`fn_lgpd_cascade_redact_contact`) — um titular anonimizado não
+   * casa com envio nenhum.
+   *
    * O desfecho é `atualizado` — o mesmo vocabulário do #2316, que a migration
    * 0683 já aceita no CHECK —, e a linha de captação sai com o vínculo do lead e
    * do contato: é ela que o gatilho de anonimização alcança.
@@ -860,13 +868,21 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       // O objeto inteiro desfaria a correção que a equipe fez à mão num campo
       // que este envio nem trouxe.
       const campos = camposQueMudaram(cardAberto.custom_fields, mapped.custom_fields);
-      // O título segue a mesma régua: escrito só quando o nome do envio difere
-      // do que o card tem. `title` de lead não se reescreve por reenvio.
-      const tituloMudou = !!mapped.name && mapped.name !== cardAberto.title;
-      // A etapa é a MESMA em que o card novo nasceria (`default_stage_id`), e
-      // só quando o card ainda não está nela.
-      const etapaDestino =
-        cardAberto.stage_id !== source.default_stage_id ? (source.default_stage_id as string) : null;
+      // O título segue a régua da opção irmã: escrito só quando o nome do envio
+      // difere do que o card tem, e nunca no Respondi, que tem formato próprio
+      // de título ("Empresa — Nome", `respondiLeadTitle`) — compará-lo com o nome
+      // reescreveria o título a cada envio.
+      const tituloMudou = !respondiMapped && !!mapped.name && mapped.name !== cardAberto.title;
+      // A etapa é a MESMA em que o card novo nasceria (`default_stage_id`), e só
+      // para a FRENTE: a etapa da fonte é fixa e chega em todo envio, e um card
+      // que a equipe já levou adiante não pode voltar para o começo do funil.
+      const etapaDestino = await etapaAlvoDoEnvio(
+        admin,
+        source.organization_id as string,
+        source.default_pipeline_id as string,
+        cardAberto.stage_id,
+        source.default_stage_id as string | null,
+      );
       const ctxDoCard: HandlerCtx = {
         organization_id: source.organization_id,
         actor: { type: "webhook_source", id: source.id },
