@@ -2,7 +2,7 @@
  * ESPECIALISTA DE ROTEADOR PUBLICADO SEM NÚMERO NÃO ATENDE PELO NÚMERO — E SÓ
  * PUBLICA PELO ROTEADOR DA PRÓPRIA EMPRESA.
  *
- * A 0717 (#3284) deixou `fn_publish_ai_agent_version` publicar versão com
+ * A 0741 (#3284) deixou `fn_publish_ai_agent_version` publicar versão com
  * `channel_session_id` nulo quando o agente é membro de um roteador cujo canal
  * está WORKING, com o roteador ainda inativo. Duas perguntas ficam, e este
  * arquivo cobra as duas no banco de verdade:
