@@ -30,6 +30,7 @@ import { soChavesAlteradas } from "@/lib/leads/custom-fields-so-diff";
 import { ConversationTagsEditor } from "./ConversationTagsEditor";
 import { ContactTagsEditor } from "./ContactTagsEditor";
 import { TarefasDaDemanda } from "./TarefasDaDemanda";
+import { FollowupDoContato } from "./FollowupDoContato";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { LoseLeadDialog } from "@/components/kanban/LoseLeadDialog";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
@@ -1118,6 +1119,17 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
         leadId={negocioAtivoId}
         podeEditar={podeCriarTarefa}
       />
+
+      {/* O FOLLOW-UP NA CONVERSA (#3178): qual fluxo está rodando neste contato,
+          a porta para iniciar um e parar o que está de pé — sem sair do painel.
+          Fica ao lado da demanda porque é dela que o follow-up é o outro lado:
+          o próximo passo que a demanda não carrega. A seção se AUTO-OCULTA
+          quando não há enrollment vivo nem fluxo ativo (contrato de
+          `RoteirosDoContato`), e o modo readonly do painel esconde as ações de
+          escrita. */}
+      {contactId && !contact?.is_anonymized && (
+        <FollowupDoContato contactId={contactId} podeEscrever={!readonly} />
+      )}
 
       <Separator />
 
