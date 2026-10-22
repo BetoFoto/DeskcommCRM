@@ -163,7 +163,7 @@ export function TarefasClient({
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 text-xs lg:h-9"
+            className="gap-1.5 text-xs md:h-9"
             onClick={() => recarregar()}
             disabled={carregando}
           >
@@ -172,7 +172,7 @@ export function TarefasClient({
           </Button>
 
           {podeEditar && (
-            <Button size="sm" className="gap-1.5 text-xs lg:h-9" onClick={() => abrirNova()}>
+            <Button size="sm" className="gap-1.5 text-xs md:h-9" onClick={() => abrirNova()}>
               <Plus size={14} aria-hidden />
               {t("Nova tarefa")}
             </Button>

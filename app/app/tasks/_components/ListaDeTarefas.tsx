@@ -166,7 +166,7 @@ function Linha({
           <Button
             variant="ghost"
             size="icon"
-            className="lg:h-7 lg:w-7"
+            className="md:h-7 md:w-7"
             aria-label={t("Editar a tarefa")}
             onClick={() => aoEditar(tarefa)}
           >
@@ -182,7 +182,7 @@ function Linha({
             <Button
               variant="destructive"
               size="sm"
-              className="px-2 text-[11px] lg:h-7"
+              className="px-2 text-[11px] md:h-7"
               disabled={ocupada}
               onClick={() => comBloqueio(() => aoApagar(tarefa))}
             >
@@ -192,7 +192,7 @@ function Linha({
             <Button
               variant="ghost"
               size="icon"
-              className="lg:h-7 lg:w-7"
+              className="md:h-7 md:w-7"
               aria-label={t("Apagar a tarefa")}
               onClick={() => setConfirmando(true)}
               onBlur={() => setConfirmando(false)}
