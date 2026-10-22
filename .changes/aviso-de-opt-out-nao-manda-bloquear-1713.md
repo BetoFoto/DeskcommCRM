@@ -9,3 +9,5 @@ Quando o cliente pedia para parar de receber mensagens com uma frase ambígua ("
 O título dos dois caminhos que abrem esse aviso — o modo assistido e o automático — passa a descrever só o que a equipe consegue fazer hoje: assumir a conversa e pedir ao cliente a palavra que a regra reconhece (PARAR, STOP ou SAIR, sozinha na mensagem). O motivo gravado e a passagem do atendimento não mudaram. O botão de bloqueio manual é a decisão DEC-013 e fica fora deste ajuste.
 
 Nada a fazer na atualização.
+
+Contribuição de @webtecnica (#3300).
