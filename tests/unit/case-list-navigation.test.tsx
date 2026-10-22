@@ -24,24 +24,24 @@ describe('navegação de Casos entre lista e detalhe', () => {
     render(<CaseList />);
     const trigger = screen.getByTestId('case-item'); fireEvent.click(trigger);
     expect(screen.getByTestId('selected-case')).toHaveTextContent('open-case');
-    fireEvent.click(screen.getByRole('button', { name: 'Voltar aos casos', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar aos casos' }));
     expect(screen.getByTestId('selected-case')).toHaveTextContent('Sem seleção');
     expect(trigger).toHaveFocus();
   });
   it('o link direto abre seu caso e a volta tem um foco válido sem botão de origem', () => {
     state.selectedInUrl = 'linked-case'; render(<CaseList />);
     expect(screen.getByTestId('selected-case')).toHaveTextContent('linked-case');
-    fireEvent.click(screen.getByRole('button', { name: 'Voltar aos casos', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar aos casos' }));
     expect(screen.getByTestId('selected-case')).toHaveTextContent('Sem seleção');
     expect(screen.getByRole('tab', { name: /Abertos/ })).toHaveFocus();
   });
   it('voltar preserva o filtro de concluídos', () => {
     render(<CaseList />);
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Concluídos', exact: true }), { button: 0, ctrlKey: false });
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Concluídos' }), { button: 0, ctrlKey: false });
     const trigger = screen.getByTestId('case-item'); fireEvent.click(trigger);
     expect(screen.getByTestId('selected-case')).toHaveTextContent('closed-case');
-    fireEvent.click(screen.getByRole('button', { name: 'Voltar aos casos', exact: true }));
-    expect(screen.getByRole('tab', { name: 'Concluídos', exact: true })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar aos casos' }));
+    expect(screen.getByRole('tab', { name: 'Concluídos' })).toHaveAttribute('aria-selected', 'true');
     expect(trigger).toHaveFocus();
   });
 });
