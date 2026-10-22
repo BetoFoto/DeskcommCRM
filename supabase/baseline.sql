@@ -7578,7 +7578,7 @@ create policy "message_templates_write" on message_templates
 -- Fica colado ao bloco da tabela (migration 0060), e não no fim do arquivo, para
 -- não disputar a cauda com toda migration nova de outro PR.
 
--- manifest: A Resposta rápida ganha ORDEM própria, definida por arrastar e soltar na tela `/app/templates` e respeitada pelo slash-menu do Inbox: coluna `ordem` (double precision) em `message_templates` (issue #3244). `0` é o topo — a resposta NOVA nasce ali (`default 0`), como a mais recente já nascia — e o backfill preserva a ordem que a tela mostrava (`updated_at` desc); ele só roda quando a coluna nasce, então reaplicar o `baseline.sql` num banco já ordenado não reescreve a escolha de ninguém.
+-- manifest: A Resposta rápida ganha ORDEM própria, definida por arrastar e soltar na tela `/app/templates` e respeitada pelo slash-menu do Inbox: coluna `ordem` (numeric, como `position_in_stage`) em `message_templates` (issue #3244). A resposta NOVA nasce no topo — um passo acima da primeira, gravado pela criação —, como a mais recente já nascia, e o backfill preserva a ordem que a tela mostrava (`updated_at` desc); ele só roda quando a coluna nasce, então reaplicar o `baseline.sql` num banco já ordenado não reescreve a escolha de ninguém.
 --
 -- 0729: `message_templates.ordem` é a POSIÇÃO da resposta rápida na lista da organização.
 --
@@ -7590,14 +7590,16 @@ create policy "message_templates_write" on message_templates
 -- a tela não oferecia reordenar. A ordem passa a ser DADO da linha, e é ela que
 -- a tela arrasta e o Inbox herda.
 --
--- ─── Por que fracionária (double precision) e não inteiro ───────────────────
+-- ─── Por que fracionária (numeric) e não inteiro ────────────────────────────
 -- A posição nasce do VIZINHO (`depois_de`), não de um número mandado pela tela:
 -- soltar entre duas respostas grava a média entre elas (`lib/templates/ordem.ts`)
 -- e só a linha arrastada é escrita — as vizinhas ficam intactas, e um PATCH de
 -- conteúdo não reescreve a lista. Inteiro exigiria renumerar a lista inteira a
 -- cada arrasto (e renumerar linha que o papel não pode escrever pela RLS).
--- `1000` de passo deixa 10 divisões exatas entre duas vizinhas antes de a
--- precisão do double apertar; quando ela aperta, a rota renumera a lista visível.
+-- `numeric`, como `position_in_stage`: a coluna guarda exatamente o número que a
+-- rota gravou. A média é calculada em JS (double); quando ela não cabe mais
+-- estritamente entre as duas vizinhas, ou quando elas empatam, a rota renumera a
+-- lista visível com passos de `1000`.
 --
 -- ─── Idempotente ────────────────────────────────────────────────────────────
 -- O `do` abaixo não é enfeite: `install.sh` (banco novo) e `update.sh` (banco
@@ -7619,7 +7621,7 @@ begin
       and column_name = 'ordem'
   ) then
     alter table public.message_templates
-      add column ordem double precision not null default 0;
+      add column ordem numeric not null default 0;
 
     with numeradas as (
       select
@@ -7627,7 +7629,7 @@ begin
         row_number() over (
           partition by organization_id
           order by updated_at desc, id
-        )::double precision * 1000 as posicao
+        )::numeric * 1000 as posicao
       from public.message_templates
     )
     update public.message_templates as m
