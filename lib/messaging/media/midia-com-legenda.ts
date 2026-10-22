@@ -22,10 +22,10 @@
  * O #2734 aceitava imagem e PDF. A #2972 pede áudio (como mensagem de voz), vídeo
  * e documento QUALQUER — porque um `.xlsx` de preços ou um `.docx` de contrato
  * "recusado" é o operador voltando ao script externo que a issue quer aposentar.
- * O destino de cada tipo é o do transporte, decidido em
- * `lib/waha/media-send.ts` (`sendVoice` com `convert: true` para áudio,
- * `sendVideo` para vídeo, `sendFile` para documento) — este módulo só diz QUAL
- * dos tipos é, e o caminho de envio segue sendo o de sempre.
+ * O destino de cada tipo é o do transporte, decidido no plano de envio de mídia
+ * do adapter do canal (nota de voz com conversão para áudio, vídeo para vídeo,
+ * arquivo para documento) — este módulo só diz QUAL dos tipos é, e o caminho de
+ * envio segue sendo o de sempre.
  *
  * Tipo que NÃO é identificável segue RECUSADO, nunca rebaixado a documento: sem
  * extensão conhecida e sem MIME declarado, escolher um tipo seria adivinhar. Um
@@ -55,7 +55,7 @@ const MIME_POR_EXTENSAO: Record<string, string> = {
   "3gp": "video/3gpp",
   mov: "video/quicktime",
   // áudio — `ogg`/`opus` é o que o WhatsApp usa como NOTA DE VOZ; os outros
-  // saem pela MESMA rota `sendVoice` com `convert: true` (o WAHA converte).
+  // saem pela MESMA rota de nota de voz com conversão (o transporte converte).
   ogg: "audio/ogg",
   opus: "audio/ogg",
   mp3: "audio/mpeg",
