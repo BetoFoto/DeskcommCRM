@@ -1125,10 +1125,17 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
           Fica ao lado da demanda porque é dela que o follow-up é o outro lado:
           o próximo passo que a demanda não carrega. A seção se AUTO-OCULTA
           quando não há enrollment vivo nem fluxo ativo (contrato de
-          `RoteirosDoContato`), e o modo readonly do painel esconde as ações de
-          escrita. */}
+          `RoteirosDoContato`). Iniciar e parar são `manager`+ no servidor
+          (`requireRole("manager")` no POST e no cancel): a régua aqui é a
+          mesma, mais o modo suporte de leitura. `readonly` sozinho deixava o
+          `agent` ver os botões e levar 403. */}
       {contactId && !contact?.is_anonymized && (
-        <FollowupDoContato contactId={contactId} podeEscrever={!readonly} />
+        <FollowupDoContato
+          contactId={contactId}
+          podeEscrever={
+            !readonly && ((user.is_platform_admin && !user.support) || roleAtLeast(activeOrg?.role, "manager"))
+          }
+        />
       )}
 
       <Separator />

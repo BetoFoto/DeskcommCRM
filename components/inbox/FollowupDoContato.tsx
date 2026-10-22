@@ -34,9 +34,29 @@ type FlowRow = {
   active_version_id: string | null;
 };
 
+/**
+ * Os status que OCUPAM A VAGA do contato: a lista do índice único
+ * `idx_followup_enrollments_one_live` (`baseline.sql`) — a mesma de
+ * `STATUS_VIVOS` em `lib/followup/silence-sweep.ts`, copiada aqui porque aquele
+ * módulo é de servidor. Com um deles de pé, iniciar outro volta 409; por isso é
+ * esta lista que decide entre oferecer Iniciar ou Parar.
+ *
+ * NÃO é o `LIVE_STATUSES` de `lib/followup/reactivity.ts` (quem reage a
+ * mensagem, sem `paused_manual`) nem o do cancel (que aceita também
+ * `coletando`, do roteiro de atendimento).
+ */
+const STATUS_QUE_OCUPAM_A_VAGA = ["active", "waiting_reply", "paused_handoff", "paused_manual"];
+
+/**
+ * A espera longa (migration 0308): a fila a mostra como viva, mas ela NÃO ocupa
+ * a vaga e o cancel não a aceita. Aqui ela aparece com o status, sem Parar, e
+ * Iniciar segue oferecido.
+ */
+const STATUS_DORMENTE = "dormente";
+
 interface Props {
   contactId: string;
-  /** O modo readonly que o painel já expõe: falso esconde as ações de escrita. */
+  /** Iniciar/parar são `manager`+ fora do modo suporte: falso esconde as ações de escrita. */
   podeEscrever: boolean;
 }
 
@@ -65,7 +85,7 @@ function listaDe<T>(valor: unknown): T[] {
  */
 export function FollowupDoContato({ contactId, podeEscrever }: Props) {
   const t = useT();
-  const [ativos, setAtivos] = useState<EnrollmentRow[] | null>(null);
+  const [doContato, setDoContato] = useState<EnrollmentRow[] | null>(null);
   const [fluxos, setFluxos] = useState<FlowRow[] | null>(null);
   const [erro, setErro] = useState(false);
   const [tentativa, setTentativa] = useState(0);
@@ -78,21 +98,23 @@ export function FollowupDoContato({ contactId, podeEscrever }: Props) {
     setErro(false);
     async function carregar() {
       try {
-        // O GET de enrollments é da ORG; o recorte por contato é feito aqui —
-        // a rota não tem filtro por contato.
+        // O recorte por contato é do servidor (`?contact_id=`); sem `status`,
+        // porque "vivo" aqui é mais de um estado (ver STATUS_QUE_OCUPAM_A_VAGA).
         const [rEnroll, rFluxos] = await Promise.all([
-          apiClient.get<{ data: EnrollmentRow[] }>("/api/v1/ai/followups/enrollments?status=active"),
+          apiClient.get<{ data: EnrollmentRow[] }>(
+            `/api/v1/ai/followups/enrollments?contact_id=${encodeURIComponent(contactId)}`,
+          ),
           apiClient.get<{ data: FlowRow[] }>("/api/v1/ai/followup-flows"),
         ]);
         if (cancelado) return;
-        setAtivos(listaDe(rEnroll.data));
+        setDoContato(listaDe<EnrollmentRow>(rEnroll.data).filter((e) => e.contact_id === contactId));
         setFluxos(listaDe(rFluxos.data));
       } catch {
         if (cancelado) return;
         // Falha de leitura NÃO vira "nada rodando": os dados ficam nulos e a
         // seção some (não afirma nada sobre o negócio em cima de um erro).
         setErro(true);
-        setAtivos(null);
+        setDoContato(null);
         setFluxos(null);
       }
     }
@@ -104,7 +126,10 @@ export function FollowupDoContato({ contactId, podeEscrever }: Props) {
 
   const recarregar = useCallback(() => setTentativa((n) => n + 1), []);
 
-  const vivo = (ativos ?? []).find((e) => e.contact_id === contactId) ?? null;
+  // A rota ordena por `updated_at` desc: o primeiro achado é o mais recente.
+  const vivo = (doContato ?? []).find((e) => STATUS_QUE_OCUPAM_A_VAGA.includes(e.status)) ?? null;
+  const dormente = vivo ? null : ((doContato ?? []).find((e) => e.status === STATUS_DORMENTE) ?? null);
+  const exibido = vivo ?? dormente;
   const fluxosAtivos = (fluxos ?? []).filter((f) => f.status === "active" && f.active_version_id);
   const nomeDoFluxo = (pointerId: string) => (fluxos ?? []).find((f) => f.id === pointerId)?.name ?? null;
 
@@ -141,24 +166,26 @@ export function FollowupDoContato({ contactId, podeEscrever }: Props) {
   }, [vivo, t, recarregar]);
 
   if (!contactId) return null;
-  const carregando = !erro && (ativos === null || fluxos === null);
+  const carregando = !erro && (doContato === null || fluxos === null);
   if (carregando) return <Skeleton className="h-14 w-full" data-testid="inbox-followup-carregando" />;
   if (erro) return null;
-  // Nada vivo e nada a iniciar: a seção não existe (contrato de RoteirosDoContato).
-  if (!vivo && (!podeEscrever || fluxosAtivos.length === 0)) return null;
+  const podeIniciar = !vivo && podeEscrever && fluxosAtivos.length > 0;
+  // Nada a mostrar e nada a iniciar: a seção não existe (contrato de RoteirosDoContato).
+  if (!exibido && !podeIniciar) return null;
 
   return (
     <section data-testid="inbox-followup">
       <h3 className="text-xs font-semibold text-text">{t("Follow-up")}</h3>
-      {vivo ? (
+      {exibido && (
         <div className="mt-2 rounded-md border border-border p-2 text-xs">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate font-medium">
-              {nomeDoFluxo(vivo.pointer_id) ?? t("Fluxo de follow-up")}
+              {nomeDoFluxo(exibido.pointer_id) ?? t("Fluxo de follow-up")}
             </span>
-            <Badge variant={tomDoStatus(vivo.status)}>{rotuloDoStatus(vivo.status, t)}</Badge>
+            <Badge variant={tomDoStatus(exibido.status)}>{rotuloDoStatus(exibido.status, t)}</Badge>
           </div>
-          {podeEscrever && (
+          {/* Parar só para quem ocupa a vaga: o cancel recusa o dormente. */}
+          {vivo && podeEscrever && (
             <Button
               variant="outline"
               size="sm"
@@ -171,7 +198,8 @@ export function FollowupDoContato({ contactId, podeEscrever }: Props) {
             </Button>
           )}
         </div>
-      ) : (
+      )}
+      {podeIniciar && (
         <div className="mt-2 space-y-2">
           {/* Select nativo (o mesmo idioma do "Desfecho da demanda"): o teste o
               aciona por selectOptions, sem portal. */}

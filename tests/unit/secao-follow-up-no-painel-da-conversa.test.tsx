@@ -65,6 +65,8 @@ const ENROLLMENT = {
 
 /** Mutable: cada caso decide se a sessão é de leitura ou de escrita. */
 let authUser: Record<string, unknown> = { support: null };
+/** Mutable: o papel na organização (iniciar/parar são manager+ no servidor). */
+let authRole = "manager";
 
 const get = vi.fn();
 const post = vi.fn();
@@ -91,7 +93,7 @@ vi.mock("@/hooks/contacts/useUpdateContact", () => ({
   useUpdateContact: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("@/hooks/auth/AuthProvider", () => ({
-  useAuth: () => ({ user: authUser, activeOrg: { role: "manager" } }),
+  useAuth: () => ({ user: authUser, activeOrg: { role: authRole } }),
 }));
 
 function renderPainel() {
@@ -114,6 +116,7 @@ function servirApi(opts: { enrollments?: unknown[]; flows?: unknown[] }) {
 
 beforeEach(() => {
   authUser = { support: null };
+  authRole = "manager";
   get.mockReset();
   post.mockReset();
   patch.mockReset();
@@ -188,6 +191,60 @@ describe("painel do inbox — seção de follow-up", () => {
 
   it("em readonly, sem enrollment vivo, não sobra porta de escrita vazia", async () => {
     authUser = { support: { access_mode: "support_readonly" } };
+    servirApi({ flows: [FLUXO] });
+    renderPainel();
+
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    expect(screen.queryByTestId("inbox-followup")).toBeNull();
+  });
+
+  it("a leitura vai pelo contato no servidor (?contact_id=), sem recortar por status", async () => {
+    servirApi({ enrollments: [ENROLLMENT] });
+    renderPainel();
+
+    await screen.findByTestId("inbox-followup");
+    const urls = get.mock.calls.map((c) => String(c[0])).filter((u) => u.includes("/followups/enrollments"));
+    expect(urls).toEqual([`/api/v1/ai/followups/enrollments?contact_id=${CONTACT}`]);
+  });
+
+  it.each(["waiting_reply", "paused_manual"])(
+    "enrollment em %s ocupa a vaga: mostra o fluxo e o Parar, sem oferecer Iniciar",
+    async (status) => {
+      servirApi({ enrollments: [{ ...ENROLLMENT, status }], flows: [FLUXO] });
+      renderPainel();
+
+      const secao = await screen.findByTestId("inbox-followup");
+      expect(secao.textContent).toContain(FLUXO.name);
+      expect(screen.getByTestId("parar-followup")).toBeTruthy();
+      expect(screen.queryByTestId("escolher-fluxo-followup")).toBeNull();
+      expect(screen.queryByTestId("iniciar-followup")).toBeNull();
+    },
+  );
+
+  it("dormente aparece com o status, sem Parar (o cancel o recusa), e Iniciar segue oferecido", async () => {
+    servirApi({ enrollments: [{ ...ENROLLMENT, status: "dormente" }], flows: [FLUXO] });
+    renderPainel();
+
+    const secao = await screen.findByTestId("inbox-followup");
+    expect(secao.textContent).toContain(FLUXO.name);
+    expect(secao.textContent).toMatch(/aguardando a data do retorno/i);
+    expect(screen.queryByTestId("parar-followup")).toBeNull();
+    expect(screen.getByTestId("iniciar-followup")).toBeTruthy();
+  });
+
+  it("papel agent vê o fluxo vivo, mas sem Iniciar nem Parar (as rotas cobram manager)", async () => {
+    authRole = "agent";
+    servirApi({ enrollments: [ENROLLMENT], flows: [FLUXO] });
+    renderPainel();
+
+    const secao = await screen.findByTestId("inbox-followup");
+    expect(secao.textContent).toContain(FLUXO.name);
+    expect(screen.queryByTestId("parar-followup")).toBeNull();
+    expect(screen.queryByTestId("iniciar-followup")).toBeNull();
+  });
+
+  it("papel agent sem follow-up vivo: a seção some, mesmo com fluxo ativo", async () => {
+    authRole = "agent";
     servirApi({ flows: [FLUXO] });
     renderPainel();
 
