@@ -520,7 +520,7 @@ diálogo e é asserida na spec.
 
 ---
 
-## J51 — Campanha pelo número oficial, com modelo aprovado `[P1]` (2026-10-15)
+## J52 — Campanha pelo número oficial, com modelo aprovado `[P1]` (2026-10-15)
 
 Contexto: issue #1330, fatia 4. Número oficial só aceita texto livre dentro das
 24 h da última mensagem do cliente, e a campanha fala com quem não escreveu —
@@ -536,12 +536,12 @@ casos 1 e 2 rodam no CI; o 3 precisa do dublê do provedor (ambiente do
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
-| J51.1 | Escolher um número oficial na nova campanha | o campo de texto some; aparece o seletor de modelos do número, o pausado desabilitado, a mídia do cabeçalho já com o link salvo, «Falta escolher a origem de» até tudo ter origem, e a prévia com «[Primeiro nome do contato]» e o texto fixo | **PASS pela tela** — Evidência: `evidence/campanha-com-modelo-aprovado/01-modelo-escolhido-com-previa.png` |
-| J51.2 | Contar o público com um contato cujo nome é só telefone | 1 pode receber; o outro fica de fora com «Falta um dado que a mensagem usa» | **PASS pela tela** — `evidence/campanha-com-modelo-aprovado/02-publico-com-quem-fica-de-fora.png` |
-| J51.3 | Salvar e preparar | a campanha grava `message_mode = template` e o mapa; o destinatário guarda os valores em `variables.modelo` e o texto preenchido em `rendered_body` (o que o agente lê) | **PASS pela tela + banco** — `evidence/campanha-com-modelo-aprovado/03-detalhe-do-rascunho.png`, `evidence/campanha-com-modelo-aprovado/04-lista-preparada.png` |
-| J51.4 | Enviar teste (com o dublê do provedor) | o provedor recebe nome, idioma, `templateParams` na ordem do contrato e `headerMedia`; a conversa guarda o modelo com o texto preenchido | **PASS pela tela, local** — `evidence/campanha-com-modelo-aprovado/05-teste-enviado.png`; no CI pula (sem dublê) |
-| J51.5 | Falha da plataforma no envio | da pessoa (131050, 131049, 131026) segue para a próxima com o motivo em frase; do envio inteiro (132015, 131048, 131042…) pausa a campanha com o motivo | **PASS (unit)** — `lib/channels/erro-da-plataforma.test.ts`; rodada **NÃO MEDIDA** pela tela |
-| J51.6 | Entrega e leitura pelo oficial direto | o trigger de ack lê `delivered_at`/`read_at` e o destinatário vira entregue/lido | **PASS (banco)** — do #2937: `tests/invariants/ack-da-api-oficial-alcanca-o-destinatario.test.ts` |
+| J52.1 | Escolher um número oficial na nova campanha | o campo de texto some; aparece o seletor de modelos do número, o pausado desabilitado, a mídia do cabeçalho já com o link salvo, «Falta escolher a origem de» até tudo ter origem, e a prévia com «[Primeiro nome do contato]» e o texto fixo | **PASS pela tela** — Evidência: `evidence/campanha-com-modelo-aprovado/01-modelo-escolhido-com-previa.png` |
+| J52.2 | Contar o público com um contato cujo nome é só telefone | 1 pode receber; o outro fica de fora com «Falta um dado que a mensagem usa» | **PASS pela tela** — `evidence/campanha-com-modelo-aprovado/02-publico-com-quem-fica-de-fora.png` |
+| J52.3 | Salvar e preparar | a campanha grava `message_mode = template` e o mapa; o destinatário guarda os valores em `variables.modelo` e o texto preenchido em `rendered_body` (o que o agente lê) | **PASS pela tela + banco** — `evidence/campanha-com-modelo-aprovado/03-detalhe-do-rascunho.png`, `evidence/campanha-com-modelo-aprovado/04-lista-preparada.png` |
+| J52.4 | Enviar teste (com o dublê do provedor) | o provedor recebe nome, idioma, `templateParams` na ordem do contrato e `headerMedia`; a conversa guarda o modelo com o texto preenchido | **PASS pela tela, local** — `evidence/campanha-com-modelo-aprovado/05-teste-enviado.png`; no CI pula (sem dublê) |
+| J52.5 | Falha da plataforma no envio | da pessoa (131050, 131049, 131026) segue para a próxima com o motivo em frase; do envio inteiro (132015, 131048, 131042…) pausa a campanha com o motivo | **PASS (unit)** — `lib/channels/erro-da-plataforma.test.ts`; rodada **NÃO MEDIDA** pela tela |
+| J52.6 | Entrega e leitura pelo oficial direto | o trigger de ack lê `delivered_at`/`read_at` e o destinatário vira entregue/lido | **PASS (banco)** — do #2937: `tests/invariants/ack-da-api-oficial-alcanca-o-destinatario.test.ts` |
 
 ## J9 — Ver o que o follow-up já fez, e intervir sem matá-lo `[P1]`
 
