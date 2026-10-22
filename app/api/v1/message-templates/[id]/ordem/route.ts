@@ -25,7 +25,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * A posição nova é a média entre as duas vizinhas, então nenhuma delas muda:
  * reordenar não é editar. `updated_at` fica fora do UPDATE de propósito — a
  * listagem desempata empate por ele, e carimbá-lo faria uma reordenação mexer na
- * ordem de quem nasceu com a MESMA posição (o `default 0` das respostas novas).
+ * ordem de quem divide a MESMA posição (duas respostas criadas ao mesmo tempo).
  * Título, corpo, atalho e `midias` também não são tocados: reordenar não muda
  * conteúdo.
  */
@@ -35,6 +35,7 @@ import { type NextRequest } from "next/server";
 import { audit } from "@/lib/audit";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { roleAtLeast } from "@/lib/auth/types";
 import { moverTemplateSchema } from "@/lib/schemas/templates";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -49,10 +50,11 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-/** Uma linha da lista, no mínimo que a conta da posição precisa. */
+/** Uma linha da lista, no mínimo que a conta da posição e a régua da RLS precisam. */
 interface Linha {
   id: string;
   ordem: number;
+  owner_user_id: string | null;
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams): Promise<Response> {
@@ -83,7 +85,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams): Promise<Re
   // não é par.
   const { data: lista, error: erroLista } = await supabase
     .from("message_templates")
-    .select("id, ordem")
+    .select("id, ordem, owner_user_id")
     .eq("organization_id", org.orgId)
     .order("ordem", { ascending: true })
     .order("updated_at", { ascending: false })
@@ -135,7 +137,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams): Promise<Re
    * linha — o vizinho e o seguinte ficam byte a byte como estavam.
    */
   if (nova !== null) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("message_templates")
       // Sem `updated_at`: reordenar não é editar (ver o cabeçalho).
       .update({ ordem: nova })
@@ -150,21 +152,42 @@ export async function PUT(req: NextRequest, { params }: RouteParams): Promise<Re
       });
       return fail("internal_error", "Erro ao reordenar a resposta rápida.", 500, { requestId });
     }
+    // Sem linha de volta, a RLS recusou a escrita (um `agent` movendo resposta
+    // COMPARTILHADA): nada mudou, então nada é auditado nem respondido como
+    // movido — a releitura de `finalizar` acharia a linha (ele a LÊ) e diria 200.
+    if (!data) {
+      return fail("forbidden", t("Você não pode reordenar esta resposta rápida."), 403, {
+        requestId,
+      });
+    }
     return finalizar(false, nova);
   }
 
   /**
    * Não há posição representável (empate entre as vizinhas — duas respostas
-   * novas as duas em `0` —, ou precisão do double esgotada): a lista visível
+   * criadas ao mesmo tempo, ou linhas de antes da 0729 —, ou precisão da média
+   * esgotada): a lista visível
    * inteira é renumerada com passos largos, na ordem pedida. É o mesmo desfecho
    * que o quadro chama de "global rebalance", e aqui ele é obrigatório: gravar
    * `NaN` ordenaria a linha como "sempre no fim" e o arrasto não teria efeito.
    *
-   * A renumeração escreve as OUTRAS linhas também, então a RLS é medida linha a
-   * linha: se alguma (uma resposta COMPARTILHADA, para um `agent`) não puder ser
-   * escrita, a rota para ali e devolve 409 — melhor que aplicar metade da ordem
-   * e responder verde.
+   * A renumeração escreve as OUTRAS linhas também, então a régua da RLS
+   * (`message_templates_write`: a própria com `agent`, a compartilhada com
+   * manager+) é conferida na lista inteira ANTES do primeiro UPDATE: nada é
+   * escrito se a lista tiver linha que este papel não grava. Conferir só no
+   * meio do laço deixaria as linhas anteriores já renumeradas e responderia 409.
    */
+  const gravavel = (linha: Linha) =>
+    linha.owner_user_id === user.id ||
+    (linha.owner_user_id === null && roleAtLeast(org.role, "manager"));
+  if (!atual.every(gravavel)) {
+    return fail(
+      "conflict",
+      t("Não foi possível reordenar a lista inteira. Recarregue a página."),
+      409,
+      { requestId },
+    );
+  }
   const ids = semAlvo.map((linha) => linha.id);
   ids.splice(indice, 0, id);
   for (let i = 0; i < ids.length; i++) {
@@ -182,6 +205,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams): Promise<Re
       });
       return fail("internal_error", "Erro ao reordenar a resposta rápida.", 500, { requestId });
     }
+    // Defesa em profundidade: a régua acima já recusou o que a RLS recusaria;
+    // chegar aqui é corrida (a linha mudou de dono ou sumiu entre as consultas).
     if (!data) {
       return fail(
         "conflict",
