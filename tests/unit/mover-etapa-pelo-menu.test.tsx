@@ -181,8 +181,8 @@ describe("Mover para… no menu do card", () => {
 
     await waitFor(() => expect(movesEnviados()).toHaveLength(1));
     const [move] = movesEnviados();
-    expect(move.url).toBe(`/api/v1/leads/${MOVIDO.id}/move`);
-    expect(move.corpo).toEqual({
+    expect(move?.url).toBe(`/api/v1/leads/${MOVIDO.id}/move`);
+    expect(move?.corpo).toEqual({
       stage_id: "s-2",
       position_in_stage: 6000,
       expected_updated_at: UPDATED_AT,
@@ -203,7 +203,7 @@ describe("Mover para… no menu do card", () => {
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
     await waitFor(() => expect(movesEnviados()).toHaveLength(1));
-    expect(movesEnviados()[0].corpo).toMatchObject({ stage_id: "s-3", lost_reason: motivo.value });
+    expect(movesEnviados()[0]?.corpo).toMatchObject({ stage_id: "s-3", lost_reason: motivo.value });
   });
 
   it("a recusa de campos obrigatórios que volta do menu abre a janela de campos", async () => {
@@ -288,7 +288,7 @@ describe("Mover para… no menu do card", () => {
 
     await waitFor(() => expect(movesEnviados()).toHaveLength(1));
     expect(screen.queryByRole("dialog", { name: "Marcar como perdido" })).toBeNull();
-    expect(movesEnviados()[0].corpo).not.toHaveProperty("lost_reason");
+    expect(movesEnviados()[0]?.corpo).not.toHaveProperty("lost_reason");
   });
 
   it("Cancelar a janela do motivo não move nada, e o motivo escolhido não vaza para o próximo negócio", async () => {
@@ -339,8 +339,8 @@ describe("Mover para… no menu do card", () => {
     await user.click(screen.getByRole("button", { name: "Mover agora" }));
 
     await waitFor(() => expect(movesEnviados()).toHaveLength(2));
-    expect(movesEnviados()[0].corpo).toMatchObject({ lost_reason: motivo.value });
-    expect(movesEnviados()[1].corpo).toMatchObject({
+    expect(movesEnviados()[0]?.corpo).toMatchObject({ lost_reason: motivo.value });
+    expect(movesEnviados()[1]?.corpo).toMatchObject({
       stage_id: "s-3",
       lost_reason: motivo.value,
       custom_fields: { cpf: "123" },
