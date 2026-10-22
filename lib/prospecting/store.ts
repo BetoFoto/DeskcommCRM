@@ -24,6 +24,7 @@ import {
 import { ProspectingError } from "./provider";
 import { audit } from "@/lib/audit";
 import { vereditoPuro } from "./site-classify";
+import { pedidoDaProspeccao } from "./pedido-da-prospeccao";
 import {
   provedorDaOrganizacao,
   validarCredencialDaOrganizacao,
@@ -390,10 +391,19 @@ export async function criarPegadaDoCandidato(
   // A triagem já recusou quem não tem telefone; esta guarda só diz isso ao compilador,
   // que não enxerga a triagem daqui (no laço original o `continue` já estreitava o tipo).
   if (!p.phone) throw new ProspectingError("Sem telefone brasileiro válido.", 422, "candidato");
+  // ─── O CARIMBO DO PEDIDO (#3072) ─────────────────────────────────────────
+  //
+  // Este `requestId` vai parar em `metadata.request_id` do `lead.created` que o
+  // `createLeadHandler` emite (`app/api/v1/leads/_handler.ts`). Era
+  // `rule:${c.id}` — a marca que o motor RESERVA para a ação de regra —, e por
+  // isso o motor pulava o negócio aberto pela campanha como se fosse laço de
+  // regra: nenhuma regra de "negócio criado" rodava para a empresa abordada.
+  // A campanha não é regra; o carimbo dela é próprio e o anti-laço das regras
+  // fica intacto.
   const ctx = {
     organization_id: org,
     actor: { type: "webhook_source" as const, id: c.id },
-    requestId: `rule:${c.id}`,
+    requestId: pedidoDaProspeccao(c.id),
   };
   // O negócio é VALIDADO antes de qualquer escrita: `normalizeProspect` aceita um nome de
   // uma letra, e o negócio exige duas. Sem isto o contato nascia, o negócio recusava, e a
