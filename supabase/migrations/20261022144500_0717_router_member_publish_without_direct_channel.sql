@@ -1,32 +1,41 @@
--- manifest: Publicação permite membro autenticado do roteador sem número próprio, com canal WORKING e isolamento de organização. Agentes comuns continuam exigindo número.
+-- manifest: Especialista de roteador publica sem número próprio quando roteador e canal são da mesma organização e o canal está WORKING (#3284, de @lucivan212). Agente comum segue exigindo número.
 -- ============================================================================
--- 2026-10-22 — 0717: PUBLICAR MEMBRO DE ROTEADOR SEM NÚMERO PRÓPRIO (V1CRED)
+-- 2026-10-22 — 0717: PUBLICAR MEMBRO DE ROTEADOR SEM NÚMERO PRÓPRIO
 --
--- A 0413 trouxe o "Provedor personalizado (compatível com OpenAI)": cadastro,
--- teste, validação e turno do agente. Faltou a PUBLICAÇÃO. A
--- `fn_publish_ai_agent_version` só aceita o modelo que está no catálogo
--- `ai_models` com o mesmo `provider`, e ninguém escreve linha `custom` ali —
--- o catálogo é GLOBAL (sem `organization_id`) e o endpoint é de cada empresa,
--- então não há lista de modelos `custom` que valha para a instalação inteira.
--- Resultado medido numa VPS real: credencial `custom` validada, rascunho com
--- `qwen3:14b` (que o endpoint devolveu em `/models`) e todo "Publicar"
--- respondendo `model_not_found`. Nenhum agente com provedor personalizado
--- conseguia ser publicado.
+-- O defeito: o editor de um especialista que é membro de um roteador de
+-- intenções avisava que "o campo de número não se aplica", mas o botão
+-- Publicar e esta função seguiam exigindo `channel_session_id` na versão. Sem
+-- número, `fn_publish_ai_agent_version` levantava `channel_session_not_found`
+-- e o especialista nunca saía do rascunho. Escolher um número para contornar
+-- era pior: a versão passaria a disputar aquele número com o agente que já
+-- atende nele.
 --
--- O conserto: para `custom`, a fonte de verdade de "este modelo existe" é a
--- lista que o PRÓPRIO endpoint devolveu — `ai_provider_credentials.
--- models_available` da credencial da versão, que já passou pelas conferências
--- de organização, ativa e validada logo acima. Escrever os modelos em
--- `ai_models` foi recusado: o catálogo é da instalação, e o id que o endpoint
--- de uma empresa serve apareceria como opção para todas as outras.
+-- O conserto, um ramo só sobre o corpo da 0592 (mesma assinatura, mesmos
+-- grants, mesma conferência de credencial e de modelo, mesma troca atômica):
+-- quando a versão não tem número, o canal conferido é o do ROTEADOR do qual o
+-- agente é membro. Publica se:
+--   - existe linha em `ai_router_members` do agente nesta organização;
+--   - o roteador é da MESMA organização (`r.organization_id = p_org_id` no
+--     join — `ai_router_members.router_id` é FK simples, então só este filtro
+--     impede um membro de apontar para roteador de outra empresa);
+--   - o canal do roteador é da mesma organização e está WORKING.
+-- O roteador NÃO precisa estar ativo: os membros são publicados antes de
+-- ligá-lo. Enquanto ele está inativo, o especialista não atende pelo número,
+-- porque a seleção por número exige `channel_session_id` igual ao do canal
+-- (`loadPublishedAgentConfig`) e o roteador só entra no turno quando ativo
+-- (`loadActiveRouter` filtra `is_active`). A exceção é deliberada: campanha
+-- que declare o especialista o carrega pelo id, como qualquer agente de
+-- campanha.
 --
--- Para `openai-assinatura`, aplica-se o mesmo isolamento: `models_available`
--- é preenchido pelo catálogo autenticado de cada conta e fica na credencial
--- daquela organização. Sem credencial própria, o modelo é recusado. Os
--- provedores nativos seguem pela mesma consulta ao catálogo global.
+-- Agente que não é membro de roteador e não tem número continua recusado com
+-- `channel_session_not_found`. Com mais de um roteador, prefere o que tem
+-- canal WORKING e, entre eles, o mais antigo.
 --
--- `create or replace` da versão de 5 argumentos, com a mesma assinatura e os
--- mesmos grants; as de 3 e 4 argumentos só delegam e não mudam. Idempotente.
+-- `create or replace` da versão de 5 argumentos; as de 3 e 4 argumentos só
+-- delegam e não mudam. O comentário da coluna `channel_session_id` (0241)
+-- dizia que publicar com NULL é sempre recusado: reescrito no fim. Idempotente.
+-- Gates: `tests/invariants/rascunho-de-agente-sem-numero.test.ts`,
+-- `tests/invariants/membro-de-roteador-sem-numero-nao-atende.test.ts`.
 -- ============================================================================
 
 create or replace function public.fn_publish_ai_agent_version(
@@ -198,3 +207,6 @@ $$;
 
 revoke execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) from public,anon,authenticated;
 grant execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) to service_role;
+
+comment on column public.ai_agent_versions.channel_session_id is
+  'Por qual número este agente atende. NULL = ainda não escolhido (rascunho), ou especialista de roteador, que atende pelo canal do roteador. Publicar com NULL só é aceito para membro de roteador da mesma organização com canal WORKING (fn_publish_ai_agent_version); fora disso, channel_session_not_found.';
