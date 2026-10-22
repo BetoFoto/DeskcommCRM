@@ -1929,18 +1929,19 @@ export const DICIONARIO: Traducoes = {
   Permitir: { es: "Permitir" },
   Arquivar: { es: "Archivar" },
   "Agente duplicado.": { es: "Agente duplicado." },
-  "Agent reativado.": { es: "Agente reanudado." },
+  "Agente reativado.": { es: "Agente reanudado." },
   "Agente pausado.": { es: "Agente pausado." },
   "Agent arquivado.": { es: "Agente archivado." },
+  "Agente arquivado.": { es: "Agente archivado." },
   Falha: { es: "Error" },
   "Erro ao executar ação.": { es: "Error al ejecutar la acción." },
   "O agente padrão da organização não pode ser arquivado.": {
     es: "El agente predeterminado de la organización no se puede archivar.",
   },
-  "O agent deixa de responder gatilhos e some das listas ativas. Versões publicadas são preservadas para auditoria. Não é possível desarquivar pela UI nesta versão.": {
+  "O agente deixa de responder gatilhos e some das listas ativas. Versões publicadas são preservadas para auditoria. Não é possível desarquivar pela UI nesta versão.": {
     es: "El agente deja de responder a los disparadores y desaparece de las listas activas. Las versiones publicadas se conservan para auditoría. En esta versión no se puede desarchivar desde la interfaz.",
   },
-  "Renomear agent": { es: "Renombrar agente" },
+  "Renomear agente": { es: "Renombrar agente" },
   "Apenas o nome interno muda. Versões publicadas e histórico são preservados.": {
     es: "Solo cambia el nombre interno. Las versiones publicadas y el historial se conservan.",
   },
@@ -1993,7 +1994,7 @@ export const DICIONARIO: Traducoes = {
   "Máximo de": { es: "Máximo de" },
   "capacidades por agente.": { es: "capacidades por agente." },
   "Campo inválido.": { es: "Campo inválido." },
-  "Salve o agent antes de publicar.": { es: "Guarda el agente antes de publicar." },
+  "Salve o agente antes de publicar.": { es: "Guarda el agente antes de publicar." },
   "Sem rascunho para publicar.": { es: "No hay borrador para publicar." },
   "Resolva os erros do formulário.": { es: "Corrige los errores del formulario." },
   "Salve o rascunho antes de publicar.": { es: "Guarda el borrador antes de publicar." },
@@ -2006,7 +2007,7 @@ export const DICIONARIO: Traducoes = {
   "Formulário inválido.": { es: "Formulario inválido." },
   "salvo.": { es: "guardado." },
   "Validação falhou.": { es: "La validación falló." },
-  "Agent criado.": { es: "Agente creado." },
+  "Agente criado.": { es: "Agente creado." },
   "Falha ao publicar:": { es: "Error al publicar:" },
   "publicada e ativa.": { es: "publicada y activa." },
   Novo: { es: "Nuevo" },
@@ -2227,7 +2228,7 @@ export const DICIONARIO: Traducoes = {
   "Publique um fluxo de follow-up": { es: "Publica un flujo de seguimiento" },
   "para vinculá-lo.": { es: "para vincularlo." },
   "Fluxos publicados": { es: "Flujos publicados" },
-  "Máximo de 20 fluxos por agent.": { es: "Máximo de 20 flujos por agente." },
+  "Máximo de 20 fluxos por agente.": { es: "Máximo de 20 flujos por agente." },
   // ─── Agentes de IA: gatilhos e painel de segurança ───
   "O que faz ele responder": { es: "Qué hace que responda" },
   "Uma mensagem nova do cliente": { es: "Un mensaje nuevo del cliente" },
@@ -16752,12 +16753,6 @@ export const DICIONARIO: Traducoes = {
   "atualizado": { es: "actualizado" },
   "recusado": { es: "rechazado" },
   "Recusado.": { es: "Rechazado." },
-  // PR #3018 - tradução agent -> agente
-  "Salve o agente antes de publicar.": { es: "Guarde el agente antes de publicar." },
-  "Agente reativado.": { es: "Agente reactivado." },
-  "O agente deixa de responder gatilhos e some das listas ativas. Versões publicadas são preservadas para auditoria. Não é possível desarquivar pela UI nesta versão.": { es: "El agente deja de responder disparadores y desaparece de las listas activas. Las versiones publicadas se preservan para auditoría. No es posible desarchivar desde la UI en esta versión." },
-  "Agente arquivado.": { es: "Agente archivado." },
-  "Renomear agente": { es: "Renombrar agente" },
   // #2041 — rodízio de atendentes na ação assign_owner.
   "Como atribuir": { es: "Cómo asignar" },
   "Um atendente fixo": { es: "Un asesor fijo" },
