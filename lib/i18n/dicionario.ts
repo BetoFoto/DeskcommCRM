@@ -17004,6 +17004,8 @@ export const DICIONARIO: Traducoes = {
   "Baixar arquivo para visualizar": {
     es: "Descargar archivo para visualizar",
   },
+  "Não foi possível carregar os anexos.": { es: "No se pudieron cargar los adjuntos." },
+  "Os anexos ficam no negócio.": { es: "Los adjuntos quedan en el negocio." },
   "Requisição multipart inválida.": {
     es: "Solicitud multipart no válida.",
   },

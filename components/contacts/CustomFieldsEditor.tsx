@@ -81,7 +81,7 @@ interface Props {
   leadId?: string;
 }
 
-export function CustomFieldsEditor({ fields, value, onChange, disabled, className, leadId }: Props) {
+export function CustomFieldsEditor({ fields, value, onChange, mode, disabled, className, leadId }: Props) {
   const t = useT();
   const [rascunhosDeMoeda, setRascunhosDeMoeda] = useState<Record<string, string>>({});
   // O rascunho do `searchable_select`: enquanto a pessoa digita, o input mostra
@@ -482,6 +482,17 @@ export function CustomFieldsEditor({ fields, value, onChange, disabled, classNam
               </div>
             );
           case "file":
+            // O anexo é do NEGÓCIO (`crm_lead_attachments.lead_id`): na ficha do
+            // contato não há negócio para pendurar o arquivo, então não há upload.
+            if (mode === "contact" || !leadId) {
+              return (
+                <div key={f.key} className="space-y-1">
+                  <Label className="text-xs">{f.label}</Label>
+                  <p className="text-xs text-muted-foreground">{t("Os anexos ficam no negócio.")}</p>
+                </div>
+              );
+            }
+            // Sem `onChange`: a lista mora em `crm_lead_attachments`, nunca em `custom_fields`.
             return (
               <FileUploadCustomField
                 key={f.key}
@@ -489,8 +500,6 @@ export function CustomFieldsEditor({ fields, value, onChange, disabled, classNam
                 label={f.label}
                 required={f.required}
                 leadId={leadId}
-                value={v}
-                onChange={(files) => set(f.key, files)}
                 disabled={disabled}
               />
             );

@@ -27,23 +27,13 @@ interface Props {
   label: string;
   required?: boolean;
   leadId?: string;
-  value?: unknown;
-  onChange: (files: LeadAttachment[]) => void;
+  /**
+   * Só AVISA a lista atual (o diálogo de campos obrigatórios a usa para liberar
+   * o botão). Nunca é para gravar em `custom_fields`: a fonte da verdade é
+   * `crm_lead_attachments`, e é ela que a régua de etapa conta no servidor.
+   */
+  onChange?: (files: LeadAttachment[]) => void;
   disabled?: boolean;
-}
-
-function parseFileList(val: unknown): LeadAttachment[] {
-  if (!val) return [];
-  if (Array.isArray(val)) return val as LeadAttachment[];
-  if (typeof val === "string") {
-    try {
-      const parsed = JSON.parse(val);
-      if (Array.isArray(parsed)) return parsed as LeadAttachment[];
-    } catch {
-      return [];
-    }
-  }
-  return [];
 }
 
 function formatBytes(bytes: number): string {
@@ -59,7 +49,6 @@ export function FileUploadCustomField({
   label,
   required = false,
   leadId,
-  value,
   onChange,
   disabled = false,
 }: Props) {
@@ -69,11 +58,18 @@ export function FileUploadCustomField({
   const [isDragging, setIsDragging] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<LeadAttachment | null>(null);
 
-  const files = parseFileList(value);
-
-  // Busca anexos persistidos na tabela crm_lead_attachments caso a lista inicial esteja vazia
+  const [files, setFiles] = useState<LeadAttachment[]>([]);
+  const avisar = useRef(onChange);
   useEffect(() => {
-    if (!leadId || files.length > 0) return;
+    avisar.current = onChange;
+  });
+  useEffect(() => {
+    avisar.current?.(files);
+  }, [files]);
+
+  // A lista vem SEMPRE da tabela: o componente não recebe valor de fora.
+  useEffect(() => {
+    if (!leadId) return;
 
     let cancelado = false;
     async function carregarAnexos() {
@@ -81,21 +77,18 @@ export function FileUploadCustomField({
         const res = await fetch(
           `/api/v1/leads/${leadId}/attachments?field_key=${encodeURIComponent(fieldKey)}`,
         );
-        if (!res.ok) return;
+        if (!res.ok) throw new Error(String(res.status));
         const json = await res.json();
-        const lista = (json.data?.files ?? []) as LeadAttachment[];
-        if (!cancelado && lista.length > 0) {
-          onChange(lista);
-        }
+        if (!cancelado) setFiles((json.data?.files ?? []) as LeadAttachment[]);
       } catch {
-        // Silencioso se não conseguir carregar no mount
+        if (!cancelado) toast.error(t("Não foi possível carregar os anexos."));
       }
     }
     void carregarAnexos();
     return () => {
       cancelado = true;
     };
-  }, [leadId, fieldKey, files.length, onChange]);
+  }, [leadId, fieldKey, t]);
 
   async function uploadFiles(selectedFiles: File[]) {
     if (selectedFiles.length === 0) return;
@@ -126,7 +119,7 @@ export function FileUploadCustomField({
         }
 
         currentList = json.data?.files || [...currentList, json.data?.attachment];
-        onChange(currentList);
+        setFiles(currentList);
       }
 
       toast.success(
@@ -191,16 +184,12 @@ export function FileUploadCustomField({
           const msg = json.error?.message || json.message || t("Falha ao remover arquivo.");
           throw new Error(msg);
         }
-        onChange(json.data?.files || files.filter((f) => f.id !== attachmentId));
+        setFiles(json.data?.files || files.filter((f) => f.id !== attachmentId));
         toast.success(t("Arquivo removido."));
-        return;
       } catch (err) {
         toast.error(err instanceof Error ? err.message : t("Erro ao remover."));
-        return;
       }
     }
-
-    onChange(files.filter((f) => f.id !== attachmentId));
   }
 
   return (
@@ -399,7 +388,7 @@ export function FileUploadCustomField({
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center gap-3 p-8 text-center text-text-muted">
-                <FileText className="h-12 w-12 text-muted-foreground/60" />
+                <FileText className="h-12 w-12 text-muted-foreground" />
                 <p className="text-sm">
                   {t("Pré-visualização indisponível para este formato.")}
                 </p>
