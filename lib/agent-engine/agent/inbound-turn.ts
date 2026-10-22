@@ -2140,6 +2140,11 @@ async function executarTurnoDoAgente(
   // objeto literal SEM estes campos: sem a guarda, o tipo da união recusa a leitura.
   const destinoPipelineId = 'destinationPipelineId' in routed ? (routed.destinationPipelineId ?? null) : null;
   const destinoStageId = 'destinationStageId' in routed ? (routed.destinationStageId ?? null) : null;
+  // #3142 — o "já engajado" que o filtro de palavra-chave lê. Vem da PRÓPRIA
+  // resolução (o sticky que `resolveConversationTurn` leu no início do turno),
+  // não de uma segunda consulta: a resolução já está em mãos aqui, ANTES do
+  // portão. `in` porque o ramo de preview devolve um objeto literal sem o campo.
+  const agenteJaEngajado = 'agenteJaEngajado' in routed && routed.agenteJaEngajado === true;
   if (
     !preview &&
     agentConfig?.operationMode === 'assisted' &&
@@ -2614,6 +2619,26 @@ async function executarTurnoDoAgente(
   // `corpoTemTexto` que faz a falha aberta da mídia rodar de verdade
   // (ponto 2).
   //
+  // O FILTRO DECIDE A ENTRADA, NÃO CADA MENSAGEM (#3142). O exemplo medido no
+  // #2696: o agente responde a "quero um orçamento", pergunta o produto, e o
+  // cliente responde "camiseta azul, tamanho M" — sem a palavra do filtro. Com
+  // o gate julgando cada mensagem, `turnoDisparaNasMensagens` devolvia false e o
+  // agente ficava CALADO no meio da conversa que ele mesmo começou. A tela
+  // promete "só entra quando a mensagem contiver uma dessas palavras": isso
+  // fala da ENTRADA do agente na conversa, não de cada turno seguinte.
+  //
+  // A âncora do "já engajado" é o STICKY do roteador — a MESMA coluna, lida do
+  // MESMO lugar (`resolveConversationTurn` → `conversations.active_ai_agent_id`,
+  // migration 0085). A resolução já está em mãos aqui (`routed`), então o gate
+  // a consulta sem segunda consulta ao banco e sem mover nada de lugar:
+  // `agenteJaEngajado`. Nenhum segundo conceito de engajamento existe — e
+  // nenhum deve ser inventado.
+  //
+  // O QUE NÃO MUDA: a janela logo abaixo segue valendo para o turno engajado
+  // (ela é sobre QUANDO o lojista atende, não sobre palavras), a ordem do início
+  // do turno fica intacta (detecções determinísticas → filtro → janela) e a
+  // falha aberta continua aberta. O miss na ENTRADA segue calando o turno.
+  //
   // Diferente da JANELA logo abaixo, um miss NÃO adia: não há "depois" em que
   // a mesma mensagem venha a casar. O turno é encerrado sem resposta (`return`,
   // o mesmo consumo do job de todo outro veto do início do turno — lead em
@@ -2622,7 +2647,12 @@ async function executarTurnoDoAgente(
   // tela. Regex quebrada, corpo sem texto ou nada a julgar ⇒ o turno SEGUE —
   // entrar de menos cala o cliente, e esta porta é a única que este gate
   // existe para não criar.
-  if (!preview && liveJob().kind === 'inbound_turn' && agentConfig?.filtroDePalavraChave != null) {
+  if (
+    !preview &&
+    liveJob().kind === 'inbound_turn' &&
+    agentConfig?.filtroDePalavraChave != null &&
+    !agenteJaEngajado
+  ) {
     const corposDoTurno =
       inboundsPendentes.length > 0
         ? inboundsPendentes

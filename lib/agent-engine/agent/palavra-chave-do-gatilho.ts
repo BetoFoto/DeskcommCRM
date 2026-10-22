@@ -61,6 +61,20 @@
  * a coluna `kind` tem CHECK e a governance do repo congela `MANIFEST.md`; o
  * próximo que quiser esse rastro na Central soma o kind e a migration juntos.)
  *
+ * ## O filtro decide a ENTRADA, não cada mensagem (#3142)
+ *
+ * A promessa da tela é sobre a ENTRADA do agente na conversa ("só entra quando
+ * a mensagem contiver uma dessas palavras"), não sobre cada turno seguinte.
+ * Numa conversa em que o agente JÁ está engajado — o STICKY do roteador,
+ * `conversations.active_ai_agent_id`, que `resolveConversationTurn` lê no início
+ * do turno e que a resolução expõe em `agenteJaEngajado` — o turno segue SEM
+ * filtro: o cliente que responde "camiseta azul, tamanho M" à pergunta do
+ * agente não pode ficar sem retorno (o exemplo medido no #2696). O miss na
+ * ENTRADA continua calando, como sempre.
+ *
+ * Este arquivo não sabe de engajamento — ele julga mensagens. Quem lê o sinal e
+ * decide pular o portão é o próprio portão, em `inbound-turn.ts`.
+ *
  * ## Onde isto é aplicado
  *
  * `inbound-turn.ts`, no caminho AUTOMÁTICO do turno `inbound_turn`: depois de

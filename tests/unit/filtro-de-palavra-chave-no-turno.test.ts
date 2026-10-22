@@ -167,6 +167,12 @@ async function turno(
   pool: never,
   filtro: RegExp | null,
   log: ReturnType<typeof logFalso>,
+  /**
+   * #3142 — o "já engajado" que a resolução do turno entrega
+   * (`agenteJaEngajado`, o sticky do roteador). `false` = ENTRADA da conversa:
+   * é o que os casos do #2696 acima medem, sem mudança.
+   */
+  engajado = false,
 ): Promise<void> {
   const job = {
     id: JOB,
@@ -206,6 +212,7 @@ async function turno(
       intentName: null,
       confidence: null,
       outcome: "fallback",
+      agenteJaEngajado: engajado,
     },
     channelSessionId: CANAL,
     conversationId: CONVERSA,
@@ -353,6 +360,87 @@ describe("ponto 1 do CR — as detecções rodam ANTES do portão", () => {
   });
 });
 
+describe("#3142 — o filtro decide a ENTRADA, não cada mensagem", () => {
+  it("conversa JÁ ENGAJADA: mensagem fora do filtro NÃO cala o turno (o defeito medido)", async () => {
+    // O exemplo do #2696: o agente respondeu "quero um orçamento", perguntou o
+    // produto, e o cliente respondeu "camiseta azul, tamanho M" — sem nenhuma
+    // palavra do filtro. Julgando cada mensagem, o agente ficava CALADO no meio
+    // da conversa que ele mesmo começou.
+    const log = logFalso();
+    const pool = poolCom(
+      [
+        texto("outbound", "Quer um orçamento de quê?", 0),
+        texto("inbound", "quero um orçamento", 1),
+        texto("outbound", "Qual o produto?", 2),
+        texto("inbound", "camiseta azul, tamanho M", 3),
+      ],
+      texto("inbound", "camiseta azul, tamanho M", 3),
+    );
+
+    // O ponto de parada é a primeira chamada de modelo (sem config de LLM na
+    // org): chegar aqui é a prova de que o turno atravessou o portão.
+    await expect(turno(pool, FILTRO, log, true)).rejects.toThrow(/config LLM/);
+    expect(
+      mensagensDeLog(log).some((m) => m.includes("turno pulado")),
+      "o turno da conversa engajada não pode ser calado pelo filtro",
+    ).toBe(false);
+  });
+
+  it("CONTROLE DA ENTRADA: sem engajamento, a MESMA mensagem continua calando", async () => {
+    const log = logFalso();
+    const pool = poolCom(
+      [texto("outbound", "Oi! Como posso ajudar?", 0), texto("inbound", "camiseta azul, tamanho M", 3)],
+      texto("inbound", "camiseta azul, tamanho M", 3),
+    );
+    await expect(turno(pool, FILTRO, log, false)).resolves.toBeUndefined();
+    expect(mensagensDeLog(log).some((m) => m.includes("turno pulado"))).toBe(true);
+  });
+
+  it("CONTROLE: engajado e SEM filtro configurado segue idêntico", async () => {
+    const pool = poolCom(
+      [texto("outbound", "Oi!", 0), texto("inbound", "camiseta azul, tamanho M", 3)],
+      texto("inbound", "camiseta azul, tamanho M", 3),
+    );
+    await expect(turno(pool, null, logFalso(), true)).rejects.toThrow(/config LLM/);
+  });
+
+  it("CONTROLE: engajado NÃO vence o pedido de humano (a ordem do início do turno fica)", async () => {
+    const log = logFalso();
+    const pool = poolCom(
+      [texto("outbound", "Oi!", 0), texto("inbound", "quero falar com um atendente", 3)],
+      texto("inbound", "quero falar com um atendente", 3),
+    );
+    await expect(turno(pool, FILTRO, log, true)).resolves.toBeUndefined();
+    expect(mocks.passagem).toHaveBeenCalledTimes(1);
+    expect(mocks.passagem.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({ reason: "requested_human" }),
+    );
+  });
+
+  it("CONTROLE: engajado NÃO vence o opt-out ambíguo", async () => {
+    const pool = poolCom(
+      [texto("outbound", "Oi!", 0), texto("inbound", "me deixa em paz", 3)],
+      texto("inbound", "me deixa em paz", 3),
+    );
+    await expect(turno(pool, FILTRO, logFalso(), true)).resolves.toBeUndefined();
+    expect(mocks.passagem.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({ reason: "suspected_optout" }),
+    );
+  });
+
+  it("CONTROLE: falha aberta segue aberta — regex quebrada não vira mordaça", async () => {
+    // O filtro que a tela grava torto NÃO é filtro: `lerFiltroDePalavraChave`
+    // devolve null (falha aberta), e o turno segue, engajado ou não.
+    const quebrado = lerFiltroDePalavraChave({ filters: { keyword_regex: "(orçamento" } });
+    expect(quebrado).toBeNull();
+    const pool = poolCom(
+      [texto("outbound", "Oi!", 0), texto("inbound", "camiseta azul, tamanho M", 3)],
+      texto("inbound", "camiseta azul, tamanho M", 3),
+    );
+    await expect(turno(pool, quebrado, logFalso(), false)).rejects.toThrow(/config LLM/);
+  });
+});
+
 /**
  * A ORDEM também se vigia no texto — comportamento verde por acidente (ex.: o
  * portão virar no-op) não prova posição, e o defeito do CR é de posição.
@@ -386,5 +474,21 @@ describe("fiação — o portão vem DEPOIS das duas detecções", () => {
     expect(t).toMatch(
       /inboundsPendentes\.length > 0\s*\?\s*inboundsPendentes\s*:\s*mensagemDoJob/,
     );
+  });
+
+  /**
+   * #3142 — o portão passou a olhar o ENGAJAMENTO antes de julgar a mensagem. Se
+   * essa leitura sumir, o defeito do #2696 volta (conversa engajada calada por
+   * um miss) e nenhum teste de decisão pura denuncia: é a ligação que se vigia.
+   */
+  it("o portão lê o engajamento da resolução (o sticky) e não de uma segunda fonte", () => {
+    const i = FONTE.indexOf("async function executarTurnoDoAgente(");
+    const t = FONTE.slice(i);
+    const leitura = t.indexOf("'agenteJaEngajado' in routed");
+    expect(leitura, "a leitura do engajamento sumiu do turno").toBeGreaterThan(-1);
+    expect(t, "o portão parou de consultar o engajamento").toMatch(/!agenteJaEngajado/);
+    // A leitura vem ANTES do portão, no mesmo ponto que as outras leituras da
+    // resolução (#2155), e o portão segue depois das duas detecções (acima).
+    expect(leitura).toBeLessThan(t.indexOf("turnoDisparaNasMensagens("));
   });
 });

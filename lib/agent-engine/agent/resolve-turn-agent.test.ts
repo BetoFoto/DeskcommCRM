@@ -345,6 +345,49 @@ describe('resolveTurnAgent', () => {
     expect(out.outcome).toBe('no_match');
     expect(warn).toHaveBeenCalled();
   });
+
+  /**
+   * #3142 — o "já engajado" que o portão do filtro de palavra-chave lê. A
+   * âncora é o sticky do roteador (a coluna `conversations.active_ai_agent_id`,
+   * que `resolveConversationTurn` lê e passa em `stickyAgentId`); a resolução a
+   * devolve em `agenteJaEngajado` para que o portão não invente um segundo
+   * conceito de engajamento nem consulte o banco de novo.
+   */
+  it('#3142 — conversa em curso (sticky preenchido) ⇒ agenteJaEngajado true', async () => {
+    const out = await resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: 'camiseta azul, tamanho M', stickyAgentId: 'agent-vendas', stickyIntent: 'vendas' },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(router()),
+        classifyIntent: vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 }),
+        loadPublishedAgentConfigById: idAwareLoader(),
+      }));
+    expect(out.outcome).toBe('sticky');
+    expect(out.agenteJaEngajado).toBe(true);
+  });
+
+  it('#3142 — ENTRADA (sem sticky) ⇒ agenteJaEngajado false', async () => {
+    const out = await resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: 'camiseta azul, tamanho M', stickyAgentId: null, stickyIntent: null },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(router()),
+        classifyIntent: vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 }),
+        loadPublishedAgentConfigById: idAwareLoader(),
+      }));
+    expect(out.outcome).toBe('classified');
+    expect(out.agenteJaEngajado).toBe(false);
+  });
+
+  it('#3142 — sticky preenchido sem router ativo ⇒ true (a coluna é a âncora, não o router)', async () => {
+    const out = await resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: 'camiseta azul', stickyAgentId: 'agent-vendas', stickyIntent: 'vendas' },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(null),
+        loadPublishedAgentConfig: vi.fn().mockResolvedValue(fakeConfig('agent-publicado')),
+        classifyIntent: vi.fn(),
+      }));
+    expect(out.outcome).toBe('no_router');
+    expect(out.agenteJaEngajado).toBe(true);
+  });
 });
 
 describe('resolveConversationTurn — contexto curto do classificador', () => {

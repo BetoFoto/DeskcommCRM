@@ -83,6 +83,26 @@ export interface TurnAgentResolution {
   routerId: string | null;
   intentName: string | null;
   confidence: number | null;
+  /**
+   * A conversa JÁ tinha um agente engajado quando este turno começou — o STICKY
+   * do roteador: `conversations.active_ai_agent_id` preenchido, a MESMA coluna
+   * que `resolveConversationTurn` lê no início do turno para alimentar a regra 2
+   * (`stickyAgentId`) e que o turno regrava a cada roteamento
+   * (`inbound-turn.ts`, migration 0085). É a ÚNICA âncora de "já engajado":
+   * não existe segundo conceito de engajamento, e ninguém deve inventar um.
+   *
+   * Quem lê: o filtro de palavra-chave (#3142). A tela promete que o agente "só
+   * entra quando a mensagem contiver uma dessas palavras" — isso fala da
+   * ENTRADA da conversa, não de cada mensagem. Numa conversa já engajada o
+   * turno segue SEM filtro (o cliente respondendo "camiseta azul, tamanho M" a
+   * uma pergunta do agente não pode ser calado); o miss na ENTRADA continua
+   * calando como sempre.
+   *
+   * `false`/ausente = nenhum agente engajado ⇒ o filtro vale normalmente.
+   * Opcional porque nasce depois das fixtures que montam esta interface à mão
+   * (o ramo de preview monta um literal sem este campo).
+   */
+  agenteJaEngajado?: boolean;
   outcome:
     | 'no_router'
     | 'classified'
@@ -243,7 +263,14 @@ export async function resolveTurnAgent(
     if (idDaCampanha !== null) {
       const config = await _loadAgentById(db, input.tenantId, idDaCampanha);
       if (config !== null) {
-        return { config, routerId: null, intentName: null, confidence: null, outcome: 'campanha' };
+        return {
+          config,
+          routerId: null,
+          intentName: null,
+          confidence: null,
+          outcome: 'campanha',
+          agenteJaEngajado: input.stickyAgentId !== null,
+        };
       }
       deps.log.warn('agente da campanha sem versão publicada; seguindo pela régua do número', {
         tenantId: input.tenantId,
@@ -259,6 +286,7 @@ export async function resolveTurnAgent(
         intentName: null,
         confidence: null,
         outcome: 'no_router',
+        agenteJaEngajado: input.stickyAgentId !== null,
       };
     }
 
@@ -278,7 +306,14 @@ export async function resolveTurnAgent(
             outcome,
           });
         }
-        return { config: daSessao, routerId: router.id, intentName: null, confidence, outcome };
+        return {
+          config: daSessao,
+          routerId: router.id,
+          intentName: null,
+          confidence,
+          outcome,
+          agenteJaEngajado: input.stickyAgentId !== null,
+        };
       }
       const config = await _loadAgentById(db, input.tenantId, router.fallbackAgentId);
       if (config === null) {
@@ -297,6 +332,7 @@ export async function resolveTurnAgent(
         intentName: null,
         confidence,
         outcome: outcome === 'classifier_failed' ? 'classifier_failed' : config === null ? 'no_match' : 'fallback',
+        agenteJaEngajado: input.stickyAgentId !== null,
       };
     };
 
@@ -332,6 +368,7 @@ export async function resolveTurnAgent(
         flowPointerId: outcome === 'sticky' ? null : (member.flowPointerId ?? null),
         destinationPipelineId: member.destinationPipelineId ?? null,
         destinationStageId: member.destinationStageId ?? null,
+        agenteJaEngajado: input.stickyAgentId !== null,
       };
     };
 
@@ -450,6 +487,7 @@ export async function resolveTurnAgent(
       intentName: null,
       confidence: null,
       outcome: 'classifier_failed',
+      agenteJaEngajado: input.stickyAgentId !== null,
     };
   }
 }
