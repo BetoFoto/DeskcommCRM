@@ -3,11 +3,11 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
-import { atualizarInterfaceDaEmpresa } from "@/app/actions/settings/atualizarInterfaceDaEmpresa";
+import { atualizarBloqueioAteAssumir } from "@/app/actions/settings/atualizarInterfaceDaEmpresa";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
-import { lerInterface, type InterfaceSettings } from "@/lib/navigation/interface";
+import { lerInterface } from "@/lib/navigation/interface";
 
 interface Props {
   /** O que está gravado hoje em `organizations.interface_settings`. */
@@ -19,24 +19,22 @@ interface Props {
  * Configurações → Empresa — o mesmo cartão de preferências da ORGANIZAÇÃO que já
  * grava `interface_settings`.
  *
- * A regra viaja na preferência que já existe (nenhum schema novo) e por isso não
- * tem formulário próprio no banco: o que este cartão faz é ligar e desligar UMA
- * chave e mandar o objeto inteiro pela action de sempre. Guardar o objeto
- * INTEIRO, e não só a chave, é o que impede esta tela de apagar a escolha de
- * menu que a pessoa fez logo acima — as duas moram no mesmo campo.
+ * A regra viaja na preferência que já existe (nenhum schema novo). Este cartão
+ * manda SÓ a chave (`atualizarBloqueioAteAssumir`), e o servidor a troca dentro
+ * do que está gravado: mandar o objeto lido na montagem desfaria a escolha de
+ * menu feita logo acima depois que a página abriu — as duas moram no mesmo campo.
  *
  * Ligada, vale para a EMPRESA toda: não é preferência de um vínculo, e não
  * concede nem tira acesso. Desligada é o padrão de quem nunca abriu esta tela.
  */
 export function InboxDaEmpresaForm({ initial }: Props) {
   const t = useT();
-  const [value, setValue] = useState<InterfaceSettings>(() => lerInterface(initial).settings);
+  const [ligado, setLigado] = useState(() => lerInterface(initial).settings.bloquearAteAssumir === true);
   const [isPending, startTransition] = useTransition();
-  const ligado = value.bloquearAteAssumir === true;
 
   function salvar() {
     startTransition(async () => {
-      const resultado = await atualizarInterfaceDaEmpresa(value);
+      const resultado = await atualizarBloqueioAteAssumir(ligado);
       if (resultado.ok) {
         toast.success(t("Bloqueio da caixa de mensagem salvo."));
         return;
@@ -57,7 +55,7 @@ export function InboxDaEmpresaForm({ initial }: Props) {
         <input
           type="checkbox"
           checked={ligado}
-          onChange={(e) => setValue((atual) => ({ ...atual, bloquearAteAssumir: e.target.checked }))}
+          onChange={(e) => setLigado(e.target.checked)}
           className="mt-1"
         />
         <span>
