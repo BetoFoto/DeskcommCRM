@@ -49,7 +49,7 @@ type RowResult = {
   error: { message: string; code?: string } | null;
 };
 
-type FilterOp = "eq" | "in";
+type FilterOp = "eq" | "in" | "gt";
 interface Filter {
   op: FilterOp;
   col: string;
@@ -64,7 +64,16 @@ const EMBED_TABLE: Record<string, string> = {
 
 /**
  * Double mínimo de um PostgrestQueryBuilder: select (com embed PostgREST-style
- * `alias:fk_col(cols)`) / insert / update, eq/in, order/limit, maybeSingle/single.
+ * `alias:fk_col(cols)`) / insert / update, eq/in/gt, order/limit, maybeSingle/single.
+ *
+ * `gt` entrou com a fatia #3286: a leitura de compromissos
+ * (`protecaoAgendaSupabase`) pagina por KEYSET (`.order("id").limit(500)` +
+ * `.gt("id", after)`) para não confiar no `max_rows` do PostgREST, e o dublê
+ * não conhecia o método — a página não-vazia chamava `query.gt` inexistente, o
+ * `catch` da produção devolvia `leitura_indisponivel` e a ação terminava
+ * `failed` por um motivo que não era o do teste. Só apareceu quando um caso
+ * passou a rodar a ação com compromisso SEMEADO no banco (nenhum caso anterior
+ * chegava à segunda página).
  */
 class FakeQuery implements PromiseLike<QResult> {
   private mode: "select" | "update" | "insert" | null = null;
@@ -111,6 +120,11 @@ class FakeQuery implements PromiseLike<QResult> {
     return this;
   }
 
+  gt(col: string, val: unknown): this {
+    this.filters.push({ op: "gt", col, val });
+    return this;
+  }
+
   order(col: string, opts: { ascending: boolean }): this {
     this.orderCol = col;
     this.orderAsc = opts.ascending;
@@ -152,6 +166,7 @@ class FakeQuery implements PromiseLike<QResult> {
         const vals = (f.val as unknown[]).map(sqlLiteral).join(", ");
         return `${prefix}${f.col} in (${vals})`;
       }
+      if (f.op === "gt") return `${prefix}${f.col} > ${sqlLiteral(f.val)}`;
       return `${prefix}${f.col} = ${sqlLiteral(f.val)}`;
     });
     return ` where ${clauses.join(" and ")}`;
@@ -785,10 +800,22 @@ describe("send_whatsapp_message — gatilho de data do funil (#3286)", () => {
   const STAGE_ID = "44444444-8888-4000-8000-000000000002";
   const LEAD_ID = "44444444-8888-4000-8000-000000000003";
   const COMPROMISSO_ID = "44444444-5555-4000-8000-000000000003";
+  /**
+   * Contato PRÓPRIO desta fatia, de propósito: o caso 10 semeia um compromisso
+   * ATIVO para o contato do arquivo, e um compromisso ativo faz a proteção da
+   * agenda adiar a cobrança (`AgendaDeferredError`) — o que mascararia a medida
+   * (o desfecho seria `failed` por outro motivo). O contato desta fatia não tem
+   * compromisso ativo nenhum, então o que o caso 11 mede é a fronteira de
+   * SERVIÇO, que é o defeito da issue.
+   */
+  const CONTACT_T11 = "44444444-9999-4000-8000-000000000001";
 
-  /** Semeia funil + negócio do contato e o compromisso usado como par de controle. */
+  /** Semeia o contato, o funil + negócio e o compromisso usado como par de controle. */
   function semearNegocio(): void {
     sql(`
+      insert into public.contacts (id, organization_id, display_name, name, phone_number, is_blocked)
+        values ('${CONTACT_T11}', '${GOV_ORG}', 'Contato T11 (data do funil)', 'Ana', '+5511977770001', false)
+        on conflict (id) do nothing;
       insert into public.crm_pipelines (id, organization_id, name, slug)
         values ('${PIPELINE_ID}', '${GOV_ORG}', 'Funil T11', 'funil-t11')
         on conflict (id) do nothing;
@@ -796,8 +823,11 @@ describe("send_whatsapp_message — gatilho de data do funil (#3286)", () => {
         values ('${STAGE_ID}', '${GOV_ORG}', '${PIPELINE_ID}', 'Véspera do embarque', 'vespera-t11', 1000)
         on conflict (id) do nothing;
       insert into public.crm_leads (id, organization_id, pipeline_id, stage_id, contact_id, title, custom_fields)
-        values ('${LEAD_ID}', '${GOV_ORG}', '${PIPELINE_ID}', '${STAGE_ID}', '${CONTACT_ID}', 'Negócio T11', '{"data_inicio":"2026-07-18"}'::jsonb)
+        values ('${LEAD_ID}', '${GOV_ORG}', '${PIPELINE_ID}', '${STAGE_ID}', '${CONTACT_T11}', 'Negócio T11', '{"data_inicio":"2026-07-18"}'::jsonb)
         on conflict (id) do nothing;
+      -- Compromisso do contato do ARQUIVO (não do contato desta fatia): serve de
+      -- par calendar_appointment para o caso 12 sem entrar na proteção da agenda
+      -- do contato medido no caso 11.
       insert into public.calendar_appointments (id, organization_id, contact_id, title, starts_at, ends_at)
         values ('${COMPROMISSO_ID}', '${GOV_ORG}', '${CONTACT_ID}', 'Compromisso T11 (controle)',
                 now() + interval '30 days', now() + interval '30 days 1 hour')
@@ -820,8 +850,8 @@ describe("send_whatsapp_message — gatilho de data do funil (#3286)", () => {
   it("11. lead.date_field_due sem origem: emit_event carimba e a ação envia (não morre em service_boundary_stale)", async () => {
     // 13:00Z = 10:00 em São Paulo: dentro da janela do canal.
     vi.setSystemTime(new Date("2026-07-17T13:00:00Z"));
-    await ensureConversation(admin, GOV_ORG, CONTACT_ID, SESSION_ID);
     semearNegocio();
+    await ensureConversation(admin, GOV_ORG, CONTACT_T11, SESSION_ID);
 
     // O cron emite SEM `service_origin` — o carimbo é responsabilidade do servidor.
     const eventoId = emitirSemOrigem("lead.date_field_due", "crm_lead", LEAD_ID, {
@@ -845,9 +875,9 @@ describe("send_whatsapp_message — gatilho de data do funil (#3286)", () => {
         event: { id: eventoId } as unknown as EventRow,
         context: {
           contact: {
-            id: CONTACT_ID,
+            id: CONTACT_T11,
             is_blocked: false,
-            phone_number: "+551****0001",
+            phone_number: "+5511977770001",
             name: "Ana",
           },
         },
@@ -856,7 +886,7 @@ describe("send_whatsapp_message — gatilho de data do funil (#3286)", () => {
     );
 
     // O desfecho do defeito era `failed` com `service_boundary_stale`.
-    expect(result.status).toBe("postponed");
+    expect(result.status, JSON.stringify(result)).toBe("postponed");
     expect(result.detail?.reason).toBe("waha_not_configured");
     const mensagemId = String(result.detail?.message_id);
     expect(mensagemId).toBeTruthy();
@@ -866,7 +896,7 @@ describe("send_whatsapp_message — gatilho de data do funil (#3286)", () => {
     expect(encontradas.length).toBe(1);
     expect(encontradas[0]!.body).toBe("Falta 1 dia, Ana!");
     expect(encontradas[0]!.direction).toBe("outbound");
-    expect(encontradas[0]!.contact_id).toBe(CONTACT_ID);
+    expect(encontradas[0]!.contact_id).toBe(CONTACT_T11);
   });
 
   it("12. o par (tipo, entidade) reconhece o novo e mantém os antigos — desconhecido segue recusado", () => {
@@ -875,17 +905,17 @@ describe("send_whatsapp_message — gatilho de data do funil (#3286)", () => {
     // O NOVO: o gatilho de data do funil, entidade crm_lead.
     expect(par("lead.date_field_due", "crm_lead", LEAD_ID)).toMatchObject({
       suportado: true,
-      contact_id: CONTACT_ID,
+      contact_id: CONTACT_T11,
     });
 
     // Os que já funcionavam seguem reconhecidos (nenhum foi afrouxado nem perdido).
-    expect(par("contact.birthday", "contact", CONTACT_ID)).toMatchObject({
+    expect(par("contact.birthday", "contact", CONTACT_T11)).toMatchObject({
       suportado: true,
-      contact_id: CONTACT_ID,
+      contact_id: CONTACT_T11,
     });
-    expect(par("contact.tag_added", "contact", CONTACT_ID)).toMatchObject({
+    expect(par("contact.tag_added", "contact", CONTACT_T11)).toMatchObject({
       suportado: true,
-      contact_id: CONTACT_ID,
+      contact_id: CONTACT_T11,
     });
     expect(par("appointment.created", "calendar_appointment", COMPROMISSO_ID)).toMatchObject({
       suportado: true,
@@ -893,12 +923,12 @@ describe("send_whatsapp_message — gatilho de data do funil (#3286)", () => {
     });
     expect(par("lead.created", "crm_lead", LEAD_ID)).toMatchObject({
       suportado: true,
-      contact_id: CONTACT_ID,
+      contact_id: CONTACT_T11,
     });
 
     // E o reconhecimento NÃO foi afrouxado: tipo desconhecido e `entity_kind`
     // incompatível continuam recusados (o ramo `else` da função).
-    expect(par("lead.date_field_due", "contact", CONTACT_ID).suportado).toBe(false);
+    expect(par("lead.date_field_due", "contact", CONTACT_T11).suportado).toBe(false);
     expect(par("lead.silent_for", "crm_lead", LEAD_ID).suportado).toBe(false);
   });
 });
