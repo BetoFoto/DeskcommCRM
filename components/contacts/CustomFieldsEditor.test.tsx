@@ -414,4 +414,30 @@ describe("CustomFieldsEditor — lista pesquisável com MÚLTIPLA ESCOLHA (#3182
     expect(screen.getByText("Consolidadora A")).toBeTruthy();
     expect(screen.getByText("Operadora Nova")).toBeTruthy();
   });
+
+  it("valor ÚNICO já gravado (o campo virou múltiplo depois) aparece como chip e sobrevive à próxima escolha", () => {
+    // Registro de antes da caixa "Permitir várias escolhas", ou gravado pelo
+    // diálogo de campos exigidos (seletor de valor único): é uma string, não
+    // uma lista. Sem tratá-la como lista de UM, ela some da ficha e a próxima
+    // escolha grava só o item novo — a "Consolidadora A" se perde.
+    let gravado: unknown;
+    function HarnessLegado() {
+      const [v, setV] = useState<Record<string, unknown>>({ fornecedores: "consolidadora-a" });
+      return (
+        <CustomFieldsEditor
+          mode="lead"
+          fields={FORNECEDORES}
+          value={v}
+          onChange={(n) => {
+            gravado = n.fornecedores;
+            setV(n);
+          }}
+        />
+      );
+    }
+    render(<HarnessLegado />);
+    expect(screen.getByText("Consolidadora A")).toBeTruthy();
+    escolher(screen.getByRole("combobox", { name: /Fornecedores/ }), "operadora");
+    expect(gravado).toEqual(["consolidadora-a", "operadora-b"]);
+  });
 });

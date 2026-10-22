@@ -312,10 +312,17 @@ export function CustomFieldsEditor({ fields, value, onChange, disabled, classNam
             // CHIPS, um por opção. No valor único o registro continua a string
             // de sempre, e nada abaixo muda de comportamento.
             const multiplo = f.multiple === true;
-            const escolhidos =
-              multiplo && Array.isArray(v)
+            // Um valor único já gravado (o campo virou múltiplo depois, ou o
+            // diálogo de campos exigidos gravou uma escolha só) é uma lista de
+            // UM — a mesma leitura de `validarValorPesquisavel`. Sem isso o
+            // valor some da ficha e a próxima escolha o sobrescreve.
+            const escolhidos = !multiplo
+              ? []
+              : Array.isArray(v)
                 ? (v as unknown[]).filter((x): x is string => typeof x === "string")
-                : [];
+                : typeof v === "string" && v.trim() !== ""
+                  ? [v]
+                  : [];
             const canonico = !multiplo && typeof v === "string" ? v : "";
             const rotuloAtual = opcoes.find((o) => o.value === canonico)?.label ?? canonico;
             const rotuloDe = (valor: string) => opcoes.find((o) => o.value === valor)?.label ?? valor;
