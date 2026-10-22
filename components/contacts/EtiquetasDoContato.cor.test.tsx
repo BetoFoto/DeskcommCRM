@@ -346,4 +346,44 @@ describe("NewContactDialog — o contato novo também nasce com etiqueta colorid
       cor: ROXO,
     });
   });
+
+  it("agent: a etiqueta digitada e não confirmada com Enter entra na criação", async () => {
+    estado.papel = "agent";
+    const user = userEvent.setup();
+    envolver(<NewContactDialog open onOpenChange={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Email"), "joana@exemplo.com");
+    await user.type(campo(), "recompra");
+    await user.click(screen.getByRole("button", { name: "Criar contato" }));
+
+    await waitFor(() =>
+      expect(mutateCriar).toHaveBeenCalledWith(expect.objectContaining({ tags: ["recompra"] })),
+    );
+  });
+
+  it("fechar sem criar descarta a etiqueta digitada: ela não vaza para o próximo contato", async () => {
+    estado.papel = "agent";
+    const user = userEvent.setup();
+    const { rerender } = envolver(<NewContactDialog open onOpenChange={vi.fn()} />);
+    // O MESMO tipo de árvore na mesma posição: o diálogo segue montado e só o
+    // `open` muda, como na tela de contatos.
+    const qc = new QueryClient();
+    const remontar = (open: boolean) =>
+      rerender(
+        <QueryClientProvider client={qc}>
+          <ProvedorDeCoresDasEtiquetas>
+            <NewContactDialog open={open} onOpenChange={vi.fn()} />
+          </ProvedorDeCoresDasEtiquetas>
+        </QueryClientProvider>,
+      );
+
+    await user.type(campo(), "recompra");
+    remontar(false);
+    remontar(true);
+    await user.type(screen.getByLabelText("Email"), "joana@exemplo.com");
+    await user.click(screen.getByRole("button", { name: "Criar contato" }));
+
+    await waitFor(() => expect(mutateCriar).toHaveBeenCalled());
+    expect(mutateCriar).toHaveBeenCalledWith(expect.not.objectContaining({ tags: expect.anything() }));
+  });
 });

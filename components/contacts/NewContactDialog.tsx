@@ -66,6 +66,21 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
   // papéis a paleta nem chega ao campo, como na ficha e no editor do Inbox.
   const podeDefinirCor = roleAtLeast(org?.role, "manager");
   const [serverError, setServerError] = useState<string | null>(null);
+  // A etiqueta que o texto AINDA digitado no campo viraria — o mesmo fio do
+  // EditContactDialog (#2732): sem ele, quem digita e clica em "Criar contato"
+  // sem Enter perde a etiqueta em silêncio.
+  const [etiquetaPendente, setEtiquetaPendente] = useState<string | null>(null);
+
+  // O diálogo segue montado entre aberturas e o campo (com o rascunho) desmonta
+  // ao fechar; o pendente do pai não pode sobreviver para o próximo contato.
+  // Pelo `open`, e não embrulhando o `onOpenChange`: o Cancelar e o pai fecham
+  // sem passar por ele. Ajuste no render, não em `useEffect` (o
+  // `react-hooks/set-state-in-effect` acusa o efeito como render em cascata).
+  const [abertoAntes, setAbertoAntes] = useState(open);
+  if (open !== abertoAntes) {
+    setAbertoAntes(open);
+    if (!open) setEtiquetaPendente(null);
+  }
 
   const form = useForm<FormShape>({
     defaultValues: {
@@ -83,7 +98,10 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
     setServerError(null);
     // A MESMA normalização da API (lib/contacts/tag-normalizada): o que a ficha
     // grava é o que o filtro `?tag=` casa (issue #1224).
-    const tags = normalizarTags(values.tags ?? []);
+    const tags = normalizarTags([
+      ...(values.tags ?? []),
+      ...(etiquetaPendente ? [etiquetaPendente] : []),
+    ]);
 
     const payload: Record<string, unknown> = { source: "manual" };
     if (values.name?.trim()) payload.name = values.name.trim();
@@ -105,6 +123,7 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
       const resposta = await create.mutateAsync(parsed.data as ContactCreate);
       toast.success(t("Contato criado"));
       form.reset();
+      setEtiquetaPendente(null);
       onOpenChange(false);
       // `.data` é o envelope do `ok()`, e dentro dele mora `{ contact, action }`.
       // Entregar `resposta.data` aqui devolveria esse envelope como se fosse o
@@ -163,6 +182,7 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
               onChange={(next) => form.setValue("tags", next, { shouldDirty: true })}
               vocabulario={vocabulario.data}
               disabled={create.isPending}
+              onPendente={setEtiquetaPendente}
               onDefinirCor={
                 podeDefinirCor ? (tag, cor) => void definirCor(tag, cor) : undefined
               }
