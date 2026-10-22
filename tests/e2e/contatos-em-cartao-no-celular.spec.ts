@@ -94,6 +94,10 @@ test.describe("contatos em cartão no celular", () => {
       () => document.body.scrollWidth - document.documentElement.clientWidth,
     );
     expect(rolagemDaPagina, "a página rola para o lado").toBeLessThanOrEqual(1);
+    // O <main> do AppShell tem overflow-auto: o que estoura dentro da tela rola
+    // nele, e o body não enxerga. É ele o rolador que a régua precisa medir.
+    const rolagemDoMain = await page.locator("main").evaluate((m) => m.scrollWidth - m.clientWidth);
+    expect(rolagemDoMain, "o conteúdo rola para o lado dentro do <main>").toBeLessThanOrEqual(1);
 
     // 2. Sem cabeçalho, e cada cartão dentro da tela (o <main> tem 16 px de respiro).
     expect(await page.locator("thead").evaluate((el) => getComputedStyle(el).display)).toBe("none");
@@ -155,6 +159,9 @@ test.describe("contatos em cartão no celular", () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await expect(page.locator("thead")).toBeVisible();
     await expect(todos).toBeHidden();
+    // Os botões de ação voltam ao tamanho de sempre no computador (36 px do size=icon).
+    const editarNoComputador = await medir(linhaDaAna.getByRole("button", { name: `Editar contato ${ANA}` }));
+    expect(editarNoComputador.height).toBe(36);
     await page.screenshot({ path: path.join(EVIDENCIA, "03-computador-tabela.png") });
 
     await page.setViewportSize({ width: 390, height: 844 });

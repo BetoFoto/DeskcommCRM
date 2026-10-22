@@ -354,7 +354,7 @@ export function ContactsTable({
             <TableCell className="max-md:p-0">
               <div className="flex items-center justify-end gap-0.5">
                 {c.conversa ? (
-                  <Button variant="ghost" size="icon" className="lg:h-8 lg:w-8" asChild>
+                  <Button variant="ghost" size="icon" className="md:h-8 md:w-8" asChild>
                     <Link
                       href={`/app/inbox?id=${c.conversa.id}`}
                       title={t("Abrir conversa no Inbox")}
@@ -370,7 +370,7 @@ export function ContactsTable({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="lg:h-8 lg:w-8"
+                    className="md:h-8 md:w-8"
                     title={t("Iniciar conversa no Inbox")}
                     aria-label={`${t("Iniciar conversa com")} ${displayName(c, t)} ${t("no Inbox")}`}
                     disabled={abrindo}
@@ -385,7 +385,7 @@ export function ContactsTable({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="lg:h-8 lg:w-8"
+                    className="md:h-8 md:w-8"
                     title={t("Editar contato")}
                     aria-label={`${t("Editar contato")} ${displayName(c, t)}`}
                     onClick={() => setContatoEmEdicao(c)}
@@ -396,7 +396,7 @@ export function ContactsTable({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-muted-foreground hover:text-error-fg lg:h-8 lg:w-8"
+                  className="text-muted-foreground hover:text-error-fg md:h-8 md:w-8"
                   title={t("Excluir contato")}
                   aria-label={`${t("Excluir contato")} ${displayName(c, t)}`}
                   onClick={() => setAlvo(c)}
