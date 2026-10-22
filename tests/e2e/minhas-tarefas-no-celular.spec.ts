@@ -23,6 +23,7 @@ import * as path from "node:path";
 import { expect, test, type Locator, type Page } from "./helpers/test";
 import { createClient } from "@supabase/supabase-js";
 
+import { HREF_MINHAS_TAREFAS } from "../../lib/tarefas/tipos";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
@@ -121,7 +122,9 @@ test.describe("Minhas tarefas no celular — o que o lembrete abre", () => {
     page,
   }) => {
     await login(page, creds.users.agent!.email, creds.password);
-    await page.goto("/app/tasks?assigned_to=me");
+    // A MESMA constante que o lembrete e o push levam: trocar o endereço sem
+    // trocar a página (ou o inverso) quebra aqui, e não só no celular de alguém.
+    await page.goto(HREF_MINHAS_TAREFAS);
     const tela = page.getByRole("main");
 
     await expect(tela.getByText(MINHA, { exact: true })).toBeVisible({ timeout: 30_000 });
@@ -173,6 +176,11 @@ test.describe("Minhas tarefas no celular — o que o lembrete abre", () => {
       () => document.body.scrollWidth - document.documentElement.clientWidth,
     );
     expect(sobra, `a página rola ${sobra}px para o lado`).toBeLessThanOrEqual(1);
+    // O body só enxerga a casca: a coluna de conteúdo tem `min-w-0` e o <main>
+    // tem `overflow-auto` (AppShell), então o que estoura na tela de Tarefas
+    // rola DENTRO do <main>. É ele o rolador que a régua precisa medir.
+    const sobraNoMain = await tela.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(sobraNoMain, `o conteúdo rola ${sobraNoMain}px para o lado dentro do <main>`).toBeLessThanOrEqual(1);
 
     await tela.getByRole("button", { name: "Todas", exact: true }).tap();
     await expect(tela.getByText(ALHEIA, { exact: true })).toBeVisible({ timeout: 30_000 });

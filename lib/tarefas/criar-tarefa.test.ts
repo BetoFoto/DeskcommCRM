@@ -217,6 +217,15 @@ describe("a tarefa automática entra na linha do tempo do lead", () => {
 });
 
 describe("o push de tarefa criada", () => {
+  it("o endereço do push é o que a página de Tarefas lê como 'Minhas'", () => {
+    // Os outros testes comparam a constante com ela mesma; este prende o VALOR
+    // ao que `app/app/tasks/page.tsx` entende (`assigned_to === "me"`). A tela
+    // de verdade é provada pelo e2e, que navega por esta mesma constante.
+    const url = new URL(HREF_MINHAS_TAREFAS, "http://x");
+    expect(url.pathname).toBe("/app/tasks");
+    expect(url.searchParams.get("assigned_to")).toBe("me");
+  });
+
   it("abre as tarefas do responsável, não a lista da organização", async () => {
     await criarTarefaInterna(dbCom() as unknown as SupabaseClient, {
       organizationId: ORG,

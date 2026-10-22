@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useUser } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
 import { ArrowsClockwise, CalendarBlank, ListChecks, Plus } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ export function TarefasClient({
   minhasDeInicio?: boolean;
 }) {
   const t = useT();
+  const usuario = useUser();
   const [modo, setModo] = useState<"lista" | "calendario">("lista");
   const [situacao, setSituacao] = useState<FiltroDeSituacao>("aberto");
   const [minhas, setMinhas] = useState(minhasDeInicio);
@@ -193,21 +195,31 @@ export function TarefasClient({
             <div key={i} className="h-14 animate-pulse rounded-lg border bg-card" />
           ))}
         </div>
-      ) : modo === "calendario" ? (
-        <CalendarioDeTarefas
-          tarefas={tarefas}
-          podeEditar={podeEditar}
-          aoAbrirTarefa={abrirEdicao}
-          aoClicarNoDia={abrirNova}
-        />
       ) : (
-        <ListaDeTarefas
-          tarefas={tarefas}
-          podeEditar={podeEditar}
-          aoAlternarConcluida={alternarConcluida}
-          aoEditar={abrirEdicao}
-          aoApagar={(tarefa) => apagarTarefa(tarefa.id)}
-        />
+        <>
+          {/* A MESMA régua `md` que esconde o seletor esconde o calendário:
+              escolhido no tablet deitado e girado para o celular, ele não pode
+              ficar preso na tela sem o botão de voltar para a lista. */}
+          {modo === "calendario" && (
+            <div data-testid="tarefas-calendario" className="hidden md:block">
+              <CalendarioDeTarefas
+                tarefas={tarefas}
+                podeEditar={podeEditar}
+                aoAbrirTarefa={abrirEdicao}
+                aoClicarNoDia={abrirNova}
+              />
+            </div>
+          )}
+          <div data-testid="tarefas-lista" className={cn(modo === "calendario" && "md:hidden")}>
+            <ListaDeTarefas
+              tarefas={tarefas}
+              podeEditar={podeEditar}
+              aoAlternarConcluida={alternarConcluida}
+              aoEditar={abrirEdicao}
+              aoApagar={(tarefa) => apagarTarefa(tarefa.id)}
+            />
+          </div>
+        </>
       )}
 
       <FormularioDeTarefa
@@ -216,6 +228,10 @@ export function TarefasClient({
         aoMudarAbertura={setFormAberto}
         tarefa={emEdicao}
         prazoSugerido={prazoSugerido}
+        // Com "Minhas" ligado, a tarefa nova nasce da pessoa: a lista que ela
+        // está vendo filtra `assigned_to=me`, e uma tarefa sem responsável
+        // sumiria da tela logo depois de salva.
+        responsavelPadrao={minhas ? usuario.id : undefined}
         aoSalvar={salvar}
       />
     </div>
