@@ -1,7 +1,13 @@
 import { InterfaceRefresh } from "@/hooks/auth/InterfaceRefresh";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { isMfaEnrolled, loadAuthUser, requiresMfa, resolveActiveOrg } from "@/lib/auth/server";
+import {
+  exigirProvaDeMfa,
+  isMfaEnrolled,
+  loadAuthUser,
+  requiresMfa,
+  resolveActiveOrg,
+} from "@/lib/auth/server";
 import { DEFAULT_VISIBILITY_MODE, roleAtLeast, type VisibilityMode } from "@/lib/auth/types";
 import { clientePelaAgendaLigado } from "@/lib/schemas/settings";
 import { AuthProvider } from "@/hooks/auth/AuthProvider";
@@ -238,6 +244,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     enrolled = isEnrolled;
     needsMfaGate = mfaRequired;
   }
+
+  // Cadastrar e provar são perguntas diferentes: o `MfaEnrollGate` abaixo cuida
+  // de quem a política obriga a cadastrar; isto, de quem JÁ tem fator e ainda
+  // não o provou nesta sessão — com ou sem política.
+  await exigirProvaDeMfa();
 
   // Read sidebar collapsed state SSR to avoid flash.
   const store = await cookies();
