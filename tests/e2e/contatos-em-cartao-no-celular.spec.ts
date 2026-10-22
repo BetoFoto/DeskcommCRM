@@ -35,7 +35,7 @@ const EVIDENCIA = path.join(process.cwd(), "evidence", "contatos-em-cartao-no-ce
 const PISO_DE_TOQUE = 44;
 
 /** Só letras: a busca também casa dígitos com o telefone de outros contatos. */
-const MARCA = `${Date.now()}`.slice(-7).replace(/\d/g, (d) => "bcdfghjklm"[Number(d)]);
+const MARCA = `${Date.now()}`.slice(-7).replace(/\d/g, (d) => "bcdfghjklm".charAt(Number(d)));
 const ANA = `Ana Cartao ${MARCA}`;
 const BRUNO = `Bruno ${MARCA} Albuquerque de Vasconcelos Figueiredo`;
 
