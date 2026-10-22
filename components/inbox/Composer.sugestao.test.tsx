@@ -192,6 +192,18 @@ describe("a faixa da assistência só existe com rascunho (issue #3027)", () => 
     expect(bloco()).toBeTruthy();
   });
 
+  it("⭐ compositor bloqueado não consulta rascunho (só leitura recebe 403 no GET)", async () => {
+    comRascunhos([rascunho()]);
+    renderComposer({ blockedReason: "Acompanhamento somente leitura" });
+
+    expect(await screen.findByText("Acompanhamento somente leitura")).toBeTruthy();
+    // Antes do #3027 a consulta morava no painel, que o aviso de bloqueio nem
+    // deixava montar. Subindo para o compositor, ela não pode sair por conta
+    // própria: o suporte somente leitura recebia 403 a cada 4s
+    // (`tests/e2e/suporte-temporario.spec.ts`, `unexpectedDenials`).
+    expect(deps.get).not.toHaveBeenCalled();
+  });
+
   it("⭐ o clique no ícone gera pelo mesmo POST e é ele que monta o bloco", async () => {
     comRascunhos([]);
     deps.post.mockResolvedValue({ data: { draft: "texto gerado" } });

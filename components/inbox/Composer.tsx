@@ -232,8 +232,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
    *
    * `mode === "reply"`: em nota o compositor não oferece sugestão de resposta, e
    * a consulta nem sai.
+   *
+   * `!blockedReason`: compositor bloqueado (suporte somente leitura, papel sem
+   * escrita) devolve só o aviso, lá embaixo — e antes o painel, que fazia esta
+   * consulta, nem chegava a montar. Com a consulta aqui em cima ela sairia mesmo
+   * assim, a cada 4s, e o `GET` exige papel `agent`: 403 em loop para quem só lê.
    */
-  const { sugestao, invalidar } = useRascunhoAssistido(conversationId, mode === "reply");
+  const { sugestao, invalidar } = useRascunhoAssistido(
+    conversationId,
+    mode === "reply" && !blockedReason,
+  );
 
   /**
    * O contato da conversa, do jeito que a interpolação e o gate do curinga
