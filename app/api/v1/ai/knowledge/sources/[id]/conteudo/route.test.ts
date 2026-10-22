@@ -292,6 +292,9 @@ describe("ler o material na tela (#3059)", () => {
     const res = await ler();
 
     expect(res.status).toBe(403);
+    // O dublê devolve 403 seja qual for o papel pedido: sem fixar a régua aqui,
+    // trocar "manager" por "agent" na rota passaria verde.
+    expect(requireRole).toHaveBeenCalledWith("manager", expect.anything());
     expect(createClient).not.toHaveBeenCalled();
     expect(extrairMock).not.toHaveBeenCalled();
   });
