@@ -40,11 +40,20 @@ const OUTRO = "c3212111-0000-4000-8000-000000000002";
 const MANAGER = "c3212111-0000-4000-8000-000000000003";
 const SESSION = "c3212222-0000-4000-8000-000000000001";
 
-/** Contatos: dois com a etiqueta (um deles "sujo"), um sem etiqueta nenhuma. */
-const CT_FORN = "c3212444-0000-4000-8000-000000000001";
-const CT_FORN_VARIANTE = "c3212444-0000-4000-8000-000000000002";
-const CT_CLIENTE = "c3212444-0000-4000-8000-000000000003";
-const CT_CLIENTE_2 = "c3212444-0000-4000-8000-000000000004";
+/**
+ * UM CONTATO POR CONVERSA: `uniq_conversations_1to1_per_contact_session` recusa
+ * duas conversas do MESMO contato na MESMA sessão (medido: com dois contatos só o
+ * `insert` caía nessa constraint e o arquivo inteiro virava SKIP — verde sem
+ * medir nada, o pior dos mundos). Dois destes contatos carregam a etiqueta — um
+ * deles com espaço e caixa do jeito que o operador digita.
+ */
+const CT_60 = "c3212444-0000-4000-8000-000000000001";
+const CT_120 = "c3212444-0000-4000-8000-000000000002";
+const CT_180 = "c3212444-0000-4000-8000-000000000003";
+const CT_300 = "c3212444-0000-4000-8000-000000000004";
+const CT_600 = "c3212444-0000-4000-8000-000000000005";
+const CT_900 = "c3212444-0000-4000-8000-000000000006";
+const CT_BOT = "c3212444-0000-4000-8000-000000000007";
 
 /** Conversas do AGENT: 6 pares válidos, um por linha de amostra. */
 const CV_60 = "c3212555-0000-4000-8000-000000000001";
@@ -189,43 +198,46 @@ beforeAll(() => {
       ('${SESSION}', '${ORG}', 'm3212-s1', '\\\\x00'::bytea, 'Numero 3212');
 
     -- Dois contatos carregam a etiqueta — um deles com espaço e caixa do jeito
-    -- que o operador digita (" Fornecedor "). Os outros dois não a carregam.
+    -- que o operador digita (" Fornecedor "). Os outros não a carregam.
     insert into public.contacts (id, organization_id, display_name, tags) values
-      ('${CT_FORN}',          '${ORG}', 'M3212 Fornecedor',         array['fornecedor']),
-      ('${CT_FORN_VARIANTE}', '${ORG}', 'M3212 Fornecedor variante', array['cliente', ' Fornecedor ']),
-      ('${CT_CLIENTE}',       '${ORG}', 'M3212 Cliente',             array['cliente']),
-      ('${CT_CLIENTE_2}',     '${ORG}', 'M3212 Cliente sem tags',    '{}'::text[]);
+      ('${CT_60}',  '${ORG}', 'M3212 Cliente 60s',     array['cliente']),
+      ('${CT_120}', '${ORG}', 'M3212 Fornecedor 120s', array['fornecedor']),
+      ('${CT_180}', '${ORG}', 'M3212 Fornecedor 180s', array['cliente', ' Fornecedor ']),
+      ('${CT_300}', '${ORG}', 'M3212 Cliente 300s',    '{}'::text[]),
+      ('${CT_600}', '${ORG}', 'M3212 Cliente 600s',    array['cliente']),
+      ('${CT_900}', '${ORG}', 'M3212 Cliente 900s',    '{}'::text[]),
+      ('${CT_BOT}', '${ORG}', 'M3212 Contato do bot',  '{}'::text[]);
 
     insert into public.conversations
       (id, organization_id, contact_id, channel_session_id, status, assigned_to_user_id, assigned_at, assignee_kind)
     values
-      ('${CV_60}',        '${ORG}', '${CT_CLIENTE}',       '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
-      ('${CV_120}',       '${ORG}', '${CT_FORN}',          '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
-      ('${CV_180}',       '${ORG}', '${CT_FORN_VARIANTE}', '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
-      ('${CV_300}',       '${ORG}', '${CT_CLIENTE_2}',     '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
-      ('${CV_600}',       '${ORG}', '${CT_CLIENTE}',       '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
-      ('${CV_900}',       '${ORG}', '${CT_CLIENTE_2}',     '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
+      ('${CV_60}',        '${ORG}', '${CT_60}',       '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
+      ('${CV_120}',       '${ORG}', '${CT_120}',          '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
+      ('${CV_180}',       '${ORG}', '${CT_180}', '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
+      ('${CV_300}',       '${ORG}', '${CT_300}',     '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
+      ('${CV_600}',       '${ORG}', '${CT_600}',       '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
+      ('${CV_900}',       '${ORG}', '${CT_900}',     '${SESSION}', 'claimed', '${AGENT}', '${DE}', 'user'),
       -- Contada, mas SEM par válido: só a IA respondeu (bot fica de fora da
       -- régua) — é a linha que prova mediana nula, nunca zero.
-      ('${CV_OUTRO_BOT}', '${ORG}', '${CT_CLIENTE}',       '${SESSION}', 'claimed', '${OUTRO}', '${DE}', 'user');
+      ('${CV_OUTRO_BOT}', '${ORG}', '${CT_BOT}',       '${SESSION}', 'claimed', '${OUTRO}', '${DE}', 'user');
 
     insert into public.messages
       (organization_id, conversation_id, channel_session_id, contact_id, type, direction, sent_via, sent_by_user_id, sent_at)
     values
-      ('${ORG}', '${CV_60}',  '${SESSION}', '${CT_CLIENTE}',       'text', 'inbound',  'crm',  null,       '2026-07-15T10:00:00+00'),
-      ('${ORG}', '${CV_60}',  '${SESSION}', '${CT_CLIENTE}',       'text', 'outbound', 'user', '${AGENT}', '2026-07-15T10:01:00+00'),
-      ('${ORG}', '${CV_120}', '${SESSION}', '${CT_FORN}',          'text', 'inbound',  'crm',  null,       '2026-07-15T11:00:00+00'),
-      ('${ORG}', '${CV_120}', '${SESSION}', '${CT_FORN}',          'text', 'outbound', 'user', '${AGENT}', '2026-07-15T11:02:00+00'),
-      ('${ORG}', '${CV_180}', '${SESSION}', '${CT_FORN_VARIANTE}', 'text', 'inbound',  'crm',  null,       '2026-07-15T12:00:00+00'),
-      ('${ORG}', '${CV_180}', '${SESSION}', '${CT_FORN_VARIANTE}', 'text', 'outbound', 'user', '${AGENT}', '2026-07-15T12:03:00+00'),
-      ('${ORG}', '${CV_300}', '${SESSION}', '${CT_CLIENTE_2}',     'text', 'inbound',  'crm',  null,       '2026-07-15T13:00:00+00'),
-      ('${ORG}', '${CV_300}', '${SESSION}', '${CT_CLIENTE_2}',     'text', 'outbound', 'user', '${AGENT}', '2026-07-15T13:05:00+00'),
-      ('${ORG}', '${CV_600}', '${SESSION}', '${CT_CLIENTE}',       'text', 'inbound',  'crm',  null,       '2026-07-15T14:00:00+00'),
-      ('${ORG}', '${CV_600}', '${SESSION}', '${CT_CLIENTE}',       'text', 'outbound', 'user', '${AGENT}', '2026-07-15T14:10:00+00'),
-      ('${ORG}', '${CV_900}', '${SESSION}', '${CT_CLIENTE_2}',     'text', 'inbound',  'crm',  null,       '2026-07-15T15:00:00+00'),
-      ('${ORG}', '${CV_900}', '${SESSION}', '${CT_CLIENTE_2}',     'text', 'outbound', 'user', '${AGENT}', '2026-07-15T15:15:00+00'),
-      ('${ORG}', '${CV_OUTRO_BOT}', '${SESSION}', '${CT_CLIENTE}', 'text', 'inbound',  'crm',  null,       '2026-07-15T16:00:00+00'),
-      ('${ORG}', '${CV_OUTRO_BOT}', '${SESSION}', '${CT_CLIENTE}', 'text', 'outbound', 'ai',   null,       '2026-07-15T16:00:30+00');
+      ('${ORG}', '${CV_60}',  '${SESSION}', '${CT_60}',       'text', 'inbound',  'crm',  null,       '2026-07-15T10:00:00+00'),
+      ('${ORG}', '${CV_60}',  '${SESSION}', '${CT_60}',       'text', 'outbound', 'user', '${AGENT}', '2026-07-15T10:01:00+00'),
+      ('${ORG}', '${CV_120}', '${SESSION}', '${CT_120}',          'text', 'inbound',  'crm',  null,       '2026-07-15T11:00:00+00'),
+      ('${ORG}', '${CV_120}', '${SESSION}', '${CT_120}',          'text', 'outbound', 'user', '${AGENT}', '2026-07-15T11:02:00+00'),
+      ('${ORG}', '${CV_180}', '${SESSION}', '${CT_180}', 'text', 'inbound',  'crm',  null,       '2026-07-15T12:00:00+00'),
+      ('${ORG}', '${CV_180}', '${SESSION}', '${CT_180}', 'text', 'outbound', 'user', '${AGENT}', '2026-07-15T12:03:00+00'),
+      ('${ORG}', '${CV_300}', '${SESSION}', '${CT_300}',     'text', 'inbound',  'crm',  null,       '2026-07-15T13:00:00+00'),
+      ('${ORG}', '${CV_300}', '${SESSION}', '${CT_300}',     'text', 'outbound', 'user', '${AGENT}', '2026-07-15T13:05:00+00'),
+      ('${ORG}', '${CV_600}', '${SESSION}', '${CT_600}',       'text', 'inbound',  'crm',  null,       '2026-07-15T14:00:00+00'),
+      ('${ORG}', '${CV_600}', '${SESSION}', '${CT_600}',       'text', 'outbound', 'user', '${AGENT}', '2026-07-15T14:10:00+00'),
+      ('${ORG}', '${CV_900}', '${SESSION}', '${CT_900}',     'text', 'inbound',  'crm',  null,       '2026-07-15T15:00:00+00'),
+      ('${ORG}', '${CV_900}', '${SESSION}', '${CT_900}',     'text', 'outbound', 'user', '${AGENT}', '2026-07-15T15:15:00+00'),
+      ('${ORG}', '${CV_OUTRO_BOT}', '${SESSION}', '${CT_BOT}', 'text', 'inbound',  'crm',  null,       '2026-07-15T16:00:00+00'),
+      ('${ORG}', '${CV_OUTRO_BOT}', '${SESSION}', '${CT_BOT}', 'text', 'outbound', 'ai',   null,       '2026-07-15T16:00:30+00');
 
     ${REF_ATENDENTES}
   `);
