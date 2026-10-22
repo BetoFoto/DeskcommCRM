@@ -14,8 +14,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   emHandoff: vi.fn(async () => false),
-  passagem: vi.fn(async () => {}),
-  aviso: vi.fn(async () => ({ avisado: true as const })),
+  passagem: vi.fn(async (..._args: unknown[]) => {}),
+  aviso: vi.fn(async (..._args: unknown[]) => ({ avisado: true as const })),
   roteador: vi.fn(),
 }));
 vi.mock('@/lib/agent-engine/agent/human-handoff', async (importOriginal) => ({
