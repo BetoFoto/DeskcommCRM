@@ -96,7 +96,7 @@ const conversa = {
   current_demanda_id: null,
   last_inbound_at: "2026-09-15T12:00:00Z",
   unread_count_for_assignee: 0,
-  channel_sessions: { provider: "waha" },
+  channel_sessions: null,
   contacts: {
     id: CONTATO,
     display_name: "Fulana",
