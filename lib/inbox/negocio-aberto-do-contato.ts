@@ -30,6 +30,12 @@ import { logger } from "@/lib/logger";
  * 4. Já é o responsável: não escreve. Sem esta saída, uma transferência para o
  *    dono atual do card regravaria a linha e emitiria um `lead.assigned` que
  *    não aconteceu — o trigger do banco só olha o UPDATE.
+ * 5. ASSUMIR só preenche negócio SEM responsável (`soSemResponsavel`, decisão
+ *    do mantenedor no #3216). Transferir é passar o atendimento de propósito:
+ *    o card vai junto. Assumir também roda em "Iniciar conversa" e "Continuar
+ *    por outro número", e ali tomar o card de um colega (humano ou agente de
+ *    IA) mudaria a meta de pessoa sem ninguém ter pedido. Com dono, nada é
+ *    tocado e o motivo é `ja_tinha_responsavel`.
  *
  * ─── Quem autoriza ──────────────────────────────────────────────────────────
  *
@@ -57,6 +63,7 @@ import { logger } from "@/lib/logger";
 export type MotivoDaSincronia =
   | "sincronizado"
   | "ja_era_o_responsavel"
+  | "ja_tinha_responsavel"
   | "sem_negocio_aberto"
   | "varios_negocios_abertos"
   | "recusado_pelo_banco"
@@ -79,19 +86,25 @@ export interface AlvoDaSincronia {
   contactId: string | null | undefined;
   /** Para quem a conversa passou — o mesmo id que foi para a conversa. */
   toUserId: string;
+  /**
+   * `true` no ASSUMIR: só dá dono a card que não tinha nenhum (régua 5). A
+   * transferência omite — ela leva o card mesmo com dono.
+   */
+  soSemResponsavel?: boolean;
 }
 
 /** O mínimo que a régua lê da linha. */
 interface NegocioAberto {
   id: string;
   owner_user_id: string | null;
+  owner_agent_id: string | null;
 }
 
 export async function sincronizarNegocioAbertoDoContato(
   supabase: SupabaseClient,
   alvo: AlvoDaSincronia,
 ): Promise<ResultadoDaSincronia> {
-  const { organizationId, contactId, toUserId } = alvo;
+  const { organizationId, contactId, toUserId, soSemResponsavel = false } = alvo;
   if (!contactId) {
     return { gravou: false, motivo: "sem_negocio_aberto", abertos: 0 };
   }
@@ -102,7 +115,7 @@ export async function sincronizarNegocioAbertoDoContato(
     // regra escondida dentro da primeira.
     const { data, error } = await supabase
       .from("crm_leads")
-      .select("id, owner_user_id")
+      .select("id, owner_user_id, owner_agent_id")
       .eq("organization_id", organizationId)
       .eq("contact_id", contactId)
       .eq("status", "open");
@@ -144,6 +157,15 @@ export async function sincronizarNegocioAbertoDoContato(
       };
     }
 
+    if (soSemResponsavel && (negocio.owner_user_id !== null || negocio.owner_agent_id !== null)) {
+      return {
+        gravou: false,
+        motivo: "ja_tinha_responsavel",
+        abertos: 1,
+        leadId: negocio.id,
+      };
+    }
+
     // O trio dono/kind vem do helper único (0070) — escrever `owner_user_id` na
     // mão é como nasce o card "com dono e sem kind", que some do filtro e das
     // métricas sem erro nenhum.
@@ -155,14 +177,18 @@ export async function sincronizarNegocioAbertoDoContato(
     // `status = 'open'` TAMBÉM na escrita: entre ler e gravar há uma janela, e
     // o card pode ter sido ganho/perdido nela. Defesa que depende só da leitura
     // anterior some quando alguém reordena o código (mesma lição do _handler).
-    const { data: gravado, error: erroDeEscrita } = await supabase
+    // No assumir, "sem dono" TAMBÉM na escrita, pela mesma janela: um colega
+    // pode ter pegado o card entre a leitura e a gravação.
+    let escrita = supabase
       .from("crm_leads")
       .update({ ...dono.patch, assigned_at: new Date().toISOString() })
       .eq("organization_id", organizationId)
       .eq("id", negocio.id)
-      .eq("status", "open")
-      .select("id")
-      .maybeSingle();
+      .eq("status", "open");
+    if (soSemResponsavel) {
+      escrita = escrita.is("owner_user_id", null).is("owner_agent_id", null);
+    }
+    const { data: gravado, error: erroDeEscrita } = await escrita.select("id").maybeSingle();
 
     if (erroDeEscrita) {
       // A visibilidade do funil recusando o dono novo é a régua funcionando,
@@ -178,8 +204,9 @@ export async function sincronizarNegocioAbertoDoContato(
       return { gravou: false, motivo: "falha", abertos: 1, leadId: negocio.id };
     }
 
-    // Zero linhas com o filtro fechado (org + id + aberto) é a corrida: o card
-    // foi ganho, perdido ou apagado entre a leitura e a escrita. A recusa da RLS
+    // Zero linhas com o filtro fechado (org + id + aberto, e sem dono no
+    // assumir) é a corrida: o card foi ganho, perdido, apagado ou ganhou dono
+    // entre a leitura e a escrita. A recusa da RLS
     // não chega aqui — ela é erro 42501, tratado acima.
     if (!gravado) {
       return {

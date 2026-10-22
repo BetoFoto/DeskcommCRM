@@ -27,6 +27,9 @@ const CONTATO_A = "aaaaaaaa-5555-4000-8000-000000000009";
 const LEAD_ABERTO = "aaaaaaaa-7777-4000-8000-000000000001";
 /** O negócio JÁ encerrado do controle: não pode ser tocado nem ganhar dono. */
 const LEAD_PERDIDO = "aaaaaaaa-7777-4000-8000-000000000002";
+/** O colega dono do card no controle do assumir (decisão B do #3216). */
+const COLEGA = "aaaaaaaa-3333-4000-8000-000000000004";
+const AGENTE_IA = "aaaaaaaa-8888-4000-8000-000000000001";
 
 type Linha = Record<string, unknown>;
 
@@ -79,6 +82,10 @@ function clienteFalso(estado: Estado) {
         return q;
       },
       eq: (c: string, v: unknown) => {
+        filtros.push([c, v]);
+        return q;
+      },
+      is: (c: string, v: unknown) => {
         filtros.push([c, v]);
         return q;
       },
@@ -215,6 +222,70 @@ describe("POST /api/v1/conversations/[id]/claim — o negócio aberto segue (#31
     expect(res.status).toBe(200);
     expect(estado.escritasDeLead).toHaveLength(0);
     expect(linhaDe(estado.leads, LEAD_ABERTO).assigned_at).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("CONTROLE (#3216, B): o card de um colega NÃO muda ao assumir", async () => {
+    estado.leads = [lead(LEAD_ABERTO, "open", COLEGA)];
+
+    const res = await POST(req(), params);
+
+    expect(res.status).toBe(200);
+    expect(linhaDe(estado.leads, LEAD_ABERTO)).toMatchObject({
+      owner_user_id: COLEGA,
+      owner_kind: "user",
+      assigned_at: "2026-01-01T00:00:00.000Z",
+    });
+    expect(estado.escritasDeLead).toHaveLength(0);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ negocio_aberto: "ja_tinha_responsavel" }),
+      }),
+    );
+  });
+
+  it("CONTROLE (#3216, B): o card de um agente de IA também não muda ao assumir", async () => {
+    estado.leads = [
+      { ...lead(LEAD_ABERTO, "open", null), owner_agent_id: AGENTE_IA, owner_kind: "ai" },
+    ];
+
+    const res = await POST(req(), params);
+
+    expect(res.status).toBe(200);
+    expect(linhaDe(estado.leads, LEAD_ABERTO)).toMatchObject({
+      owner_user_id: null,
+      owner_agent_id: AGENTE_IA,
+    });
+    expect(estado.escritasDeLead).toHaveLength(0);
+  });
+
+  it("CORRIDA (#3216, B): o card que ganhou dono entre a leitura e a escrita não é tomado", async () => {
+    // A leitura vê o card sem dono; antes do UPDATE, um colega o pega. O filtro
+    // "sem dono" da escrita é o que impede o assumir de passar por cima.
+    const card = lead(LEAD_ABERTO, "open", null);
+    estado.leads = [card];
+    const cliente = clienteFalso(estado);
+    const fromOriginal = cliente.from;
+    cliente.from = (tabela: string) => {
+      const q = fromOriginal(tabela);
+      const updateOriginal = q.update;
+      q.update = (v: Linha) => {
+        Object.assign(card, { owner_user_id: COLEGA, owner_kind: "user" });
+        return updateOriginal(v);
+      };
+      return q;
+    };
+    vi.mocked(createClient).mockResolvedValue(cliente as unknown as SupabaseClient);
+
+    const res = await POST(req(), params);
+
+    expect(res.status).toBe(200);
+    expect(card.owner_user_id).toBe(COLEGA);
+    expect(estado.escritasDeLead).toHaveLength(0);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ negocio_aberto: "mudou_entre_leitura_e_escrita" }),
+      }),
+    );
   });
 
   it("o banco recusando (42501) não derruba o assumir e o motivo é a recusa", async () => {

@@ -82,16 +82,17 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   const conv = row as unknown as Conversation;
 
-  // #3177: assumir a conversa também assume o negócio ABERTO do contato — a
-  // sugestão 1 da issue vale para as duas portas de troca de dono ("ao
-  // transferir OU assumir"). Aqui a régua da RLS é a mais generosa possível: o
-  // dono novo é quem está assumindo, e o card sem dono é visível a ele em
-  // qualquer `visibility_mode`. Mesma doutrina da transferência: o cliente é o
-  // da SESSÃO, a conversa já é dele, e o motivo da recusa não derruba nada.
+  // #3177: assumir a conversa dá dono ao negócio ABERTO do contato só quando
+  // ele NÃO tem responsável (decisão do mantenedor no #3216): esta rota também
+  // atende "Iniciar conversa" e "Continuar por outro número", e nenhum desses
+  // cliques tira o card de um colega. O card sem dono é visível a quem assume
+  // em qualquer `visibility_mode`. Mesma doutrina da transferência: o cliente
+  // é o da SESSÃO, a conversa já é dele, e o motivo da recusa não derruba nada.
   const sincronia = await sincronizarNegocioAbertoDoContato(supabase, {
     organizationId: conv.organization_id,
     contactId: conv.contact_id,
     toUserId: user.id,
+    soSemResponsavel: true,
   });
 
   await audit({
