@@ -1,4 +1,4 @@
-import { comercialExigeHumano, contemAssuntoComercialNaSaida } from '@/lib/escalacao/assunto-comercial';
+import { comercialExigeHumano, contemAssuntoComercialNaSaida, restricaoComercialBarra } from '@/lib/escalacao/assunto-comercial';
 import { assertAgentOperationPg, type AgentOperationContext } from '@/lib/ai/agents/operation';
 import { assertApprovedReplyPg, type ApprovedReplyContext } from '@/lib/ai/replies/delivery';
 import { assertMeetingDeliveryPg, type MeetingDeliveryContext } from '@/lib/agenda/meet-delivery';
@@ -1287,23 +1287,11 @@ const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTim
  * classificador semântico de promessa (F4-02) e a conferência de fato (#2231), que
  * rodam antes de tomar conexão — ver o porquê no ponto da chamada.
  */
-/**
- * Falha FECHADA: a leitura que estoura vale como restrição ligada. O pior
- * desfecho é uma resposta com preço barrada numa org que não restringiu (vai à
- * equipe); o contrário seria a IA negociando numa org que proibiu.
- */
+/** Falha FECHADA — a regra mora em `restricaoComercialBarra`, a mesma do atalho inline do follow-up. */
 async function resolverRestricaoComercial(args: RunBeforeSendArgs, body: string): Promise<boolean> {
   if (args.enforceCommercialRestriction !== undefined) return args.enforceCommercialRestriction;
   if (args.approvedReply !== undefined || args.meetingDelivery !== undefined) return false;
-  if (!contemAssuntoComercialNaSaida(body)) return false;
-  try {
-    return await comercialExigeHumano(args.pool, args.tenantId);
-  } catch (err) {
-    args.log.warn('restrição comercial não lida — tratada como ligada (falha fechada)', {
-      error: err instanceof Error ? err.message.slice(0, 120) : 'erro desconhecido',
-    });
-    return true;
-  }
+  return restricaoComercialBarra(body, () => comercialExigeHumano(args.pool, args.tenantId), (m, c) => args.log.warn(m, c));
 }
 
 export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSendResult> {

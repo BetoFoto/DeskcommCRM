@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contemAssuntoComercialNaSaida, contemAssuntoComercialRestrito, comercialExigeHumano } from "./assunto-comercial";
+import { contemAssuntoComercialNaSaida, contemAssuntoComercialRestrito, comercialExigeHumano, restricaoComercialBarra } from "./assunto-comercial";
 
 describe("valores e negociação somente humanos", () => {
   it.each(["Quanto custa?", "Qual o preço dos óculos?", "Tem desconto?", "Pode parcelar?",
@@ -68,4 +68,29 @@ describe("valores que o redator escreve sem moeda nem vírgula", () => {
     ("a saída não barra: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(false));
   it.each(["Tome 2 vezes ao dia", "Já vim aqui 3 vezes", "Nossa taxa de sucesso é de 90%"])
     ("a entrada não desvia: %s", s => expect(contemAssuntoComercialRestrito(s)).toBe(false));
+});
+
+// Rodada 3 do #3270: "N vezes" só é parcela com contexto de pagamento.
+describe("parcela na saída: só com contexto de pagamento", () => {
+  it.each(["3x 600", "12x de 150", "12x150", "São 10 vezes de 29", "10 vezes sem juros",
+    "Em 12 vezes no cartão", "Dá em até 6 vezes"])
+    ("a saída barra: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(true));
+  it.each(["Você já remarcou 3 vezes", "Ligamos 2 vezes e ninguém atendeu", "Use 2 vezes diariamente",
+    "Rua Augusta, 1500", "CEP 01310-100", "Traga uma foto 3x4", "Faça 3x12 repetições", "Tome 2x ao dia"])
+    ("a saída não barra: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(false));
+});
+
+describe("restricaoComercialBarra: a régua dos dois caminhos de envio", () => {
+  const avisar = () => {};
+  it("corpo sem preço não lê a escolha", async () => {
+    let leu = false;
+    expect(await restricaoComercialBarra("Bom dia", async () => (leu = true), avisar)).toBe(false);
+    expect(leu).toBe(false);
+  });
+  it.each([true, false])("corpo com preço segue a escolha: %s", async ligada => {
+    expect(await restricaoComercialBarra("por 1.800", async () => ligada, avisar)).toBe(ligada);
+  });
+  it("leitura que estoura conta como ligada", async () => {
+    expect(await restricaoComercialBarra("por 1.800", async () => { throw Error("offline"); }, avisar)).toBe(true);
+  });
 });

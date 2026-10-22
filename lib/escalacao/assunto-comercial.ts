@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { CAMADA_RESTRICAO_COMERCIAL } from "@/lib/agent-engine/guardrails/camadas-da-org";
 
 /**
@@ -34,18 +36,22 @@ export function contemAssuntoComercialRestrito(texto: string): boolean {
  * entra só aqui: moeda sem número colado ("R$", "BRL", "USD", "EUR"), "valor" e
  * "à vista" soltos, as palavras de preço em espanhol e inglês, moeda por extenso
  * ("cem euros"), decimal com ponto em posição de preço ("por 299.90", "299.90
- * cada"), honorários/abatimento/cupom/pesos, parcela por extenso ("10 vezes de 29")
- * e inteiro ou milhar depois de verbo de preço ("faço 1800", "por 1.800"). Data e
- * hora com ponto continuam fora: sem palavra de preço por perto, "15.10 às 14.30"
- * não é dinheiro.
+ * cada"), honorários/abatimento/cupom/pesos, parcela com valor depois ("10 vezes
+ * de 29", "3x 600", "12x150") e inteiro ou milhar depois de verbo de preço ("faço
+ * 1800", "por 1.800"). "N vezes" sozinho é frequência ("remarcou 3 vezes", "use 2
+ * vezes diariamente") e não conta; "em/até N vezes", "N vezes sem juros" e "N vezes
+ * no cartão" já vêm da entrada. Data e hora com ponto continuam fora: sem palavra
+ * de preço por perto, "15.10 às 14.30" não é dinheiro.
  */
 const PRECO_SO_NA_SAIDA: readonly RegExp[] = [
   /(?:r|us)\$|€|£|\b(?:brl|usd|eur)\b/u,
   /\b(?:valor(?:es)?|a vista|descuent\w*|cuotas?|cuesta\w*|precios?|prices?|pricing|costs?|costos?|discounts?|dolar(?:es)?|dollars?|euros?)\b/u,
   /\b(?:por|cada)\s+\d+[.,]\d{2}\b|\b\d+[.,]\d{2}\s*(?:cada|por mes|ao mes|mensais)\b/u,
   /\b(?:honorarios?|abatimentos?|cupo(?:m|ns))\b|\b\d[\d.,]*\s*pesos\b/u,
-  // Parcela por extenso, menos a frequência de remédio e de sessão ("2 vezes ao dia").
-  /\b\d{1,2}\s*vezes\b(?!\s*(?:ao|por|na|no|a)\s+(?:dia|semana|mes|ano|hora))/u,
+  // Parcela com o valor colado: "10 vezes de 29", "3x 600", "12x de 150", "12x150".
+  // ponytail: na forma "Nx" o valor precisa de 3 dígitos ou centavos — "foto 3x4" e
+  // "3x12 repetições" ficam de fora, e "10x 50" também (vai pela palavra de preço, se houver).
+  /\b\d{1,2}\s*vezes\s+de\s+(?:r\$\s*)?\d|\b\d{1,2}\s*x\s*(?:de\s+)?(?:r\$\s*)?(?:\d{3,}|\d+[.,]\d{2})(?![\d/:-])/u,
   // Inteiro ou milhar com ponto depois de verbo/preposição de preço ("por 1.800",
   // "faço 1800"). Ano, hora, telefone e porcentagem ficam de fora; "mais de 1.000
   // clientes" também. ponytail: a lista de quantificadores antes de "de" é a régua; contagem
@@ -57,6 +63,32 @@ export function contemAssuntoComercialNaSaida(texto: string): boolean {
   if (contemAssuntoComercialRestrito(texto)) return true;
   const normal = normalizar(texto);
   return PRECO_SO_NA_SAIDA.some((re) => re.test(normal));
+}
+
+/**
+ * A saída deste corpo fica barrada pela restrição comercial? Uma decisão só para
+ * os dois caminhos que mandam texto ao cliente: a cadeia (`runBeforeSend`) e o
+ * atalho inline do texto fixo do follow-up (`enviarTextoFixoPendente`), que não
+ * passa por ela. Só lê a escolha da organização quando o corpo tem cara de preço.
+ *
+ * Falha FECHADA: a leitura que estoura vale como restrição ligada. O pior
+ * desfecho é uma mensagem com preço barrada numa org que não restringiu (vai à
+ * equipe); o contrário seria a IA negociando numa org que proibiu.
+ */
+export async function restricaoComercialBarra(
+  body: string,
+  lerEscolha: () => Promise<boolean>,
+  avisar: (mensagem: string, contexto: Record<string, unknown>) => void,
+): Promise<boolean> {
+  if (!contemAssuntoComercialNaSaida(body)) return false;
+  try {
+    return await lerEscolha();
+  } catch (err) {
+    avisar("restrição comercial não lida — tratada como ligada (falha fechada)", {
+      error: err instanceof Error ? err.message.slice(0, 120) : "erro desconhecido",
+    });
+    return true;
+  }
 }
 
 /**
@@ -76,4 +108,16 @@ export async function comercialExigeHumano(
     [organizationId, CAMADA_RESTRICAO_COMERCIAL],
   );
   return rows[0]?.enabled === true;
+}
+
+/** `comercialExigeHumano` para quem só tem o client do Supabase (o atalho inline). Erro LANÇA. */
+export async function comercialExigeHumanoViaSupabase(admin: SupabaseClient, organizationId: string): Promise<boolean> {
+  const { data, error } = await admin
+    .from("org_guardrail_layers")
+    .select("enabled")
+    .eq("organization_id", organizationId)
+    .eq("layer", CAMADA_RESTRICAO_COMERCIAL)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as { enabled?: unknown } | null)?.enabled === true;
 }
