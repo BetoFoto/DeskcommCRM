@@ -9322,5 +9322,8 @@
   "Lista de várias escolhas": "Multiple-choice list",
   "Lista pesquisável": "Searchable list",
   "Sim ou não": "Yes or no",
-  "Link (URL)": "Link (URL)"
+  "Link (URL)": "Link (URL)",
+  "Valores e negociação": "Prices and negotiation",
+  "Encaminhar preços e negociação diretamente para uma pessoa": "Route prices and negotiation directly to a person",
+  "A IA não informa valores, descontos ou condições de pagamento. Pedidos identificados vão para a equipe antes do modelo; respostas comerciais da IA também são barradas.": "AI does not provide prices, discounts or payment terms. Detected requests go to the team before the model; commercial AI responses are also blocked."
 }
