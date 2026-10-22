@@ -1959,6 +1959,13 @@ async function escalarComercialAntesDoModelo(
          where o.organization_id = $1 and o.conversation_id = $2 and o.direction = 'outbound'), '-infinity')
      order by m.created_at desc limit 100`, [tenantId, turno.conversationId],
   )).rows.map((m) => m.body ?? '');
+  // STOP e pedido de humano VENCEM o desvio comercial. "Quanto custa? Para de me
+  // mandar mensagem" caía aqui: o cliente recebia o aviso comercial e o turno
+  // voltava sem registrar o opt-out. Com `false`, o turno segue para as
+  // detecções determinísticas — do assistido e do automático —, que usam a regra
+  // única de `lib/opt-out/deteccao.ts` e registram a parada. (Contato já
+  // bloqueado não recebe o aviso daqui: o `stopGate` lê `is_blocked` na fonte.)
+  if (textos.some((t) => detectAmbiguousOptOut(t) || detectHumanHandoffRequest(t))) return false;
   if (!textos.some(contemAssuntoComercialRestrito)) return false;
   const log = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: turno.leadId });
   const aviso = await avisarLeadLendoOContato(
@@ -2566,6 +2573,28 @@ async function executarTurnoDoAgente(
       ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
     },
   });
+
+  /**
+   * Resposta da IA barrada pela restrição comercial (#2877): avisa o cliente e
+   * passa para a equipe. Vale para o `send_message` e o `send_template` — os dois
+   * corpos que o modelo escolhe. O aviso vem ANTES da passagem, que arma o
+   * silêncio que a cadeia lê.
+   */
+  const passarComercialParaEquipe = async (code: string) => {
+    const aviso = await avisarLeadDaEscalacao(pool, avisoDaEscalacao().ids, {
+      ...avisoDaEscalacao().base,
+      motivo: 'outro',
+    });
+    const briefing = montarBriefingDaPassagem({ checkpoint: null, pendentesDoCliente: [],
+      motivo: { codigo: 'low_confidence', texto: 'Resposta comercial barrada; valores e negociação são exclusivos da equipe.' } });
+    await performHumanHandoff(pool, { tenantId, leadId, conversationId: input.conversationId },
+      { reason: 'low_confidence', conversationSummary: briefing.body,
+        inboxTitle: 'Valores e negociação — atendimento humano necessário',
+        passagem: { origem: 'runtime_nativo', motivoCodigo: 'low_confidence', briefing },
+        avisoAoLead: aviso, log: runLog });
+    return { ok: false as const, error: { code,
+      message: 'Resposta barrada e necessidade de atendimento humano registrada. Não envie valores nem negocie.' } };
+  };
 
   // F4-06 (acceptance 1): detecção DETERMINÍSTICA (regex PT-BR, sem LLM) de pedido explícito
   // de atendimento humano na última mensagem do lead. Handoff é cidadão de 1ª classe (exigência
@@ -3376,6 +3405,9 @@ async function executarTurnoDoAgente(
           },
         });
 
+        if (chain.status === 'vetoed' && chain.code === 'commercial_requires_human') {
+          return passarComercialParaEquipe(chain.code);
+        }
         if (chain.status === 'vetoed') {
           return { ok: false, error: { code: chain.code, message: chain.message } };
         }
@@ -3903,21 +3935,7 @@ async function executarTurnoDoAgente(
             });
           }
           if (chain.status === 'vetoed' && chain.code === 'commercial_requires_human') {
-            // O contexto do turno já foi lido: o aviso sai com os insumos dele, e
-            // ANTES da passagem, que arma o silêncio que a cadeia lê.
-            const aviso = await avisarLeadDaEscalacao(pool, avisoDaEscalacao().ids, {
-              ...avisoDaEscalacao().base,
-              motivo: 'outro',
-            });
-            const briefing = montarBriefingDaPassagem({ checkpoint: null, pendentesDoCliente: [],
-              motivo: { codigo: 'low_confidence', texto: 'Resposta comercial barrada; valores e negociação são exclusivos da equipe.' } });
-            await performHumanHandoff(pool, { tenantId, leadId, conversationId: input.conversationId },
-              { reason: 'low_confidence', conversationSummary: briefing.body,
-                inboxTitle: 'Valores e negociação — atendimento humano necessário',
-                passagem: { origem: 'runtime_nativo', motivoCodigo: 'low_confidence', briefing },
-                avisoAoLead: aviso, log: runLog });
-            return { ok: false, error: { code: chain.code,
-              message: 'Resposta barrada e necessidade de atendimento humano registrada. Não envie valores nem negocie.' } };
+            return passarComercialParaEquipe(chain.code);
           }
           if (chain.status === 'vetoed' && chain.code === 'clinical_claim') {
             // Fail-safe do gate de afirmação clínica. Ao contrário do vocabulário interno,

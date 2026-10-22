@@ -1,4 +1,4 @@
-import { contemAssuntoComercialRestrito } from '@/lib/escalacao/assunto-comercial';
+import { comercialExigeHumano, contemAssuntoComercialNaSaida } from '@/lib/escalacao/assunto-comercial';
 import { assertAgentOperationPg, type AgentOperationContext } from '@/lib/ai/agents/operation';
 import { assertApprovedReplyPg, type ApprovedReplyContext } from '@/lib/ai/replies/delivery';
 import { assertMeetingDeliveryPg, type MeetingDeliveryContext } from '@/lib/agenda/meet-delivery';
@@ -243,7 +243,10 @@ export interface GateContext {
    *    quando a organização ligou a camada.
    */
   clinicalClaimEnforced?: boolean;
-  /** Restrição explícita da organização; não altera envios humanos. */
+  /**
+   * Restrição comercial da organização (#2877). Resolvida em `runBeforeSend` — ver
+   * `RunBeforeSendArgs.enforceCommercialRestriction` —, nunca um default calado.
+   */
   commercialRestrictionEnforced?: boolean;
   /**
    * Arma o `spinningGate`. **Ausente = ARMADO** — a direção segura aqui é a
@@ -566,7 +569,7 @@ export const clinicalClaimGate: Gate = {
 export const commercialRestrictionGate: Gate = {
   name: 'commercial_restriction',
   evaluate: (ctx) => {
-    if (ctx.commercialRestrictionEnforced !== true || !contemAssuntoComercialRestrito(ctx.body))
+    if (ctx.commercialRestrictionEnforced !== true || !contemAssuntoComercialNaSaida(ctx.body))
       return { pass: true };
     return { pass: false, code: 'commercial_requires_human',
       reason: 'Valores e negociação exigem atendimento humano; não envie esta resposta.',
@@ -1129,6 +1132,17 @@ export interface RunBeforeSendArgs {
    * (`camadaLigada(camadas.afirmacao_clinica, false)`).
    */
   enforceClinicalClaim?: boolean;
+  /**
+   * Arma o `commercialRestrictionGate` (#2877). AUSENTE não é "desligado": a
+   * cadeia lê a escolha da organização ela mesma (`comercialExigeHumano`), e a
+   * leitura que falha conta como LIGADA. Esquecer o argumento num caminho novo de
+   * envio, portanto, não abre a trava — foi assim que o template, o roteiro e o
+   * follow-up ficaram de fora na primeira versão.
+   *
+   * Só não lê quem não é texto da IA: resposta aprovada por humano
+   * (`approvedReply`) e o link do Meet (`meetingDelivery`). Texto fixo do
+   * sistema que sabe o que diz (o aviso de escalação) passa `false` explícito.
+   */
   enforceCommercialRestriction?: boolean;
   /**
    * Desarma o `spinningGate` para ESTA tentativa. Ausente = armado (ver
@@ -1273,6 +1287,25 @@ const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTim
  * classificador semântico de promessa (F4-02) e a conferência de fato (#2231), que
  * rodam antes de tomar conexão — ver o porquê no ponto da chamada.
  */
+/**
+ * Falha FECHADA: a leitura que estoura vale como restrição ligada. O pior
+ * desfecho é uma resposta com preço barrada numa org que não restringiu (vai à
+ * equipe); o contrário seria a IA negociando numa org que proibiu.
+ */
+async function resolverRestricaoComercial(args: RunBeforeSendArgs, body: string): Promise<boolean> {
+  if (args.enforceCommercialRestriction !== undefined) return args.enforceCommercialRestriction;
+  if (args.approvedReply !== undefined || args.meetingDelivery !== undefined) return false;
+  if (!contemAssuntoComercialNaSaida(body)) return false;
+  try {
+    return await comercialExigeHumano(args.pool, args.tenantId);
+  } catch (err) {
+    args.log.warn('restrição comercial não lida — tratada como ligada (falha fechada)', {
+      error: err instanceof Error ? err.message.slice(0, 120) : 'erro desconhecido',
+    });
+    return true;
+  }
+}
+
 export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSendResult> {
   const gates = args.gates ?? BEFORE_SEND_GATES;
   // ANTES de tomar conexão, de propósito: preferência de estilo não precisa do
@@ -1292,6 +1325,11 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
   // resposta aprovada ou aviso de código passarem por uma preferência de estilo.
   const bodyDoModelo =
     estilo !== null ? aplicarAjustesDeEstilo(args.body, estilo.ajustes) : args.body;
+
+  // Restrição comercial (#2877) — fora do lock pela mesma razão do estilo acima.
+  // Só consulta quando o corpo tem cara de preço: o gate não vetaria nada sem
+  // isso, e todo envio comum não paga o round-trip.
+  const restricaoComercial = await resolverRestricaoComercial(args, bodyDoModelo);
 
   // ═══ A CONFERÊNCIA SEMÂNTICA DE PROMESSA RODA FORA DO LOCK ═══
   //
@@ -1463,7 +1501,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
         : {}),
       internalVocabularyEnforced: args.enforceInternalVocabulary ?? false,
       clinicalClaimEnforced: args.enforceClinicalClaim ?? false,
-      commercialRestrictionEnforced: args.enforceCommercialRestriction ?? false,
+      commercialRestrictionEnforced: restricaoComercial,
       ...(args.agenda !== undefined ? { agenda: args.agenda } : {}),
       ...(args.followup !== undefined ? { followup: args.followup } : {}),
     };

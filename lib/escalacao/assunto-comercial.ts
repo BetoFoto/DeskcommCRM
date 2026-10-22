@@ -8,8 +8,10 @@ import { CAMADA_RESTRICAO_COMERCIAL } from "@/lib/agent-engine/guardrails/camada
  * valor e mandavam à equipe conversa de clínica e de agenda. O número só conta
  * com contexto de preço: moeda, parcela ("em 3x", "10x de") ou "% off".
  */
+const normalizar = (texto: string): string => texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
 export function contemAssuntoComercialRestrito(texto: string): boolean {
-  const normal = texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const normal = normalizar(texto);
   return /\b(?:precos?|prec[io]+s?|custa\w*|custos?|quanto (?:fica|sai|e|seria)|descont\w*|negoci\w*|parcel\w*|pagamento\w*|pagar|pag[ao]s?|pix|boleto\w*|credito|debito|promoc\w*|oferta\w*|orcamento\w*|reais|gratis|gratuit\w*|barat\w*|caro|cobran\w*|cobra(?:m|r|mos)?|reembolso\w*|estorno\w*)\b/u.test(normal)
     // "valor" só quando é o do produto: "qual o valor?", "valor da consulta" — não "valor nutricional".
     || /\bvalor(?:es)?(?=\s*(?:$|[?!.,;]|d[aeo]s?\b|total\b|final\b|a vista\b|pra\b|para\b|com desconto\b))/u.test(normal)
@@ -19,6 +21,30 @@ export function contemAssuntoComercialRestrito(texto: string): boolean {
     // ponytail: vírgula com 2 casas é preço ("299,90"); com ponto é data/hora, e não conta.
     || /\b\d+,\d{2}\b/u.test(normal)
     || /\b(?:fica|sai|apenas|somente|a partir de)\s*(?:por|em)?\s*\d/u.test(normal);
+}
+
+/**
+ * A trava de SAÍDA (`commercialRestrictionGate`): tudo o que a entrada pega e mais.
+ *
+ * Pode ser mais estrita que a triagem de entrada porque o custo do erro é outro:
+ * na entrada, um falso positivo manda à equipe uma conversa que a IA atenderia;
+ * aqui, só barra uma resposta que a IA escreveu e passa a conversa adiante. O que
+ * entra só aqui: moeda sem número colado ("R$", "BRL", "USD", "EUR"), "valor" e
+ * "à vista" soltos, as palavras de preço em espanhol e inglês, moeda por extenso
+ * ("cem euros") e decimal com ponto em posição de preço ("por 299.90", "299.90
+ * cada"). Data e hora com ponto continuam fora: sem palavra de preço por perto,
+ * "15.10 às 14.30" não é dinheiro.
+ */
+const PRECO_SO_NA_SAIDA: readonly RegExp[] = [
+  /(?:r|us)\$|€|£|\b(?:brl|usd|eur)\b/u,
+  /\b(?:valor(?:es)?|a vista|descuent\w*|cuotas?|cuesta\w*|precios?|prices?|pricing|costs?|costos?|discounts?|dolar(?:es)?|dollars?|euros?)\b/u,
+  /\b(?:por|cada)\s+\d+[.,]\d{2}\b|\b\d+[.,]\d{2}\s*(?:cada|por mes|ao mes|mensais)\b/u,
+];
+
+export function contemAssuntoComercialNaSaida(texto: string): boolean {
+  if (contemAssuntoComercialRestrito(texto)) return true;
+  const normal = normalizar(texto);
+  return PRECO_SO_NA_SAIDA.some((re) => re.test(normal));
 }
 
 /**

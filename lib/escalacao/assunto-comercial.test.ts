@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contemAssuntoComercialRestrito, comercialExigeHumano } from "./assunto-comercial";
+import { contemAssuntoComercialNaSaida, contemAssuntoComercialRestrito, comercialExigeHumano } from "./assunto-comercial";
 
 describe("valores e negociação somente humanos", () => {
   it.each(["Quanto custa?", "Qual o preço dos óculos?", "Tem desconto?", "Pode parcelar?",
@@ -32,4 +32,21 @@ describe("valores e negociação somente humanos", () => {
     expect(chamadas[0]?.sql).toMatch(/from org_guardrail_layers/);
     expect(chamadas[0]?.values).toEqual(["org", "restricao_comercial"]);
   });
+  // A trava de SAÍDA (#3270, defeito 3): só barra envio, então pega o que a
+  // entrada deixa passar de propósito.
+  const SO_NA_SAIDA = ["O total é 299.90 BRL", "EUR 40", "Total: 299.90 USD", "O valor é 300",
+    "Por 299.90 você leva", "Leva por 299.90", "299.90 cada", "cem euros", "R$",
+    "Hay descuento", "En 3 cuotas", "Cuesta 40", "The price is 30", "It costs 40", "We have a discount"];
+  it.each(SO_NA_SAIDA)("a saída barra o que a entrada deixa passar: %s", s => {
+    expect(contemAssuntoComercialRestrito(s)).toBe(false);
+    expect(contemAssuntoComercialNaSaida(s)).toBe(true);
+  });
+  it.each(["trezentos reais", "Fica R$ 250,00 em 3x", "Pagamento à vista", "Pode pagar no boleto ou pix",
+    "Qual o preço?", "Tem desconto?", "Em 3 parcelas"])
+    ("a saída pega tudo que a entrada pega: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(true));
+  // Número sozinho e data/hora com ponto continuam fora também na saída.
+  it.each(["Rua das Flores, 2054", "Sala 01", "(11) 4000-0000", "Abre às 8:30?", "dia 15.10 às 14.30",
+    "Abrimos às 9.00", "Tome 1 comprimido 2x ao dia", "Estou com 40% de visão", "15/10 às 14:30",
+    "Seu horário ficou para 14.30, combinado?", "Temos 3 unidades"])
+    ("a saída não confunde rotina com preço: %s", s => expect(contemAssuntoComercialNaSaida(s)).toBe(false));
 });
