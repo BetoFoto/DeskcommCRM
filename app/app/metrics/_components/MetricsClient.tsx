@@ -12,6 +12,7 @@ import { AtritoPanel } from "./AtritoPanel";
 import { CanaisPanel } from "./CanaisPanel";
 import { PerdasPanel } from "./PerdasPanel";
 import { PrevisaoPanel } from "./PrevisaoPanel";
+import { SeriePanel } from "./SeriePanel";
 import { useTeamMembers } from "@/hooks/team/useTeamMembers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -223,6 +224,10 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
           operação (rodízio #1330). Fora do filtro de atendente a RLS é quem
           escopa: agent vê as próprias conversas, manager+ a organização. */}
       <CanaisPanel owner={selectedOwner} />
+      {/* Evolução dos ganhos no tempo (issue #3024, fatia 1): a tendência que
+          os números acima não mostram — quantidade por dia/semana/mês, com a
+          tabela dos baldes no mesmo Card. Não altera nenhum número já exibido. */}
+      <SeriePanel />
     </div>
   );
 }
