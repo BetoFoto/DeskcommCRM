@@ -228,11 +228,14 @@ export async function cascadeRedactContact(args: CascadeArgs): Promise<CascadeRe
         objectPath: anexo.storage_path,
       });
     }
-    await admin
+    const { error: apagarErro } = await admin
       .from("crm_lead_attachments")
       .delete()
       .eq("organization_id", args.organizationId)
       .in("lead_id", idsDosLeads);
+    if (apagarErro) {
+      throw new Error(`[lgpd-redact-cascade] anexos dos leads não apagados: ${apagarErro.message}`);
+    }
   }
 
   const { data, error } = await admin.rpc("fn_lgpd_cascade_redact_contact" as never, {
