@@ -411,7 +411,7 @@ test("testa sem enviar, pausa preserva publicação e duas aprovações entregam
     // O alvo do recorte era o BLOCO; sem rascunho ele não existe mais, e o que
     // precisa caber nos 390px é a linha de ações do compositor — com o botão de
     // ícone no lugar do bloco.
-    await capture(page, page.getByLabel("Mensagem").locator("xpath=.."), info, "obsoleta-mobile");
+    await capture(page, page.getByRole("textbox", { name: "Mensagem", exact: true }).locator("xpath=.."), info, "obsoleta-mobile");
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`/app/ai/agents/${f.agent}`);
     await page.getByLabel("Modo de operação").selectOption("automatic");
