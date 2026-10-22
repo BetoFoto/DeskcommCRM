@@ -34,7 +34,7 @@ import { sql } from "./gov-helpers";
  * Timestamps LITERAIS para agregações determinísticas.
  */
 
-const ORG = "c32120000-0000-4000-8000-000000000001";
+const ORG = "c3212000-0000-4000-8000-000000000001";
 const AGENT = "c3212111-0000-4000-8000-000000000001";
 const OUTRO = "c3212111-0000-4000-8000-000000000002";
 const MANAGER = "c3212111-0000-4000-8000-000000000003";

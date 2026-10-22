@@ -17,6 +17,42 @@ language sql stable
 set search_path = public
 as $$
   with
+  -- ─── #3212: o recorte por ETIQUETA DO CONTATO ───────────────────────────
+  --
+  -- «Quanto tempo o fornecedor segura o atendimento» não tinha resposta: não havia como
+  -- tirar da régua as conversas de um contato que carrega uma etiqueta. As etiquetas
+  -- existem em `contacts.tags` (0033/0034, com índice GIN) e NENHUMA métrica as lia.
+  --
+  -- O recorte é do CONTATO e vale para as três contas de CONVERSA — a contagem
+  -- (`conversations_handled`), a média e a mediana. `won`/`lost` são NEGÓCIOS e
+  -- `calls_answered` é LIGAÇÃO: nenhum dos dois é conversa de contato, e nenhum é tocado.
+  --
+  -- A comparação normaliza os DOIS lados com `lower(btrim(...))`: etiqueta é texto que o
+  -- operador digita (`Fornecedor ` e `fornecedor` são a mesma), e é a MESMA normalização de
+  -- `contatoCarregaEtiqueta()` em `lib/metrics/mediana-e-recorte-por-etiqueta.ts` — o par
+  -- TS×SQL é comparado lado a lado em `tests/invariants/mediana-e-recorte-por-etiqueta.test.ts`.
+  contatos_excluidos as (
+    select ct.id
+    from public.contacts ct
+    where p_excluir_etiqueta is not null
+      and ct.organization_id = p_org
+      and exists (
+        select 1
+        from unnest(coalesce(ct.tags, '{}'::text[])) as t
+        where lower(btrim(t)) = lower(btrim(p_excluir_etiqueta))
+      )
+  ),
+  -- ETIQUETA NÃO INFORMADA NÃO RECORTA: `p_excluir_etiqueta` nulo esvazia o conjunto acima e
+  -- este total sai 0 — a resposta DECLARA o que foi tirado, e «nada» é resposta legítima.
+  conversas_excluidas as (
+    select count(*) as total
+    from public.conversations c
+    where c.organization_id = p_org
+      and c.assigned_to_user_id is not null
+      and c.assigned_at >= p_from and c.assigned_at < p_to
+      and (p_owner is null or c.assigned_to_user_id = p_owner)
+      and exists (select 1 from contatos_excluidos e where e.id = c.contact_id)
+  ),
   lead_agg as (
     select
       owner_user_id as user_id,
@@ -70,42 +106,6 @@ as $$
       and answered_at >= p_from and answered_at < p_to
       and (p_owner is null or owner_user_id = p_owner)
     group by owner_user_id
-  ),
-  -- ─── #3212: o recorte por ETIQUETA DO CONTATO ───────────────────────────
-  --
-  -- «Quanto tempo o fornecedor segura o atendimento» não tinha resposta: não havia como
-  -- tirar da régua as conversas de um contato que carrega uma etiqueta. As etiquetas
-  -- existem em `contacts.tags` (0033/0034, com índice GIN) e NENHUMA métrica as lia.
-  --
-  -- O recorte é do CONTATO e vale para as três contas de CONVERSA — a contagem
-  -- (`conversations_handled`), a média e a mediana. `won`/`lost` são NEGÓCIOS e
-  -- `calls_answered` é LIGAÇÃO: nenhum dos dois é conversa de contato, e nenhum é tocado.
-  --
-  -- A comparação normaliza os DOIS lados com `lower(btrim(...))`: etiqueta é texto que o
-  -- operador digita (`Fornecedor ` e `fornecedor` são a mesma), e é a MESMA normalização de
-  -- `contatoCarregaEtiqueta()` em `lib/metrics/mediana-e-recorte-por-etiqueta.ts` — o par
-  -- TS×SQL é comparado lado a lado em `tests/invariants/mediana-e-recorte-por-etiqueta.test.ts`.
-  contatos_excluidos as (
-    select ct.id
-    from public.contacts ct
-    where p_excluir_etiqueta is not null
-      and ct.organization_id = p_org
-      and exists (
-        select 1
-        from unnest(coalesce(ct.tags, '{}'::text[])) as t
-        where lower(btrim(t)) = lower(btrim(p_excluir_etiqueta))
-      )
-  ),
-  -- ETIQUETA NÃO INFORMADA NÃO RECORTA: `p_excluir_etiqueta` nulo esvazia o conjunto acima e
-  -- este total sai 0 — a resposta DECLARA o que foi tirado, e «nada» é resposta legítima.
-  conversas_excluidas as (
-    select count(*) as total
-    from public.conversations c
-    where c.organization_id = p_org
-      and c.assigned_to_user_id is not null
-      and c.assigned_at >= p_from and c.assigned_at < p_to
-      and (p_owner is null or c.assigned_to_user_id = p_owner)
-      and exists (select 1 from contatos_excluidos e where e.id = c.contact_id)
   ),
   -- ─── #2514: o recorte ANTES do lateral, não depois dele ────────────────────
   --
