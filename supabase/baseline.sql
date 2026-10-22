@@ -12511,16 +12511,10 @@ create policy channel_sessions_tenant_select on public.channel_sessions
   );
 
 drop policy if exists channel_sessions_tenant_write on public.channel_sessions;
-create policy channel_sessions_tenant_write on public.channel_sessions
-  for all using (
-    (organization_id in (select public.fn_user_org_ids())
-      and public.fn_role_at_least(organization_id, 'admin'))
-    or public.fn_is_platform_admin_full()
-  ) with check (
-    (organization_id in (select public.fn_user_org_ids())
-      and public.fn_role_at_least(organization_id, 'admin'))
-    or public.fn_is_platform_admin_full()
-  );
+-- A escrita não é mais criada aqui: a migration 0707 (#3202) a divide em
+-- insert/update/delete no fim do arquivo. Recriá-la aqui fazia a regra `for all`
+-- voltar a valer entre esta linha e o apêndice da 0707 (numa re-aplicação pelo
+-- update.sh, somada às novas).
 
 -- ---- agentes de IA ----
 drop policy if exists tenant_isolation_ai_agents_all on public.ai_agents;
