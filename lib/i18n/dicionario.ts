@@ -72,6 +72,15 @@ export const DICIONARIO: Traducoes = {
   "O plano escolhido e seus limites passam a valer na próxima renovação. A fatura atual mantém o valor e o vencimento.": { es: "El plan elegido y sus límites entrarán en vigor en la próxima renovación. La factura actual mantiene el importe y la fecha de vencimiento." },
   "Pague o ajuste proporcional para aplicar o novo plano. Seus limites atuais permanecem até a confirmação.": { es: "Paga el ajuste proporcional para aplicar el nuevo plan. Tus límites actuales se mantienen hasta la confirmación." },
   "Aguardando o primeiro pagamento. O acesso será liberado após a confirmação.": { es: "Esperando el primer pago. El acceso se habilitará después de la confirmación." },
+  "Buscar etiquetas": { es: "Buscar etiquetas" },
+  "etiquetas": { es: "etiquetas" },
+  "Nenhuma etiqueta encontrada.": { es: "No se encontró ninguna etiqueta." },
+  "Digite o nome exato da etiqueta de destino": { es: "Escriba el nombre exacto de la etiqueta de destino" },
+  "Não foi possível carregar as tags.": { es: "No se pudieron cargar las etiquetas." },
+  "Essa etiqueta não existe. Juntar só leva para uma etiqueta que já existe; para dar um nome novo, use Renomear.": {
+    es: "Esa etiqueta no existe. Unir solo lleva a una etiqueta que ya existe; para darle un nombre nuevo, usa Renombrar.",
+  },
+
   "Canal para enviar os lembretes": { es: "Canal para enviar los recordatorios" },
   "Automático — conversa da reserva ou único canal disponível": { es: "Automático — conversación de la reserva o único canal disponible" },
   "Canal configurado indisponível — escolha outro": { es: "Canal configurado no disponible — elige otro" },
