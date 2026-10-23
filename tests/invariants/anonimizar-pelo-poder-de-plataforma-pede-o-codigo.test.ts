@@ -23,7 +23,7 @@ const CONTATO_DE_FORA = "dddddddd-0747-4000-8000-0000000000c2";
 
 /**
  * Anonimiza como `usuario`, numa transação desfeita no fim: cada caso parte do
- * contato intacto. Devolve `already_anonymized` (`f` = anonimizou agora).
+ * contato intacto. Devolve `already_anonymized` (`false` = anonimizou agora).
  */
 function anonimizar(usuario: string, contato: string, org: string, aal: "aal1" | "aal2"): string | undefined {
   const claims = JSON.stringify({ sub: usuario, session_id: SESSAO, aal, role: "authenticated" });
@@ -88,15 +88,15 @@ describe("0747 — anonimizar pelo poder de plataforma pede o código provado na
 
   it("fora da própria organização, com o código provado nesta sessão, anonimiza", () => {
     confiar(true);
-    expect(anonimizar(PLAT, CONTATO_DE_FORA, OUTRA, "aal2")).toBe("f");
+    expect(anonimizar(PLAT, CONTATO_DE_FORA, OUTRA, "aal2")).toBe("false");
   });
 
   it("na organização onde é admin, a sessão do dispositivo confiável anonimiza", () => {
     confiar(true);
-    expect(anonimizar(PLAT, CONTATO_PROPRIO, PROPRIA, "aal1")).toBe("f");
+    expect(anonimizar(PLAT, CONTATO_PROPRIO, PROPRIA, "aal1")).toBe("false");
   });
 
   it("sem fator cadastrado (verificação opcional), fora da própria organização, nada muda", () => {
-    expect(anonimizar(SEM_FATOR, CONTATO_DE_FORA, OUTRA, "aal1")).toBe("f");
+    expect(anonimizar(SEM_FATOR, CONTATO_DE_FORA, OUTRA, "aal1")).toBe("false");
   });
 });
