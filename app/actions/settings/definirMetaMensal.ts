@@ -31,7 +31,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { ipDoCliente } from "@/lib/http/ip-do-cliente";
@@ -46,6 +46,7 @@ export type DefinirMetaMensalResult =
         | "unauthenticated"
         | "forbidden_tenant"
         | "forbidden_role"
+        | "mfa_required"
         | "erro_ao_gravar";
       details?: unknown;
     };
@@ -83,6 +84,7 @@ export async function definirMetaMensal(
   if (!podeAdministrarEmpresa(authUser, activeOrg) && ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
     return { ok: false, error: "forbidden_role" };
   }
+  if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
 
   const supabase = await createClient();
   const orgId = activeOrg.orgId;

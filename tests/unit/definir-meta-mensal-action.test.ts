@@ -18,6 +18,7 @@ const ORG = "22222222-2222-4222-8222-222222222222";
 const USER = "11111111-1111-4111-8111-111111111111";
 
 let papel = "manager";
+let emDivida = false;
 let existente: { id: string; alvo: number } | null = null;
 const inseridas: Array<Record<string, unknown>> = [];
 const atualizadas: Array<{ valores: Record<string, unknown>; filtros: Array<[string, unknown]> }> = [];
@@ -39,6 +40,7 @@ vi.mock("@/lib/auth/server", () => ({
     support: null,
   })),
   resolveActiveOrg: vi.fn(async () => ({ orgId: ORG, name: "Loja", role: papel })),
+  mfaEmDivida: vi.fn(async () => emDivida),
 }));
 
 function cadeiaDeLeitura() {
@@ -82,6 +84,7 @@ const { definirMetaMensal } = await import("@/app/actions/settings/definirMetaMe
 
 beforeEach(() => {
   papel = "manager";
+  emDivida = false;
   existente = null;
   inseridas.length = 0;
   atualizadas.length = 0;
@@ -116,6 +119,17 @@ describe("definirMetaMensal", () => {
     });
     expect(inseridas).toEqual([]);
     expect(atualizadas).toEqual([]);
+    expect(auditadas).toEqual([]);
+  });
+
+  it("sessão devendo o código → mfa_required, e nada é lido, gravado nem auditado", async () => {
+    emDivida = true;
+    expect(await definirMetaMensal({ periodo: "2026-10", alvo: 40 })).toEqual({
+      ok: false,
+      error: "mfa_required",
+    });
+    expect(leiturasPorOrg).toEqual([]);
+    expect(inseridas).toEqual([]);
     expect(auditadas).toEqual([]);
   });
 
