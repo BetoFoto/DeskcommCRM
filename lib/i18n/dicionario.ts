@@ -105,6 +105,9 @@ export const DICIONARIO: Traducoes = {
     es: "Esa etiqueta no existe. Unir solo lleva a una etiqueta que ya existe; para darle un nombre nuevo, usa Renombrar.",
   },
 
+  "Deixar valores e negociação com a equipe": { es: "Dejar precios y negociación con el equipo" },
+  "Quando ligada, o assistente não fala de preço, desconto, parcelamento nem forma de pagamento: o pedido vai direto para uma pessoa da equipe, o cliente é avisado, e a resposta do assistente que tocar nesses assuntos não sai.": { es: "Si está activada, el asistente no habla de precio, descuento, cuotas ni forma de pago: la solicitud pasa directamente a una persona del equipo, se avisa al cliente y no sale ninguna respuesta del asistente que toque esos temas." },
+  "Não custa nada e reconhece frases em português e espanhol. Vale para a organização inteira, e pode mandar à equipe uma pergunta que não era sobre preço.": { es: "No cuesta nada y reconoce frases en portugués y español. Vale para toda la organización y puede pasar al equipo una pregunta que no era sobre precio." },
   "Canal para enviar os lembretes": { es: "Canal para enviar los recordatorios" },
   "Automático — conversa da reserva ou único canal disponível": { es: "Automático — conversación de la reserva o único canal disponible" },
   "Canal configurado indisponível — escolha outro": { es: "Canal configurado no disponible — elige otro" },
@@ -5928,8 +5931,8 @@ export const DICIONARIO: Traducoes = {
   },
   "O logo não foi gravado.": { es: "No se guardó el logo." },
   // ─── lib/auth/require-role.ts (gate ÚNICO de autorização — toda rota /api/v1) ───
-  "Esta sessão precisa da verificação em duas etapas. Entre novamente com o código do aplicativo.": {
-    es: "Esta sesión requiere verificación en dos pasos. Inicia sesión de nuevo con el código de la app.",
+  "Confirme o código do aplicativo de verificação para continuar.": {
+    es: "Confirma el código de la app de verificación para continuar.",
   },
   "Muitas trocas seguidas. Tente de novo em alguns minutos.": {
     es: "Demasiados cambios seguidos. Intenta de nuevo en unos minutos.",
@@ -7624,9 +7627,22 @@ export const DICIONARIO: Traducoes = {
   "Período de carência inválido: use de 0 a 30 dias.": {
     es: "Período de gracia no válido: usa de 0 a 30 días.",
   },
-  "Entre de novo e informe o código de 6 dígitos antes de desligar a verificação.": {
-    es: "Entra de nuevo e ingresa el código de 6 dígitos antes de desactivar la verificación.",
+  "Informe o código de 6 dígitos antes de desligar a verificação.": {
+    es: "Ingresa el código de 6 dígitos antes de desactivar la verificación.",
   },
+  "Confiar neste dispositivo por 30 dias": { es: "Confiar en este dispositivo por 30 días" },
+  "Dispositivos confiáveis": { es: "Dispositivos de confianza" },
+  "Navegadores onde você marcou “Confiar neste dispositivo”. Neles o login não pede o código por 30 dias.": {
+    es: "Navegadores donde marcaste “Confiar en este dispositivo”. En ellos el inicio de sesión no pide el código por 30 días.",
+  },
+  "Nenhum dispositivo confiável.": { es: "Ningún dispositivo de confianza." },
+  "Navegador desconhecido": { es: "Navegador desconocido" },
+  "Confiável até": { es: "De confianza hasta" },
+  "Os dispositivos voltam a pedir o código no próximo login.": {
+    es: "Los dispositivos vuelven a pedir el código en el próximo inicio de sesión.",
+  },
+  "Esquecendo…": { es: "Olvidando…" },
+  "Esquecer todos os dispositivos": { es: "Olvidar todos los dispositivos" },
   "Não consegui remover a verificação agora.": { es: "No pude quitar la verificación ahora." },
   Ativar: { es: "Activar" },
   "Exigir de quem administra": { es: "Exigir a quien administra" },
@@ -12821,6 +12837,15 @@ export const DICIONARIO: Traducoes = {
   "Este número foi excluído da Central de Conexões.": {
     es: "Este número fue eliminado de la Central de Conexiones.",
   },
+  "Envio automático bloqueado pelo modo de teste do canal.": {
+    es: "Envío automático bloqueado por el modo de prueba del canal.",
+  },
+  "Não foi possível verificar o acesso da IA. Nenhuma mensagem foi enviada.": {
+    es: "No fue posible verificar el acceso de la IA. No se envió ningún mensaje.",
+  },
+  "Envio automático bloqueado: a organização está suspensa.": {
+    es: "Envío automático bloqueado: la organización está suspendida.",
+  },
   "Contato sem telefone para envio WhatsApp.": {
     es: "El contacto no tiene teléfono para enviarle mensajes por WhatsApp.",
   },
@@ -15527,6 +15552,24 @@ export const DICIONARIO: Traducoes = {
   "O modelo foi desativado pela plataforma.": { es: "La plataforma desactivó la plantilla." },
   "Os valores enviados não batem com as variáveis do modelo.": { es: "Los valores enviados no coinciden con las variables de la plantilla." },
   "O modelo não existe neste número com este idioma.": { es: "La plantilla no existe en este número con este idioma." },
+  "Este modelo não está na lista de modelos do número. Sincronize em Conexões, na aba Modelos.": {
+    es: "Esta plantilla no está en la lista de plantillas del número. Sincroniza en Conexiones, en la pestaña Modelos.",
+  },
+  "O modelo mudou na plataforma depois de configurado. Configure o envio de novo.": {
+    es: "La plantilla cambió en la plataforma después de configurarse. Configura el envío de nuevo.",
+  },
+  "O acesso ao WhatsApp Oficial expirou ou foi revogado. Reconecte o número em Conexões.": {
+    es: "El acceso al WhatsApp Oficial expiró o fue revocado. Vuelve a conectar el número en Conexiones.",
+  },
+  "Falta permissão para este envio no WhatsApp Oficial. Revise as permissões do número em Conexões.": {
+    es: "Falta permiso para este envío en el WhatsApp Oficial. Revisa los permisos del número en Conexiones.",
+  },
+  "A conexão com o WhatsApp Oficial atingiu o limite de pedidos por agora. Tente de novo mais tarde.": {
+    es: "La conexión con el WhatsApp Oficial alcanzó el límite de solicitudes por ahora. Inténtalo de nuevo más tarde.",
+  },
+  "Não conseguimos montar os valores do modelo para este envio. Nada foi enviado.": {
+    es: "No pudimos armar los valores de la plantilla para este envío. No se envió nada.",
+  },
   "O texto do modelo com os valores ficou longo demais.": { es: "El texto de la plantilla con los valores quedó demasiado largo." },
   "O conteúdo viola a política de modelos da plataforma.": { es: "El contenido viola la política de plantillas de la plataforma." },
   "O formato de um valor não confere com o modelo (por exemplo, falta o link da imagem do cabeçalho).": { es: "El formato de un valor no coincide con la plantilla (por ejemplo, falta el enlace de la imagen del encabezado)." },
@@ -15794,9 +15837,10 @@ export const DICIONARIO: Traducoes = {
   "Linhas no corpo": { es: "Líneas en el cuerpo" },
   "atualizada — já vale para os agentes.": { es: "actualizada: ya vale para los agentes." },
   "Editar skill": { es: "Editar skill" },
-  "Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na conversa quando uma das palavras-chave aparece na mensagem do cliente.": {
-    es: "Guardar crea una versión nueva (la anterior queda en el historial). El cuerpo solo entra en la conversación cuando una de las palabras clave aparece en el mensaje del cliente.",
+  "Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na conversa quando uma das palavras-chave aparece na mensagem do cliente, ou quando a conversa ou o contato tem uma das etiquetas de ativação.": {
+    es: "Guardar crea una versión nueva (la anterior queda en el historial). El cuerpo solo entra en la conversación cuando una de las palabras clave aparece en el mensaje del cliente, o cuando la conversación o el contacto tiene una de las etiquetas de activación.",
   },
+  "Etiquetas de ativação": { es: "Etiquetas de activación" },
   "Não foi possível carregar a skill.": { es: "No se pudo cargar la skill." },
   "Skill de pacote: descrição, palavras-chave e corpo são editáveis. Ao salvar, a versão nova herda os arquivos do pacote — nada se perde.": {
     es: "Skill de paquete: la descripción, las palabras clave y el cuerpo se pueden editar. Al guardar, la versión nueva hereda los archivos del paquete: nada se pierde.",
@@ -15813,6 +15857,11 @@ export const DICIONARIO: Traducoes = {
   "consulta, horário, preço": { es: "consulta, horario, precio" },
   "A skill é carregada quando o cliente escreve uma destas palavras.": {
     es: "La skill se carga cuando el cliente escribe una de estas palabras.",
+  },
+  "Etiquetas que ativam (opcional)": { es: "Etiquetas que activan (opcional)" },
+  "odonto, clínica": { es: "odonto, clínica" },
+  "Se a conversa ou o contato tiver uma destas etiquetas, a skill entra mesmo sem a palavra-chave.": {
+    es: "Si la conversación o el contacto tiene una de estas etiquetas, la skill entra aunque falte la palabra clave.",
   },
   "Corpo (o procedimento que o agente segue)": { es: "Cuerpo (el procedimiento que sigue el agente)" },
   linhas: { es: "líneas" },
@@ -16814,6 +16863,25 @@ export const DICIONARIO: Traducoes = {
   "Dê um nome ao plano.": { es: "Dale un nombre al plan." },
   "O plano precisa de pelo menos um passo.": { es: "El plan necesita al menos un paso." },
   "Escreva o título de todos os passos.": { es: "Escribe el título de todos los pasos." },
+  "O nome do plano pode ter até {n} caracteres.": {
+    es: "El nombre del plan puede tener hasta {n} caracteres.",
+  },
+  "A descrição do plano pode ter até {n} caracteres.": {
+    es: "La descripción del plan puede tener hasta {n} caracteres.",
+  },
+  "O plano pode ter no máximo {n} passos.": { es: "El plan puede tener como máximo {n} pasos." },
+  "Cabem no máximo {n} planos por organização.": {
+    es: "Caben como máximo {n} planes por organización.",
+  },
+  "O título do passo {p} pode ter até {n} caracteres.": {
+    es: "El título del paso {p} puede tener hasta {n} caracteres.",
+  },
+  "A descrição do passo {p} pode ter até {n} caracteres.": {
+    es: "La descripción del paso {p} puede tener hasta {n} caracteres.",
+  },
+  "O prazo do passo {p} precisa ser um número inteiro de dias, de 0 a {n}.": {
+    es: "El plazo del paso {p} debe ser un número entero de días, de 0 a {n}.",
+  },
   "O que é salvo aqui é o que o editor de regras oferece na ação Aplicar um plano de tarefas.": {
     es: "Lo que se guarda aquí es lo que el editor de reglas ofrece en la acción Aplicar un plan de tareas.",
   },

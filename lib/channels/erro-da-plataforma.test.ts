@@ -5,7 +5,8 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { codigoDaPlataforma, falhaDoEnvioInteiro, fraseDaFalha } from "./erro-da-plataforma";
+import { motivoDaFalhaDaMensagem } from "@/lib/inbox/motivo-da-falha";
+import { codigoDaPlataforma, falhaDoEnvioInteiro, fraseDaFalha, recusaDoEnvioDeModelo } from "./erro-da-plataforma";
 
 describe("codigoDaPlataforma", () => {
   it("oficial direto: o número vem em error_code", () => {
@@ -65,5 +66,60 @@ describe("fraseDaFalha", () => {
     expect(fraseDaFalha("131050", "x")).toMatch(/desligou as mensagens de marketing/);
     expect(fraseDaFalha("999999", "Algo raro")).toBe("Algo raro");
     expect(fraseDaFalha(null, "  ")).toBeNull();
+  });
+});
+
+// O segundo canal que usa `send-template-for-session.ts` (`errorPrefix: "datafy"`).
+// Mora aqui porque o nome do provider não pode aparecer fora de `lib/channels/`.
+describe("recusaDoEnvioDeModelo: o prefixo que o envio de modelo grava", () => {
+  it.each([
+    ["datafy_132000: Parameter mismatch", { codigo: "132000", textoDoProvedor: "Parameter mismatch" }],
+    ["meta_100: Parameter name is missing or empty", { codigo: "100", textoDoProvedor: "Parameter name is missing or empty" }],
+    ["datafy_erro: build_failed", { codigo: "erro", textoDoProvedor: "build_failed" }],
+    ["meta_4: (#4) Application request limit reached", { codigo: "4", textoDoProvedor: "(#4) Application request limit reached" }],
+    ["template_missing: promo (pt_BR) não está no espelho", { codigo: "template_missing", textoDoProvedor: "promo (pt_BR) não está no espelho" }],
+  ])("%s", (texto, esperado) => {
+    expect(recusaDoEnvioDeModelo(texto)).toEqual(esperado);
+  });
+
+  it("o texto do provedor sai cortado em 300 caracteres, como fraseDaFalha", () => {
+    expect(recusaDoEnvioDeModelo(`meta_131009: ${"a".repeat(500)}`)?.textoDoProvedor).toBe("a".repeat(300));
+  });
+
+  it.each(["template_missing_values: 1", "400 Bad Request", "131026 — Undeliverable", "", null])(
+    "não é recusa do envio de modelo: %s",
+    (texto) => {
+      expect(recusaDoEnvioDeModelo(texto)).toBeNull();
+    },
+  );
+
+  it("a tela da conversa: datafy_<n> com frase nossa e sem frase nossa", () => {
+    const t = (s: string) => s;
+    expect(motivoDaFalhaDaMensagem({ error_code: "datafy_error", error_message: "datafy_132000: Parameter mismatch" }, t))
+      .toBe("Os valores enviados não batem com as variáveis do modelo.");
+    expect(motivoDaFalhaDaMensagem({ error_code: "datafy_error", error_message: "datafy_100: Parameter name is missing or empty" }, t))
+      .toBe("(#100) Parameter name is missing or empty");
+  });
+});
+
+// O desfecho de status do parceiro (`zernio/webhook.ts`) grava `zernio_error` e
+// `<código> — <título> — <explicação>`. A main mostrava esse texto na dica do selo.
+describe("a tela da conversa: desfecho do parceiro com código sem frase nossa", () => {
+  const t = (s: string) => s;
+  it.each([
+    "131000 — Something went wrong — Message failed to send due to an unknown error.",
+    "131053 — Media upload error — Unable to download the media.",
+  ])("%s: o texto gravado, não 'Confira a conexão'", (texto) => {
+    expect(motivoDaFalhaDaMensagem({ error_code: "zernio_error", error_message: texto }, t)).toBe(texto);
+  });
+
+  it("código com frase nossa: a frase (controle)", () => {
+    expect(motivoDaFalhaDaMensagem({ error_code: "zernio_error", error_message: "131026 — Message undeliverable — x" }, t))
+      .toMatch(/^Não foi possível entregar/);
+  });
+
+  it("sem o formato do desfecho, a frase do canal segue (500 do serviço)", () => {
+    expect(motivoDaFalhaDaMensagem({ error_code: "zernio_error", error_message: "500 Internal Server Error" }, t))
+      .toBe("O canal recusou o envio. Confira a conexão em Conexões.");
   });
 });
