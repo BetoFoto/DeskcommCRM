@@ -366,14 +366,19 @@ test.describe("Quadro do funil — coluna vazia acompanha a rolagem e cabeçalho
     // continua acontecendo com a faixa no meio. Sem o arraste, ela não testa nada.
     await abrirQuadro(page, pipelinePrincipal, TITULO(0, 1));
 
-    const cartao = page.getByText(TITULO(0, 1), { exact: true });
+    // O gesto parte do respiro do CARD (canto de cima, à esquerda), não do título: o
+    // título é um `<button>`, e o dnd não começa arraste em elemento interativo — com o
+    // ponteiro nele, nenhum arraste começava, com ou sem o conserto.
+    const cartao = page
+      .locator("[data-rfd-draggable-id]")
+      .filter({ has: page.getByText(TITULO(0, 1), { exact: true }) });
     const caixaCartao = await cartao.boundingBox();
     const caixaQuadro = await quadro(page).boundingBox();
     expect(caixaCartao).not.toBeNull();
     expect(caixaQuadro).not.toBeNull();
 
-    const x = caixaCartao!.x + caixaCartao!.width / 2;
-    const y = caixaCartao!.y + caixaCartao!.height / 2;
+    const x = caixaCartao!.x + 6;
+    const y = caixaCartao!.y + 4;
 
     await page.mouse.move(x, y);
     await page.mouse.down();
@@ -386,6 +391,12 @@ test.describe("Quadro do funil — coluna vazia acompanha a rolagem e cabeçalho
     await page.mouse.move(x, alvoY, { steps: 25 });
     await page.waitForTimeout(1200);
 
+    // Sem esta guarda, "o arraste nem começou" e "a rolagem automática morreu" davam o
+    // MESMO zero abaixo. O dnd tira o card arrastado do fluxo com `position: fixed`.
+    const arrastando = await page.$$eval("[data-rfd-draggable-id]", (els) =>
+      els.filter((el) => getComputedStyle(el).position === "fixed").length,
+    );
+    expect(arrastando, "o arraste nem começou — o gesto não pegou o card").toBe(1);
     const rolouSozinho = await quadro(page).evaluate((el) => el.scrollTop);
     await page.mouse.up();
     await page.waitForTimeout(300);
