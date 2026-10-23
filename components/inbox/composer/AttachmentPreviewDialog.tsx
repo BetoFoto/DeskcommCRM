@@ -19,7 +19,7 @@ interface Props {
    * enviar — o operador aprova antes de qualquer byte sair.
    *
    * A LEGENDA só aparece quando ALGUM anexo da fila a leva (#3151): áudio não
-   * leva legenda nos dois adaptadores de WhatsApp de envio direto (ver
+   * leva legenda em nenhum adaptador de canal de `lib/channels/` (ver
    * `anexoLevaLegenda`), então pedir o texto
    * é escrever algo que nunca chega. Fila mista mantém o campo — a legenda vai
    * com a imagem.
@@ -31,6 +31,12 @@ interface Props {
    * "+", onde a legenda nasce vazia.
    */
   legendaInicial?: string | null;
+  /**
+   * A fila vai para uma NOTA INTERNA, não para o canal. Ali o texto é o corpo
+   * da nota e aparece ao lado do anexo — inclusive de um áudio —, então o campo
+   * fica sempre: a régua de #3151 vale só para o que sai ao cliente.
+   */
+  notaInterna?: boolean;
   sending: boolean;
   onCancel: () => void;
   onSend: (caption: string) => void;
@@ -46,6 +52,7 @@ interface Props {
 export function AttachmentPreviewDialog({
   files,
   legendaInicial = null,
+  notaInterna = false,
   sending,
   onCancel,
   onSend,
@@ -88,9 +95,9 @@ export function AttachmentPreviewDialog({
   /**
    * A fila leva legenda se ALGUM anexo dela leva (#3151). Com fila só de
    * áudio não há campo: o texto que o atendente escrevesse não teria por onde
-   * sair — os adaptadores de WhatsApp de envio direto mandam o áudio sem `caption`.
+   * sair — os adaptadores de canal mandam o áudio sem `caption`.
    */
-  const levaLegenda = files.some(anexoLevaLegenda);
+  const levaLegenda = notaInterna || files.some(anexoLevaLegenda);
   /**
    * A saída do diálogo é UMA: sem anexo que leve legenda, o envio não leva
    * texto nenhum — o `caption` do momento só vale onde algum anexo o leva, e
@@ -161,8 +168,8 @@ export function AttachmentPreviewDialog({
         )}
         {/*
           O CAMPO DE LEGENDA SÓ APARECE ONDE A LEGENDA CHEGA (#3151). Numa fila
-          só de áudio ele não é renderizado: os dois adaptadores de WhatsApp de
-          envio direto não mandam `caption` em áudio, e o atendente escrevia um texto que nunca saía. Na fila MISTA
+          só de áudio ele não é renderizado: nenhum adaptador de canal manda
+          `caption` em áudio, e o atendente escrevia um texto que nunca saía. Na fila MISTA
           ele continua — a legenda viaja com o primeiro anexo que a aceita.
         */}
         {levaLegenda && (

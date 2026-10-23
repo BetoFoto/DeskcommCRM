@@ -550,7 +550,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       );
       setPendingEm("reply");
       setPendingFiles(arquivos);
-      // Áudio NÃO leva legenda nos dois adaptadores de WhatsApp de envio direto
+      // Áudio NÃO leva legenda em nenhum adaptador de canal
       // (#3151): sem anexo na fila que a
       // leve, o corpo volta para o CAMPO em vez de virar legenda de um áudio
       // que a descarta — o texto continua na tela, para o operador mandar como
@@ -1021,6 +1021,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       <AttachmentPreviewDialog
         files={pendingFiles}
         legendaInicial={legendaInicial}
+        notaInterna={pendingEm === "note"}
         sending={upload.isPending || send.isPending || createNote.isPending}
         onCancel={() => {
           const devolver = legendaInicial;
@@ -1038,8 +1039,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           // nada a legendar: o texto volta para o campo, como no cancelar, para
           // o que o operador escreveu não sumir junto com o último anexo que o
           // levaria (#3151). Tirar a imagem de uma fila [imagem, áudio] é
-          // exatamente este caminho.
-          if (indiceDaLegenda(resto) === -1) {
+          // exatamente este caminho. Na NOTA o texto é o corpo dela e vale com
+          // áudio também: só a fila vazia o devolve.
+          if (resto.length === 0 || (pendingEm !== "note" && indiceDaLegenda(resto) === -1)) {
             setPendingFiles(resto);
             setLegendaInicial(null);
             // Sem foco: o diálogo continua ABERTO com o áudio que sobrou.

@@ -1,8 +1,8 @@
 /**
  * O DIÁLOGO PEDE LEGENDA SÓ ONDE A LEGENDA CHEGA (#3151).
  *
- * O defeito medido na main: o campo "Legenda" aparecia SEMPRE, mas os dois
- * adaptadores de WhatsApp de envio direto em `lib/channels/` mandam a nota de
+ * O defeito medido na main: o campo "Legenda" aparecia SEMPRE, mas os
+ * adaptadores de canal em `lib/channels/` mandam a nota de
  * voz sem `caption`. O atendente escrevia um texto que nunca chegava.
  *
  * O que cada caso prova, e por que nesta forma:
@@ -11,7 +11,7 @@
  *      texto nenhum. É o alvo da issue.
  *   CONTROLE imagem, vídeo e documento — o campo continua e a legenda digitada
  *      chega ao `onSend`: é o comportamento que NÃO podia mudar, porque esses
- *      três tipos levam `caption` nos dois canais.
+ *      três tipos levam `caption` nos canais.
  *   CONTROLE fila MISTA (imagem + áudio) — o campo continua, com a legenda da
  *      resposta rápida, e ela chega ao `onSend`. Esconder o campo aqui seria
  *      perder o texto que o operador já tinha; a legenda sai com a imagem, que
@@ -45,12 +45,13 @@ const CAMPOS_QUE_LEVAM: [string, File][] = [
   ["documento", DOCUMENTO],
 ];
 
-function montar(files: File[], legendaInicial: string | null = null) {
+function montar(files: File[], legendaInicial: string | null = null, notaInterna = false) {
   const onSend = vi.fn();
   render(
     <AttachmentPreviewDialog
       files={files}
       legendaInicial={legendaInicial}
+      notaInterna={notaInterna}
       sending={false}
       onCancel={vi.fn()}
       onSend={onSend}
@@ -109,6 +110,17 @@ describe("o diálogo pede legenda só onde ela chega (#3151)", () => {
     enviar();
 
     expect(onSend).toHaveBeenCalledWith("Olha a tabela");
+  });
+
+  it("CONTROLE: NOTA INTERNA com áudio mantém o campo — o texto é o corpo da nota", () => {
+    // A nota não sai pelo canal: o corpo aparece ao lado do áudio no card da
+    // nota. Esconder o campo aqui tiraria o texto da nota, não um texto morto.
+    const { onSend, enviar } = montar([AUDIO], null, true);
+
+    fireEvent.change(screen.getByLabelText("Legenda"), { target: { value: " Ouvir antes de ligar " } });
+    enviar();
+
+    expect(onSend).toHaveBeenCalledWith("Ouvir antes de ligar");
   });
 });
 

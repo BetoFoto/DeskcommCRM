@@ -1,8 +1,8 @@
 /**
  * A LEGENDA SÓ EXISTE ONDE O CANAL A LEVA (#3151).
  *
- * Áudio é o ÚNICO tipo que não leva texto: os dois adaptadores de WhatsApp de
- * envio direto em `lib/channels/` mandam a nota de voz SEM `caption` — ao contrário de imagem,
+ * Áudio é o ÚNICO tipo que não leva texto: os adaptadores de canal em
+ * `lib/channels/` (WAHA, oficial, Datafy e Zernio) mandam a nota de voz SEM `caption` — ao contrário de imagem,
  * vídeo e documento, que levam. Pedir
  * legenda de um áudio é escrever um texto que nunca chega.
  *
