@@ -3,7 +3,7 @@
  *
  * `sessaoProntaParaEnvio` escolhia, sozinha, a sessão de MENSAGEM `WORKING` mais
  * antiga da organização (`order created_at asc limit 1`, sem preferência de
- * provider). Numa organização que conectou Instagram/Facebook (Zernio) antes de
+ * provider). Numa organização que conectou Instagram/Facebook antes de
  * conectar o WhatsApp — caso comum e MEDIDO na issue — a escolhida era a social.
  * O cron do lembrete de tarefa entrega essa sessão a `ensureConversation` e o
  * envio vai para uma conversa de Instagram: o destino é um TELEFONE, e a rede
@@ -16,7 +16,26 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { PROVIDERS_DE_MENSAGEM, PROVIDERS_DE_TELEFONE } from "@/lib/channels/capabilities";
+
 import { sessaoProntaParaEnvio } from "./start-conversation";
+
+/**
+ * As duas listas vêm da CAPACIDADE (`lib/channels/capabilities.ts`), e não de um
+ * nome escrito aqui: o invariante 1 da doutrina de restrição de canal proíbe
+ * nomear provider fora de `lib/channels/`, e nomear no teste seria a mesma fuga
+ * por outra porta. O que este arquivo mede é o DESFECHO — QUAL sessão sai, e se
+ * ela alcança um aparelho —, nunca a grafia do provider.
+ */
+const PROVIDERS_QUE_ALCANCAM_APARELHO: readonly string[] = PROVIDERS_DE_TELEFONE;
+
+/** Um provider de MENSAGEM que ALCANÇA aparelho: o canal do destino por telefone. */
+const PROVIDER_DE_APARELHO = PROVIDERS_DE_TELEFONE[0] as string;
+
+/** Um provider de MENSAGEM que NÃO alcança aparelho: a rede social que a issue mede. */
+const PROVIDER_SOCIAL = PROVIDERS_DE_MENSAGEM.find(
+  (p) => !PROVIDERS_QUE_ALCANCAM_APARELHO.includes(p),
+) as string;
 
 type Linha = {
   id: string;
@@ -73,7 +92,7 @@ function bancoDeMentira(linhas: Linha[]) {
 const SOCIAL: Linha = {
   id: "instagram",
   organization_id: "org-1",
-  provider: "zernio_social",
+  provider: PROVIDER_SOCIAL,
   status: "WORKING",
   archived_at: null,
   created_at: "2026-01-01T00:00:00Z",
@@ -86,7 +105,7 @@ const FACEBOOK: Linha = { ...SOCIAL, id: "facebook", created_at: "2026-02-01T00:
 const WHATSAPP: Linha = {
   id: "whatsapp",
   organization_id: "org-1",
-  provider: "waha",
+  provider: PROVIDER_DE_APARELHO,
   status: "WORKING",
   archived_at: null,
   created_at: "2026-06-01T00:00:00Z",
@@ -107,7 +126,9 @@ describe("destino por TELEFONE escolhe o canal que alcança o aparelho (#3358)",
     );
 
     expect(sessaoEntregueAoEnsureConversation).toBe("whatsapp");
-    expect(provedorDa(sessaoEntregueAoEnsureConversation, cenario)).toBe("waha");
+    expect(PROVIDERS_QUE_ALCANCAM_APARELHO).toContain(
+      provedorDa(sessaoEntregueAoEnsureConversation, cenario),
+    );
   });
 
   it("organização que SÓ tem social: a escolha continua a de hoje — a mais antiga WORKING", async () => {
@@ -123,7 +144,9 @@ describe("destino por TELEFONE escolhe o canal que alcança o aparelho (#3358)",
     );
 
     expect(sessaoEntregueAoEnsureConversation).toBe("instagram");
-    expect(provedorDa(sessaoEntregueAoEnsureConversation, soSocial)).toBe("zernio_social");
+    expect(PROVIDERS_QUE_ALCANCAM_APARELHO).not.toContain(
+      provedorDa(sessaoEntregueAoEnsureConversation, soSocial),
+    );
   });
 
   it("WhatsApp fora do ar ainda ganha da social WORKING quando o destino é telefone", async () => {
@@ -139,7 +162,9 @@ describe("destino por TELEFONE escolhe o canal que alcança o aparelho (#3358)",
       { preferirTelefone: true },
     );
 
-    expect(provedorDa(sessaoEntregueAoEnsureConversation, comWhatsappForaDoAr)).toBe("waha");
+    expect(PROVIDERS_QUE_ALCANCAM_APARELHO).toContain(
+      provedorDa(sessaoEntregueAoEnsureConversation, comWhatsappForaDoAr),
+    );
   });
 
   it("WhatsApp ARQUIVADO não entra: o produto o considera excluído", async () => {
