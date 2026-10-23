@@ -57,6 +57,7 @@ import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-se
 import { emitirFalhaDeEntrega } from "@/lib/messaging/falha-de-entrega";
 import { previaDaMensagem } from "@/lib/messaging/previa-da-mensagem";
 import { aplicarAssinatura, configAssinatura, linhaDeAssinatura } from "@/lib/messaging/assinatura";
+import { nomeDoAgenteDeIA } from "@/lib/messaging/nome-do-agente-de-ia";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -657,7 +658,15 @@ export async function sendMessageHandler(
       if (origemDoEmissor === "user" && ctx.actor.type === "user") {
         nomeDoAtendente = (await nomesDosAtendentes([ctx.actor.id])).get(ctx.actor.id) ?? null;
       }
-      assinatura = linhaDeAssinatura(configAss, origemDoEmissor, nomeDoAtendente);
+      // #3310: com `por_agente` ligado, a IA assina com o nome do AGENTE QUE
+      // ENVIOU (`ai_agents.name`) — com dois agentes no mesmo número, o cliente
+      // lia o nome de um e a conversa seguia com outro. `nome_ia` fica como
+      // reserva (mensagem sem agente, leitura que falhou). Desligado, nem lê.
+      const nomeDoAgente =
+        origemDoEmissor === "ai" && configAss.porAgente && ctx.actor.type === "ai_agent"
+          ? await nomeDoAgenteDeIA(supabase, ctx.organization_id, ctx.actor.id)
+          : null;
+      assinatura = linhaDeAssinatura(configAss, origemDoEmissor, nomeDoAtendente, nomeDoAgente);
     }
   }
 

@@ -682,6 +682,8 @@
   "Assinar as mensagens da IA": "Sign the AI's messages",
   "A IA aparece pelo nome abaixo, nunca pelo nome de um atendente.": "The AI appears under the name below, never under an agent's name.",
   "Nome da IA": "AI name",
+  "Assinar com o nome de cada agente": "Sign with each agent's name",
+  "Ligado, cada mensagem da IA leva o nome do agente que a escreveu, como está no cadastro do agente. O Nome da IA acima fica para a mensagem sem agente.": "When on, each AI message carries the name of the agent that wrote it, as registered for that agent. The AI name above is used for messages without an agent.",
   "Sem asteriscos nem quebra de linha.": "No asterisks or line breaks.",
   "Salvar assinatura": "Save signature",
   "Assinatura salva.": "Signature saved.",
