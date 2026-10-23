@@ -1584,6 +1584,25 @@ Spec: `tests/e2e/inbox-anuncio-de-origem.spec.ts`.
 | J46.2 | Mensagem recebida de um clique, nos três transportes (intermediado, oficial direto, QR) | `metadata.anuncio` com título, texto, id, link e miniatura; sem `ctwa_clid` nem payload cru; sem anúncio, a chave nem aparece; o primeiro toque do contato segue estampado como antes | **PASS (unit)** — `tests/unit/mensagem-guarda-o-seu-anuncio.test.ts` |
 | J46.3 | Endereço do anúncio que não é `https:` (`javascript:`, `data:`, `http:`) | não chega a `href` nem a `src` | **PASS (unit)** — `tests/unit/anuncio-visivel-na-inbox.test.tsx` |
 
+## J56 — Acompanhar a IA pelo celular `[P1]` (2026-10-23)
+
+ADR-0006, fase F4. O gestor pausa um agente, abre o aviso da Central e acompanha
+execuções, acervo, fila e construtor de follow-up com o celular na mão. Spec:
+`tests/e2e/ia-no-celular.spec.ts` (parte 7), 390×844 com toque emulado, login
+`admin` de uma organização própria semeada pelo service role. As alças de ligação
+do construtor ficaram de fora (ver o comentário em `app/globals.css`).
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J56.1 | Lista de agentes | o ⋯ do cartão tem ≥ 44×44px e fica dentro da tela; o `<main>` não rola para o lado | a medir (CI) + UNIT `app/app/ai/agents/_components/AgentRowMenu.test.tsx` |
+| J56.2 | Tela do agente, operação | a caixa «Operação do agente» não rola para o lado; o seletor tem ≥ 44px e cabe; «Pausar automático» cabe, tem ≥ 44px, e o toque pausa (vira «Retomar automático») | a medir (CI) |
+| J56.3 | Aba Execuções | cabeçalho `display:none`; a caixa da tabela sem rolagem lateral; «Detalhes» ≥ 44px e dentro da tela; Custo e Latência rotulados no cartão; o `<main>` não rola | a medir (CI) |
+| J56.4 | Central de avisos | o link do destino tem ≥ 44px de altura e cabe; o `<main>` não rola | a medir (CI) + UNIT `tests/unit/central-avisos-destino.test.tsx` |
+| J56.5 | O que o agente sabe, com um material | «Preparar tudo de novo» e «Adicionar material» entre 15px e a borda direita; o `<main>` não rola | a medir (CI) |
+| J56.6 | Fila de follow-up | cabeçalho `display:none`; a caixa da tabela sem rolagem lateral; o cartão e «Cancelar» (≥ 44px) dentro da tela | a medir (CI) |
+| J56.7 | Construtor de follow-up | zoom +, zoom − e encaixe com ≥ 44×44px e o centro livre; tocar num passo abre o painel com o fundo acima do topo da barra de abas | a medir (CI) + UNIT `tests/unit/followup-canvas-controles.test.ts`, `tests/unit/painel-do-no-acima-da-barra.test.ts` |
+| J56.8 | «Ver conversa» de um atendimento | o link pega o toque até 22px do centro com ponteiro grosso | UNIT `tests/unit/case-detail.test.tsx` (classes); sem prova pela tela |
+
 ## J47 — Ler a conversa selecionada no tema escuro `[P1]` (2026-10-12)
 
 Contexto: relatado por uma operação real, com a captura — no tema escuro, a linha
