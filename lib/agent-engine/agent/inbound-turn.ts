@@ -2131,6 +2131,42 @@ async function escalarComercialAntesDoModelo(
   return true;
 }
 
+/**
+ * O MESMO job já gravou uma decisão de roteamento? (#3143)
+ *
+ * Existe porque `rescheduleJob` NÃO cria outro job: o adiamento (pela janela
+ * anti-ban, ou pela janela de funcionamento do agente) devolve a MESMA linha de
+ * `job_queue` para 'pending', e a reexecução roda com o mesmo `job_id`. O turno
+ * que chega às 19h para um agente 8h-18h é reagendado DEPOIS de o roteador ter
+ * rodado e de a decisão ter sido gravada, e às 8h o roteador roda de novo — sem
+ * esta pergunta, cada passagem insere uma linha em `ai_router_decisions` e o
+ * painel que conta roteamento (`app/api/v1/ai/evolution`) lê o dobro para um job
+ * que só teve uma decisão.
+ *
+ * É a chave do REUSO, não um veto: quem chama decide o que fazer com a resposta
+ * (hoje, não gravar de novo nem reaplicar o destino do card). Erro de leitura
+ * sobe para quem chamou — lá a falha degrada aberto e grava como antes.
+ *
+ * `desde` é a criação do job: a decisão do mesmo job nunca é anterior a ele.
+ * Não há índice com `job_id`: sem o limite, a consulta varre a tabela inteira
+ * em todo turno com roteador. Com ele, entra por índice com `created_at`
+ * (medido com 250 mil linhas: seq scan de 3.847 buffers vira 4 buffers).
+ */
+async function decisaoDeRoteamentoDoJobJaGravada(
+  pool: pg.Pool,
+  organizationId: string,
+  jobId: string,
+  desde: Date,
+): Promise<boolean> {
+  const { rows } = await pool.query(
+    `select 1 from ai_router_decisions
+      where organization_id = $1 and job_id = $2 and created_at >= $3
+      limit 1`,
+    [organizationId, jobId, desde],
+  );
+  return rows.length > 0;
+}
+
 async function executarTurnoDoAgente(
   deps: InboundTurnDeps,
   job: JobRow | null,
@@ -2433,7 +2469,40 @@ async function executarTurnoDoAgente(
   }
   // Fase 3: grava a decisão de roteamento e a aderência da conversa ao agente.
   // Fire-and-forget — falha de telemetria nunca derruba a resposta ao lead.
+  //
+  // #3143 — UM TURNO, UMA DECISÃO DE ROTEAMENTO. O turno adiado pela JANELA DO
+  // AGENTE (o gate lá embaixo, depois do filtro de palavra-chave) não volta como
+  // turno novo: `rescheduleJob` devolve a MESMA linha de `job_queue` para
+  // 'pending' — quem escreveu às 19h para um agente 8h-18h é o mesmo job às 8h.
+  // A reexecução resolve o turno outra vez (o handler pergunta ao roteador antes
+  // de entrar aqui) e, sem esta guarda, gravaria uma SEGUNDA linha: o turno
+  // reagendado aparecia duas vezes em `ai_router_decisions`, e o painel que conta
+  // roteamento (`app/api/v1/ai/evolution`) leria o dobro.
+  //
+  // A decisão da PRIMEIRA passagem é REUSADA: a reexecução não grava de novo nem
+  // reaplica o destino do card (a chamada das 19h já o aplicou; repetir só
+  // devolveria `ja_no_destino`/`destino_ocupado` — `destino-da-intencao.ts`).
+  //
+  // As 22h isso não acontece porque não precisa: o gate anti-ban adia ANTES do
+  // roteador, então não há decisão gravada a reusar — e a reexecução grava a sua,
+  // uma só.
+  //
+  // A guarda é de TELEMETRIA e degrada ABERTO: se a leitura falhar, `false` e a
+  // gravação acontece como antes — nunca se perde a linha por causa dela.
+  let decisaoJaGravada = false;
   if (!preview && routed.routerId !== null) {
+    try {
+      decisaoJaGravada = await decisaoDeRoteamentoDoJobJaGravada(
+        pool,
+        tenantId,
+        liveJob().id,
+        liveJob().created_at,
+      );
+    } catch (err) {
+      runLog.warn('não consegui conferir a decisão de roteamento deste job — gravando como antes', {
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
+      });
+    }
     try {
       if (agentConfig !== null) {
         await pool.query(
@@ -2448,21 +2517,23 @@ async function executarTurnoDoAgente(
       // decidiu mora em `llm_calls` do mesmo `job_id` (purpose `intent_router`,
       // `origem_da_escolha = 'jev'`); o único leitor desta tabela
       // (`app/api/v1/ai/evolution`) conta roteamento, não quem o fez.
-      await pool.query(
-        `insert into ai_router_decisions
+      if (!decisaoJaGravada) {
+        await pool.query(
+          `insert into ai_router_decisions
            (organization_id, router_id, conversation_id, intent_name, confidence, agent_id, outcome, job_id)
          values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [
-          tenantId,
-          routed.routerId,
-          input.conversationId,
-          routed.intentName,
-          routed.confidence,
-          agentConfig?.agentId ?? null,
-          routed.outcome,
-          liveJob().id,
-        ],
-      );
+          [
+            tenantId,
+            routed.routerId,
+            input.conversationId,
+            routed.intentName,
+            routed.confidence,
+            agentConfig?.agentId ?? null,
+            routed.outcome,
+            liveJob().id,
+          ],
+        );
+      }
     } catch (err) {
       runLog.warn('decisão do router não gravada', {
         error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
@@ -2475,8 +2546,10 @@ async function executarTurnoDoAgente(
   // roteamento (mesmo agente, mesma intenção) e ANTES do turno do agente, para
   // que ele já responda com o card no funil certo. Silencioso por design: card
   // já no destino, destino já ocupado e alvo ambíguo não são erro (ver
-  // `destino-da-intencao.ts`).
-  if (!preview && destinoPipelineId !== null) {
+  // `destino-da-intencao.ts`). No turno reexecutado depois do adiamento pela
+  // janela do agente ele NÃO roda de novo: a passagem anterior já aplicou o
+  // destino e moveu o card (#3143, ver a guarda da decisão de roteamento acima).
+  if (!preview && destinoPipelineId !== null && !decisaoJaGravada) {
     try {
       const destino = await aplicaDestinoDaIntencao({
         admin: deps.crmCfg.supabase,

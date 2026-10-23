@@ -3258,7 +3258,7 @@
   "Erro ao gravar o logo.": "Error saving the logo.",
   "O caminho do logo não pertence a esta empresa.": "The logo path doesn't belong to this company.",
   "O logo não foi gravado.": "The logo wasn't saved.",
-  "Esta sessão precisa da verificação em duas etapas. Entre novamente com o código do aplicativo.": "This session needs two-factor verification. Sign in again with the app's code.",
+  "Confirme o código do aplicativo de verificação para continuar.": "Confirm the code from your authenticator app to continue.",
   "Muitas trocas seguidas. Tente de novo em alguns minutos.": "Too many changes in a row. Try again in a few minutes.",
   "Não consegui trocar o logo agora.": "Couldn't change the logo right now.",
   "Cor": "Color",
