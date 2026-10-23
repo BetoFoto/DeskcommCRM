@@ -194,7 +194,7 @@ export const PROVIDERS_DE_TELEFONE = [
   "meta_cloud",
   "zernio",
   "datafy",
-] as const satisfies readonly (typeof PROVIDERS_DE_MENSAGEM)[number][];
+] as const satisfies readonly Exclude<(typeof PROVIDERS_DE_MENSAGEM)[number], "zernio_social">[];
 
 /**
  * `true` quando a linha de `channel_sessions` é um canal de mensagem.

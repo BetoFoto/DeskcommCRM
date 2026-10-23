@@ -182,7 +182,7 @@ describe("destino por TELEFONE escolhe o canal que alcança o aparelho (#3358)",
 
   it("quem NÃO pede a preferência continua escolhendo pela ordem de criação", async () => {
     // A porta é a mesma para o create de contato (`contacts/_handler.ts`), o
-    // MCP e a conversa compartilhada — e nenhum deles sabe o destino. Eles
+    // MCP e a conversa compartilhada — e eles ainda não pedem a preferência. Eles
     // seguem recebendo o MESMO resultado de antes desta issue.
     const cenário = [SOCIAL, WHATSAPP];
 

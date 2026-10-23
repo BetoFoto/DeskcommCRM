@@ -364,9 +364,9 @@ async function rodar(admin: ReturnType<typeof createAdminClient>, requestId: str
       // preferência, a porta devolvia a sessão `WORKING` mais ANTIGA da
       // organização, e numa organização que conectou o Instagram/Facebook antes
       // do WhatsApp a escolhida era a social: o lembrete era gravado numa
-      // conversa de Instagram e recusado pela janela de 24h fechada. Quem não
-      // sabe o destino (o `create` de contato, o MCP) continua chamando sem a
-      // opção.
+      // conversa de Instagram e recusado pela janela de 24h fechada. O `create`
+      // de contato e a conversa compartilhada ainda chamam sem a opção
+      // (continuação do #3358).
       const canalId = await sessaoProntaParaEnvio(admin, tarefa.organization_id, { preferirTelefone: true });
       const telefone = pref.whatsapp_numero ?? null;
       let contatoId: string | null = null;

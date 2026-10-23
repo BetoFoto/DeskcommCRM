@@ -54,8 +54,8 @@ export interface PreferenciaDeSessao {
  * Sem sessão de WhatsApp na organização, a cadeia termina na regra de sempre (a
  * de mensagem mais antiga) — a preferência reordena, nunca inventa canal. E
  * quem não passa a opção continua escolhendo exatamente como antes: o `create`
- * de contato, o MCP e a conversa compartilhada não sabem o destino e não
- * opinam.
+ * de contato e a conversa compartilhada (inclusive pelo MCP) ainda chamam sem a
+ * opção, embora também tenham o telefone na mão (continuação do #3358).
  */
 export async function sessaoProntaParaEnvio(
   supabase: SupabaseClient,
