@@ -658,13 +658,12 @@ export async function sendMessageHandler(
       if (origemDoEmissor === "user" && ctx.actor.type === "user") {
         nomeDoAtendente = (await nomesDosAtendentes([ctx.actor.id])).get(ctx.actor.id) ?? null;
       }
-      // #3310: a IA assina com o nome do AGENTE QUE ENVIOU (`ai_agents.name`),
-      // não com o `nome_ia` da organização — com dois agentes no mesmo número, o
-      // cliente lia o nome de um e a conversa seguia com outro. `nome_ia` fica
-      // como reserva (mensagem sem agente, leitura que falhou), e é o que
-      // `nomeDaAssinaturaDaIA` decide.
+      // #3310: com `por_agente` ligado, a IA assina com o nome do AGENTE QUE
+      // ENVIOU (`ai_agents.name`) — com dois agentes no mesmo número, o cliente
+      // lia o nome de um e a conversa seguia com outro. `nome_ia` fica como
+      // reserva (mensagem sem agente, leitura que falhou). Desligado, nem lê.
       const nomeDoAgente =
-        origemDoEmissor === "ai" && ctx.actor.type === "ai_agent"
+        origemDoEmissor === "ai" && configAss.porAgente && ctx.actor.type === "ai_agent"
           ? await nomeDoAgenteDeIA(supabase, ctx.organization_id, ctx.actor.id)
           : null;
       assinatura = linhaDeAssinatura(configAss, origemDoEmissor, nomeDoAtendente, nomeDoAgente);

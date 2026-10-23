@@ -1239,6 +1239,8 @@ export const DICIONARIO: Traducoes = {
   "Cada atendente aparece pelo próprio nome, com as iniciais em maiúscula.": { es: "Cada asesor aparece con su propio nombre, con las iniciales en mayúscula." },
   "Assinar as mensagens da IA": { es: "Firmar los mensajes de la IA" },
   "A IA aparece pelo nome abaixo, nunca pelo nome de um atendente.": { es: "La IA aparece con el nombre de abajo, nunca con el nombre de un asesor." },
+  "Assinar com o nome de cada agente": { es: "Firmar con el nombre de cada agente" },
+  "Ligado, cada mensagem da IA leva o nome do agente que a escreveu, como está no cadastro do agente. O Nome da IA acima fica para a mensagem sem agente.": { es: "Activado, cada mensaje de la IA lleva el nombre del agente que lo escribió, tal como está en el registro del agente. El Nombre de la IA de arriba queda para el mensaje sin agente." },
   "Nome da IA": { es: "Nombre de la IA" },
   "Sem asteriscos nem quebra de linha.": { es: "Sin asteriscos ni saltos de línea." },
   "Salvar assinatura": { es: "Guardar firma" },
