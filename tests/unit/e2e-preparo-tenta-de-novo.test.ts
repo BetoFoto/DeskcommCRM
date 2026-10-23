@@ -60,7 +60,7 @@ exit "$rc"`,
   falso("sudo", `echo "sudo $*" >> "${log}"`);
   const r = spawnSync("bash", ["-e", "-c", scriptDoPasso(passo)], {
     // PATH mínimo: um ffmpeg da máquina de quem roda o teste pularia o laço.
-    env: { PATH: `${bin}:/usr/bin:/bin` },
+    env: { ...process.env, PATH: `${bin}:/usr/bin:/bin` },
     encoding: "utf-8",
   });
   return { status: r.status, saida: r.stdout + r.stderr, chamadas: readFileSync(log, "utf-8").trim().split("\n") };
