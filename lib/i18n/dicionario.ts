@@ -39,6 +39,30 @@ import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // Encaminhar mensagem (#2835) — botão na bolha do chat e o diálogo de destino.
+  "Encaminhar": { es: "Reenviar" },
+  "Encaminhar mensagem": { es: "Reenviar mensaje" },
+  "Escolha a conversa que vai receber esta mensagem.": { es: "Elige la conversación que recibirá este mensaje." },
+  "Buscar conversa": { es: "Buscar conversación" },
+  "Mensagem encaminhada.": { es: "Mensaje reenviado." },
+  // A rota responde 201 mesmo quando o envio falhou (`status: "failed"`): o
+  // toast precisa dizer isso, com o motivo que o envio gravou.
+  "Não foi possível encaminhar: {motivo}": { es: "No se pudo reenviar: {motivo}" },
+  // Recusas do encaminhamento (`lib/inbox/encaminhar-mensagem.ts`).
+  "Escolha uma conversa de destino desta organização.": { es: "Elige una conversación de destino de esta organización." },
+  "A conversa de destino não tem canal de envio.": { es: "La conversación de destino no tiene canal de envío." },
+  "O canal da conversa de destino está desativado. Reative-o para encaminhar.": {
+    es: "El canal de la conversación de destino está desactivado. Reactívalo para reenviar.",
+  },
+  "Esta mensagem foi apagada e não pode ser encaminhada.": { es: "Este mensaje fue eliminado y no se puede reenviar." },
+  "A mídia desta mensagem ainda não chegou ao CRM. Tente encaminhar de novo em alguns segundos.": {
+    es: "El contenido multimedia de este mensaje aún no llegó al CRM. Intenta reenviarlo de nuevo en unos segundos.",
+  },
+  "Não consegui preparar a mídia desta mensagem para o encaminhamento. Tente de novo em instantes.": {
+    es: "No pude preparar el contenido multimedia de este mensaje para reenviarlo. Inténtalo de nuevo en unos instantes.",
+  },
+  "Esta mídia não pode ser encaminhada.": { es: "Este contenido multimedia no se puede reenviar." },
+  "Só é possível encaminhar mensagens de texto ou mídia.": { es: "Solo se pueden reenviar mensajes de texto o multimedia." },
   ...TEXTOS_AGENDA_SERVICOS,
   ...TEXTOS_AGENDA_CONFIGURACAO,
   "Etiquetas de contato interno": { es: "Etiquetas de contacto interno" },
