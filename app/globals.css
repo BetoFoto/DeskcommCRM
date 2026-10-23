@@ -937,6 +937,9 @@
    importada pelo componente, então chega depois deste arquivo na cascata. Duas
    classes vencem por especificidade, não por ordem. Só com ponteiro grosso:
    com mouse o canto do canvas fica como sempre.
+   Vale para TODO `.react-flow`, não só o construtor de follow-up: o canvas de
+   Automações (`CanvasDaAutomacao`) também ganha botões de zoom de 44px. É de
+   propósito — o mesmo dedo, o mesmo controle.
    As alças de ligação (`.react-flow__handle`) ficaram de fora de propósito:
    moram dentro do viewport com zoom (44px de CSS viram 22px a 50%), e uma área
    para fora do nó cobre o vão de 80px entre dois passos, onde passa a aresta

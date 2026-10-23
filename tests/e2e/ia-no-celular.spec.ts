@@ -12,11 +12,16 @@
  *    `overflow-auto`, então "o <main> não transborda" NÃO prova o cartão — cada
  *    cartão tem a sua asserção: cabeçalho `display:none`, a caixa da tabela sem
  *    rolagem lateral, «Detalhes» dentro da tela e o rótulo do custo escrito.
+ *    As execuções são semeadas em `llm_calls` (com `agent_id`), que é o que a
+ *    rota `GET /api/v1/ai/agents/:id/runs` lê — NÃO em `ai_agent_runs`, que a
+ *    aba deixou de ler (ver o cabeçalho da rota).
  * 4. Central de avisos: o link do destino tem 44px de altura.
  * 5. O que o agente sabe: com um material, os dois botões cabem na tela.
  * 6. Fila de follow-up: o cartão cabe e «Cancelar» fica na tela.
  * 7. Construtor: tocar num passo abre o painel ACIMA da barra de abas, e os
  *    botões de zoom têm 44px (a folha da lib declara 26px).
+ * 8. Caso: «Ver conversa» pega o dedo até 21px acima e abaixo do centro, e não
+ *    a 24px (controle).
  *
  * As alças de ligação do construtor NÃO ganharam área maior, e por isso não há
  * caso para elas: ficam dentro do viewport com zoom (44px de CSS viram 22px a
@@ -59,7 +64,9 @@ const senha = `Local-${randomUUID()}!`;
 const NOME_DO_AGENTE = `Agente celular ${randomUUID().slice(0, 8)}`;
 const NOME_DO_CONTATO = "Cliente da fila no celular";
 
-const semente = { usuario: "", email: "", org: "", agente: "", ponteiro: "" };
+const semente = { usuario: "", email: "", org: "", agente: "", ponteiro: "", caso: "" };
+/** Quantas linhas cada tabela recebeu: a limpeza cobra que todas saiam. */
+const semeadas: Record<string, number> = {};
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: "pt-BR" });
 test.describe.configure({ timeout: 240_000 });
@@ -67,6 +74,7 @@ test.describe.configure({ timeout: 240_000 });
 async function insere(tabela: string, valores: Record<string, unknown>): Promise<string> {
   const { data, error } = await db.from(tabela).insert(valores).select("id").single();
   if (error) throw new Error(`${tabela}: ${error.message}`);
+  semeadas[tabela] = (semeadas[tabela] ?? 0) + 1;
   return (data as { id: string }).id;
 }
 
@@ -140,18 +148,21 @@ async function semear() {
   const ponteiro = await db.from("ai_agents").update({ published_version_id: versao }).eq("id", agente);
   if (ponteiro.error) throw new Error(`published_version_id: ${ponteiro.error.message}`);
 
+  // A aba Execuções lê `llm_calls` filtrada por `agent_id` (a rota mudou de
+  // tabela; `ai_agent_runs` não tem escritor no motor de produção).
   for (const [i, custo] of [1234, 87].entries()) {
-    await insere("ai_agent_runs", {
+    await insere("llm_calls", {
       organization_id: org,
       agent_id: agente,
-      agent_version_id: versao,
-      status: "completed",
-      tokens_in: 1200,
-      tokens_out: 340,
+      purpose: "agent_turn",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      status: "ok",
+      input_tokens: 1200,
+      output_tokens: 340,
       cost_cents: custo,
       latency_ms: 2380,
-      steps_count: 3,
-      started_at: new Date(Date.now() - (i + 1) * 60_000).toISOString(),
+      created_at: new Date(Date.now() - (i + 1) * 60_000).toISOString(),
     });
   }
 
@@ -174,6 +185,27 @@ async function semear() {
   // Uma promessa agendada (`cron_jobs`, o mesmo formato de `seed-e2e-followup-promise`):
   // daqui a 3 dias, então nenhum relógio a dispara durante a spec.
   const contato = await insere("contacts", { organization_id: org, display_name: NOME_DO_CONTATO });
+
+  // Um caso aberto, com a conversa que «Ver conversa» abre (o mesmo formato de
+  // `conversa-do-caso.spec.ts`).
+  const conversa = await insere("conversations", {
+    organization_id: org,
+    contact_id: contato,
+    channel_session_id: sessao,
+    status: "ai_handling",
+    assignee_kind: "ai",
+    last_inbound_at: new Date().toISOString(),
+  });
+  semente.caso = await insere("agent_cases", {
+    organization_id: org,
+    conversation_id: conversa,
+    status: "awaiting_human",
+    title: "Caso do celular",
+    summary: "Cliente quer trocar o tamanho do pedido.",
+    blocker: "precisa de alguém com alçada",
+    source: "agent",
+  });
+
   const daquiATresDias = new Date(Date.now() + 3 * 86_400_000).toISOString();
   await insere("cron_jobs", {
     organization_id: org,
@@ -210,18 +242,37 @@ async function semear() {
 
 test.beforeAll(semear);
 
+/**
+ * Filhos antes dos pais, à mão: `conversations` tem FK RESTRICT para `contacts` e
+ * `channel_sessions`, e `ai_agent_versions` para `channel_sessions` — deixar
+ * tudo para a cascata da organização é apostar na ordem em que o Postgres
+ * dispara as cascatas. Cada passo confere o `error` E quantas linhas saíram; as
+ * falhas se acumulam (um filho preso não impede de tentar o resto) e a limpeza
+ * termina com `throw` se qualquer coisa ficou para trás.
+ */
 test.afterAll(async () => {
-  if (semente.org) {
-    // `ai_agent_runs.agent_id` é ON DELETE RESTRICT: as execuções saem antes da cascata da org.
-    const runs = await db.from("ai_agent_runs").delete().eq("organization_id", semente.org);
-    if (runs.error) throw runs.error;
-    const org = await db.from("organizations").delete().eq("id", semente.org);
-    if (org.error) throw org.error;
+  const falhas: string[] = [];
+  const passos: Array<[tabela: string, coluna: string, valor: string]> = [
+    ["agent_cases", "organization_id", semente.org],
+    ["conversations", "organization_id", semente.org],
+    ["llm_calls", "organization_id", semente.org],
+    // Leva as versões (CASCADE), que seguram `channel_sessions` por RESTRICT.
+    ["ai_agents", "organization_id", semente.org],
+    // O resto (contato, sessão, promessa, fluxo, material, aviso) sai em cascata.
+    ["organizations", "id", semente.org],
+  ];
+  for (const [tabela, coluna, valor] of passos) {
+    const esperadas = semeadas[tabela] ?? 0;
+    if (!valor || esperadas === 0) continue;
+    const { data, error } = await db.from(tabela).delete().eq(coluna, valor).select("id");
+    if (error) falhas.push(`${tabela}: ${error.message}`);
+    else if ((data?.length ?? 0) < esperadas) falhas.push(`${tabela}: saíram ${data?.length ?? 0} de ${esperadas}`);
   }
   if (semente.usuario) {
     const u = await db.auth.admin.deleteUser(semente.usuario);
-    if (u.error) throw u.error;
+    if (u.error) falhas.push(`usuário: ${u.error.message}`);
   }
+  if (falhas.length > 0) throw new Error(`a limpeza deixou sobra no banco — ${falhas.join("; ")}`);
 });
 
 test("[P1] o gestor pausa o agente, abre o aviso e acompanha a IA pelo celular", async ({ page }) => {
@@ -261,8 +312,8 @@ test("[P1] o gestor pausa o agente, abre o aviso e acompanha a IA pelo celular",
 
     const pausar = operacao.getByRole("button", { name: "Pausar automático" });
     const p = await medir(pausar);
+    // Sem asserção de altura aqui: o `size="sm"` já dá `h-11` abaixo de lg, com ou sem este PR.
     expect(p.right, "«Pausar automático» passa da borda").toBeLessThanOrEqual(BORDA_DIREITA);
-    expect(p.height).toBeGreaterThanOrEqual(PISO_DE_TOQUE);
     await page.screenshot({ path: path.join(EVIDENCIA, "01-operacao-do-agente.png") });
     await pausar.tap();
     await expect(operacao.getByRole("button", { name: "Retomar automático" })).toBeVisible({ timeout: 30_000 });
@@ -276,8 +327,8 @@ test("[P1] o gestor pausa o agente, abre o aviso e acompanha a IA pelo celular",
     await provaOCartao(painel.locator("table"), "execuções");
     for (const linha of await linhas.all()) {
       const detalhes = await medir(linha.getByRole("button", { name: "Detalhes" }));
+      // Só a borda: a altura vem do `size="sm"` (h-11) com ou sem o cartão.
       expect(detalhes.right, "«Detalhes» passa da borda").toBeLessThanOrEqual(BORDA_DIREITA);
-      expect(detalhes.height).toBeGreaterThanOrEqual(PISO_DE_TOQUE);
     }
     // O cabeçalho sumiu: o rótulo do número vem do próprio cartão, pelo `::before`.
     const rotulos = await linhas
@@ -323,8 +374,8 @@ test("[P1] o gestor pausa o agente, abre o aviso e acompanha a IA pelo celular",
     const r = await medir(linha);
     expect(r.right, "o cartão da fila passa da borda").toBeLessThanOrEqual(BORDA_DIREITA);
     const cancelar = await medir(linha.getByTestId("cancelar-item-da-fila"));
+    // Só a borda: a altura vem do `size="sm"` (h-11) com ou sem o cartão.
     expect(cancelar.right, "«Cancelar» passa da borda").toBeLessThanOrEqual(BORDA_DIREITA);
-    expect(cancelar.height).toBeGreaterThanOrEqual(PISO_DE_TOQUE);
     await page.screenshot({ path: path.join(EVIDENCIA, "03-fila-em-cartao.png") });
   });
 
@@ -359,5 +410,44 @@ test("[P1] o gestor pausa o agente, abre o aviso e acompanha a IA pelo celular",
     const topoDaBarra = await barra.evaluate((el) => el.getBoundingClientRect().top);
     expect(fundoDoPainel, "o painel do passo desce por trás da barra de abas").toBeLessThanOrEqual(topoDaBarra + 1);
     await page.screenshot({ path: path.join(EVIDENCIA, "04-painel-acima-da-barra.png") });
+  });
+
+  await test.step("8. caso: «Ver conversa» pega o dedo até 21px do centro", async () => {
+    await page.goto(`/app/ai/cases?caso=${semente.caso}`);
+    const link = page.getByRole("link", { name: "Ver conversa" });
+    await expect(link).toBeVisible({ timeout: 30_000 });
+    await link.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    // DESVIO DE MÉTODO, escrito: a área declarada é 16px (a caixa `inline-block`
+    // do text-xs) + 2×14px (`-inset-3.5`) = 44px, ou seja, ±22px do centro. Mede
+    // a 21px, não a 22: a 22 o ponto cai exatamente na borda, e o arredondamento
+    // de subpixel da caixa decide sozinho. O controle a 24px (2px fora) tem de
+    // NÃO cair no link — se cair, a área é maior que a declarada e os 21px não
+    // provam o `-inset-3.5`.
+    // Os 21px sozinhos NÃO provam o `inline-block`: num link `inline` a caixa é a
+    // da fonte (~14,5px), e 14,5 + 28 ainda dá ±21,25. Quem prova o
+    // `inline-block` é a altura medida do `::before`, que só chega a 44 com a
+    // caixa de 16px.
+    const m = await link.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      const cai = (dy: number) => {
+        const alvo = document.elementFromPoint(x, y + dy);
+        return alvo !== null && (alvo === el || el.contains(alvo));
+      };
+      return {
+        antes: parseFloat(getComputedStyle(el, "::before").height),
+        acima21: cai(-21),
+        abaixo21: cai(21),
+        acima24: cai(-24),
+        abaixo24: cai(24),
+      };
+    });
+    expect(m.antes, "altura da área de toque (::before)").toBeGreaterThanOrEqual(PISO_DE_TOQUE - 0.5);
+    expect(m.acima21, "21px acima do centro não cai no link").toBe(true);
+    expect(m.abaixo21, "21px abaixo do centro não cai no link").toBe(true);
+    expect(m.acima24, "controle: 24px acima ainda cai no link").toBe(false);
+    expect(m.abaixo24, "controle: 24px abaixo ainda cai no link").toBe(false);
+    await page.screenshot({ path: path.join(EVIDENCIA, "05-ver-conversa.png") });
   });
 });

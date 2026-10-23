@@ -89,13 +89,15 @@ describe("CaseDetail", () => {
     expect(screen.getByRole("link", { name: "Ver conversa" })).toHaveAttribute("href", "/app/inbox/conv-1");
   });
 
-  it("o link da conversa pega o dedo a 22px do centro (16px + 2×14px)", () => {
+  it("o link da conversa declara a área de toque de 44px (16px + 2×14px); a geometria é da spec", () => {
     useCaseMock.mockReturnValue({ isLoading: false, data: BASE_CASE });
     render(wrap(<CaseDetail caseId="case-1" />));
     const classes = screen.getByRole("link", { name: "Ver conversa" }).className.split(/\s+/);
 
     // `inline-block` dá ao link a caixa da linha (16px do text-xs), que é de onde
     // o `::before` absoluto mede; num `inline` a caixa é a da fonte, menor.
+    // Isto confere só a CLASSE escrita; o toque a 21px (e o controle a 24px) é
+    // medido em `tests/e2e/ia-no-celular.spec.ts`, passo 8.
     expect(classes).toEqual(
       expect.arrayContaining([
         "relative",
