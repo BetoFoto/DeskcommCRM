@@ -75,8 +75,41 @@ describe("motivoDaFalhaDaMensagem: o prefixo do envio de modelo", () => {
     expect(m).not.toMatch(CONEXAO);
   });
 
-  it("recusa sem código e com texto cru: a genérica, nunca a frase do canal", () => {
-    expect(motivo("meta_error", "meta_erro: fetch failed http://servico-interno:3000/x")).toBe(GENERICA);
+  // `erro` só nasce do `buildComponents` (defeito nosso, nada saiu): frase própria,
+  // sem o texto interno do montador.
+  it.each([
+    "meta_erro: buildComponents: slot body espera 'currency', que este montador ainda não sabe montar",
+    "meta_erro: build_failed",
+  ])("recusa sem código (%s): frase própria, sem o texto interno", (texto) => {
+    const m = motivo("meta_error", texto);
+    expect(m).toBe("Não conseguimos montar os valores do modelo para este envio. Nada foi enviado.");
+    expect(m).not.toMatch(/buildComponents|build_failed|Confira a conexão/);
+  });
+
+  // Acesso quebrado: aqui a conexão está de fato com problema, e a frase manda
+  // para Conexões em vez de mostrar o texto do provedor em inglês.
+  it.each([
+    ["meta_190: Error validating access token: Session has expired", /^O acesso ao WhatsApp Oficial expirou ou foi revogado\. Reconecte o número em Conexões\.$/],
+    ["meta_10: Application does not have permission for this action", /^Falta permissão para este envio no WhatsApp Oficial\. Revise as permissões do número em Conexões\.$/],
+    ["meta_200: Permissions error", /^Falta permissão para este envio no WhatsApp Oficial\. Revise as permissões do número em Conexões\.$/],
+  ])("acesso: %s manda reconectar/rever permissões", (texto, frase) => {
+    expect(motivo("meta_error", texto)).toMatch(frase);
+  });
+
+  it("código de UM dígito (4, limite de pedidos): frase própria, não a do canal", () => {
+    const m = motivo("meta_error", "meta_4: (#4) Application request limit reached");
+    expect(m).toBe("A conexão com o WhatsApp Oficial atingiu o limite de pedidos por agora. Tente de novo mais tarde.");
+    expect(m).not.toMatch(CONEXAO);
+  });
+
+  it("código de um dígito sem frase nossa: o texto do provedor com o código", () => {
+    expect(motivo("meta_error", "meta_1: An unknown error occurred")).toBe("(#1) An unknown error occurred");
+  });
+
+  it("o texto do provedor sai com no máximo 300 caracteres", () => {
+    const m = motivo("meta_error", `meta_131009: ${"x ".repeat(400)}`);
+    expect(m.startsWith("(#131009) x x")).toBe(true);
+    expect(m.length).toBeLessThanOrEqual("(#131009) ".length + 300);
   });
 
   it("recusa com código e texto do provedor barrado pelo filtro: a genérica", () => {

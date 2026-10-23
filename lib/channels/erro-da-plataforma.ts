@@ -88,16 +88,23 @@ export function codigoDaPlataforma(
 }
 
 /**
- * A recusa do ENVIO DE MODELO como `meta/send-template-for-session.ts` a grava,
- * debaixo do código genérico do adapter: `<prefixo do canal>_<código>: <texto do
- * provedor>` (o `api_error`; `erro` quando a resposta não trouxe código), ou
- * `template_missing:` / `template_stale:` (a conferência contra o espelho).
+ * A recusa do envio como o adapter oficial a grava, debaixo do código genérico
+ * dele: `<prefixo do canal>_<código>: <texto do provedor>`. Vale para o ENVIO DE
+ * MODELO (`meta/send-template-for-session.ts`, o `api_error`) e também para o
+ * TEXTO LIVRE (`adapters/meta-cloud.ts`, `send`), que grava o mesmo prefixo — o
+ * nome da função é do primeiro caso, o leitor serve aos dois. O código tem de 1 a
+ * 6 dígitos: a plataforma tem códigos de um dígito (`4`, limite de pedidos).
+ * `erro` é a recusa SEM código, e só nasce de um defeito NOSSO ao montar os
+ * parâmetros do modelo (`buildComponents` em `meta/send-template.ts`) — nada saiu.
+ * E `template_missing:` / `template_stale:` são a conferência contra o espelho.
+ *
+ * O texto do provedor sai cortado em 300 caracteres, o mesmo teto de `fraseDaFalha`.
  *
  * `codigoDaPlataforma` não lê este prefixo — e ensiná-lo mudaria também quando a
  * campanha pausa (`falhaDoEnvioInteiro`), que é decisão de outro conserto. Quem
  * só quer a FRASE (a tela da conversa) lê os dois.
  */
-const RECUSA_DO_MODELO = /^(?:[a-z]+_(\d{2,6}|erro)|(template_missing|template_stale)):\s*/;
+const RECUSA_DO_MODELO = /^(?:[a-z]+_(\d{1,6}|erro)|(template_missing|template_stale)):\s*/;
 
 export function recusaDoEnvioDeModelo(
   errorMessage: string | null | undefined,
@@ -105,7 +112,7 @@ export function recusaDoEnvioDeModelo(
   const texto = (errorMessage ?? "").trim();
   const achado = RECUSA_DO_MODELO.exec(texto);
   if (!achado) return null;
-  return { codigo: (achado[1] ?? achado[2])!, textoDoProvedor: texto.slice(achado[0].length) };
+  return { codigo: (achado[1] ?? achado[2])!, textoDoProvedor: texto.slice(achado[0].length).slice(0, 300) };
 }
 
 /** `true` quando a falha vale para todos os envios seguintes, não só para esta pessoa. */
@@ -155,6 +162,12 @@ export const FRASES_DA_PLATAFORMA: Record<string, string> = {
   // A conferência contra o espelho (`send-template-for-session.ts`), não a plataforma.
   template_missing: "Este modelo não está na lista de modelos do número. Sincronize em Conexões, na aba Modelos.",
   template_stale: "O modelo mudou na plataforma depois de configurado. Configure o envio de novo.",
+  // Acesso e limite da aplicação: a recusa do envio (`<canal>_190: …`) traz estes
+  // códigos, e aqui a conexão está de fato quebrada — a frase manda a Conexões.
+  "190": "O acesso ao WhatsApp Oficial expirou ou foi revogado. Reconecte o número em Conexões.",
+  "10": "Falta permissão para este envio no WhatsApp Oficial. Revise as permissões do número em Conexões.",
+  "200": "Falta permissão para este envio no WhatsApp Oficial. Revise as permissões do número em Conexões.",
+  "4": "A conexão com o WhatsApp Oficial atingiu o limite de pedidos por agora. Tente de novo mais tarde.",
 };
 
 export function fraseDaFalha(codigo: string | null, textoCru: string | null | undefined): string | null {

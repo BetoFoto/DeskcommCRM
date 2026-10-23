@@ -46,9 +46,12 @@ const SINAL_DE_TEXTO_CRU =
  *    e põe a causa no texto (`template_missing_values: 1`, `[plataforma:132000]`,
  *    `<canal>_132000: …`), e a frase genérica do canal mandaria conferir uma
  *    conexão que funciona;
- * 2b. recusa do envio de modelo cujo código não tem frase nossa (`<canal>_100: …`):
- *    o texto do provedor, sem o nosso prefixo — foi a pista do #2659. Barrado pelo
- *    filtro de texto cru, a genérica; nunca a frase do canal;
+ * 2b. recusa do envio cujo código não tem frase nossa (`<canal>_100: …` — o
+ *    envio de modelo E o de texto livre gravam este prefixo): o texto do provedor,
+ *    sem o nosso prefixo e com no máximo 300 caracteres — foi a pista do #2659.
+ *    Barrado pelo filtro de texto cru, a genérica; nunca a frase do canal. A
+ *    recusa sem código (`<canal>_erro: …`) é defeito NOSSO ao montar os parâmetros
+ *    do modelo: frase própria, sem mostrar o texto interno;
  * 3. a frase do código em `FRASES_DE_FALHA`;
  * 4. o `error_message` sem sinal de texto cru — o título que a plataforma
  *    grava para um código que nenhum dos mapas conhece é a única pista. Vai
@@ -68,6 +71,7 @@ export function motivoDaFalhaDaMensagem(
   }
   if (recusa) {
     const { codigo: codigoDaRecusa, textoDoProvedor } = recusa;
+    if (codigoDaRecusa === "erro") return t("Não conseguimos montar os valores do modelo para este envio. Nada foi enviado.");
     if (!textoDoProvedor || SINAL_DE_TEXTO_CRU.test(textoDoProvedor)) return t("Não foi possível enviar esta mensagem.");
     // O código fica à vista: o `details` da plataforma às vezes vem sem ele.
     return /^\d+$/.test(codigoDaRecusa) && !textoDoProvedor.includes(`#${codigoDaRecusa}`)

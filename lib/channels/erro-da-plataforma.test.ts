@@ -66,9 +66,14 @@ describe("recusaDoEnvioDeModelo: o prefixo que o envio de modelo grava", () => {
     ["datafy_132000: Parameter mismatch", { codigo: "132000", textoDoProvedor: "Parameter mismatch" }],
     ["meta_100: Parameter name is missing or empty", { codigo: "100", textoDoProvedor: "Parameter name is missing or empty" }],
     ["datafy_erro: build_failed", { codigo: "erro", textoDoProvedor: "build_failed" }],
+    ["meta_4: (#4) Application request limit reached", { codigo: "4", textoDoProvedor: "(#4) Application request limit reached" }],
     ["template_missing: promo (pt_BR) não está no espelho", { codigo: "template_missing", textoDoProvedor: "promo (pt_BR) não está no espelho" }],
   ])("%s", (texto, esperado) => {
     expect(recusaDoEnvioDeModelo(texto)).toEqual(esperado);
+  });
+
+  it("o texto do provedor sai cortado em 300 caracteres, como fraseDaFalha", () => {
+    expect(recusaDoEnvioDeModelo(`meta_131009: ${"a".repeat(500)}`)?.textoDoProvedor).toBe("a".repeat(300));
   });
 
   it.each(["template_missing_values: 1", "400 Bad Request", "131026 — Undeliverable", "", null])(
