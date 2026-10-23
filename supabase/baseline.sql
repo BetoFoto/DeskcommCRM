@@ -58053,8 +58053,8 @@ begin
   end;
 end; $$;
 
--- ---- marca embaralhada de quem foi apagado a pedido; a importação do histórico a consulta (migration 0741, doc 186) ----
--- Espelho idempotente de supabase/migrations/20261023130000_0741_lgpd_marca_de_apagamento.sql;
+-- ---- marca embaralhada de quem foi apagado a pedido; a importação do histórico a consulta (migration 0750, doc 186) ----
+-- Espelho idempotente de supabase/migrations/20261023160005_0750_lgpd_marca_de_apagamento.sql;
 -- o porquê inteiro está no cabeçalho de lá. Fica ACIMA da varredura anon porque cria função.
 --
 -- O PROBLEMA. A anonimização zera o telefone do contato. O WhatsApp do número,
