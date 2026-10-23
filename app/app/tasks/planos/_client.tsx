@@ -99,10 +99,14 @@ export function PlanosDeTarefa() {
     onError: (e: Error) => setErro(e.message),
   });
 
+  // O PATCH substitui a lista INTEIRA. Sem a lista lida (carregando ou com erro),
+  // `[]` fingiria "não há planos" e salvar apagaria os que existem: tudo que
+  // grava fica desativado até `q.data` chegar.
+  const listaLida = q.data !== undefined;
   const planos = q.data?.planos ?? [];
 
   function guardar() {
-    if (!rascunho) return;
+    if (!rascunho || !listaLida) return;
     const nome = rascunho.nome.trim();
     if (!nome) {
       setErro(t("Dê um nome ao plano."));
@@ -127,6 +131,7 @@ export function PlanosDeTarefa() {
   }
 
   function excluir(plano: PlanoDeTarefas) {
+    if (!listaLida) return;
     salvar.mutate(planos.filter((p) => p.id !== plano.id));
   }
 
@@ -153,6 +158,7 @@ export function PlanosDeTarefa() {
         </div>
         <Button
           type="button"
+          disabled={!listaLida}
           onClick={() => {
             setErro(null);
             setRascunho(novoPlano());
@@ -177,13 +183,26 @@ export function PlanosDeTarefa() {
             setErro(null);
           }}
           onGuardar={guardar}
-          ocupado={salvar.isPending}
+          ocupado={salvar.isPending || !listaLida}
         />
       ) : null}
 
       {q.isLoading ? <Skeleton className="h-40 w-full" /> : null}
 
-      {!q.isLoading && planos.length === 0 && !rascunho ? (
+      {q.isError && !listaLida ? (
+        <Card role="alert" className="space-y-2 p-4 text-sm">
+          <p>
+            {t(
+              "Não foi possível carregar os planos. Para não apagar os que já existem, criar e salvar ficam desativados até a lista carregar.",
+            )}
+          </p>
+          <Button type="button" variant="outline" onClick={() => void q.refetch()}>
+            {t("Tentar de novo")}
+          </Button>
+        </Card>
+      ) : null}
+
+      {listaLida && planos.length === 0 && !rascunho ? (
         <Card className="p-4 text-sm text-muted-foreground">
           {t("Nenhum plano cadastrado ainda.")}
         </Card>
@@ -195,7 +214,7 @@ export function PlanosDeTarefa() {
             <div className="min-w-0">
               <h2 className="truncate font-medium">{plano.nome}</h2>
               {plano.descricao ? (
-                <p className="text-sm text-muted-foreground">{plano.descricao}</p>
+                <p className="break-words text-sm text-muted-foreground">{plano.descricao}</p>
               ) : null}
             </div>
             <div className="flex shrink-0 gap-2">

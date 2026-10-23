@@ -16853,6 +16853,9 @@ export const DICIONARIO: Traducoes = {
   },
   "Novo plano": { es: "Nuevo plan" },
   "Nenhum plano cadastrado ainda.": { es: "Aún no hay planes registrados." },
+  "Não foi possível carregar os planos. Para não apagar os que já existem, criar e salvar ficam desativados até a lista carregar.": {
+    es: "No se pudieron cargar los planes. Para no borrar los que ya existen, crear y guardar quedan desactivados hasta que la lista cargue.",
+  },
   "Nome do plano": { es: "Nombre del plan" },
   "Proposta enviada": { es: "Propuesta enviada" },
   "Descrição (opcional)": { es: "Descripción (opcional)" },
