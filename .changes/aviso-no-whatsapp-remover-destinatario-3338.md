@@ -10,4 +10,4 @@ A tela Aviso no WhatsApp passa a ter a ação Remover destinatário, com a conse
 
 Pausar segue sendo outra coisa, exatamente como era: com os avisos desligados e um número ainda cadastrado, o que chega dele continua sem virar atendimento. Quem quer o número de volta usa Remover destinatário.
 
-Contribuição de @webtecnica.
+Contribuição de @webtecnica (#3361).
