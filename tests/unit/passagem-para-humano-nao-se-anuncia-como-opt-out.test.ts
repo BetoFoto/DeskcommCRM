@@ -72,7 +72,7 @@ const CTX_DA_COPY: RetentionContext = {
  * e vazio para todo o resto (todos os loaders têm default para vazio: é o
  * caminho feliz que o #2506 já usa).
  */
-function clienteComTravas(travas: { stopped: boolean; stop_por_handoff: boolean }): pg.PoolClient {
+function clienteComTravas(travas: { stopped: boolean; stop_por_handoff: boolean; contato_interno?: boolean }): pg.PoolClient {
   return {
     query: vi.fn(async (sql: string) => {
       const s = String(sql).toLowerCase().trim();
@@ -95,7 +95,7 @@ function poolDoTeste(cliente: pg.PoolClient): pg.Pool {
 }
 
 /** Turno com a CADEIA REAL (`gates` ausente = `BEFORE_SEND_GATES`). */
-function turno(travas: { stopped: boolean; stop_por_handoff: boolean }, extras: Partial<RunBeforeSendArgs> = {}) {
+function turno(travas: { stopped: boolean; stop_por_handoff: boolean; contato_interno?: boolean }, extras: Partial<RunBeforeSendArgs> = {}) {
   const cliente = clienteComTravas(travas);
   const pool = poolDoTeste(cliente);
   const send = vi.fn(async () => ({ kind: "sent" as const, idempotencyKey: "k", messageId: "m" }));
@@ -168,6 +168,15 @@ describe("#3310 · 1+2 — o gate separa a passagem para a equipe do opt-out rea
     expect(r.status === "vetoed" && r.code).toBe("contato_bloqueado");
   });
 
+  it("etiqueta interna (#2353) E handoff juntos: vence `contato_interno` (Devolver ao automático não a desfaz)", async () => {
+    const { args, send } = turno({ stopped: true, stop_por_handoff: true, contato_interno: true });
+
+    const r = await runBeforeSend(args);
+
+    expect(r.status === "vetoed" && r.code).toBe("contato_interno");
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("`optedOutThisTurn` (opt-out já lido no turno) segue `contato_bloqueado`", async () => {
     const { args } = turno({ stopped: true, stop_por_handoff: true }, { optedOutThisTurn: true });
 
@@ -178,8 +187,9 @@ describe("#3310 · 1+2 — o gate separa a passagem para a equipe do opt-out rea
 
   it("a leitura do banco separa as travas: `force_human` sozinho marca o handoff", () => {
     const src = semComentarios(fonte("lib", "agent-engine", "guardrails", "before-send.ts"));
-    // O predicado do STOP continua idêntico (a decisão não mudou)…
-    expect(src).toMatch(/is_blocked or force_human or is_personal or ai_opt_out\) as stopped/);
+    // O predicado do STOP continua o da main — com a etiqueta interna do #2353
+    // (a decisão não mudou)…
+    expect(src).toMatch(/is_blocked or force_human or is_personal or ai_opt_out or i\.contato_interno\) as stopped/);
     // …e a segunda coluna é o que distingue o handoff do opt-out.
     expect(src).toMatch(
       /force_human and not \(is_blocked or is_personal or ai_opt_out\)\) as stop_por_handoff/,
