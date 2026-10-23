@@ -12812,6 +12812,15 @@ export const DICIONARIO: Traducoes = {
   "Este número foi excluído da Central de Conexões.": {
     es: "Este número fue eliminado de la Central de Conexiones.",
   },
+  "Envio automático bloqueado pelo modo de teste do canal.": {
+    es: "Envío automático bloqueado por el modo de prueba del canal.",
+  },
+  "Não foi possível verificar o acesso da IA. Nenhuma mensagem foi enviada.": {
+    es: "No fue posible verificar el acceso de la IA. No se envió ningún mensaje.",
+  },
+  "Envio automático bloqueado: a organização está suspensa.": {
+    es: "Envío automático bloqueado: la organización está suspendida.",
+  },
   "Contato sem telefone para envio WhatsApp.": {
     es: "El contacto no tiene teléfono para enviarle mensajes por WhatsApp.",
   },

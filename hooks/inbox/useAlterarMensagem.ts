@@ -56,7 +56,7 @@ export function useAlterarMensagem(conversationId: string | null) {
   // servidor, e depois de um "não" a bolha tem de mostrar o estado real.
   const reenviar = useMutation({
     mutationFn: ({ id, confirmado }: { id: string; confirmado: boolean }) =>
-      apiClient.post<{ data: { status: string; error_code: string | null } }>(
+      apiClient.post<{ data: { status: string; error_code: string | null; error_message: string | null } }>(
         `/api/v1/messages/${id}/retry`,
         confirmado ? { confirmado: true } : {},
       ),

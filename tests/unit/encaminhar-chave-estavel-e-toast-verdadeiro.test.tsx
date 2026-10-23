@@ -171,14 +171,38 @@ describe("encaminhar: o toast diz a verdade sobre o desfecho", () => {
     );
   });
 
-  // O texto livre do canal pode trazer o endereço interno do serviço. O toast
-  // conta a MESMA frase do selo "Falhou" da bolha (`motivoDaFalhaDaMensagem`),
-  // nunca o `error_message` cru. Sabotagem: devolver `error_message` à frente
-  // do código no helper deixa este caso VERMELHO.
-  it("o texto cru do canal não chega ao toast", async () => {
+  // #2835: o motivo gravado pelo envio vence o código do adaptador — quando o
+  // texto é NOSSO. Aqui o código tem frase própria ("…nesta automação"), e é a
+  // frase do envio que vale: num encaminhamento não há automação.
+  it("o motivo gravado pelo envio vence o código do adaptador", async () => {
     post.mockResolvedValueOnce({
       data: {
-        status: "failed", error_code: "waha_error",
+        status: "failed", error_code: "channel_archived",
+        error_message: "Este número foi excluído da Central de Conexões.",
+      },
+    });
+    const { result } = renderHook(() => useEncaminharMensagem(), { wrapper });
+
+    await act(async () => {
+      result.current.mutate(vars);
+    });
+
+    expect(toastError).toHaveBeenCalledTimes(1);
+    expect(toastError.mock.calls[0]![0]).toBe(
+      "Não foi possível encaminhar: Este número foi excluído da Central de Conexões.",
+    );
+    expect(toastError.mock.calls[0]![0]).not.toContain("automação");
+  });
+
+  // O texto livre do TRANSPORTE pode trazer o endereço interno do serviço: com
+  // frase própria no código, vale a frase; sem ela, a genérica.
+  it.each([
+    ["waha_error", "Não foi possível encaminhar: Não conseguimos falar com o serviço de WhatsApp. Confira se ele está no ar."],
+    ["codigo_sem_frase", "Não foi possível encaminhar: Não foi possível enviar esta mensagem."],
+  ])("o texto cru do canal não chega ao toast (%s)", async (error_code, esperado) => {
+    post.mockResolvedValueOnce({
+      data: {
+        status: "failed", error_code,
         error_message: "fetch failed http://servico-interno:3000/api/sendText",
       },
     });
@@ -189,8 +213,7 @@ describe("encaminhar: o toast diz a verdade sobre o desfecho", () => {
     });
 
     expect(toastError).toHaveBeenCalledTimes(1);
-    expect(toastError.mock.calls[0]![0]).not.toContain("servico-interno");
-    expect(toastError.mock.calls[0]![0]).toContain("Não conseguimos falar com o serviço de WhatsApp.");
+    expect(toastError.mock.calls[0]![0]).toBe(esperado);
   });
 
   it("envio ENTREGUE: toast de sucesso, sem toast de erro", async () => {
