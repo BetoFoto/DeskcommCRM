@@ -1505,6 +1505,32 @@ real, não pela tela).
 - `evidence/cobranca-revendedor/sistema-cobranca-ligada.png`
 - `evidence/cobranca-revendedor/visao-geral-checklist.png`
 
+## J53 — Tocar os controles da casca no celular `[P1]` (2026-10-23)
+
+ADR-0006, fase F4. Os primitivos que o app inteiro usa (`Switch`, itens de menu e
+de seleção, `TabsList`, `AlertDialog`) e a casca (gaveta "Mais", busca, aviso de
+proposta, faixa de conexão caída) passam a ter alvo de dedo com ponteiro grosso
+(`pointer-coarse:`) ou pela largura da janela: abaixo de `md` (aviso de proposta,
+faixa de conexão, rótulo da lupa) e abaixo de `lg` (a fila de abas, que cresce
+também com mouse). Valem também no computador largo: o «Limpar» da busca, que
+saía com a ponta direita embaixo do X, e a janela de confirmação, que passa a
+rolar por dentro. O `Switch` ganha `pointer-coarse:my-3`, para o `::before` de
+um não invadir o do vizinho numa pilha densa. Spec:
+`tests/e2e/celular-toque-nos-controles.spec.ts` (parte 7), 390×844 com toque
+emulado, login `admin`, nada semeado. Catraca de classe em
+`tests/unit/toque-nos-primitivos.test.tsx`. Evidência:
+`evidence/celular-f4-casca/` (gravada pelo CI).
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J53.1 | Interruptor «Lead ganho via in_app» em Configurações › Notificações | `elementFromPoint` 21 px abaixo do centro cai no interruptor; a 24 px não cai (controle: a área deste não passa de 24 px; pode cair no vizinho) | classe conferida (unit); geometria a medir (CI) |
+| J53.1b | Pilha densa: dois clones do interruptor real na geometria da lista de grupos (um a cada 28 px sem a margem) | passo ≥ 44 px; o toque 21 px abaixo do centro do de cima cai no de cima, não no de baixo. Desvio declarado na spec: a lista de grupos real exige canal com grupos | classe conferida (unit); geometria a medir (CI) |
+| J53.2 | Menu do usuário | todo `[role=menuitem]` ≥ 44 px de altura | classe conferida (unit); geometria a medir (CI) |
+| J53.3 | Gaveta «Mais» | todo link e cabeçalho de grupo ≥ 44 px | a medir (CI) |
+| J53.4 | Aba «Atendimento» em Equipe | ≥ 44 px, e o toque 2 px dentro da borda de cima e da de baixo cai na aba (antes a fila `h-9` cortava 4 px de cada lado) | classe conferida (unit); geometria a medir (CI) |
+| J53.5 | Busca: digitar «x» e tocar no centro de «Limpar» | o campo esvazia e a busca continua aberta | a medir (CI) |
+| J53.6 | Controle a 1280 px, mouse, sem toque | o item «Sair» do menu continua abaixo de 44 px | a medir (CI) |
+
 ## J44 — O revendedor cobra pelo Asaas: Pix e boleto recorrentes, com CPF/CNPJ no checkout `[P0]` (2026-10-06)
 
 **Origem:** PR 3b da cobrança do revendedor (`docs/superpowers/specs/2026-09-29-cobranca-do-revendedor-design.md`, §6.2, §7(a), §7(b), §7(f), §13, §15 riscos 5 e 11).
