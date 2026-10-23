@@ -55,6 +55,8 @@ function byteaIn(valor: unknown): Buffer {
 async function postgrest(entrada: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = new URL(String(entrada));
   const metodo = (init?.method ?? "GET").toUpperCase();
+  // Outras tabelas (ex.: a limpeza de dispositivos confiáveis) não mexem nos códigos.
+  if (!url.pathname.endsWith("/user_recovery_codes")) return new Response(null, { status: 204 });
   const filtros = [...url.searchParams.entries()].filter(([k]) => !["select", "limit"].includes(k));
   const casa = (l: Linha) =>
     filtros.every(([col, f]) => {

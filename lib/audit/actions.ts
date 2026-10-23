@@ -39,6 +39,9 @@ export const AUDIT_ACTIONS = [
   "auth.mfa_enrolled",
   "auth.mfa_success",
   "auth.mfa_failed",
+  /** "Confiar neste dispositivo" marcado depois de um código provado. */
+  "auth.mfa_device_trusted",
+  "auth.mfa_trusted_devices_forgotten",
   "auth.recovery_code_used",
   "nuvemshop.connected",
   "nuvemshop.disconnected",

@@ -2,6 +2,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { irAoDesafioDeMfa } from "@/lib/auth/ir-ao-desafio-de-mfa";
+
 import { SecurityClient } from "./_client";
 
 /**
@@ -23,29 +25,31 @@ vi.mock("@/app/actions/settings/regenerateRecoveryCodes", () => ({
 vi.mock("@/app/actions/settings/signOutEverywhere", () => ({
   signOutEverywhere: sair,
 }));
+vi.mock("@/app/actions/settings/esquecerDispositivosConfiaveis", () => ({
+  esquecerDispositivosConfiaveis: vi.fn(),
+}));
 vi.mock("@/app/actions/auth/politicaDeMfa", () => ({
   definirExigenciaDeMfa: vi.fn(),
   desativarMfaDaConta: desligarMfa,
 }));
+vi.mock("@/lib/auth/ir-ao-desafio-de-mfa", () => ({ irAoDesafioDeMfa: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/auth/RecoveryCodesPanel", () => ({ RecoveryCodesPanel: () => null }));
 vi.mock("@/components/auth/MfaEnrollModal", () => ({ MfaEnrollModal: () => null }));
 vi.mock("@/components/voice/PainelDeChamadaDeVoz", () => ({ PainelDeChamadaDeVoz: () => null }));
 
 const semReload = vi.fn();
-const navegar = vi.fn();
 
 beforeEach(() => {
   regenerar.mockReset().mockResolvedValue({ ok: true, recovery_codes: ["a", "b"] });
   sair.mockReset().mockResolvedValue(undefined);
   desligarMfa.mockReset().mockResolvedValue({ ok: true });
   semReload.mockReset();
-  navegar.mockReset();
   // `desativarMfaDaConta` recarrega a página no sucesso — jsdom não navega de
   // verdade, então só trocamos a implementação por um espião inofensivo.
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { ...window.location, reload: semReload, assign: navegar },
+    value: { ...window.location, reload: semReload },
   });
 });
 
@@ -57,6 +61,7 @@ function renderTela(props: Partial<React.ComponentProps<typeof SecurityClient>> 
       podeExigirDaEquipe={false}
       papelMinimo="none"
       diasDeCarencia={0}
+      dispositivos={[]}
       {...props}
     />,
   );
@@ -109,8 +114,11 @@ describe("Configurações › Segurança — confirmação por AlertDialog", () 
     await user.click(within(dialogo).getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(sair).toHaveBeenCalledTimes(1));
   });
+});
 
-  it("regenerar sem o código provado na sessão leva ao desafio e volta para a tela", async () => {
+describe("Configurações › Segurança — regenerar sem o código desta sessão leva ao desafio", () => {
+  it("mfa_required ao regenerar leva ao código (o dispositivo confiável não emite códigos novos)", async () => {
+    vi.mocked(irAoDesafioDeMfa).mockReset();
     regenerar.mockResolvedValue({ ok: false, error: "mfa_required" });
     const user = userEvent.setup();
     renderTela();
@@ -119,8 +127,6 @@ describe("Configurações › Segurança — confirmação por AlertDialog", () 
     const dialogo = await screen.findByRole("alertdialog");
     await user.click(within(dialogo).getByRole("button", { name: "Confirmar" }));
 
-    await waitFor(() =>
-      expect(navegar).toHaveBeenCalledWith("/login/mfa?next=%2Fapp%2Fsettings%2Fsecurity"),
-    );
+    await waitFor(() => expect(irAoDesafioDeMfa).toHaveBeenCalledTimes(1));
   });
 });

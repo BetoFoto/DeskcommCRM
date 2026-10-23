@@ -5928,8 +5928,8 @@ export const DICIONARIO: Traducoes = {
   },
   "O logo não foi gravado.": { es: "No se guardó el logo." },
   // ─── lib/auth/require-role.ts (gate ÚNICO de autorização — toda rota /api/v1) ───
-  "Esta sessão precisa da verificação em duas etapas. Entre novamente com o código do aplicativo.": {
-    es: "Esta sesión requiere verificación en dos pasos. Inicia sesión de nuevo con el código de la app.",
+  "Confirme o código do aplicativo de verificação para continuar.": {
+    es: "Confirma el código de la app de verificación para continuar.",
   },
   "Muitas trocas seguidas. Tente de novo em alguns minutos.": {
     es: "Demasiados cambios seguidos. Intenta de nuevo en unos minutos.",
@@ -7624,9 +7624,22 @@ export const DICIONARIO: Traducoes = {
   "Período de carência inválido: use de 0 a 30 dias.": {
     es: "Período de gracia no válido: usa de 0 a 30 días.",
   },
-  "Entre de novo e informe o código de 6 dígitos antes de desligar a verificação.": {
-    es: "Entra de nuevo e ingresa el código de 6 dígitos antes de desactivar la verificación.",
+  "Informe o código de 6 dígitos antes de desligar a verificação.": {
+    es: "Ingresa el código de 6 dígitos antes de desactivar la verificación.",
   },
+  "Confiar neste dispositivo por 30 dias": { es: "Confiar en este dispositivo por 30 días" },
+  "Dispositivos confiáveis": { es: "Dispositivos de confianza" },
+  "Navegadores onde você marcou “Confiar neste dispositivo”. Neles o login não pede o código por 30 dias.": {
+    es: "Navegadores donde marcaste “Confiar en este dispositivo”. En ellos el inicio de sesión no pide el código por 30 días.",
+  },
+  "Nenhum dispositivo confiável.": { es: "Ningún dispositivo de confianza." },
+  "Navegador desconhecido": { es: "Navegador desconocido" },
+  "Confiável até": { es: "De confianza hasta" },
+  "Os dispositivos voltam a pedir o código no próximo login.": {
+    es: "Los dispositivos vuelven a pedir el código en el próximo inicio de sesión.",
+  },
+  "Esquecendo…": { es: "Olvidando…" },
+  "Esquecer todos os dispositivos": { es: "Olvidar todos los dispositivos" },
   "Não consegui remover a verificação agora.": { es: "No pude quitar la verificación ahora." },
   Ativar: { es: "Activar" },
   "Exigir de quem administra": { es: "Exigir a quien administra" },
@@ -8329,6 +8342,15 @@ export const DICIONARIO: Traducoes = {
   "Resposta segurada pela proteção do número": { es: "Respuesta retenida por la protección del número" },
   "Resposta bloqueada por conformidade": { es: "Respuesta bloqueada por cumplimiento normativo" },
   "Resposta retida para correção": { es: "Respuesta retenida para corrección" },
+  // #3310: a pausa por handoff humano ganhou família própria no aviso de
+  // retenção — as três frases acima descreviam outro caso, e a de conformidade
+  // acusava um opt-out que o cliente nunca pediu.
+  "Resposta pausada: a conversa está com a equipe": {
+    es: "Respuesta en pausa: la conversación está con el equipo",
+  },
+  "O atendimento automático está pausado porque a conversa foi passada para a equipe. Use “Devolver ao automático” para a IA voltar a responder.": {
+    es: "La atención automática está en pausa porque la conversación se pasó al equipo. Usa “Devolver al automático” para que la IA vuelva a responder.",
+  },
 
   // ─── Inbox: gaps achados na varredura completa (ambas as aspas) ───
   "Você não tem nenhuma organização ativa. Aceite um convite ou contate o admin.": {

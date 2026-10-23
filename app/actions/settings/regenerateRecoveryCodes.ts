@@ -34,11 +34,9 @@ export async function regenerateRecoveryCodes(): Promise<RegenerateRecoveryCodes
   const hasFactor = factors?.totp?.some((f) => f.status === "verified");
   if (!hasFactor) return { ok: false, error: "mfa_not_enrolled" };
 
-  // Os códigos novos SUBSTITUEM o fator: quem os tem entra sem o celular. Então
-  // gerá-los exige o fator provado NESTA sessão — `aal2` exato, a mesma régua de
-  // desligar a verificação (`desativarMfaDaConta`). Não use `mfaEmDivida()`:
-  // essa pergunta pode ganhar exceções (dispositivo lembrado, por exemplo) que
-  // valem para o dia a dia e não para emitir uma credencial que dispensa o fator.
+  // Exige o código provado NESTA sessão (`aal2`), como desligar a verificação:
+  // códigos novos desligam o fator pela porta da recuperação, então uma sessão
+  // só com a senha — ou de um dispositivo confiável — não pode emiti-los.
   if ((await sessionAal()) !== "aal2") return { ok: false, error: "mfa_required" };
 
   // A tabela só aceita escrita do client de serviço (migration 0755): sem ele a

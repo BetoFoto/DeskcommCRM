@@ -166,7 +166,7 @@ Quando o humano clica **"Não consigo → escalar"**, o caso vira `escalated` e 
 A ferramenta nativa `request_human_handoff` aceita `motivo_codigo` opcional:
 `requested_human` para pedido de atendente e `critical_stage` quando a etapa exige
 finalização pela equipe (por exemplo, concluir um agendamento com os dados já
-coletados). Ausente, preserva `requested_human`; mencionar agendamento por si só
+coletados). Ausente, registra `low_confidence` (o assistente não resolveu sozinho, #3310): o pedido do cliente vem com `requested_human` explícito; mencionar agendamento por si só
 não é razão para encaminhar. O código classifica o briefing, a passagem e o aviso
 da Central, sem escolher destino nem alterar as condições do handoff. `por_que`
 continua sendo a justificativa em texto, com `reason` como sinônimo legado.
