@@ -1,8 +1,14 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: Gerar novos códigos de recuperação passa a pedir o código do aplicativo
+titulo: Códigos de recuperação passam a funcionar no login, e gerar novos pede o código do aplicativo
 ---
+
+Os códigos de recuperação passam a funcionar no login quando o celular com o
+aplicativo autenticador não está à mão ("Perdi acesso ao autenticador"). O
+código pode ser digitado em minúsculas, com espaço ou com hífen. Códigos
+gerados antes desta versão não são aceitos: quem usa a verificação em duas
+etapas deve gerar códigos novos em Configurações › Segurança.
 
 Em Configurações › Segurança, gerar novos códigos de recuperação agora exige
 que a sessão já tenha confirmado o código de 6 dígitos do aplicativo
