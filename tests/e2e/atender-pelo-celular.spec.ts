@@ -663,6 +663,29 @@ test.describe("atender pelo celular", () => {
   });
 
   test("B-6 teclado aberto: o painel de sugestão sai da frente", async ({ page }) => {
+    // O painel só é montado quando HÁ sugestão (issue #3027). O que este caso
+    // mede é a camada (teclado aberto esconde o painel), não a origem do
+    // rascunho: a leitura da sugestão devolve uma pendente, sem gerar nada.
+    await page.route(`**/api/v1/conversations/${conversa}/draft-reply`, async (rota) => {
+      if (rota.request().method() !== "GET") return rota.fallback();
+      await rota.fulfill({
+        json: {
+          data: {
+            drafts: [
+              {
+                id: "00000000-0000-4000-8000-0000000000b6",
+                revision: "1",
+                status: "pending",
+                original_body: `Sugestão de resposta ${SUFIXO}`,
+                edited_body: null,
+                error_code: null,
+                proposals: [],
+              },
+            ],
+          },
+        },
+      });
+    });
     await entrar(page);
     await page.goto(`/app/inbox?filter=all&id=${conversa}`);
     await esperarConversa(page);
