@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { PipelinePageClient } from "./_client";
+import type { Pipeline, Stage } from "@/lib/kanban/types";
 
 /**
  * A página da lista do funil (#3172), espionada — e não mockada em silêncio.
@@ -85,6 +86,21 @@ const FUNIS = [
   { id: "p-3", name: "Parcerias" },
 ];
 
+/**
+ * A LEITURA LEVE que o server component entrega (#3172, item 4 do CR): o funil
+ * e as etapas, sem negócio nenhum. É dela que a aba Lista vive quando o quadro
+ * não foi lido — por isso estes casos a passam à mão, como a página real faz.
+ */
+const FUNIL_LEVE = {
+  id: "p-1",
+  name: "Vendas",
+  vocabulary: null,
+  settings: {},
+} as unknown as Pipeline;
+const ETAPAS = [
+  { id: "e-1", name: "Prospecção", position: 0, is_won: false, is_lost: false },
+] as unknown as Stage[];
+
 /** Os negócios da página que a rota devolveria — dois, com `has_more`. */
 const PAGINA = {
   leads: [
@@ -126,6 +142,8 @@ describe("troca rápida de funil", () => {
         initialName="Vendas"
         role="admin"
         funis={[{ id: "p-1", name: "Vendas" }]}
+        funilInicial={FUNIL_LEVE}
+        etapasIniciais={ETAPAS}
       />,
     );
 
@@ -135,7 +153,14 @@ describe("troca rápida de funil", () => {
 
   it("com vários funis, o título vira seletor com os funis vivos", async () => {
     render(
-      <PipelinePageClient pipelineId="p-1" initialName="Vendas" role="admin" funis={FUNIS} />,
+      <PipelinePageClient
+        pipelineId="p-1"
+        initialName="Vendas"
+        role="admin"
+        funis={FUNIS}
+        funilInicial={FUNIL_LEVE}
+        etapasIniciais={ETAPAS}
+      />,
     );
 
     // O h1 continua existindo para leitor de tela, escondido do olho.
@@ -151,7 +176,14 @@ describe("troca rápida de funil", () => {
 
   it("escolher outro funil navega para o quadro dele, sem query string", async () => {
     render(
-      <PipelinePageClient pipelineId="p-1" initialName="Vendas" role="admin" funis={FUNIS} />,
+      <PipelinePageClient
+        pipelineId="p-1"
+        initialName="Vendas"
+        role="admin"
+        funis={FUNIS}
+        funilInicial={FUNIL_LEVE}
+        etapasIniciais={ETAPAS}
+      />,
     );
 
     await userEvent.click(screen.getByRole("combobox", { name: "Trocar de funil: Vendas" }));
@@ -163,7 +195,14 @@ describe("troca rápida de funil", () => {
 
   it("escolher o funil atual não navega", async () => {
     render(
-      <PipelinePageClient pipelineId="p-1" initialName="Vendas" role="admin" funis={FUNIS} />,
+      <PipelinePageClient
+        pipelineId="p-1"
+        initialName="Vendas"
+        role="admin"
+        funis={FUNIS}
+        funilInicial={FUNIL_LEVE}
+        etapasIniciais={ETAPAS}
+      />,
     );
 
     await userEvent.click(screen.getByRole("combobox", { name: "Trocar de funil: Vendas" }));
@@ -188,7 +227,14 @@ describe("troca rápida de funil", () => {
 describe("a terceira aba do funil (Lista)", () => {
   const montar = (visoes = FUNIS) =>
     render(
-      <PipelinePageClient pipelineId="p-1" initialName="Vendas" role="admin" funis={visoes} />,
+      <PipelinePageClient
+        pipelineId="p-1"
+        initialName="Vendas"
+        role="admin"
+        funis={visoes}
+        funilInicial={FUNIL_LEVE}
+        etapasIniciais={ETAPAS}
+      />,
     );
 
   it("as três visões convivem no interruptor, e o Quadro continua sendo o padrão", () => {
@@ -259,4 +305,3 @@ describe("a terceira aba do funil (Lista)", () => {
     expect(screen.queryByTestId("lista-do-funil")).toBeNull();
   });
 });
-
