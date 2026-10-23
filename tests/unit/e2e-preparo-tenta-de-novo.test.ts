@@ -60,10 +60,15 @@ exit "$rc"`,
   falso("sudo", `echo "sudo $*" >> "${log}"`);
   const r = spawnSync("bash", ["-e", "-c", scriptDoPasso(passo)], {
     // PATH mínimo: um ffmpeg da máquina de quem roda o teste pularia o laço.
-    env: { ...process.env, PATH: `${bin}:/usr/bin:/bin` },
+    env: { ...process.env, PATH: `${bin}:/usr/bin:/bin`, HOME: raiz },
     encoding: "utf-8",
   });
-  return { status: r.status, saida: r.stdout + r.stderr, chamadas: readFileSync(log, "utf-8").trim().split("\n") };
+  return {
+    status: r.status,
+    saida: r.stdout + r.stderr,
+    chamadas: readFileSync(log, "utf-8").trim().split("\n"),
+    home: raiz,
+  };
 }
 
 const BROWSER = "Instalar o browser";
@@ -94,7 +99,8 @@ describe("e2e.yml — o preparo não espera o espelho do apt para sempre", () =>
     const tentativas = r.chamadas.filter((c) => c.startsWith("timeout"));
     expect(tentativas).toHaveLength(2);
     expect(tentativas[0]).not.toContain("apt-get update");
-    expect(tentativas[0]).toContain("apt-get install -y -q --no-install-recommends ffmpeg");
+    // Os .deb vão para a pasta que o cache do passo seguinte guarda — sem isso o cache fica vazio.
+    expect(tentativas[0]).toContain(`apt-get install -y -q --no-install-recommends -o Dir::Cache::Archives=${r.home}/.cache/ffmpeg-apt/ ffmpeg`);
     expect(tentativas[1]).toContain("sudo apt-get update -q && sudo apt-get install");
   });
 
@@ -103,6 +109,13 @@ describe("e2e.yml — o preparo não espera o espelho do apt para sempre", () =>
     expect(r.status, r.saida).toBe(1);
     expect(r.chamadas.filter((c) => c.startsWith("timeout"))).toHaveLength(3);
     expect(r.saida).toContain("::error");
+  });
+
+  it("o cache do ffmpeg guarda a mesma pasta em que o passo instala", () => {
+    const yml = readFileSync(E2E, "utf-8");
+    const caminhos = [...yml.matchAll(/path: (~\/\.cache\/ffmpeg-apt\/\*\.deb)/g)].map((m) => m[1]);
+    expect(caminhos, "restaurar e guardar").toHaveLength(2);
+    expect(scriptDoPasso(FFMPEG)).toContain('debs="$HOME/.cache/ffmpeg-apt"');
   });
 
   it("os dois passos têm cinto próprio de timeout-minutes", () => {

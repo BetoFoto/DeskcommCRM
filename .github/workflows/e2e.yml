@@ -2015,6 +2015,7 @@ jobs:
           : "${ImageVersion:?runner do GitHub sem ImageVersion}"
           echo "prefixo=playwright-apt-${ImageOS}-pw${pw}-" >> "$GITHUB_OUTPUT"
           echo "imagem=${ImageVersion}" >> "$GITHUB_OUTPUT"
+          echo "os=${ImageOS}" >> "$GITHUB_OUTPUT"
 
       - name: Restaurar os .deb do browser
         if: runner.environment == 'github-hosted'
@@ -2035,6 +2036,13 @@ jobs:
       # No log do run 39965635473 (parte 7) o `apt-get update` recebe os
       # `InRelease` do `azure.archive.ubuntu.com` e fica 24,5 min sem imprimir
       # mais uma linha até o cancelamento.
+      #
+      # Nem toda "trava" é trava. No run 39981658310 (parte 6, o PR que trouxe
+      # este laço) o índice desceu a 11,8 MB/s e os .deb do ffmpeg a ~60 kB/s:
+      # 62,8 MB nesse ritmo são ~17 min, e as 3 tentativas morreram no meio.
+      # Contra espelho LENTO tentar de novo não salva; o que salva é não
+      # descer do espelho — por isso o ffmpeg ganhou cache de .deb próprio
+      # (abaixo), como o browser já tinha.
       #
       # Travado não destrava esperando: cada tentativa ganha 180 s (3× o pior
       # caso saudável) e a seguinte abre conexões novas com o espelho. Morta a
@@ -2076,15 +2084,31 @@ jobs:
       # ao espelho que trava. `-q` e não `-qq`: com `-qq` o log do run
       # 39942328361 ficou 22,7 min mudo, sem dizer se travou no índice ou no
       # download.
+      #
+      # Os .deb do ffmpeg (87 pacotes, 62,8 MB) moram numa pasta só deles, com
+      # cache próprio: a chave do browser é escrita por qualquer parte, e só a
+      # parte 6 tem o ffmpeg. Mesmo raciocínio da pasta do browser — o apt
+      # confere cada .deb restaurado contra o índice e só desce o que mudou.
+      - name: Restaurar os .deb do ffmpeg
+        if: matrix.parte == 6 && runner.environment == 'github-hosted'
+        id: debs-ffmpeg
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/ffmpeg-apt/*.deb
+          key: ffmpeg-apt-${{ steps.debs.outputs.os }}-${{ steps.debs.outputs.imagem }}
+          restore-keys: ffmpeg-apt-${{ steps.debs.outputs.os }}-
+
       - name: Instalar o ffmpeg e sondar os encoders (áudio no celular, F2)
         if: matrix.parte == 6
         timeout-minutes: 12
         run: |
           set -euo pipefail
           if ! command -v ffmpeg >/dev/null; then
+            debs="$HOME/.cache/ffmpeg-apt"
+            mkdir -p "$debs/partial"
             atualizar=""
             for tentativa in 1 2 3; do
-              if timeout -k 20 180 bash -c "${atualizar} sudo apt-get install -y -q --no-install-recommends ffmpeg"; then break; fi
+              if timeout -k 20 180 bash -c "${atualizar} sudo apt-get install -y -q --no-install-recommends -o Dir::Cache::Archives=$debs/ ffmpeg"; then break; fi
               echo "::warning title=Preparo do e2e: nova tentativa::a tentativa ${tentativa} de 3 de instalar o ffmpeg não terminou em 180 s (espelho do apt travado?)"
               if [ "$tentativa" -eq 3 ]; then
                 echo "::error title=O preparo não instalou o ffmpeg::3 tentativas de 180 s sem terminar. É o espelho do apt, não o PR — rerode a parte."
@@ -2097,6 +2121,13 @@ jobs:
           fi
           ffmpeg -hide_banner -encoders | grep -E ' (aac|libopus) '
           test "$(ffmpeg -hide_banner -encoders | grep -cE ' (aac|libopus) ')" -ge 2
+
+      - name: Guardar os .deb do ffmpeg
+        if: matrix.parte == 6 && runner.environment == 'github-hosted' && steps.debs-ffmpeg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/ffmpeg-apt/*.deb
+          key: ffmpeg-apt-${{ steps.debs.outputs.os }}-${{ steps.debs.outputs.imagem }}
 
       # `.env.local` é CÓPIA do `.env.e2e`, não uma terceira redação dele.
       #
