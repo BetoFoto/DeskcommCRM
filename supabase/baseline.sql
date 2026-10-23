@@ -58053,6 +58053,28 @@ begin
   end;
 end; $$;
 
+-- ---- o endereço do servidor aceita sublinhado (migration 0669, issue #2804) ----
+-- A CHECK `platform_smtp_settings_host` recusava `_`, e o `.env` sempre aceitou:
+-- quem roda um relé na própria VPS em Docker (`meu_relay`,
+-- `supabase_inbucket_…`) apontava o CRM para o contêiner e recebia a mensagem
+-- crua do Postgres na tela. O que não é nome de máquina — espaço, barra,
+-- `http://` — segue recusado.
+--
+-- Drop e add JUNTOS, no mesmo bloco: o `update.sh` roda sem `ON_ERROR_STOP`, e
+-- a versão que soltasse a constraint para recriá-la em seguida deixaria uma
+-- janela sem validação se a atualização morresse no meio. Idempotente: reaplicar
+-- derruba e recria a mesma constraint.
+
+do $constraint$
+begin
+  alter table public.platform_smtp_settings
+    drop constraint if exists platform_smtp_settings_host;
+  alter table public.platform_smtp_settings
+    add constraint platform_smtp_settings_host
+    check (smtp_host is null or smtp_host ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$');
+end
+$constraint$;
+
 -- ---- vocabulário de etiquetas paginado e pesquisável (migration 0748, #2855) ----
 -- Antes da varredura de anon, como todo apêndice que cria função
 -- (tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts).
