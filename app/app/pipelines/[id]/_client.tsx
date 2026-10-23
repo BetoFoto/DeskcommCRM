@@ -371,6 +371,11 @@ export function PipelinePageClient({
           // lista, e quem avisa é o servidor (`meta.avisos`) — o mesmo caminho
           // de quem abre pelo Inbox, que também abre sem o quadro em mãos.
           leads={data?.leads ?? []}
+          // #3038: os campos que a etapa exige são preenchidos no PRÓPRIO
+          // formulário — a lista sai do `settings` que o quadro já tem em mãos.
+          // Na Lista o quadro não carrega (#3172): o funil da leitura leve já
+          // traz os `settings`, então o bloco de campos exigidos continua vivo.
+          settings={data?.pipeline.settings ?? funilInicial.settings}
         />
       )}
       <FilterBar
