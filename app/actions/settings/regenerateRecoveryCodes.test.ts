@@ -38,6 +38,7 @@ vi.mock("@/lib/supabase/admin", () => {
 import { regenerateRecoveryCodes } from "./regenerateRecoveryCodes";
 
 beforeEach(() => {
+  vi.stubEnv("INTERNAL_SECRET", "segredo-da-instalacao");
   h.escritas = 0;
 });
 

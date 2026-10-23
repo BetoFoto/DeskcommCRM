@@ -9,7 +9,7 @@ import { z } from "zod";
 import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit, isServiceRoleConfigured } from "@/lib/audit";
-import { hashRecoveryCode } from "@/lib/auth/recovery-codes";
+import { hashRecoveryCode, normalizeRecoveryCode } from "@/lib/auth/recovery-codes";
 import { esquecerDispositivosConfiaveis } from "@/lib/auth/dispositivo-confiavel";
 
 export type UseRecoveryCodeResult =
@@ -28,7 +28,7 @@ const inputSchema = z.object({
  *
  * Security:
  *  - 200ms artificial delay on miss (timing leak protection).
- *  - hashRecoveryCode = sha256 → bytea match.
+ *  - hashRecoveryCode: the same bytea literal the actions write (see the helper).
  *  - Audit emits with masked code (`AB****YZ`).
  */
 export async function useRecoveryCode(
@@ -42,7 +42,7 @@ export async function useRecoveryCode(
 
   const parsed = inputSchema.safeParse({
     email: rawInput.email?.trim().toLowerCase(),
-    code: rawInput.code?.trim().toUpperCase(),
+    code: normalizeRecoveryCode(String(rawInput.code ?? "")),
   });
   if (!parsed.success) {
     await delay(200);

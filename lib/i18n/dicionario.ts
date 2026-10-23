@@ -105,6 +105,9 @@ export const DICIONARIO: Traducoes = {
     es: "Esa etiqueta no existe. Unir solo lleva a una etiqueta que ya existe; para darle un nombre nuevo, usa Renombrar.",
   },
 
+  "Deixar valores e negociação com a equipe": { es: "Dejar precios y negociación con el equipo" },
+  "Quando ligada, o assistente não fala de preço, desconto, parcelamento nem forma de pagamento: o pedido vai direto para uma pessoa da equipe, o cliente é avisado, e a resposta do assistente que tocar nesses assuntos não sai.": { es: "Si está activada, el asistente no habla de precio, descuento, cuotas ni forma de pago: la solicitud pasa directamente a una persona del equipo, se avisa al cliente y no sale ninguna respuesta del asistente que toque esos temas." },
+  "Não custa nada e reconhece frases em português e espanhol. Vale para a organização inteira, e pode mandar à equipe uma pergunta que não era sobre preço.": { es: "No cuesta nada y reconoce frases en portugués y español. Vale para toda la organización y puede pasar al equipo una pregunta que no era sobre precio." },
   "Canal para enviar os lembretes": { es: "Canal para enviar los recordatorios" },
   "Automático — conversa da reserva ou único canal disponível": { es: "Automático — conversación de la reserva o único canal disponible" },
   "Canal configurado indisponível — escolha outro": { es: "Canal configurado no disponible — elige otro" },
