@@ -9,6 +9,17 @@
  * é quem executou o apagamento, e nomear o revendedor (operador) num documento
  * jurídico inverteria os papéis.
  *
+ * ─── O QUE ESTE PAPEL NÃO IMPRIME (CR do PR #3321, itens 1 e 2) ────────────
+ *
+ * (1) Não imprime a identidade do titular — nem o nome, nem o documento, nem os
+ * contatos, nem mascarados. O que o documento atesta é o apagamento; reimprimir
+ * aqui o dado apagado criaria uma cópia nova, sem prazo e fora do alcance da
+ * cascata de exclusão. O requerente é identificado pelo PROTOCOLO do pedido.
+ * (2) Não cita lei: a citação do perfil do país (`citacaoDaLei`) é a do direito
+ * de ACESSO (`LGPD Art. 18, II` no Brasil, `RGPD art. 15.º` em Portugal), e num
+ * atestado de eliminação ela afirmaria um direito que o titular não exerceu
+ * neste pedido. Cabeçalho sem lei é melhor que cabeçalho com o artigo errado.
+ *
  * Consequência prática: `Stylesheet` de módulo, sem `oklch()`/`var(--x)` — que o
  * @react-pdf descarta em silêncio, gerando PDF válido com a cor perdida.
  *
@@ -52,24 +63,6 @@ const styles = StyleSheet.create({
   footer: { position: "absolute", bottom: 22, left: 44, right: 44, fontSize: 7, color: "#666666" },
 });
 
-/**
- * O documento do titular como o papel o declara.
- *
- * As três linhas saem INLINE no documento (e não de um subcomponente) de
- * propósito: quem lê o texto do PDF é a travessia da árvore de elementos
- * (`textos`, em `art-15-entregue-no-pdf` e no teste deste documento), e ela
- * atravessa elementos de HOST — um `<LinhaDoTitular />` some da travessia, e o
- * documento apareceria sem o requerente para quem o lê por ali.
- */
-function documentoDoTitularParaImprimir(dados: DadosDoAtestado): string {
-  const t = dados.titular;
-  if (t.documento) return `${t.rotuloDoDocumento} ${t.documento}`;
-  if (t.documentoNoCadastro) {
-    return `${t.rotuloDoDocumento} informado no cadastro (não reimpresso neste documento)`;
-  }
-  return "não informado no pedido";
-}
-
 export function AtestadoDeAnonimizacaoPdf({ dados, codigo, algoritmo }: PropsDoAtestado): React.ReactElement {
   const e = dados.evidencia;
   const executor = e.executor
@@ -80,9 +73,7 @@ export function AtestadoDeAnonimizacaoPdf({ dados, codigo, algoritmo }: PropsDoA
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.title}>Atestado de Anonimização de Dados Pessoais</Text>
-          <Text style={styles.subtitle}>
-            {`${dados.lei_rotulo ?? "Base legal"}: ${dados.lei_citada ?? "não declarada (país sem citação revisada)"} · Protocolo #${dados.request_id.slice(0, 8)}`}
-          </Text>
+          <Text style={styles.subtitle}>{`Protocolo #${dados.request_id.slice(0, 8)}`}</Text>
         </View>
 
         <View style={styles.section}>
@@ -101,22 +92,22 @@ export function AtestadoDeAnonimizacaoPdf({ dados, codigo, algoritmo }: PropsDoA
           </View>
         </View>
 
+        {/*
+          O requerente entra pelo PROTOCOLO, e só por ele: o papel atesta o
+          apagamento, e reimprimir nome/documento/contato — mesmo mascarados —
+          guardaria numa cópia nova o dado que a cascata acabou de apagar.
+        */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Requerente</Text>
           <View style={styles.row}>
-            <Text style={styles.label}>Nome / razão social:</Text>
-            <Text style={styles.value}>{dados.titular.nome}</Text>
+            <Text style={styles.label}>Protocolo:</Text>
+            <Text style={styles.value}>{dados.request_id}</Text>
           </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Documento:</Text>
-            <Text style={styles.value}>{documentoDoTitularParaImprimir(dados)}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>E-mail / telefone:</Text>
-            <Text style={styles.value}>
-              {[dados.titular.email, dados.titular.telefone].filter(Boolean).join(" · ") || "não informados"}
-            </Text>
-          </View>
+          <Text style={styles.notaFina}>
+            O requerente é identificado apenas pelo protocolo do pedido: este documento não reproduz nome,
+            documento nem contato do titular — nem mascarados. É a trilha de auditoria que guarda o vínculo com
+            o pedido.
+          </Text>
         </View>
 
         <View style={styles.section}>

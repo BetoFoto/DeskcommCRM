@@ -13,6 +13,16 @@
  * Conteúdo, mascaramento e código vêm de `atestado-de-anonimizacao.ts`; o
  * desenho, de `atestado-renderer.tsx`. Aqui não há texto jurídico.
  *
+ * ─── O QUE ESTE ARQUIVO GRAVA (CR do PR #3321, item 1) ──────────────────────
+ *
+ * O PDF do Storage não carrega nome, documento nem contato do titular — nem
+ * mascarados. O requerente entra pelo PROTOCOLO do pedido, e o que sobra no
+ * arquivo é o controlador (razão social e CNPJ, dado público), o ato de execução
+ * (quem, de onde, quando) e o código de autenticidade. O objeto é uma cópia
+ * nova: reimprimir aqui a identidade que a cascata acabou de apagar criaria dado
+ * reidentificável sem prazo e fora do alcance da exclusão. A chave do objeto
+ * continua sendo só uuid do banco — nada de texto digitado.
+ *
  * O `sha256` devolvido é do PDF ASSINADO (o que foi gravado), não do buffer
  * intermediário: quem confere o arquivo no Storage tem de achar o mesmo hash.
  */

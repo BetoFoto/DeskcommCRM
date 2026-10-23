@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * A EMISSÃO DO ATESTADO — o papel sai, e sai GRAVADO onde a rota vai buscá-lo.
  *
@@ -9,6 +10,11 @@
  * com sucesso. Renderizador que devolvesse Buffer vazio faria o outro teste
  * passar inteiro.
  *
+ * O TERCEIRO caso lê as BYTES GRAVADAS (o PDF extraído com o mesmo extrator do
+ * RAG): é a prova de que a cópia do Storage é identificável pelo protocolo — e
+ * de que não leva citação de lei (item 2 do CR do PR #3321), medida no arquivo,
+ * não na árvore de elementos.
+ *
  * O caso do Storage que recusa existe porque a decisão do worker é engolir a
  * falha: se `emitirAtestadoDeAnonimizacao` não LANÇASSE nesse caminho, o worker
  * não teria como saber que não saiu nada, e `result.atestado` afirmaria um
@@ -16,6 +22,7 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { extractPdfText } from "@/lib/ai/rag/extractors/pdf";
 import {
   VERSAO_DO_ATESTADO,
   type DadosDoAtestado,
@@ -30,14 +37,6 @@ function dados(over: Partial<DadosDoAtestado> = {}): DadosDoAtestado {
     organization_name: "Loja Exemplo LTDA",
     organization_document: "12.345.678/0001-90",
     organization_email: "dpo@loja.exemplo",
-    titular: {
-      nome: "Maria Souza",
-      documento: "***.***.***-45",
-      rotuloDoDocumento: "CPF",
-      email: "m***@exemplo.com",
-      telefone: "(**) ****-1234",
-      documentoNoCadastro: false,
-    },
     evidencia: {
       executor: { user_id: "u1", nome: "Ana Lima", email: "ana@loja.exemplo", papel: "administrador" },
       ip: "203.0.113.7",
@@ -47,14 +46,12 @@ function dados(over: Partial<DadosDoAtestado> = {}): DadosDoAtestado {
     },
     escopo: "contact",
     fuso: "America/Sao_Paulo",
-    lei_rotulo: "Base legal",
-    lei_citada: "RGPD art. 12.º, n.º 3",
     ...over,
   };
 }
 
 function storageFalso(erro: string | null) {
-  const gravados: Array<{ bucket: string; path: string; bytes: number; opcoes?: Record<string, unknown> }> = [];
+  const gravados: Array<{ bucket: string; path: string; bytes: number; corpo: Buffer; opcoes?: Record<string, unknown> }> = [];
   return {
     gravados,
     admin: {
@@ -62,7 +59,7 @@ function storageFalso(erro: string | null) {
         from(bucket: string) {
           return {
             async upload(path: string, corpo: Buffer, opcoes?: Record<string, unknown>) {
-              gravados.push({ bucket, path, bytes: corpo.length, opcoes });
+              gravados.push({ bucket, path, bytes: corpo.length, corpo, opcoes });
               return { error: erro ? { message: erro } : null };
             },
           };
@@ -116,6 +113,26 @@ describe("a emissão do atestado", () => {
 
     expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
     expect(bytes.length).toBeGreaterThan(1000);
+  });
+
+  it("as BYTES GRAVADAS identificam o pedido pelo protocolo e não citam lei", async () => {
+    const { admin, gravados } = storageFalso(null);
+    process.env.LGPD_SIGNING_KEY = "chave-de-assinatura-de-teste-bem-longa";
+    try {
+      await emitirAtestadoDeAnonimizacao(admin as never, dados());
+    } finally {
+      delete process.env.LGPD_SIGNING_KEY;
+    }
+
+    const texto = await extractPdfText(gravados[0]!.corpo);
+
+    // Controle positivo: a extração funcionou e a cópia é reconhecível pelo
+    // controlador. Sem isto, "não contém" seria indistinguível de extração morta.
+    expect(texto).toContain("11111111");
+    expect(texto).toContain("Loja Exemplo LTDA");
+    expect(texto).toContain("ANONIMIZADOS");
+    // Item 2 do CR: nenhuma citação de lei no arquivo.
+    expect(texto).not.toMatch(/LGPD|RGPD|GDPR|art\.|artigo|Lei n/i);
   });
 
   it("sem chave de assinatura, o metadado diz `sha256` — e o documento impresso diz o mesmo", async () => {

@@ -16,8 +16,11 @@
  * ─── Quando o pedido não tem atestado ──────────────────────────────────────
  *
  * 404 com `atestado_ausente`: pedido que não foi executado, organização cuja
- * execução ainda não rodou, ou emissão que falhou (e então o motivo está em
- * `result.atestado.erro` — a resposta o traz, em vez de dizer só "não existe").
+ * execução ainda não rodou, organização no BRASIL — onde o worker não emite
+ * atestado nenhum por decisão de produto de 2026-10-16 (CR do PR #3321, item 3;
+ * a guarda do país é `avisaTitular`, em `workers/lgpd-redact-worker.ts`) —, ou
+ * emissão que falhou (e então o motivo está em `result.atestado.erro` — a
+ * resposta o traz, em vez de dizer só "não existe").
  */
 import type { NextRequest } from "next/server";
 

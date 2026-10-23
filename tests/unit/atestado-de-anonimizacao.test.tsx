@@ -9,13 +9,21 @@
  * árvore (`textos`, a mesma técnica de `art-15-entregue-no-pdf`) —, e não um
  * resumo do que ele deveria dizer.
  *
- * Os casos que importam são os NEGATIVOS, porque é neles que um documento deste
- * tipo costuma errar: (1) o documento NÃO pode inventar artigo de lei — a
- * citação entra pelo perfil do país, e país sem citação revisada não cita nada;
- * (2) NÃO pode imprimir o número inteiro do titular nem o endereço inteiro, já
- * que circula por e-mail e pode ser encaminhado; (3) NÃO pode inventar um
- * responsável quando a execução foi automática; (4) NÃO pode exibir o mesmo
- * selo para HMAC (prova origem) e SHA-256 (prova só integridade).
+ * ─── Os NEGATIVOS mudaram de lado no CR do PR #3321 ─────────────────────────
+ *
+ * O arquivo tinha casos afirmando que o papel imprimia o titular MASCARADO
+ * ("Maria Souza", `m***@exemplo.com`, `(**) ****-1234`) e a citação de lei do
+ * perfil do país. O CR pediu o INVERSO em dois itens: o papel não carrega
+ * identidade do titular — nem mascarada, porque é cópia nova de dado
+ * reidentificável sobrevivendo ao apagamento que ele atesta (item 1) —, e não
+ * cita lei, porque a citação do perfil é a do direito de ACESSO (item 2). Os
+ * casos foram reescritos como asserções de AUSÊNCIA, com o valor proibido
+ * escrito por extenso em `PII_DO_TITULAR`: é isso que faz a volta do dado
+ * reidentificável ficar vermelha aqui.
+ *
+ * Os negativos que continuam valendo: (3) NÃO pode inventar um responsável
+ * quando a execução foi automática; (4) NÃO pode exibir o mesmo selo para HMAC
+ * (prova origem) e SHA-256 (prova só integridade).
  */
 import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
@@ -41,6 +49,21 @@ function textos(no: ReactNode): string[] {
   return [];
 }
 
+/**
+ * O que a anonimização APAGOU. A fixture antiga imprimia isto no papel (nome,
+ * documento e contatos mascarados); aqui os valores existem só para permitir
+ * afirmar que NÃO estão no documento — nem na linha canônica do código.
+ */
+const PII_DO_TITULAR = [
+  "Maria Souza",
+  "m***@exemplo.com",
+  "maria@exemplo.com",
+  "(**) ****-1234",
+  "(**) ****-7777",
+  "***.***.***-45",
+  "529.982.247-25",
+] as const;
+
 function dados(over: Partial<DadosDoAtestado> = {}): DadosDoAtestado {
   return {
     request_id: "11111111-2222-3333-4444-555555555555",
@@ -48,14 +71,6 @@ function dados(over: Partial<DadosDoAtestado> = {}): DadosDoAtestado {
     organization_name: "Loja Exemplo LTDA",
     organization_document: "12.345.678/0001-90",
     organization_email: "dpo@loja.exemplo",
-    titular: {
-      nome: "Maria Souza",
-      documento: "***.***.***-45",
-      rotuloDoDocumento: "CPF",
-      email: "m***@exemplo.com",
-      telefone: "(**) ****-1234",
-      documentoNoCadastro: false,
-    },
     evidencia: {
       executor: { user_id: "u1", nome: "Ana Lima", email: "ana@loja.exemplo", papel: "administrador" },
       ip: "203.0.113.7",
@@ -65,8 +80,6 @@ function dados(over: Partial<DadosDoAtestado> = {}): DadosDoAtestado {
     },
     escopo: "contact",
     fuso: "America/Sao_Paulo",
-    lei_rotulo: "Base legal",
-    lei_citada: "RGPD art. 12.º, n.º 3",
     ...over,
   };
 }
@@ -81,7 +94,7 @@ function papel(
 }
 
 describe("o papel declara o que o pedido precisa provar", () => {
-  it("identifica o controlador, o requerente, o ato datado e o código", () => {
+  it("identifica o controlador, o requerente PELO PROTOCOLO, o ato datado e o código", () => {
     const p = papel(dados());
 
     expect(p).toContain("Atestado de Anonimização de Dados Pessoais");
@@ -90,11 +103,12 @@ describe("o papel declara o que o pedido precisa provar", () => {
     expect(p).toContain("Loja Exemplo LTDA");
     expect(p).toContain("12.345.678/0001-90");
     expect(p).toContain("dpo@loja.exemplo");
-    // O requerente, identificado — e mascarado.
-    expect(p).toContain("Maria Souza");
-    expect(p).toContain("**");
-    expect(p).toContain("m***@exemplo.com");
-    expect(p).toContain("****-1234");
+    // O requerente: o protocolo é a identificação — e o papel diz que é assim
+    // de propósito, em vez de deixar a ausência de nome parecer falha de
+    // impressão.
+    expect(p).toContain("11111111-2222-3333-4444-555555555555");
+    expect(p).toMatch(/Protocolo #11111111/);
+    expect(p).toContain("identificado apenas pelo protocolo do pedido");
     // O ato: quando, quem, de onde.
     expect(p).toContain("2026-10-22T15:04:05.000Z (America/Sao_Paulo)");
     expect(p).toContain("Ana Lima");
@@ -105,24 +119,45 @@ describe("o papel declara o que o pedido precisa provar", () => {
     expect(p).toContain(VERSAO_DO_ATESTADO);
   });
 
-  it("não imprime o endereço do titular pela metade — nem qualquer número que não tenha vindo", () => {
+  it("NÃO imprime nome, documento nem contato do titular — nem mascarados (item 1 do CR)", () => {
     const p = papel(dados());
-    expect(p).not.toContain("maria@exemplo.com");
-    expect(p).not.toContain("111.222.333-44");
+
+    for (const proibido of PII_DO_TITULAR) {
+      expect(p, `o papel voltou a imprimir ${JSON.stringify(proibido)}`).not.toContain(proibido);
+    }
+    // A forma MASCARADA também é cópia do dado apagado: nenhum bloco de CPF nem
+    // telefone mascarado pode aparecer, mesmo que o valor exato mude.
+    expect(p, "o papel imprime CPF mascarado").not.toMatch(/\*{3}\.\*{3}\.\*{3}-\d{2}/);
+    expect(p, "o papel imprime telefone mascarado").not.toMatch(/\*{4}-\d{4}/);
+    expect(p, "o papel imprime e-mail mascarado").not.toMatch(/\*{3}@/);
   });
 
-  it("país sem citação revisada: o papel DIZ que não cita, em vez de citar errado", () => {
-    const p = papel(dados({ lei_citada: null }));
-    expect(p).toContain("não declarada (país sem citação revisada)");
-    expect(p).not.toContain("RGPD");
+  it("NÃO cita lei nenhuma — nem a do direito de acesso (item 2 do CR)", () => {
+    const d = dados();
+    const p = papel(d);
+    const declaracao = textoDaDeclaracao(d);
+
+    // Nem a lei, nem o artigo: a citação do perfil (`LGPD Art. 18, II` no
+    // Brasil, `RGPD art. 15.º` em Portugal) é a do direito de ACESSO e não
+    // descreve este pedido.
+    for (const texto of [p, declaracao]) {
+      expect(texto).not.toMatch(/LGPD|RGPD|GDPR/);
+      expect(texto).not.toMatch(/art\.|artigo|Art\./i);
+      expect(texto).not.toMatch(/Lei n/i);
+    }
+    // E a frase de ausência NÃO substitui a citação: ela diria "país sem citação
+    // revisada", que é FALSO para Portugal (o perfil de lá tem citação).
+    expect(p).not.toContain("não declarada (país sem citação revisada)");
+    expect(p).not.toContain("Base legal");
   });
 
-  it("a declaração é de FATO — nenhum artigo sai daqui", () => {
+  it("a declaração é de FATO — nenhum artigo, e o vínculo é o protocolo", () => {
     const t = textoDaDeclaracao(dados());
     expect(t).toContain("11111111-2222-3333-4444-555555555555");
-    expect(t).toContain("Maria Souza");
-    expect(t).toContain("203.0.113.7");
     expect(t).toContain("ANONIMIZADOS");
+    expect(t).toContain("203.0.113.7");
+    expect(t).toContain("não reproduz nome, documento nem contato do titular");
+    expect(t).not.toContain("Maria Souza");
     expect(t).not.toMatch(/art\.|artigo|LGPD|RGPD|Lei n/i);
   });
 
@@ -135,23 +170,6 @@ describe("o papel declara o que o pedido precisa provar", () => {
     expect(p).toContain("execução automática do sistema");
     expect(p).toContain("sem ato humano (execução automática)");
     expect(p).not.toContain("Ana Lima");
-  });
-
-  it("sem documento em lugar nenhum: diz o que falta, nunca um número pela metade", () => {
-    const p = papel(
-      dados({
-        titular: {
-          nome: "Maria Souza",
-          documento: null,
-          rotuloDoDocumento: "CPF",
-          email: null,
-          telefone: null,
-          documentoNoCadastro: true,
-        },
-      }),
-    );
-    expect(p).toContain("CPF informado no cadastro (não reimpresso neste documento)");
-    expect(p).toContain("não informados");
   });
 
   it("instalação sem chave exibe INTEGRIDADE, não autenticidade", () => {
@@ -172,7 +190,7 @@ describe("o código de autenticidade amarra o documento à instalação", () => 
     const a = codigoDeAutenticidade(dados(), "chave-de-assinatura-longa");
     const b = codigoDeAutenticidade(dados(), "chave-de-assinatura-longa");
     const alterado = codigoDeAutenticidade(
-      dados({ titular: { ...dados().titular, nome: "Maria Souz4" } }),
+      dados({ organization_name: "Loja Exemplo LTDA ME" }),
       "chave-de-assinatura-longa",
     );
 
@@ -190,14 +208,42 @@ describe("o código de autenticidade amarra o documento à instalação", () => 
     }
   });
 
+  it("a linha canônica NÃO carrega identidade do titular (item 1 do CR)", () => {
+    const linha = linhaCanonica(dados());
+
+    for (const proibido of PII_DO_TITULAR) {
+      expect(linha, `a linha canônica voltou a assinar ${JSON.stringify(proibido)}`).not.toContain(proibido);
+    }
+    // O que ela assina é o que o papel declara: protocolo, controlador, escopo e
+    // o ato de execução.
+    expect(linha).toContain("11111111-2222-3333-4444-555555555555");
+    expect(linha).toContain("Loja Exemplo LTDA");
+    expect(linha).toContain("Ana Lima");
+    expect(linha.split("|")).toHaveLength(12);
+  });
+
   it("a linha canônica marca o ausente com `-`: ausente e vazio não geram o mesmo código", () => {
     const completo = linhaCanonica(dados());
-    const semDocumento = linhaCanonica(dados({ titular: { ...dados().titular, documento: null } }));
-    const documentoVazio = linhaCanonica(dados({ titular: { ...dados().titular, documento: "" } }));
+    const semEmail = linhaCanonica(
+      dados({
+        evidencia: {
+          ...dados().evidencia,
+          executor: { user_id: null, nome: "Ana Lima", email: null, papel: "administrador" },
+        },
+      }),
+    );
+    const emailVazio = linhaCanonica(
+      dados({
+        evidencia: {
+          ...dados().evidencia,
+          executor: { user_id: null, nome: "Ana Lima", email: "", papel: "administrador" },
+        },
+      }),
+    );
 
     expect(completo.split("|")[0]).toBe(VERSAO_DO_ATESTADO);
-    expect(semDocumento.split("|")).toContain("-");
-    expect(documentoVazio).not.toBe(semDocumento);
+    expect(semEmail.split("|")).toContain("-");
+    expect(emailVazio).not.toBe(semEmail);
   });
 
   it("o código citável é o recorte de 16 hex em quatro blocos", () => {

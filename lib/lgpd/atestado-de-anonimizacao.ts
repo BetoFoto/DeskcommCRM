@@ -10,23 +10,30 @@
  * obrigação do controlador (o dever de prestar contas — LGPD art. 37 e RGPD
  * art. 5.º, 2), e a única forma de o titular guardar isso é um documento.
  *
- * ─── O documento DESCREVE o fato; quem diz a norma é o perfil do país ───────
+ * ─── O documento DESCREVE o fato, e NÃO cita lei ───────────────────────────
  *
- * A citação legal entra pela MESMA função do resto do produto (`citacaoDaLei`,
- * do perfil da organização): país sem citação revisada não cita artigo nenhum,
- * porque artigo errado num documento que vai ao titular é pior que artigo
- * nenhum. Nada aqui monta frase jurídica própria — quando o perfil não tem
- * citação, o documento fala só do que aconteceu.
+ * A citação do produto (`citacaoDaLei`, do perfil do país) é a do direito de
+ * ACESSO — `LGPD Art. 18, II` no Brasil e `RGPD art. 15.º` em Portugal —, e num
+ * atestado de ELIMINAÇÃO ela afirmaria um direito que o titular não exerceu
+ * neste pedido (CR do mantenedor, item 2). Citar o artigo de eliminação pede
+ * uma citação própria revisada, que ainda não existe; até lá o documento fala
+ * só do que aconteceu. Sem a linha, o cabeçalho não diz "país sem citação
+ * revisada" — frase que seria FALSA para Portugal, onde a citação existe.
  *
- * ─── Mascaramento: o documento é sobre o titular e circula por e-mail ───────
+ * ─── Minimização: o papel não carrega a identidade do titular ──────────────
  *
- * Documento que viaja por e-mail pode ser encaminhado. O documento do titular e
- * os contatos saem MASCARADOS, com os mesmos helpers da tela e do relatório do
- * art. 18, II (`mask.ts`): o bastante para o titular se reconhecer (os quatro
- * dígitos finais, o domínio do e-mail), insuficiente para o atestado virar, ele
- * mesmo, um vazamento. Quem quiser o número inteiro no papel muda UM ponto:
- * `mascararDocumento`. O documento do CONTROLADOR (CNPJ) sai inteiro — dado
- * público de empresa, e é ele que diz de quem é o documento.
+ * Quem guarda o documento é o Storage, e o que ele atesta é justamente o
+ * apagamento: nome, documento e contatos do titular (mesmo mascarados) seriam
+ * uma cópia NOVA de dado reidentificável, sem prazo e fora do alcance da
+ * cascata de exclusão (CR do mantenedor, item 1). O requerente é identificado
+ * APENAS pelo protocolo do pedido — o vínculo que a trilha de auditoria conhece
+ * e que o controlador reencontra. As mesmas chaves saíram da linha canônica do
+ * código: o que o HMAC assina é exatamente o que o papel declara. Quem algum dia
+ * decidir reimprimir a identidade assume a decisão de exposição, e ela terá de
+ * voltar AQUI, na linha canônica e no renderizador — os três juntos.
+ *
+ * O documento do CONTROLADOR (razão social e CNPJ) sai inteiro: dado público de
+ * empresa, e é ele que diz de quem é o documento.
  *
  * ─── O código de autenticidade, e o que ele NÃO é ──────────────────────────
  *
@@ -45,33 +52,18 @@
  * dos bytes muda o conteúdo que ele hasheia). Ele é gravado junto do código em
  * `lgpd_requests.result.atestado` e na trilha de auditoria, que é onde um
  * auditor confere o arquivo.
+ *
+ * ─── Onde este documento é emitido ────────────────────────────────────────
+ *
+ * Decisão de produto de 2026-10-16, confirmada no CR do PR #3321 (item 3): no
+ * Brasil nada muda por enquanto — nem o aviso do art. 12.º nem este atestado.
+ * A guarda do país mora no worker (`avisaTitular`, de `perfil.codigo !==
+ * PAIS_PADRAO`); este módulo não sabe de país nenhum, só compõe o documento.
  */
 import { createHash, createHmac } from "node:crypto";
 
-import { maskEmail, maskPhone, mascaraCpf } from "@/lib/lgpd/mask";
-
 /** Versão do FORMATO. Entra na linha canônica: mudar o layout muda o código. */
 export const VERSAO_DO_ATESTADO = "atestado-de-anonimizacao.v1";
-
-/** O documento do titular e os contatos mascarados — o que o papel declara. */
-export interface ParteDoAtestado {
-  /** Nome (pessoa) ou razão social (empresa); "não informado" quando ausente. */
-  nome: string;
-  /** Documento do titular JÁ MASCARADO; `null` quando ele não foi declarado. */
-  documento: string | null;
-  /** Rótulo do documento do titular: "CPF", "CNPJ" ou "Documento". */
-  rotuloDoDocumento: string;
-  /** E-mail mascarado (`maskEmail`), ou o do cadastro. */
-  email: string | null;
-  /** Telefone mascarado (`maskPhone`). */
-  telefone: string | null;
-  /**
-   * O titular TEM documento no cadastro e ele não foi reimpresso aqui (campo
-   * cifrado em repouso: `contacts.cpf_encrypted`). É ESTA a frase que o
-   * documento imprime — nunca um número inventado.
-   */
-  documentoNoCadastro: boolean;
-}
 
 /** Quem executou, de onde e quando — a evidência que o documento carrega. */
 export interface EvidenciaDaExecucao {
@@ -89,6 +81,14 @@ export interface EvidenciaDaExecucao {
   origem: "aprovacao_manual" | "automatica";
 }
 
+/**
+ * O que o documento declara — e o que ele NÃO declara.
+ *
+ * Não há campo para o titular: nome, documento e contato saíram do documento na
+ * mesma decisão que tirou a citação de lei (CR do mantenedor, itens 1 e 2). O
+ * requerente entra no papel pelo `request_id`. Reintroduzir qualquer um deles é
+ * reintroduzir uma cópia de dado reidentificável que sobrevive ao apagamento.
+ */
 export interface DadosDoAtestado {
   request_id: string;
   organization_id: string;
@@ -98,112 +98,11 @@ export interface DadosDoAtestado {
   organization_document: string | null;
   /** Contato do encarregado (`organizations.dpo_email`). */
   organization_email: string | null;
-  titular: ParteDoAtestado;
   evidencia: EvidenciaDaExecucao;
   /** Escopo do pedido: o titular, ou a loja inteira. */
   escopo: "contact" | "tenant";
   /** Fuso da organização (`organizations.timezone`), para data e hora locais. */
   fuso: string;
-  /** Rótulo e citação vindos do PERFIL do país; `null` = país sem citação revisada. */
-  lei_rotulo: string | null;
-  lei_citada: string | null;
-}
-
-/**
- * O PONTO ÚNICO do mascaramento do documento do titular.
- *
- * `null` quando o número não veio — o documento imprime a frase de ausência, e
- * nunca um documento pela metade. Quem decidir imprimir o número inteiro muda
- * esta função (e assume a decisão de exposição num papel que circula).
- */
-export function mascararDocumento(documento: string | null | undefined): string | null {
-  return mascaraCpf(documento);
-}
-
-/** Chaves por onde um pedido pode declarar o documento do titular. */
-const CHAVES_DE_DOCUMENTO = ["cpf", "cnpj", "documento", "document", "tax_id", "cpf_cnpj"] as const;
-
-/** Chaves por onde um pedido pode declarar o nome/razão do titular. */
-const CHAVES_DE_NOME = ["nome", "name", "razao_social", "razao", "full_name", "display_name"] as const;
-
-function textoDe(payload: Record<string, unknown> | null | undefined, chaves: readonly string[]): string | null {
-  if (!payload) return null;
-  for (const chave of chaves) {
-    const valor = payload[chave];
-    if (typeof valor === "string" && valor.trim() !== "") return valor.trim();
-  }
-  return null;
-}
-
-/**
- * O documento do titular, mascarado, pelo que o PEDIDO declarou.
- *
- * O caminho preferido é a declaração do próprio titular no formulário do
- * pedido; o cadastro do contato é o segundo. O CPF do cadastro vive cifrado
- * (`contacts.cpf_encrypted`) e NÃO é decifrado aqui: o pagamento de decifrar
- * PII para reimprimir PII num papel que circula não se paga — o documento
- * declara que o titular tem o dado no cadastro e que ele foi apagado, que é o
- * fato que o atestado prova.
- */
-export function documentoDoTitular(payload: Record<string, unknown> | null | undefined): {
-  documento: string | null;
-  rotuloDoDocumento: string;
-} {
-  const bruto = textoDe(payload, CHAVES_DE_DOCUMENTO);
-  const mascarado = mascararDocumento(bruto);
-  if (!mascarado) return { documento: null, rotuloDoDocumento: "Documento" };
-  const digitos = (bruto ?? "").replace(/\D/g, "");
-  return { documento: mascarado, rotuloDoDocumento: digitos.length === 14 ? "CNPJ" : "CPF" };
-}
-
-/**
- * A identidade do titular como o documento a declara.
- *
- * `nomeDoContato`/`emailDoContato`/`telefoneDoContato` têm de ser lidos ANTES da
- * cascata (ela zera esses campos — são justamente os dados apagados); o payload
- * do pedido serve de segundo caminho, como no aviso. O nome nunca fica vazio no
- * papel: sem nome em lugar nenhum, o documento diz "não informado", que é
- * verdade, em vez de deixar a linha em branco (que parece falha de impressão).
- */
-function documentoDosCamposCustomizados(campos: Record<string, unknown> | null | undefined): string | null {
-  if (!campos) return null;
-  const candidatos = new Set(
-    Object.entries(campos)
-      .filter(([chave]) => chave.toLowerCase().includes("cpf"))
-      .map(([, valor]) => (typeof valor === "number" ? String(valor) : valor))
-      .filter((valor): valor is string => typeof valor === "string" && mascaraCpf(valor) !== null)
-      .map((valor) => valor.replace(/\D/g, "")),
-  );
-  const [unico] = candidatos;
-  // Duas máscaras diferentes = não há como saber qual é a do titular (o `cpf` e
-  // o `cpf_responsavel` de uma clínica). Imprimir a errada num papel de
-  // exclusão é pior que não imprimir dígito nenhum.
-  return candidatos.size === 1 ? mascaraCpf(unico) : null;
-}
-
-export function titularDoAtestado(args: {
-  payload: Record<string, unknown> | null | undefined;
-  /** `contacts.custom_fields`: o segundo lugar onde o documento declarado mora. */
-  camposCustomizados?: Record<string, unknown> | null;
-  nomeDoContato: string | null;
-  emailDoContato: string | null;
-  telefoneDoContato: string | null;
-  temDocumentoNoCadastro: boolean;
-}): ParteDoAtestado {
-  const doPayload = documentoDoTitular(args.payload);
-  const dosCampos = args.camposCustomizados ? documentoDosCamposCustomizados(args.camposCustomizados) : null;
-  const documento = doPayload.documento ?? dosCampos;
-  const email = args.emailDoContato ?? textoDe(args.payload, ["email", "e-mail"]);
-  const telefone = args.telefoneDoContato ?? textoDe(args.payload, ["telefone", "phone", "celular", "whatsapp"]);
-  const nome = args.nomeDoContato ?? textoDe(args.payload, CHAVES_DE_NOME);
-  return {
-    nome: nome ?? "não informado",
-    documento,
-    rotuloDoDocumento: doPayload.documento ? doPayload.rotuloDoDocumento : "CPF",
-    email: maskEmail(email),
-    telefone: maskPhone(telefone),
-    documentoNoCadastro: args.temDocumentoNoCadastro && documento === null,
-  };
 }
 
 /**
@@ -213,6 +112,11 @@ export function titularDoAtestado(args: {
  * ausente não podem gerar o mesmo código). É esta função que um auditor
  * reproduz para reconferir; mudar a ordem, o separador ou a versão muda todos
  * os códigos já emitidos — por isso `VERSAO_DO_ATESTADO` vem primeiro.
+ *
+ * A identidade do titular NÃO entra aqui (item 1 do CR): o que o HMAC assina
+ * tem de ser o que o papel declara, e o papel identifica o requerente só pelo
+ * protocolo. Um campo de PII na linha canônica provaria integridade de um dado
+ * que o documento não deveria guardar.
  */
 export function linhaCanonica(d: DadosDoAtestado): string {
   return [
@@ -221,11 +125,6 @@ export function linhaCanonica(d: DadosDoAtestado): string {
     d.organization_id,
     d.organization_name,
     d.organization_document ?? "-",
-    d.titular.nome,
-    d.titular.documento ?? "-",
-    d.titular.rotuloDoDocumento,
-    d.titular.email ?? "-",
-    d.titular.telefone ?? "-",
     d.escopo,
     d.evidencia.origem,
     d.evidencia.executor?.nome ?? "sistema",
@@ -275,24 +174,25 @@ export function codigoCurto(codigo: string): string {
 /**
  * A DECLARAÇÃO — o parágrafo que o documento imprime.
  *
- * Texto de FATO, sem artigo: quem foi o pedido, o que foi feito, quando, por
- * quem e de onde. A norma aplicável entra pela citação do perfil do país, no
- * cabeçalho do documento — nunca inventada aqui.
+ * Texto de FATO, sem artigo e sem identidade: quem pediu (pelo protocolo), o
+ * que foi feito, quando, por quem e de onde. O nome do titular não entra —
+ * imprimi-lo seria guardar no papel o dado que o papel atesta apagado —, e a
+ * frase diz isso em vez de deixar a leitura ambígua.
  */
 export function textoDaDeclaracao(d: DadosDoAtestado): string {
-  const titular = d.titular.nome === "não informado" ? "o titular identificado neste documento" : d.titular.nome;
   const escopo =
     d.escopo === "tenant"
       ? "os dados pessoais de todos os titulares da base desta organização"
-      : "os dados pessoais do titular identificado neste documento";
+      : "os dados pessoais do titular deste pedido";
   const executor = d.evidencia.executor
     ? `${d.evidencia.executor.nome}${d.evidencia.executor.email ? ` (${d.evidencia.executor.email})` : ""}`
     : "execução automática do sistema";
   const origem = d.evidencia.ip ? `, a partir do IP ${d.evidencia.ip}` : ", sem ato humano de origem (execução automática)";
   return [
     `Declaramos, na condição de controlador, que em cumprimento ao pedido de exclusão protocolado sob o número ${d.request_id},`,
-    `${escopo} — referentes a ${titular} — foram ANONIMIZADOS nos sistemas desta organização,`,
+    `${escopo} foram ANONIMIZADOS nos sistemas desta organização,`,
     `com a eliminação dos campos identificáveis, em ${d.evidencia.em}, por ${executor}${origem}.`,
+    "Este documento não reproduz nome, documento nem contato do titular — o vínculo com o pedido é o protocolo acima.",
     "O registro desta execução é mantido em trilha de auditoria imutável para demonstração, e este documento é a prova",
     "que o requerente pode guardar. O código de autenticidade abaixo amarra este conjunto de informações ao registro.",
   ].join(" ");
