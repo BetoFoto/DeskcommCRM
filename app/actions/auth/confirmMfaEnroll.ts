@@ -45,7 +45,10 @@ export async function confirmMfaEnroll(
 
   // A mesma régua de `enrollMfa`: com um fator verificado, confirmar outro (e
   // receber códigos de recuperação) exige o atual provado nesta sessão.
-  const { data: fatores } = await supabase.auth.mfa.listFactors();
+  const { data: fatores, error: listErr } = await supabase.auth.mfa.listFactors();
+  // Sem a lista não dá para saber se a conta já tem fator: recusa em vez de
+  // tratar como primeiro cadastro.
+  if (listErr) return { ok: false, error: "challenge_failed", message: listErr.message };
   const temFatorVerificado = fatores?.all?.some(
     (f) => f.factor_type === "totp" && f.status === "verified",
   );

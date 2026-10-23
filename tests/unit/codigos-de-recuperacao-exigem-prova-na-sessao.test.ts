@@ -16,6 +16,7 @@ const estado = vi.hoisted(() => ({
   escritas: [] as string[],
   provedor: [] as string[],
   servico: true,
+  listaFalha: false,
 }));
 
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
@@ -45,6 +46,7 @@ beforeEach(() => {
   estado.escritas = [];
   estado.provedor = [];
   estado.servico = true;
+  estado.listaFalha = false;
   const anota = (nome: string) => async () => {
     estado.provedor.push(nome);
     return nome === "enroll"
@@ -55,10 +57,13 @@ beforeEach(() => {
     auth: {
       getUser: async () => ({ data: { user: { id: "eu" } }, error: null }),
       mfa: {
-        listFactors: async () => ({
-          data: { all: estado.fatores, totp: estado.fatores.filter((f) => f.factor_type === "totp") },
-          error: null,
-        }),
+        listFactors: async () =>
+          estado.listaFalha
+            ? { data: null, error: { message: "indisponível" } }
+            : {
+                data: { all: estado.fatores, totp: estado.fatores.filter((f) => f.factor_type === "totp") },
+                error: null,
+              },
         unenroll: anota("unenroll"),
         enroll: anota("enroll"),
         challenge: anota("challenge"),
@@ -120,6 +125,12 @@ describe("cadastrar um fator novo", () => {
     expect(estado.provedor).toContain("enroll");
   });
 
+  it("sem a lista de fatores, recusa em vez de tratar como primeiro cadastro", async () => {
+    estado.listaFalha = true;
+    expect((await enrollMfa()).ok).toBe(false);
+    expect(estado.provedor).toEqual([]);
+  });
+
   it("primeiro cadastro (nenhum fator verificado) segue em aal1", async () => {
     estado.fatores = [NAO_CONFIRMADO];
     expect((await enrollMfa()).ok).toBe(true);
@@ -147,6 +158,13 @@ describe("confirmar um fator novo", () => {
     estado.fatores = [NAO_CONFIRMADO];
     estado.servico = false;
     expect(await confirmMfaEnroll("123456", "f2")).toEqual({ ok: false, error: "service_unavailable" });
+    expect(estado.provedor).toEqual([]);
+    expect(estado.escritas).toEqual([]);
+  });
+
+  it("sem a lista de fatores, recusa sem desafio e sem códigos", async () => {
+    estado.listaFalha = true;
+    expect((await confirmMfaEnroll("123456", "f2")).ok).toBe(false);
     expect(estado.provedor).toEqual([]);
     expect(estado.escritas).toEqual([]);
   });

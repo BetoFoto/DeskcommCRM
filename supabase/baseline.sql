@@ -58993,10 +58993,12 @@ comment on table public.entregas_de_aviso_de_agendamento is
 -- authenticated, nem cria a policy antiga; a revogação abaixo cura quem instalou
 -- antes. Negação escrita no molde de calendar_oauth_nonces (0192). Bloco DO: sem
 -- ON_ERROR_STOP, drop + create soltos podem deixar a tabela sem a policy nova.
+-- O revoke fica FORA do bloco: se a troca de policy falhar, ele não é desfeito
+-- junto, e a policy antiga sem privilégio nenhum não abre nada.
+revoke all on table public.user_recovery_codes from anon, authenticated;
+
 do $$
 begin
-  revoke all on table public.user_recovery_codes from anon, authenticated;
-
   drop policy if exists recovery_codes_self on public.user_recovery_codes;
   drop policy if exists user_recovery_codes_ninguem_le on public.user_recovery_codes;
   create policy user_recovery_codes_ninguem_le
