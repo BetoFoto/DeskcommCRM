@@ -53,7 +53,8 @@
  * Para a Previsão e o ranking EXISTIREM na hora de medir, o arquivo semeia pelo
  * service role um negócio aberto com valor e data prevista no mês seguinte (numa
  * etapa com chance de fechamento, criada para isso) e um ganho atribuído ao
- * admin — e apaga os dois, e a etapa, no fim.
+ * admin, mais uma conversa atribuída ao admin num canal (para o "Por canal"
+ * existir) — e apaga tudo no fim, conferindo o erro de cada delete.
  *
  * ═══ Três casos, e o motivo de não serem onze ════════════════════════════════
  *
@@ -133,6 +134,9 @@ test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
 const MARCA = `${Date.now()}`.slice(-7);
 const negociosSemeados: string[] = [];
 const etapasSemeadas: string[] = [];
+const conversasSemeadas: string[] = [];
+const contatosSemeados: string[] = [];
+const canaisSemeados: string[] = [];
 
 /** O dia 15 do mês que vem, em `YYYY-MM-DD` — cai na Previsão como um mês. */
 function diaDoMesQueVem(): string {
@@ -219,11 +223,57 @@ test.beforeAll(async () => {
       owner_user_id: donoId,
     }),
   );
+
+  // "Por canal" só desenha a tabela quando `fn_channel_metrics` acha conversa
+  // atribuída com canal na janela (30 dias, por `assigned_at`). O banco do CI não
+  // garante uma, e sem ela a asserção do cartão de "Por canal" não teria o que
+  // medir: a semente a garante, e a asserção cobra a presença.
+  const canal = await insere("channel_sessions", {
+    organization_id: c.org_id,
+    waha_session_name: `celular-cabe-${MARCA}`,
+    display_name: `Canal celular ${MARCA}`,
+    status: "WORKING",
+    webhook_secret_encrypted: "\\x00",
+  });
+  canaisSemeados.push(canal);
+  const contato = await insere("contacts", {
+    organization_id: c.org_id,
+    name: `Contato celular ${MARCA}`,
+    phone_number: `+55119${MARCA}0`,
+  });
+  contatosSemeados.push(contato);
+  conversasSemeadas.push(
+    await insere("conversations", {
+      organization_id: c.org_id,
+      contact_id: contato,
+      channel_session_id: canal,
+      status: "open",
+      assigned_to_user_id: donoId,
+      assigned_at: new Date().toISOString(),
+      last_message_at: new Date().toISOString(),
+    }),
+  );
 });
 
+/**
+ * Filhos antes de pais: `crm_leads.stage_id` é ON DELETE RESTRICT, e a conversa
+ * aponta para o contato e para o canal. Cada delete tem o `error` conferido: uma
+ * sobra aqui é a etapa "Previsao <marca>" virando coluna no funil padrão que as
+ * outras specs da parte 6 usam — ela tem de aparecer no run, não sumir calada.
+ */
 test.afterAll(async () => {
-  if (negociosSemeados.length) await admin.from("crm_leads").delete().in("id", negociosSemeados);
-  if (etapasSemeadas.length) await admin.from("crm_stages").delete().in("id", etapasSemeadas);
+  const falhas: string[] = [];
+  const apagar = async (tabela: string, ids: string[]) => {
+    if (!ids.length) return;
+    const { error } = await admin.from(tabela).delete().in("id", ids);
+    if (error) falhas.push(`${tabela} (${ids.join(", ")}): ${error.message}`);
+  };
+  await apagar("crm_leads", negociosSemeados);
+  await apagar("crm_stages", etapasSemeadas);
+  await apagar("conversations", conversasSemeadas);
+  await apagar("contacts", contatosSemeados);
+  await apagar("channel_sessions", canaisSemeados);
+  if (falhas.length) throw new Error(`a limpeza da semente deixou sobra:\n${falhas.join("\n")}`);
 });
 
 /** Quanto o conteúdo passa da janela: o `body` OU o `<main>` (ver o cabeçalho). */
@@ -335,9 +385,9 @@ async function tabelasQueRolamNaPropriaCaixa(page: Page): Promise<string[]> {
 }
 
 /**
- * O ranking por atendente (semeado, então SEMPRE presente) e o "Por canal"
- * (presente só quando o banco tem conversa por canal) viram cartão a 390px: o
- * cabeçalho some. O texto procurado vale em português e em espanhol.
+ * O ranking por atendente e o "Por canal" (os dois semeados, então SEMPRE
+ * presentes) viram cartão a 390px: o cabeçalho some. O texto procurado vale em
+ * português e em espanhol.
  */
 async function conferirOsCartoesDoPainel(page: Page): Promise<void> {
   const ranking = page.locator("main table", { has: page.locator("th", { hasText: /mediana/ }) });
@@ -350,12 +400,11 @@ async function conferirOsCartoesDoPainel(page: Page): Promise<void> {
   const canais = page.locator("main table", {
     has: page.locator("th", { hasText: /Sem resposta|Sin respuesta/ }),
   });
-  if ((await canais.count()) > 0) {
-    expect(
-      await canais.locator("thead").evaluate((el) => getComputedStyle(el).display),
-      "o cabeçalho de Por canal continua à vista a 390px",
-    ).toBe("none");
-  }
+  await expect(canais, "o Por canal semeado não apareceu no painel").toHaveCount(1);
+  expect(
+    await canais.locator("thead").evaluate((el) => getComputedStyle(el).display),
+    "o cabeçalho de Por canal continua à vista a 390px",
+  ).toBe("none");
 }
 
 test("as superfícies não estouram a tela em 360 nem em 390px", async ({ page }) => {

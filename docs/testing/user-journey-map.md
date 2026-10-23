@@ -1542,28 +1542,35 @@ real, não pela tela).
 
 ## J54 — Acompanhar os números no celular `[P1]` (2026-10-23)
 
-ADR-0006, fase F4. O gestor abre Desempenho (`/app/metrics`) e Relatórios
-(`/app/activities`) no celular. O ranking por atendente, "Por canal" e "Por
-etiqueta" viram um cartão por linha, só com classes `max-md:`, e cada número
-leva o nome da coluna no `data-rotulo`. A Previsão rola dentro do próprio quadro.
+ADR-0006, fase F4. O gestor abre Desempenho (`/app/metrics`) e Atividades
+(`/app/activities`) no celular. Os quadros "Performance por atendente" e "Por
+canal" e a aba "Por etiqueta" viram um cartão por linha, só com classes
+`max-md:`, e cada número leva o nome da coluna no `data-rotulo`. O quadro
+Previsão rola dentro dele mesmo.
 Spec: `tests/e2e/celular-cabe-na-tela.spec.ts` (parte 6), 360 e 390px com toque
-emulado, login admin, semeando pelo service role um negócio aberto com valor e
-data no mês seguinte (numa etapa com chance de fechamento criada para isso) e um
-ganho do admin. A régua de estouro passou a medir também o `<main>`, que tem
+emulado, login admin. A spec semeia pelo service role:
+- um negócio aberto com valor e data no mês seguinte, numa etapa com chance de
+  fechamento criada para isso;
+- um ganho do admin;
+- uma conversa atribuída ao admin num canal, para "Por canal" existir.
+
+O `afterAll` apaga tudo, filhos antes de pais, e lança erro se algum delete
+falhar. A régua de estouro passou a medir também o `<main>`, que tem
 `overflow-auto`: a do `body` sozinha dava zero com a tela estourada.
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
-| J54.1 | A régua mede o `<main>` | `Math.max(body − janela, main.scrollWidth − main.clientWidth) ≤ 1` nas cinco superfícies (Inbox, Funis, Agenda, Desempenho, Relatórios), a 360 e a 390px | a medir (CI) |
+| J54.1 | A régua mede o `<main>` | `Math.max(body − janela, main.scrollWidth − main.clientWidth) ≤ 1` nas cinco superfícies (Inbox, Funis, Agenda, Desempenho, Atividades), a 360 e a 390px | a medir (CI) |
 | J54.2 | Previsão com dados | a tabela de meses da Previsão não alarga o `<main>` (rola dentro do próprio quadro) | a medir (CI) |
-| J54.3 | Ranking em cartão | a 390px o cabeçalho do ranking tem `display:none` e a caixa de nenhuma tabela do Desempenho ou de Relatórios rola para o lado; "Por canal", quando o banco tem conversa por canal, idem | a medir (CI) + UNIT `graficos-do-desempenho` (rótulo de cada célula = cabeçalho da coluna, em pt e es), `relatorio-por-etiqueta-tela` |
-| J54.4 | Salvar da régua ≥ 44px | com o campo da régua de abandono alterado, nenhum controle do Desempenho fica abaixo de 44px de altura a 360px | a medir (CI) |
-| J54.5 | Número do dia visível | cada dia da série de Relatórios escreve a quantidade embaixo da barra, escondida só onde há hover | UNIT `serie-diaria-mostra-o-numero` |
+| J54.3 | Performance por atendente e Por canal em cartão | a 390px o cabeçalho dos dois quadros (ambos semeados, presença cobrada) tem `display:none`, e a caixa de nenhuma tabela de Desempenho ou de Atividades rola para o lado | classe e rótulos conferidos (unit `graficos-do-desempenho`, em pt e es; `relatorio-por-etiqueta-tela`); geometria a medir (CI) |
+| J54.4 | "Salvar" ao lado de "Contar como perdida no silêncio após" ≥ 44px | com o campo alterado, nenhum controle do Desempenho fica abaixo de 44px de altura a 360px | a medir (CI) |
+| J54.5 | Número do dia visível | cada dia do quadro "Quando" de Atividades escreve a quantidade embaixo da barra, escondida só onde há hover | classe conferida (unit `serie-diaria-mostra-o-numero`); geometria a medir (CI) |
+| J54.6 | Linha do tempo de Atividades | o link do negócio tem `max-md:min-h-11` e o motivo quebra palavra longa (`max-md:wrap-anywhere`) | classe conferida (unit `serie-diaria-mostra-o-numero`); geometria a medir (CI) — o caso de 44px da spec pula `<a>` de fundo transparente e não mede este link |
 
 **NÃO COBERTO, declarado:** "Por etiqueta" em cartão pela tela (a aba precisa
 de conversas etiquetadas, que o CI não semeia aqui; o contrato está no unit);
-"Por canal" quando o banco do CI não tem conversa por canal (o caso só confere
-se a tabela existir); aparelho real.
+a altura real do link do negócio em Atividades (só a classe, no unit); a
+quebra do motivo de perda em Desempenho (`PerdasPanel`, sem unit); aparelho real.
 
 ## J45 — O dono gera o link de pagamento pela empresa e manda pelo WhatsApp `[P0]` (2026-10-14)
 

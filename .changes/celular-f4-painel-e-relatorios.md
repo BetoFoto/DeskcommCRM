@@ -1,17 +1,21 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: No celular, o Desempenho e os Relatórios cabem na tela e o ranking da equipe vira cartão
+titulo: No celular, Desempenho e Atividades cabem na tela, e Performance por atendente vira cartão
 ---
 
-No celular, a tela de Desempenho e a de Relatórios cabem na largura do aparelho.
-A Previsão, que passava da borda da tela, rola dentro do próprio quadro. O
-ranking por atendente, o quadro "Por canal" e a tabela "Por etiqueta" viram um
-cartão por linha, cada número com o nome da coluna ao lado. Assim ninguém
-precisa arrastar a tabela para o lado.
+No celular, as telas Desempenho e Atividades cabem na largura do aparelho. O
+quadro Previsão, que passava da borda da tela, agora rola dentro dele mesmo. Os
+quadros "Performance por atendente" e "Por canal" e a aba "Por etiqueta" mostram
+um cartão por linha, com o nome da coluna ao lado de cada número. Ninguém precisa
+mais arrastar a tabela para o lado.
 
-O botão "Salvar" da régua de abandono ficou do tamanho do dedo. A série diária
-de Relatórios passa a escrever, embaixo de cada dia, quantos acontecimentos
-houve: antes esse número só aparecia passando o mouse sobre a barra.
+O botão "Salvar" ao lado de "Contar como perdida no silêncio após" ficou do
+tamanho do dedo. Em Atividades, o quadro "Quando" escreve embaixo de cada dia
+quantos acontecimentos houve. Antes esse número só aparecia passando o mouse
+sobre a barra.
 
-No computador as telas continuam iguais. Nada a fazer na atualização.
+Numa tela de computador com mouse, os quadros têm a mesma cara de antes. O
+formato de cartão só vale em tela estreita, e o número de cada dia, no
+computador, fica disponível só para o leitor de tela. Nada a fazer na
+atualização.

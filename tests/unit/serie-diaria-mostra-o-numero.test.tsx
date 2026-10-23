@@ -8,6 +8,10 @@
 // número nos dois.
 //
 // Tirar o número, ou escondê-lo também no toque (`sr-only` puro), deixa vermelho.
+//
+// Na mesma tela, a linha do tempo: o link do negócio tem 44px de altura no
+// celular (`max-md:min-h-11`), e o motivo, que perdeu o `truncate` no celular,
+// quebra palavra longa (`max-md:wrap-anywhere`) em vez de alargar a tela.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
@@ -20,8 +24,18 @@ vi.mock("@/lib/api/client", () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
-    <a href={href}>{children}</a>
+  default: ({
+    href,
+    className,
+    children,
+  }: {
+    href: string;
+    className?: string;
+    children: React.ReactNode;
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
   ),
 }));
 
@@ -82,5 +96,54 @@ describe("a série diária de Relatórios", () => {
       expect(l.classes, l.dia).not.toContain("sr-only");
       expect(l.classes, l.dia).not.toContain("hidden");
     }
+  });
+});
+
+describe("a linha do tempo de Atividades no celular", () => {
+  it("o link do negócio tem 44px de altura e o motivo quebra palavra longa, só abaixo de md", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: {
+        ...RELATORIO,
+        atividades: [
+          {
+            id: "a1",
+            type: "lead.lost",
+            rotulo: "Perdido",
+            quando: "2026-10-22T12:00:00.000Z",
+            atorNome: "Ana",
+            atorForma: "filled",
+            motivo: "https://exemplo.com/um-link-sem-espaco-nenhum-que-passaria-da-tela",
+            negocioId: "11111111-2222-3333-4444-555555555555",
+            negocioTitulo: "Pedido da Ana",
+            contatoId: null,
+            contatoNome: null,
+          },
+        ],
+      } satisfies RelatorioComJanela,
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ActivityReportClient />
+      </QueryClientProvider>,
+    );
+
+    const lista = await screen.findByTestId("lista-de-atividades");
+    const classes = (el: Element | null) => (el?.getAttribute("class") ?? "").split(/\s+/);
+
+    const link = lista.querySelector('a[href="/app/leads/11111111-2222-3333-4444-555555555555"]');
+    expect(link?.textContent).toBe("Pedido da Ana");
+    expect(classes(link)).toEqual(
+      expect.arrayContaining(["max-md:inline-flex", "max-md:min-h-11", "max-md:items-center"]),
+    );
+    expect(classes(link).filter((c) => /min-h/.test(c) && !c.startsWith("max-md:"))).toEqual([]);
+
+    const motivo = Array.from(lista.querySelectorAll("span")).find((s) =>
+      s.textContent?.startsWith("https://exemplo.com/"),
+    );
+    expect(classes(motivo ?? null)).toEqual(
+      expect.arrayContaining(["max-md:wrap-anywhere", "md:truncate"]),
+    );
+    expect(classes(motivo ?? null)).not.toContain("truncate");
   });
 });

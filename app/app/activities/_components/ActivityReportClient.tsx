@@ -252,7 +252,7 @@ export function ActivityReportClient() {
                       <span className="text-xs text-muted-foreground">· {i.contatoNome}</span>
                     )}
                     {i.motivo && (
-                      <span className="w-full text-xs text-muted-foreground md:truncate">
+                      <span className="w-full text-xs text-muted-foreground max-md:wrap-anywhere md:truncate">
                         {i.motivo}
                       </span>
                     )}
