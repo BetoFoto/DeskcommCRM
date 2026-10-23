@@ -99,6 +99,21 @@ interface Props {
    */
   janelaFechada?: string | null;
   /**
+   * A caixa travada até alguém ASSUMIR a conversa (#3012).
+   *
+   * Entra pela MESMA porta do bloqueio de canal (`isDisabled`), e não por um
+   * segundo caminho: o que trava o campo, o envio, o anexo, o emoji, o áudio e
+   * a resposta rápida é o de sempre. A diferença é a origem — não é o canal nem
+   * o contato, é uma regra da organização que já vem resolvida de fora
+   * (`composerBloqueadoAteAssumir`).
+   *
+   * Trava a caixa INTEIRA, nota interna inclusive. O corte da janela de 24h
+   * separa a nota porque aquela regra é sobre o que CHEGA ao cliente; esta é
+   * sobre começar o atendimento sem responsável, e uma nota escrita antes de
+   * assumir organiza um atendimento que ainda não é de ninguém.
+   */
+  aguardandoAssumir?: boolean;
+  /**
    * A mensagem que esta resposta CITA, quando o atendente escolheu responder
    * "em cima" de uma. `null` = envio solto, o caso comum.
    *
@@ -136,6 +151,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     disabled,
     blockedReason,
     janelaFechada,
+    aguardandoAssumir = false,
     contactName,
     contactDisplayName,
     currentContactId,
@@ -241,7 +257,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   // send/createNote fora do disable: o texto some na hora do envio; travar o campo
   // até a API voltar impedia digitar a próxima mensagem com o campo ainda cheio.
-  const isDisabled = disabled || !!blockedReason || upload.isPending;
+  // `aguardandoAssumir` (#3012) entra AQUI, no mesmo lugar: um termo a mais na
+  // trava de sempre, nunca um desabilitar paralelo que pudesse divergir dela.
+  const isDisabled = disabled || !!blockedReason || upload.isPending || aguardandoAssumir;
   // A janela só alcança o que SAI. Em modo nota o composer segue liberado: a
   // nota interna nunca chega ao cliente, e é onde o atendente registra por que
   // a conversa esfriou — barrá-la tira exatamente o que ainda dá para fazer.
@@ -710,6 +728,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           >
             <p className="min-w-0 flex-1">
               {t("Contato sem nome no CRM: {{nome}}/{{primeiro_nome}} ficaram literais no texto. Edite antes de enviar.")}
+            </p>
+          </div>
+        )}
+        {/* O AVISO DO BLOQUEIO ATÉ ASSUMIR (#3012) — a caixa está travada e o
+            motivo precisa estar junto dela, não só no botão lá em cima. A saída
+            da regra é o "Assumir" do cabeçalho, que continua visível em todos os
+            estados; esta faixa só diz o que fazer para voltar a escrever. */}
+        {aguardandoAssumir && (
+          <div
+            data-testid="aviso-assumir"
+            className="mb-1.5 flex items-start gap-2 rounded-md border-l-2 border-primary bg-muted/60 px-2 py-1.5 text-xs"
+          >
+            <p className="min-w-0 flex-1 text-muted-foreground">
+              {t("Assuma esta conversa para responder.")}
             </p>
           </div>
         )}
