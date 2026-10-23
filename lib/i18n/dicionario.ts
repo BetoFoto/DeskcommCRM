@@ -12834,6 +12834,15 @@ export const DICIONARIO: Traducoes = {
   "Este número foi excluído da Central de Conexões.": {
     es: "Este número fue eliminado de la Central de Conexiones.",
   },
+  "Envio automático bloqueado pelo modo de teste do canal.": {
+    es: "Envío automático bloqueado por el modo de prueba del canal.",
+  },
+  "Não foi possível verificar o acesso da IA. Nenhuma mensagem foi enviada.": {
+    es: "No fue posible verificar el acceso de la IA. No se envió ningún mensaje.",
+  },
+  "Envio automático bloqueado: a organização está suspensa.": {
+    es: "Envío automático bloqueado: la organización está suspendida.",
+  },
   "Contato sem telefone para envio WhatsApp.": {
     es: "El contacto no tiene teléfono para enviarle mensajes por WhatsApp.",
   },
@@ -15540,6 +15549,24 @@ export const DICIONARIO: Traducoes = {
   "O modelo foi desativado pela plataforma.": { es: "La plataforma desactivó la plantilla." },
   "Os valores enviados não batem com as variáveis do modelo.": { es: "Los valores enviados no coinciden con las variables de la plantilla." },
   "O modelo não existe neste número com este idioma.": { es: "La plantilla no existe en este número con este idioma." },
+  "Este modelo não está na lista de modelos do número. Sincronize em Conexões, na aba Modelos.": {
+    es: "Esta plantilla no está en la lista de plantillas del número. Sincroniza en Conexiones, en la pestaña Modelos.",
+  },
+  "O modelo mudou na plataforma depois de configurado. Configure o envio de novo.": {
+    es: "La plantilla cambió en la plataforma después de configurarse. Configura el envío de nuevo.",
+  },
+  "O acesso ao WhatsApp Oficial expirou ou foi revogado. Reconecte o número em Conexões.": {
+    es: "El acceso al WhatsApp Oficial expiró o fue revocado. Vuelve a conectar el número en Conexiones.",
+  },
+  "Falta permissão para este envio no WhatsApp Oficial. Revise as permissões do número em Conexões.": {
+    es: "Falta permiso para este envío en el WhatsApp Oficial. Revisa los permisos del número en Conexiones.",
+  },
+  "A conexão com o WhatsApp Oficial atingiu o limite de pedidos por agora. Tente de novo mais tarde.": {
+    es: "La conexión con el WhatsApp Oficial alcanzó el límite de solicitudes por ahora. Inténtalo de nuevo más tarde.",
+  },
+  "Não conseguimos montar os valores do modelo para este envio. Nada foi enviado.": {
+    es: "No pudimos armar los valores de la plantilla para este envío. No se envió nada.",
+  },
   "O texto do modelo com os valores ficou longo demais.": { es: "El texto de la plantilla con los valores quedó demasiado largo." },
   "O conteúdo viola a política de modelos da plataforma.": { es: "El contenido viola la política de plantillas de la plataforma." },
   "O formato de um valor não confere com o modelo (por exemplo, falta o link da imagem do cabeçalho).": { es: "El formato de un valor no coincide con la plantilla (por ejemplo, falta el enlace de la imagen del encabezado)." },
