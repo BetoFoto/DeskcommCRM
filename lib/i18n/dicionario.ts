@@ -16863,6 +16863,25 @@ export const DICIONARIO: Traducoes = {
   "Dê um nome ao plano.": { es: "Dale un nombre al plan." },
   "O plano precisa de pelo menos um passo.": { es: "El plan necesita al menos un paso." },
   "Escreva o título de todos os passos.": { es: "Escribe el título de todos los pasos." },
+  "O nome do plano pode ter até {n} caracteres.": {
+    es: "El nombre del plan puede tener hasta {n} caracteres.",
+  },
+  "A descrição do plano pode ter até {n} caracteres.": {
+    es: "La descripción del plan puede tener hasta {n} caracteres.",
+  },
+  "O plano pode ter no máximo {n} passos.": { es: "El plan puede tener como máximo {n} pasos." },
+  "Cabem no máximo {n} planos por organização.": {
+    es: "Caben como máximo {n} planes por organización.",
+  },
+  "O título do passo {p} pode ter até {n} caracteres.": {
+    es: "El título del paso {p} puede tener hasta {n} caracteres.",
+  },
+  "A descrição do passo {p} pode ter até {n} caracteres.": {
+    es: "La descripción del paso {p} puede tener hasta {n} caracteres.",
+  },
+  "O prazo do passo {p} precisa ser um número inteiro de dias, de 0 a {n}.": {
+    es: "El plazo del paso {p} debe ser un número entero de días, de 0 a {n}.",
+  },
   "O que é salvo aqui é o que o editor de regras oferece na ação Aplicar um plano de tarefas.": {
     es: "Lo que se guarda aquí es lo que el editor de reglas ofrece en la acción Aplicar un plan de tareas.",
   },
