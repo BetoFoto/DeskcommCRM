@@ -20,18 +20,21 @@ const h = vi.hoisted(() => ({
   aposSelect: null as null | (() => void),
   /** Quanto o relógio anda a cada rodada dublada (ms). */
   avancoPorRodada: 0,
+  /** Status que a rodada dublada devolve, por id de importação (padrão: rodando). */
+  statusDaRodada: {} as Record<string, string>,
 }));
 
 vi.mock("@/lib/auth/cron-auth", () => ({ autorizaCron: () => h.autoriza }));
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
-vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
+const auditEspiao = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/audit", () => ({ audit: auditEspiao }));
 vi.mock("@/lib/channels/historico/rodada", () => ({
   TETO_PADRAO: { conversas: 3, mensagens: 300, chamadas: 20 },
   rodarUmaRodada: vi.fn(async (_admin: unknown, id: string, teto: unknown, opcoes?: { prazo?: number }) => {
     h.rodadas.push({ id, teto, opcoes });
     if (h.avancoPorRodada) vi.setSystemTime(Date.now() + h.avancoPorRodada);
     if (h.rodadaLanca) throw new Error(h.rodadaLanca);
-    return { status: "rodando", gravadas: 1, existentes: 0 };
+    return { status: h.statusDaRodada[id] ?? "rodando", gravadas: 1, existentes: 0 };
   }),
 }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -91,6 +94,8 @@ beforeEach(() => {
   h.rodadaLanca = null;
   h.aposSelect = null;
   h.avancoPorRodada = 0;
+  h.statusDaRodada = {};
+  auditEspiao.mockReset();
   vi.useRealTimers();
 });
 
@@ -173,6 +178,17 @@ describe("cron da importação do histórico (#999)", () => {
     };
     await chamar();
     expect(h.rodadas).toEqual([]);
+  });
+
+  it("o FIM da importação audita (concluída ou erro); rodada que só anda o cursor não", async () => {
+    h.tabela = [linha("a"), linha("b"), linha("c")];
+    h.statusDaRodada = { a: "concluida", b: "erro" };
+    await chamar();
+    expect(auditEspiao.mock.calls.map(([e]) => [e.action, e.resourceId, e.metadata?.importacao_id])).toEqual([
+      ["channel.historico_import_completed", "s-a", "a"],
+      ["channel.historico_import_failed", "s-b", "b"],
+    ]);
+    expect(auditEspiao.mock.calls.every(([e]) => e.organizationId === "org")).toBe(true);
   });
 
   it("rodada que lança não derruba o lote", async () => {

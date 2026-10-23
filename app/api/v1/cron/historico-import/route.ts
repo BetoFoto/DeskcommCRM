@@ -23,7 +23,10 @@
  * migration: a chave mora no jsonb que já existe.
  *
  * Empresa parada fica de fora (a rodada gasta chamada ao canal e escreve).
- * Auditoria é das rotas (início, cancelamento, retomada); a rodada não audita.
+ * Auditoria: início, cancelamento e retomada são das rotas; o FIM (concluída ou
+ * erro) é daqui, uma linha por importação que terminou nesta chamada. Rodada que
+ * só andou o cursor não audita (cron de minuto, ver
+ * tests/unit/cron-audita-so-quando-ha-efeito.test.ts).
  *
  * Auth: Bearer INTERNAL_SECRET (fail-closed), igual aos demais crons.
  */
@@ -31,6 +34,7 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
+import { audit } from "@/lib/audit";
 import { autorizaCron } from "@/lib/auth/cron-auth";
 import { MARGEM_PARA_CHAMADA_MS, PRAZO_DA_CHAMADA_MS } from "@/lib/channels/historico/prazo";
 import { rodarUmaRodada, TETO_PADRAO } from "@/lib/channels/historico/rodada";
@@ -48,6 +52,7 @@ const TRAVA_MS = 5 * 60_000;
 interface Linha {
   id: string;
   organization_id: string;
+  channel_session_id: string;
   cursor: Record<string, unknown> | null;
   updated_at: string;
   organizations?: { status?: string | null } | Array<{ status?: string | null }> | null;
@@ -68,7 +73,7 @@ async function handle(req: NextRequest): Promise<Response> {
   const prazo = Date.now() + PRAZO_DA_CHAMADA_MS;
   const { data, error } = await admin
     .from("importacoes_de_historico")
-    .select("id, organization_id, cursor, updated_at, organizations:organization_id!inner(status)")
+    .select("id, organization_id, channel_session_id, cursor, updated_at, organizations:organization_id!inner(status)")
     .eq("status", "rodando")
     .eq("organizations.status", STATUS_OPERANTE)
     .order("updated_at", { ascending: true })
@@ -112,6 +117,17 @@ async function handle(req: NextRequest): Promise<Response> {
     try {
       const r = await rodarUmaRodada(admin, l.id, TETO_PADRAO, { prazo });
       status[r.status] = (status[r.status] ?? 0) + 1;
+      if (r.status === "concluida" || r.status === "erro") {
+        void audit({
+          action: r.status === "concluida" ? "channel.historico_import_completed" : "channel.historico_import_failed",
+          organizationId: l.organization_id,
+          resourceType: "channel_session",
+          resourceId: l.channel_session_id,
+          bypassedRls: true,
+          metadata: { importacao_id: l.id, gravadas_na_rodada: r.gravadas },
+          requestId,
+        });
+      }
     } catch (err) {
       // A rodada guarda o próprio erro na linha; o que chega aqui é o que ela
       // não conseguiu nem ler/gravar. A trava vence sozinha em TRAVA_MS.
