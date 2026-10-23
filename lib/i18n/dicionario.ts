@@ -7677,6 +7677,10 @@ export const DICIONARIO: Traducoes = {
   },
   "Gerando…": { es: "Generando…" },
   "Regenerar códigos de recuperação": { es: "Regenerar códigos de recuperación" },
+  "Você está sem códigos de recuperação válidos: os gerados antes da última atualização deixaram de valer, e cada código só vale uma vez. Sem eles, perder o celular tira o seu acesso.": {
+    es: "No tienes códigos de recuperación válidos: los generados antes de la última actualización dejaron de valer, y cada código solo vale una vez. Sin ellos, perder el celular te deja sin acceso.",
+  },
+  "Gere novos códigos de recuperação": { es: "Genera nuevos códigos de recuperación" },
   "Habilite MFA antes de gerar códigos.": { es: "Habilita MFA antes de generar códigos." },
   "Sessões ativas": { es: "Sesiones activas" },
 
