@@ -8,4 +8,4 @@ Numa organização que conectou o Instagram ou o Facebook antes do WhatsApp, o l
 
 Nada a fazer na atualização.
 
-Contribuição de @webtecnica (#3358).
+Contribuição de @webtecnica (#3364).
