@@ -620,9 +620,14 @@ export async function mfaEmDividaEstrita(): Promise<boolean> {
  * que roda antes para todo platform admin, e o rpc `fn_session_mfa_proven`.
  * Falha ao ler os fatores LANÇA (o `isMfaEnrolled`), como nas rotas — nenhuma tela
  * renderiza; erro do rpc também lança.
+ *
+ * `regua`: a tela cujas ações usam a régua ESTRITA (as da instalação em `/app`:
+ * extensões, servidor MCP externo) passa `mfaEmDividaEstrita`. Sem isso, quem
+ * entrou pelo dispositivo confiável abria a tela e recebia `mfa_required` em
+ * toda ação — e entrar de novo não pedia o código.
  */
-export async function exigirProvaDeMfa(): Promise<void> {
-  if (!(await mfaEmDivida())) return;
+export async function exigirProvaDeMfa(regua: () => Promise<boolean> = mfaEmDivida): Promise<void> {
+  if (!(await regua())) return;
   // `x-pathname` vem do `proxy.ts`, gravado ANTES do `NextResponse.next` — só o
   // que existe ali chega aqui (tests/unit/proxy-encaminha-o-caminho.test.ts).
   const caminho = safeNext((await headers()).get("x-pathname"), "/app");

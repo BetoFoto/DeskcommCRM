@@ -40,7 +40,7 @@ export type RoleCheck =
   | { ok: false; response: NextResponse<ApiError> };
 
 const MENSAGEM_DE_MFA =
-  "Esta sessão precisa da verificação em duas etapas. Entre novamente com o código do aplicativo.";
+  "Confirme o código do aplicativo de verificação para continuar.";
 
 interface RequireRoleOpts {
   /** Correlaciona a resposta e o audit com o X-Request-Id da rota. */

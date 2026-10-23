@@ -5928,8 +5928,8 @@ export const DICIONARIO: Traducoes = {
   },
   "O logo não foi gravado.": { es: "No se guardó el logo." },
   // ─── lib/auth/require-role.ts (gate ÚNICO de autorização — toda rota /api/v1) ───
-  "Esta sessão precisa da verificação em duas etapas. Entre novamente com o código do aplicativo.": {
-    es: "Esta sesión requiere verificación en dos pasos. Inicia sesión de nuevo con el código de la app.",
+  "Confirme o código do aplicativo de verificação para continuar.": {
+    es: "Confirma el código de la app de verificación para continuar.",
   },
   "Muitas trocas seguidas. Tente de novo em alguns minutos.": {
     es: "Demasiados cambios seguidos. Intenta de nuevo en unos minutos.",

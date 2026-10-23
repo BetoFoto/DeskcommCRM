@@ -84,7 +84,7 @@ export async function requireExtensionPlatformFor(user: AuthUser): Promise<Platf
       ok: false,
       response: fail(
         "mfa_required",
-        t("Esta sessão precisa da verificação em duas etapas. Entre novamente com o código do aplicativo."),
+        t("Confirme o código do aplicativo de verificação para continuar."),
         403,
       ),
     };
