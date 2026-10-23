@@ -70,6 +70,14 @@ export interface CustomFieldDef {
   mensagem_padrao?: string;
   /** Só no `searchable_select`: aceita valor fora da lista (issue #2521). */
   allow_new?: boolean;
+  /**
+   * Só no `searchable_select`: guarda VÁRIOS valores canônicos, em vez de um
+   * (issue #3182). O registro vira uma lista e os escolhidos aparecem como
+   * chips — assim o negócio "forfait" registra o aéreo da consolidadora A junto
+   * do hotel da operadora B, sem o despejo da lista inteira de opções que
+   * tornava o `multiselect` inviável com listas longas.
+   */
+  multiple?: boolean;
 }
 
 interface Props {
@@ -307,8 +315,25 @@ export function CustomFieldsEditor({ fields, value, onChange, mode, disabled, cl
             // relatório de "Maceió" voltarem a bater. `allow_new` deixa passar
             // um valor novo, aparado, quando o funil o permite.
             const opcoes = f.options ?? [];
-            const canonico = typeof v === "string" ? v : "";
+            // O MODO MÚLTIPLO da lista pesquisável (#3182): o registro é uma
+            // LISTA de `value` canônicos e o que já foi escolhido aparece em
+            // CHIPS, um por opção. No valor único o registro continua a string
+            // de sempre, e nada abaixo muda de comportamento.
+            const multiplo = f.multiple === true;
+            // Um valor único já gravado (o campo virou múltiplo depois, ou o
+            // diálogo de campos exigidos gravou uma escolha só) é uma lista de
+            // UM — a mesma leitura de `validarValorPesquisavel`. Sem isso o
+            // valor some da ficha e a próxima escolha o sobrescreve.
+            const escolhidos = !multiplo
+              ? []
+              : Array.isArray(v)
+                ? (v as unknown[]).filter((x): x is string => typeof x === "string")
+                : typeof v === "string" && v.trim() !== ""
+                  ? [v]
+                  : [];
+            const canonico = !multiplo && typeof v === "string" ? v : "";
             const rotuloAtual = opcoes.find((o) => o.value === canonico)?.label ?? canonico;
+            const rotuloDe = (valor: string) => opcoes.find((o) => o.value === valor)?.label ?? valor;
             const rascunho = rascunhosDeBusca[f.key];
             const listaId = `${baseId}-${f.key}-opcoes`;
             // A lista é NOSSA, não um `<datalist>`: o navegador refiltra o
@@ -322,8 +347,18 @@ export function CustomFieldsEditor({ fields, value, onChange, mode, disabled, cl
               setBuscaAberta(null);
               setDestacado(-1);
             };
+            // O REGISTRO de uma escolha: no valor único a string; no múltiplo a
+            // lista com o novo item no fim. Escolher de novo uma opção que já
+            // está lá é a MESMA escolha — o chip não duplica.
+            const gravar = (valor: string) => {
+              if (!multiplo) {
+                set(f.key, valor);
+                return;
+              }
+              set(f.key, escolhidos.includes(valor) ? escolhidos : [...escolhidos, valor]);
+            };
             const escolher = (valor: string) => {
-              set(f.key, valor);
+              gravar(valor);
               limparRascunho();
               setRecusados(({ [f.key]: _limpo, ...resto }) => resto);
               fechar();
@@ -334,9 +369,12 @@ export function CustomFieldsEditor({ fields, value, onChange, mode, disabled, cl
               fechar();
               if (rascunho === undefined) return;
               const achado = valorCanonico(opcoes, rascunho);
-              if (achado !== null) set(f.key, achado);
-              else if (rascunho.trim() === "") set(f.key, "");
-              else if (f.allow_new === true) set(f.key, rascunho.trim());
+              if (achado !== null) gravar(achado);
+              // Num campo múltiplo o rascunho vazio não é escrita: os chips já
+              // escolhidos são o registro, e limpar o texto do input não os apaga.
+              else if (rascunho.trim() === "") {
+                if (!multiplo) set(f.key, "");
+              } else if (f.allow_new === true) gravar(rascunho.trim());
               // Sem casar e sem `allow_new`, o valor não é gravado: o
               // input volta ao que estava, e o aviso abaixo explica.
               else setRecusados((current) => ({ ...current, [f.key]: true }));
@@ -345,6 +383,35 @@ export function CustomFieldsEditor({ fields, value, onChange, mode, disabled, cl
             return (
               <div key={f.key} className="space-y-2">
                 {labelEl}
+                {/* OS CHIPS (#3182): o que já foi escolhido, um por opção, com
+                    o rótulo da lista e um botão para tirar. É o que substitui o
+                    despejo da lista INTEIRA de opções na ficha — com 200
+                    fornecedores, o registro ocupa o espaço do que foi escolhido,
+                    não o da lista. */}
+                {multiplo && escolhidos.length > 0 && (
+                  <ul className="flex flex-wrap gap-1" aria-label={t("Escolhidos")}>
+                    {escolhidos.map((valor) => {
+                      const rotulo = rotuloDe(valor);
+                      return (
+                        <li
+                          key={valor}
+                          className="flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-0.5 text-xs"
+                        >
+                          {rotulo}
+                          <button
+                            type="button"
+                            aria-label={`${t("Remover")} ${rotulo}`}
+                            className="text-text-muted hover:text-error-fg"
+                            onClick={() => set(f.key, escolhidos.filter((x) => x !== valor))}
+                            disabled={disabled}
+                          >
+                            ×
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
                 <div className="relative">
                   <Input
                     id={id}
@@ -357,8 +424,10 @@ export function CustomFieldsEditor({ fields, value, onChange, mode, disabled, cl
                       aberta && destacado >= 0 ? `${listaId}-${destacado}` : undefined
                     }
                     autoComplete="off"
-                    placeholder={t("Digite para buscar…")}
-                    value={rascunho ?? rotuloAtual}
+                    placeholder={
+                      multiplo ? t("Digite para buscar e acrescentar…") : t("Digite para buscar…")
+                    }
+                    value={rascunho ?? (multiplo ? "" : rotuloAtual)}
                     onFocus={() => {
                       setBuscaAberta(f.key);
                       setDestacado(-1);
