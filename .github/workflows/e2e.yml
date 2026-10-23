@@ -1379,6 +1379,11 @@ jobs:
       # ("a parte cresceu", 1266s e 1286s de suíte, zero vermelho). A parte 3
       # levou 12,7 min. A spec soma 235s de caso e só depende do seed do
       # catálogo, que roda em toda parte `!= 4`. PREVISÃO: ~16,5 min nas duas.
+      #
+      # `contatos-em-cartao-no-celular` entrou em 2026-10-21 (F3 da ADR-0006):
+      # a lista de contatos a 390px, com toque emulado e login `agent`. Semeia
+      # dois contatos pelo service role e os apaga no fim; não depende de WAHA
+      # nem de vizinha. PREVISÃO, não medida: ~1 min de caso.
       SPECS_PARTE_6: >-
         agenda-google-meet.spec.ts
         agenda-presenca-recuperacao.spec.ts
@@ -1387,6 +1392,7 @@ jobs:
         cobranca-desligada.spec.ts
         cobranca-link-pelo-dono.spec.ts
         cobranca-suspensao-e-limites.spec.ts
+        contatos-em-cartao-no-celular.spec.ts
         filtro-por-marcador-pela-tela.spec.ts
         fonte-de-captacao-assina-os-envios.spec.ts
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
