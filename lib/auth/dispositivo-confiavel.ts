@@ -23,8 +23,9 @@ import { cookieSecure } from "@/lib/supabase/cookie-secure";
  * e um cookie `Strict` não chegaria a `/auth/callback`.
  *
  * O que continua pedindo o código mesmo num dispositivo confiável: desligar a
- * própria verificação, trocar a senha (o GoTrue exige `aal2`) e o poder de
- * PLATAFORMA — `/admin/**` e extensões da instalação (`mfaEmDividaEstrita`), e
+ * própria verificação, gerar códigos de recuperação novos (eles desligam o fator
+ * pela porta da recuperação), trocar a senha (o GoTrue exige `aal2`) e o poder de
+ * PLATAFORMA — `/admin/**` e as telas da instalação (`mfaEmDividaEstrita`), e
  * o admin da plataforma agindo numa empresa onde não é admin (`mfaEmDivida`).
  *
  * A confiança é do FATOR, não só da pessoa: remover o fator por qualquer caminho

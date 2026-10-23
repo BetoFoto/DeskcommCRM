@@ -2,6 +2,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { irAoDesafioDeMfa } from "@/lib/auth/ir-ao-desafio-de-mfa";
+
 import { SecurityClient } from "./_client";
 
 /**
@@ -30,6 +32,7 @@ vi.mock("@/app/actions/auth/politicaDeMfa", () => ({
   definirExigenciaDeMfa: vi.fn(),
   desativarMfaDaConta: desligarMfa,
 }));
+vi.mock("@/lib/auth/ir-ao-desafio-de-mfa", () => ({ irAoDesafioDeMfa: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/auth/RecoveryCodesPanel", () => ({ RecoveryCodesPanel: () => null }));
 vi.mock("@/components/auth/MfaEnrollModal", () => ({ MfaEnrollModal: () => null }));
@@ -110,5 +113,20 @@ describe("Configurações › Segurança — confirmação por AlertDialog", () 
 
     await user.click(within(dialogo).getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(sair).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("Configurações › Segurança — regenerar sem o código desta sessão leva ao desafio", () => {
+  it("mfa_required ao regenerar leva ao código (o dispositivo confiável não emite códigos novos)", async () => {
+    vi.mocked(irAoDesafioDeMfa).mockReset();
+    regenerar.mockResolvedValue({ ok: false, error: "mfa_required" });
+    const user = userEvent.setup();
+    renderTela();
+
+    await user.click(screen.getByRole("button", { name: "Regenerar códigos de recuperação" }));
+    const dialogo = await screen.findByRole("alertdialog");
+    await user.click(within(dialogo).getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(irAoDesafioDeMfa).toHaveBeenCalledTimes(1));
   });
 });

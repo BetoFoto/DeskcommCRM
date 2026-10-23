@@ -17,6 +17,7 @@ import { Card } from "@/components/ui/card";
 import { RecoveryCodesPanel } from "@/components/auth/RecoveryCodesPanel";
 import { MfaEnrollModal } from "@/components/auth/MfaEnrollModal";
 import { regenerateRecoveryCodes } from "@/app/actions/settings/regenerateRecoveryCodes";
+import { irAoDesafioDeMfa } from "@/lib/auth/ir-ao-desafio-de-mfa";
 import { signOutEverywhere } from "@/app/actions/settings/signOutEverywhere";
 import { esquecerDispositivosConfiaveis } from "@/app/actions/settings/esquecerDispositivosConfiaveis";
 import type { DispositivoConfiavel } from "@/lib/auth/dispositivo-confiavel";
@@ -88,6 +89,8 @@ export function SecurityClient({
       if (r.ok) {
         setCodes(r.recovery_codes);
         toast.success(t("Novos códigos gerados."));
+      } else if (r.error === "mfa_required") {
+        irAoDesafioDeMfa();
       } else {
         // O `error` é código (`mfa_not_enrolled`) ou a mensagem crua do banco, em inglês — a tela
         // mostrava « Erro: mfa_not_enrolled » em todo idioma.
