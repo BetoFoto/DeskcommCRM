@@ -956,6 +956,15 @@ export const DICIONARIO: Traducoes = {
   },
   "Testar conexão": { es: "Probar conexión" },
   "Informe uma porta entre 1 e 65535.": { es: "Indica un puerto entre 1 y 65535." },
+  "Endereço de servidor inválido. Use o nome da máquina, como smtp.suaempresa.com ou meu_relay — sem espaço, sem barra e sem http://.": {
+    es: "Dirección de servidor inválida. Usa el nombre de la máquina, como smtp.suempresa.com o meu_relay — sin espacio, sin barra y sin http://.",
+  },
+  "O e-mail do remetente está em formato inválido. Use algo como suporte@suaempresa.com.": {
+    es: "El correo del remitente tiene un formato inválido. Usa algo como soporte@suempresa.com.",
+  },
+  "Não foi possível salvar o servidor de e-mail. Nada foi gravado; tente novamente em instantes.": {
+    es: "No fue posible guardar el servidor de correo. No se guardó nada; inténtalo de nuevo en unos instantes.",
+  },
   "Informe somente o e-mail do remetente, por exemplo suporte@empresa.com.": {
     es: "Indica solo el correo del remitente, por ejemplo soporte@empresa.com.",
   },
@@ -17244,6 +17253,14 @@ export const DICIONARIO: Traducoes = {
     es: "No se pudo cargar la evolución de las ganancias.",
   },
   "Série cortada no teto de leitura.": { es: "Serie cortada en el límite de lectura." },
+
+  // Últimas compras do contato (#3179, PR #3242).
+  "Últimas compras": { es: "Últimas compras" },
+  "Não consegui ler as compras.": { es: "No pude leer las compras." },
+  "Ganho em {data}": { es: "Ganado el {data}" },
+  "Escolha até {max} campos do negócio para aparecerem em cada compra do contato. Sem escolha, a seção mostra a data do ganho, o título e o valor.": {
+    es: "Elige hasta {max} campos del negocio para que aparezcan en cada compra del contacto. Sin elección, la sección muestra la fecha en que se ganó, el título y el valor.",
+  },
 };
 
 /**
