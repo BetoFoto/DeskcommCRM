@@ -12584,16 +12584,10 @@ create policy channel_sessions_tenant_select on public.channel_sessions
   );
 
 drop policy if exists channel_sessions_tenant_write on public.channel_sessions;
-create policy channel_sessions_tenant_write on public.channel_sessions
-  for all using (
-    (organization_id in (select public.fn_user_org_ids())
-      and public.fn_role_at_least(organization_id, 'admin'))
-    or public.fn_is_platform_admin_full()
-  ) with check (
-    (organization_id in (select public.fn_user_org_ids())
-      and public.fn_role_at_least(organization_id, 'admin'))
-    or public.fn_is_platform_admin_full()
-  );
+-- A escrita não é mais criada aqui: a migration 0752 (#3202) a divide em
+-- insert/update/delete no fim do arquivo. Recriá-la aqui fazia a regra `for all`
+-- voltar a valer entre esta linha e o apêndice da 0752 (numa re-aplicação pelo
+-- update.sh, somada às novas).
 
 -- ---- agentes de IA ----
 drop policy if exists tenant_isolation_ai_agents_all on public.ai_agents;
@@ -47277,17 +47271,65 @@ notify pgrst, 'reload schema';
 -- `fn_attendant_metrics` (0037/0266) e `fn_channel_metrics` (0590) ganham o conjunto de
 -- candidatas antes do `cross join lateral`; o resto do corpo, inclusive o filtro da janela
 -- dentro do agregado, é o mesmo de antes. O porquê de cada predicado está na migration.
+-- (issue #3212, migration 0754) `fn_attendant_metrics` ganha a MEDIANA da 1ª resposta e o
+-- recorte por etiqueta do contato: o bloco abaixo é o espelho da função VIGENTE, EDITADO no
+-- lugar (sem bloco novo) — a média não muda um byte e `fn_channel_metrics` não é tocada nesta
+-- fatia. A assinatura de 4 argumentos é derrubada antes do `create or replace` (senão a
+-- chamada posicional de 4 argumentos fica ambígua) e o `revoke`/`grant` é reemitido para ela.
+
+-- A assinatura de 4 argumentos sai: com as duas vivas a chamada POSICIONAL de 4 argumentos
+-- fica ambígua (`function is not unique`) — e é assim que a suíte de invariantes e outros
+-- leitores chamam a função. `create or replace` não substitui assinatura diferente.
+drop function if exists public.fn_attendant_metrics(uuid, timestamptz, timestamptz, uuid);
 
 create or replace function public.fn_attendant_metrics(
   p_org uuid,
   p_from timestamptz,
   p_to timestamptz,
-  p_owner uuid default null
+  p_owner uuid default null,
+  -- (0754) A etiqueta do contato que SAI da conta das conversas. `null` = sem recorte.
+  p_excluir_etiqueta text default null
 ) returns jsonb
 language sql stable
 set search_path = public
 as $$
   with
+  -- ─── #3212: o recorte por ETIQUETA DO CONTATO ───────────────────────────
+  --
+  -- «Quanto tempo o fornecedor segura o atendimento» não tinha resposta: não havia como
+  -- tirar da régua as conversas de um contato que carrega uma etiqueta. As etiquetas
+  -- existem em `contacts.tags` (0033/0034, com índice GIN) e NENHUMA métrica as lia.
+  --
+  -- O recorte é do CONTATO e vale para as três contas de CONVERSA — a contagem
+  -- (`conversations_handled`), a média e a mediana. `won`/`lost` são NEGÓCIOS e
+  -- `calls_answered` é LIGAÇÃO: nenhum dos dois é conversa de contato, e nenhum é tocado.
+  --
+  -- A comparação normaliza os DOIS lados com `lower(btrim(...))`: etiqueta é texto que o
+  -- operador digita (`Fornecedor ` e `fornecedor` são a mesma), e é a MESMA normalização de
+  -- `contatoCarregaEtiqueta()` em `lib/metrics/mediana-e-recorte-por-etiqueta.ts` — o par
+  -- TS×SQL é comparado lado a lado em `tests/invariants/mediana-e-recorte-por-etiqueta.test.ts`.
+  contatos_excluidos as (
+    select ct.id
+    from public.contacts ct
+    where p_excluir_etiqueta is not null
+      and ct.organization_id = p_org
+      and exists (
+        select 1
+        from unnest(coalesce(ct.tags, '{}'::text[])) as t
+        where lower(btrim(t)) = lower(btrim(p_excluir_etiqueta))
+      )
+  ),
+  -- ETIQUETA NÃO INFORMADA NÃO RECORTA: `p_excluir_etiqueta` nulo esvazia o conjunto acima e
+  -- este total sai 0 — a resposta DECLARA o que foi tirado, e «nada» é resposta legítima.
+  conversas_excluidas as (
+    select count(*) as total
+    from public.conversations c
+    where c.organization_id = p_org
+      and c.assigned_to_user_id is not null
+      and c.assigned_at >= p_from and c.assigned_at < p_to
+      and (p_owner is null or c.assigned_to_user_id = p_owner)
+      and exists (select 1 from contatos_excluidos e where e.id = c.contact_id)
+  ),
   lead_agg as (
     select
       owner_user_id as user_id,
@@ -47314,6 +47356,8 @@ as $$
       and assigned_to_user_id is not null
       and assigned_at >= p_from and assigned_at < p_to
       and (p_owner is null or assigned_to_user_id = p_owner)
+      -- (0754) conversa cujo CONTATO carrega a etiqueta pedida sai da conta.
+      and not exists (select 1 from contatos_excluidos e where e.id = contact_id)
     group by assigned_to_user_id
   ),
   -- (0235) Chamada de voz ATENDIDA conta como trabalho.
@@ -47369,7 +47413,14 @@ as $$
   ttfr as (
     select
       c.assigned_to_user_id as user_id,
-      avg(extract(epoch from (fr.first_human_out - fr.first_in))) as avg_first_response_seconds
+      avg(extract(epoch from (fr.first_human_out - fr.first_in))) as avg_first_response_seconds,
+      -- (0754) MEDIANA da 1ª resposta: o valor do MEIO da amostra ordenada (com
+      -- tamanho par, `percentile_cont(0.5)` interpola os dois do meio — o mesmo de
+      -- `mediana()` em `lib/metrics/mediana-e-recorte-por-etiqueta.ts`). Grupo sem
+      -- par válido não existe no agregado e o campo sai `null` (não medida), NUNCA 0.
+      percentile_cont(0.5) within group (
+        order by extract(epoch from (fr.first_human_out - fr.first_in))
+      ) as median_first_response_seconds
     from public.conversations c
     -- A linha de fora do candidato nunca entrou na média; ela só existia para
     -- ser varrida. O lateral e o filtro de baixo estão INTACTOS.
@@ -47386,6 +47437,9 @@ as $$
     where c.organization_id = p_org
       and c.assigned_to_user_id is not null
       and (p_owner is null or c.assigned_to_user_id = p_owner)
+      -- (0754) o MESMO recorte do `conv_agg`: média e mediana nascem do mesmo conjunto,
+      -- para uma nunca divergir da outra.
+      and not exists (select 1 from contatos_excluidos e where e.id = c.contact_id)
       and fr.first_in is not null
       and fr.first_human_out is not null
       and fr.first_human_out > fr.first_in
@@ -47399,6 +47453,10 @@ as $$
     union select user_id from voice_agg
   )
   select jsonb_build_object(
+    -- (0754) a etiqueta QUE FOI USADA e o total de conversas que ela tirou da conta
+    -- vêm declarados na resposta: recorte sem número declarado vira número torto.
+    'excluded_tag', p_excluir_etiqueta,
+    'excluded_conversations', (select total from conversas_excluidas),
     'funnel', coalesce((
       select jsonb_agg(
         jsonb_build_object(
@@ -47428,6 +47486,7 @@ as $$
           'lost', coalesce(la.lost, 0),
           'conversations_handled', coalesce(ca.conversations_handled, 0),
           'avg_first_response_seconds', tf.avg_first_response_seconds,
+          'median_first_response_seconds', tf.median_first_response_seconds,
           'calls_answered', coalesce(va.calls_answered, 0),
           'call_seconds', (coalesce(va.call_ms, 0) / 1000)::bigint
         ) order by coalesce(la.won, 0) desc, a.user_id
@@ -47440,6 +47499,13 @@ as $$
     ), '[]'::jsonb)
   );
 $$;
+-- SECURITY INVOKER não é coberta pela VARREDURA anon da 0116 (que só olha definer), e a
+-- função é nova: sem isto ela nasceria com o EXECUTE default de PUBLIC (e de anon, que o
+-- ALTER DEFAULT PRIVILEGES do dump grava no catálogo).
+revoke all on function public.fn_attendant_metrics(uuid, timestamptz, timestamptz, uuid, text)
+  from public, anon;
+grant execute on function public.fn_attendant_metrics(uuid, timestamptz, timestamptz, uuid, text)
+  to authenticated, service_role;
 
 create or replace function public.fn_channel_metrics(
   p_org uuid,
@@ -58334,6 +58400,221 @@ grant  execute on function public.emit_event(text, text, uuid, jsonb, jsonb, uui
 
 notify pgrst, 'reload schema';
 
+-- ---- publicar membro de roteador sem número próprio (migration 0749, #3284) ----
+-- Substitui o corpo do bloco da 0592 acima (a última definição vence). Mesma
+-- definição da migration, byte a byte.
+-- ============================================================================
+-- 2026-10-22 — 0749: PUBLICAR MEMBRO DE ROTEADOR SEM NÚMERO PRÓPRIO
+--
+-- O defeito: o editor de um especialista que é membro de um roteador de
+-- intenções avisava que "o campo de número não se aplica", mas o botão
+-- Publicar e esta função seguiam exigindo `channel_session_id` na versão. Sem
+-- número, `fn_publish_ai_agent_version` levantava `channel_session_not_found`
+-- e o especialista nunca saía do rascunho. Escolher um número para contornar
+-- era pior: a versão passaria a disputar aquele número com o agente que já
+-- atende nele.
+--
+-- O conserto, um ramo só sobre o corpo da 0592 (mesma assinatura, mesmos
+-- grants, mesma conferência de credencial e de modelo, mesma troca atômica):
+-- quando a versão não tem número, o canal conferido é o do ROTEADOR do qual o
+-- agente é membro. Publica se:
+--   - existe linha em `ai_router_members` do agente nesta organização;
+--   - o roteador é da MESMA organização (`r.organization_id = p_org_id` no
+--     join — `ai_router_members.router_id` é FK simples, então só este filtro
+--     impede um membro de apontar para roteador de outra empresa);
+--   - o canal do roteador é da mesma organização e está WORKING.
+-- O roteador NÃO precisa estar ativo: os membros são publicados antes de
+-- ligá-lo. Enquanto ele está inativo, o especialista não atende pelo número,
+-- porque a seleção por número exige `channel_session_id` igual ao do canal
+-- (`loadPublishedAgentConfig`) e o roteador só entra no turno quando ativo
+-- (`loadActiveRouter` filtra `is_active`). A exceção é deliberada: campanha
+-- que declare o especialista o carrega pelo id, como qualquer agente de
+-- campanha.
+--
+-- Agente que não é membro de roteador e não tem número continua recusado com
+-- `channel_session_not_found`. Com mais de um roteador, prefere o que tem
+-- canal WORKING e, entre eles, o mais antigo.
+--
+-- `create or replace` da versão de 5 argumentos; as de 3 e 4 argumentos só
+-- delegam e não mudam. O comentário da coluna `channel_session_id` (0241)
+-- dizia que publicar com NULL é sempre recusado: reescrito no fim. Idempotente.
+-- Gates: `tests/invariants/rascunho-de-agente-sem-numero.test.ts`,
+-- `tests/invariants/membro-de-roteador-sem-numero-nao-atende.test.ts`.
+-- ============================================================================
+
+create or replace function public.fn_publish_ai_agent_version(
+  p_org_id uuid,
+  p_agent_id uuid,
+  p_version_id uuid,
+  p_platform_credential_verified boolean,
+  p_expected_provenance text
+)
+returns table (
+  agent_id uuid,
+  version_id uuid,
+  previous_version_id uuid,
+  published_at timestamptz
+)
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_agent record;
+  v_version record;
+  v_credential record;
+  v_session record;
+  v_model_count integer;
+  v_previous_version_id uuid;
+  v_published_at timestamptz := now();
+begin
+  select a.id, a.organization_id, a.published_version_id, a.archived_at
+    into v_agent
+  from public.ai_agents a
+  where a.id = p_agent_id
+  for update;
+
+  if not found then
+    raise exception 'agent_not_found' using errcode = 'P0001';
+  end if;
+  if v_agent.organization_id <> p_org_id then
+    raise exception 'agent_not_found' using errcode = 'P0001';
+  end if;
+  if v_agent.archived_at is not null then
+    raise exception 'agent_archived' using errcode = 'P0001';
+  end if;
+
+  select v.id, v.organization_id, v.agent_id, v.status, v.provider, v.model,
+         v.credential_id, v.channel_session_id, v.provisioning_origin
+    into v_version
+  from public.ai_agent_versions v
+  where v.id = p_version_id
+  for update;
+
+  if not found then
+    raise exception 'version_not_found' using errcode = 'P0001';
+  end if;
+  if v_version.agent_id <> p_agent_id or v_version.organization_id <> p_org_id then
+    raise exception 'version_not_found' using errcode = 'P0001';
+  end if;
+  if p_expected_provenance is not null and (
+    p_expected_provenance not in('onboarding','legacy_reconciliation') or
+    v_version.provisioning_origin is distinct from p_expected_provenance or
+    (select count(*) from public.ai_agent_versions own_version where own_version.organization_id=p_org_id and own_version.agent_id=p_agent_id)<>1
+  ) then raise exception 'existing_version_requires_review' using errcode='P0001';end if;
+  if v_version.status not in ('draft', 'superseded') then
+    raise exception 'version_invalid_state' using errcode = 'P0001';
+  end if;
+
+  if v_version.credential_id is null and p_platform_credential_verified is not true then
+    raise exception 'credential_missing' using errcode = 'P0001';
+  end if;
+
+  if v_version.credential_id is not null then
+  select c.id, c.organization_id, c.provider, c.is_active, c.validated_at,
+         c.models_available
+    into v_credential
+  from public.ai_provider_credentials c
+  where c.id = v_version.credential_id;
+
+  if not found or v_credential.organization_id <> p_org_id then
+    raise exception 'credential_not_found' using errcode = 'P0001';
+  end if;
+  if not v_credential.is_active then
+    raise exception 'credential_inactive' using errcode = 'P0001';
+  end if;
+  if v_credential.validated_at is null then
+    raise exception 'credential_not_validated' using errcode = 'P0001';
+  end if;
+  if v_credential.provider <> v_version.provider then
+    raise exception 'credential_provider_mismatch' using errcode = 'P0001';
+  end if;
+
+  end if;
+
+  -- Especialistas de roteador não têm channel_session_id na própria versão:
+  -- o roteador é dono do canal, e o runtime os carrega SOMENTE por agent_id.
+  -- Não requerer roteador ATIVO: os membros precisam ser publicados ANTES de
+  -- ativá-lo, sem competir com o agente publicado diretamente no canal.
+  if v_version.channel_session_id is null then
+    select s.id, s.organization_id, s.status
+      into v_session
+    from public.ai_router_members rm
+    join public.ai_routers r
+      on r.id = rm.router_id and r.organization_id = p_org_id
+    join public.channel_sessions s
+      on s.id = r.channel_session_id and s.organization_id = p_org_id
+    where rm.agent_id = p_agent_id and rm.organization_id = p_org_id
+    order by (s.status = 'WORKING') desc, r.created_at asc, r.id asc
+    limit 1;
+  else
+    select s.id, s.organization_id, s.status
+      into v_session
+    from public.channel_sessions s
+    where s.id = v_version.channel_session_id;
+  end if;
+
+  if not found or v_session.organization_id <> p_org_id then
+    raise exception 'channel_session_not_found' using errcode = 'P0001';
+  end if;
+  if v_session.status <> 'WORKING' then
+    raise exception 'channel_session_offline' using errcode = 'P0001';
+  end if;
+
+  -- `custom` e o login por assinatura consultam um catálogo autenticado ou
+  -- específico da empresa; quem confirma que o modelo existe é a lista
+  -- gravada na credencial já conferida acima. Não usar `ai_models`, que é
+  -- global entre organizações.
+  if v_version.provider in ('custom', 'openai-assinatura') then
+    if v_version.credential_id is null then
+      raise exception 'model_not_found' using errcode = 'P0001';
+    end if;
+    if not (v_version.model = any(coalesce(v_credential.models_available, '{}'::text[]))) then
+      raise exception 'model_not_found' using errcode = 'P0001';
+    end if;
+  else
+    select count(*)
+      into v_model_count
+    from public.ai_models m
+    where m.provider = v_version.provider
+      and m.model_id = v_version.model
+      and m.deprecated_at is null;
+
+    if v_model_count = 0 then
+      raise exception 'model_not_found' using errcode = 'P0001';
+    end if;
+  end if;
+
+  v_previous_version_id := v_agent.published_version_id;
+
+  if v_previous_version_id is not null and v_previous_version_id <> p_version_id then
+    update public.ai_agent_versions
+       set status = 'superseded', superseded_at = v_published_at
+     where id = v_previous_version_id;
+  end if;
+
+  update public.ai_agent_versions
+     set status = 'published',
+         published_at = v_published_at,
+         superseded_at = null
+   where id = p_version_id;
+
+  update public.ai_agents
+     set published_version_id = p_version_id,
+         updated_at = v_published_at
+   where id = p_agent_id;
+
+  return query
+    select p_agent_id, p_version_id, v_previous_version_id, v_published_at;
+end;
+$$;
+
+revoke execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) from public,anon,authenticated;
+grant execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) to service_role;
+
+comment on column public.ai_agent_versions.channel_session_id is
+  'Por qual número este agente atende. NULL = ainda não escolhido (rascunho), ou especialista de roteador, que atende pelo canal do roteador. Publicar com NULL só é aceito para membro de roteador da mesma organização com canal WORKING (fn_publish_ai_agent_version); fora disso, channel_session_not_found.';
+
 -- ---- marca embaralhada de quem foi apagado a pedido; a importação do histórico a consulta (migration 0750, doc 186) ----
 -- Espelho idempotente de supabase/migrations/20261023160005_0750_lgpd_marca_de_apagamento.sql;
 -- o porquê inteiro está no cabeçalho de lá. Fica ACIMA da varredura anon porque cria função.
@@ -61463,3 +61744,151 @@ comment on column public.campaigns.provider_template_variables is
 
 -- O ack pelos carimbos de entrega e leitura (`fn_campanha_sincroniza_ack`) já
 -- vem do bloco da #2937: esta migration não o redefine.
+
+-- ---- traço do turno do agente (migration 0721) ----
+-- manifest: traço do turno do agente — uma linha por execução, chave `job_id` (issue #2869).
+
+-- ═══ O que esta tabela responde, e por que ela existe ═════════════════════════
+--
+-- O turno real do agente é auditável hoje em pedaços que moram longe um do
+-- outro: `llm_calls` guarda cada chamada de modelo, `skill_activations` guarda
+-- quais skills entraram, `event_log` guarda a cadeia de eventos. Nenhuma linha
+-- responde "o que aconteceu NESTE turno": quais ferramentas o modelo chamou (e
+-- qual falhou), qual janela de histórico foi carregada, quais fontes de
+-- conhecimento estavam ligadas e como o turno terminou. Um turno que respondeu
+-- errado só se explica lendo o código.
+--
+-- ═══ Por que tabela nova, e não `ai_agent_runs` ═══════════════════════════════
+--
+-- `ai_agent_runs` nasceu com a forma disso (0023) e o motor vivo NUNCA escreveu
+-- nela: o único escritor é a prévia (`is_dry_run = true`), e por isso a aba
+-- Execuções passou a ler `llm_calls` (medido: 0 linhas em produção com 130
+-- chamadas `agent_turn`). Reaproveitá-la significaria decidir, de passagem, que
+-- ela volta a ser a fonte do turno real — decisão do mantenedor, não nossa.
+-- Esta tabela é ADITIVA: a tela de Execuções continua lendo o que já lê.
+--
+-- ═══ Por que SEM trigger de auditoria ════════════════════════════════════════
+--
+-- Toda outra tabela do módulo de IA audita cada linha. Aqui não, de propósito:
+-- é uma escrita por TURNO, e o conteúdo do traço já é o registro do que
+-- aconteceu. Auditar a auditoria dobraria o volume de `audit_log` sem responder
+-- nenhuma pergunta nova. Se a política mudar, é um `create trigger` de uma linha.
+--
+-- ═══ O que esta fatia ainda NÃO grava ════════════════════════════════════════
+--
+-- O snapshot/hash da composição do prompt, os trechos de conhecimento
+-- efetivamente recuperados, a janela de histórico REALMENTE carregada (a coluna
+-- `historico_mensagens` existe para a fatia que medir isso, e nasce `null` em
+-- vez de receber a janela PEDIDA, que é outra coisa) e a comparação entre a
+-- resposta crua do modelo e o texto enviado ficam para as fatias seguintes. O
+-- que esta já separa é prévia de turno real (`is_dry_run`).
+
+create table if not exists public.agent_turn_traces (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations (id) on delete cascade,
+  -- Turno real: `job_id` (o job da fila É o run). Prévia: `preview_run_id`.
+  -- Exatamente um dos dois — o CHECK abaixo é o que impede a linha órfã.
+  job_id uuid,
+  preview_run_id text,
+  conversation_id uuid,
+  contact_id uuid,
+  agent_id uuid,
+  agent_version_id uuid,
+  is_dry_run boolean not null default false,
+  status text not null check (status in ('completed', 'failed', 'aborted')),
+  abort_reason text,
+  error_code text,
+  error_message text,
+  provider text,
+  model text,
+  messages_sent integer not null default 0 check (messages_sent >= 0),
+  historico_mensagens integer check (historico_mensagens is null or historico_mensagens >= 0),
+  -- Agregados do job, somados na hora de gravar (não há segunda escrita).
+  tokens_in integer not null default 0 check (tokens_in >= 0),
+  tokens_out integer not null default 0 check (tokens_out >= 0),
+  cost_cents numeric not null default 0,
+  latency_ms integer not null default 0 check (latency_ms >= 0),
+  -- Skills ativadas no turno (`skill_activations` do mesmo job).
+  skills jsonb not null default '[]'::jsonb,
+  -- Ferramentas chamadas: nome, estado (ok|falhou|bloqueada), erro e duração.
+  ferramentas jsonb not null default '[]'::jsonb,
+  ferramentas_truncadas boolean not null default false,
+  -- Fontes de conhecimento ligadas ao agente, com versão e hash.
+  kb_sources jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint agent_turn_traces_chave check (
+    (job_id is not null and preview_run_id is null)
+    or (job_id is null and preview_run_id is not null)
+  )
+);
+
+comment on table public.agent_turn_traces is
+  'Uma linha por execução do agente (issue #2869): chave `job_id` no turno real, `preview_run_id` na prévia. Agrega tokens/custo/latência de `llm_calls` e as skills de `skill_activations` do mesmo job, e guarda o que só existe no turno: as ferramentas chamadas (nome, estado, erro, duração), a janela de histórico e as fontes de conhecimento ligadas. Escrita melhor-esforço pelo motor — falhar aqui nunca derruba o atendimento.';
+
+-- A chave do turno real. Parcial de propósito: a prévia não tem job, e uma
+-- coluna nula não colide no Postgres — sem o `where`, o upsert do turno real
+-- não teria em que se apoiar (e o `on conflict` da gravação é o que torna a
+-- repetição de um turno idempotente em vez de duplicar a linha).
+create unique index if not exists agent_turn_traces_job_idx
+  on public.agent_turn_traces (job_id) where job_id is not null;
+
+create index if not exists agent_turn_traces_org_created_idx
+  on public.agent_turn_traces (organization_id, created_at desc);
+
+create index if not exists agent_turn_traces_preview_idx
+  on public.agent_turn_traces (preview_run_id) where preview_run_id is not null;
+
+-- O agregado do traço lê `skill_activations` pelo `job_id` a cada turno, e a
+-- tabela só tinha índice por organização e por skill (0078). Sem isto, cada
+-- turno paga uma varredura da tabela inteira para descobrir o que ele mesmo
+-- acabou de gravar.
+create index if not exists idx_skill_activations_job
+  on public.skill_activations (job_id) where job_id is not null;
+
+-- RLS: o traço é da organização e ninguém mais o lê. A leitura é do painel
+-- (sessão do usuário, `authenticated`), por uma policy só de `select`. A
+-- escrita é só do worker, que passa por fora do RLS: por isso `authenticated`
+-- perde o grant de escrita (o molde de `automation_rodizio_atribuicoes`, 0692),
+-- e `anon` não recebe nada em hipótese alguma: um traço carrega o texto do erro
+-- e os ids das fontes de conhecimento.
+alter table public.agent_turn_traces enable row level security;
+
+drop policy if exists tenant_isolation_agent_turn_traces_all on public.agent_turn_traces;
+drop policy if exists tenant_isolation_agent_turn_traces_select on public.agent_turn_traces;
+create policy tenant_isolation_agent_turn_traces_select on public.agent_turn_traces
+  for select using (organization_id in (select public.fn_user_org_ids()));
+
+revoke all on public.agent_turn_traces from anon, authenticated;
+grant select on public.agent_turn_traces to authenticated;
+grant all on public.agent_turn_traces to service_role;
+
+-- ---- #3202: channel_sessions — a regra de escrita deixa de valer para a leitura (migration 0752) ----
+-- `for all` também vale para SELECT: fn_role_at_least (~4 ms) rodava por linha em todo embed de channel_sessions.
+drop policy if exists channel_sessions_tenant_write on public.channel_sessions;
+drop policy if exists channel_sessions_tenant_insert on public.channel_sessions;
+drop policy if exists channel_sessions_tenant_update on public.channel_sessions;
+drop policy if exists channel_sessions_tenant_delete on public.channel_sessions;
+
+create policy channel_sessions_tenant_insert on public.channel_sessions
+  for insert with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'admin'))
+    or public.fn_is_platform_admin_full()
+  );
+create policy channel_sessions_tenant_update on public.channel_sessions
+  for update using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'admin'))
+    or public.fn_is_platform_admin_full()
+  ) with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'admin'))
+    or public.fn_is_platform_admin_full()
+  );
+create policy channel_sessions_tenant_delete on public.channel_sessions
+  for delete using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'admin'))
+    or public.fn_is_platform_admin_full()
+  );

@@ -10767,7 +10767,13 @@ isOneToOne: false
         Returns: Json
       }
       fn_attendant_metrics: {
-        Args: { p_from: string; p_org: string; p_owner?: string; p_to: string }
+        Args: {
+          p_excluir_etiqueta?: string
+          p_from: string
+          p_org: string
+          p_owner?: string
+          p_to: string
+        }
         Returns: Json
       }
       fn_buscar_trechos_das_fontes: {

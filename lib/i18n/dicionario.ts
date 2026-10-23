@@ -39,6 +39,30 @@ import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // Encaminhar mensagem (#2835) — botão na bolha do chat e o diálogo de destino.
+  "Encaminhar": { es: "Reenviar" },
+  "Encaminhar mensagem": { es: "Reenviar mensaje" },
+  "Escolha a conversa que vai receber esta mensagem.": { es: "Elige la conversación que recibirá este mensaje." },
+  "Buscar conversa": { es: "Buscar conversación" },
+  "Mensagem encaminhada.": { es: "Mensaje reenviado." },
+  // A rota responde 201 mesmo quando o envio falhou (`status: "failed"`): o
+  // toast precisa dizer isso, com o motivo que o envio gravou.
+  "Não foi possível encaminhar: {motivo}": { es: "No se pudo reenviar: {motivo}" },
+  // Recusas do encaminhamento (`lib/inbox/encaminhar-mensagem.ts`).
+  "Escolha uma conversa de destino desta organização.": { es: "Elige una conversación de destino de esta organización." },
+  "A conversa de destino não tem canal de envio.": { es: "La conversación de destino no tiene canal de envío." },
+  "O canal da conversa de destino está desativado. Reative-o para encaminhar.": {
+    es: "El canal de la conversación de destino está desactivado. Reactívalo para reenviar.",
+  },
+  "Esta mensagem foi apagada e não pode ser encaminhada.": { es: "Este mensaje fue eliminado y no se puede reenviar." },
+  "A mídia desta mensagem ainda não chegou ao CRM. Tente encaminhar de novo em alguns segundos.": {
+    es: "El contenido multimedia de este mensaje aún no llegó al CRM. Intenta reenviarlo de nuevo en unos segundos.",
+  },
+  "Não consegui preparar a mídia desta mensagem para o encaminhamento. Tente de novo em instantes.": {
+    es: "No pude preparar el contenido multimedia de este mensaje para reenviarlo. Inténtalo de nuevo en unos instantes.",
+  },
+  "Esta mídia não pode ser encaminhada.": { es: "Este contenido multimedia no se puede reenviar." },
+  "Só é possível encaminhar mensagens de texto ou mídia.": { es: "Solo se pueden reenviar mensajes de texto o multimedia." },
   ...TEXTOS_AGENDA_SERVICOS,
   ...TEXTOS_AGENDA_CONFIGURACAO,
   "Etiquetas de contato interno": { es: "Etiquetas de contacto interno" },
@@ -2138,8 +2162,8 @@ export const DICIONARIO: Traducoes = {
   ". Publish bloqueado até validar.": { es: ". Publicación bloqueada hasta validar." },
   "Por qual número ele atende": { es: "Con qué número atiende" },
   "Este agente é acionado pelo roteador": { es: "Este agente se activa mediante el enrutador" },
-  "— o campo de número abaixo não se aplica.": {
-    es: "— el campo de número de abajo no aplica.",
+  "— a publicação usa o canal do roteador, sem número próprio neste especialista.": {
+    es: "— la publicación usa el canal del enrutador, sin número propio en este especialista.",
   },
   "Número conectado": { es: "Número conectado" },
   "Selecione um número": { es: "Selecciona un número" },
@@ -10474,6 +10498,9 @@ export const DICIONARIO: Traducoes = {
   "Sua performance": { es: "Tu rendimiento" },
   "Sem atividade no período (ganhos/perdidos, conversas ou respostas).": { es: "Sin actividad en el período (ganados/perdidos, conversaciones o respuestas)." },
   "1ª resposta (média)": { es: "1ª respuesta (promedio)" },
+  // #3212 — a mediana entra AO LADO da média na mesma coluna: o texto antigo
+  // fica (nada é renomeado) e a chave nova declara as DUAS leituras.
+  "1ª resposta (média / mediana)": { es: "1ª respuesta (promedio / mediana)" },
   "Por canal": { es: "Por canal" },
   "Sem atividade no período.": { es: "Sin actividad en el período." },
   "Erro ao carregar os canais.": { es: "Error al cargar los canales." },
@@ -11043,6 +11070,12 @@ export const DICIONARIO: Traducoes = {
   "Campo 'agent_id' deve ser UUID válido.": { es: "El campo 'agent_id' debe ser un UUID válido." },
   "Campo 'file' ausente ou inválido.": { es: "Campo 'file' ausente o inválido." },
   "Campo 'file' (multipart) obrigatório.": { es: "Campo 'file' (multipart) obligatorio." },
+  "Campo 'nota_de_voz' inválido.": { es: "Campo 'nota_de_voz' inválido." },
+  "Formato não suportado: use ?formato=aac.": { es: "Formato no admitido: use ?formato=aac." },
+  "Muitas conversões de áudio seguidas. Tente em um minuto.": { es: "Demasiadas conversiones de audio seguidas. Inténtelo en un minuto." },
+  "Muitos áudios sendo preparados agora. Tente em alguns segundos.": { es: "Se están preparando muchos audios ahora. Inténtelo en unos segundos." },
+  "Formato de áudio não suportado.": { es: "Formato de audio no admitido." },
+  "Não foi possível preparar o áudio para este aparelho.": { es: "No fue posible preparar el audio para este dispositivo." },
   "Campo 'name' inválido (2-120 chars).": { es: "Campo 'name' inválido (2-120 caracteres)." },
   "Canal não encontrado.": { es: "Canal no encontrado." },
   "Caso não encontrado.": { es: "Caso no encontrado." },
@@ -16868,6 +16901,20 @@ export const DICIONARIO: Traducoes = {
   "opções importadas.": { es: "opciones importadas." },
   "já existiam.": { es: "ya existían." },
   "Nenhuma opção nova para importar.": { es: "Ninguna opción nueva para importar." },
+  // ─── Configurações › Funis com listas longas: as opções RECOLHIDAS (#3176) ───
+  //    A lista de um campo de lista deixou de ser montada inteira na abertura da
+  //    tela; o resumo fala a contagem e a lista abre sob demanda.
+  "opções": { es: "opciones" },
+  "apelidos": { es: "alias" },
+  "Ver opções": { es: "Ver opciones" },
+  "Ver e editar a lista do campo": { es: "Ver y editar la lista del campo" },
+  "Recolher a lista do campo": { es: "Contraer la lista del campo" },
+  // (`Importar CSV` já tem entrada acima — não duplicar aqui: o dicionário é um
+  //  objeto literal, e chave repetida é erro de typecheck.)
+  "Buscar opções": { es: "Buscar opciones" },
+  "Nenhuma opção casa com a busca.": { es: "Ninguna opción coincide con la búsqueda." },
+  "Mostrar mais opções": { es: "Mostrar más opciones" },
+  "Editar vocabulário e campos deste funil": { es: "Editar vocabulario y campos de este embudo" },
   "Esse valor não está na lista. Escolha uma das opções.": {
     es: "Ese valor no está en la lista. Elija una de las opciones.",
   },
