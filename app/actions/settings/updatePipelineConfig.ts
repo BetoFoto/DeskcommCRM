@@ -77,6 +77,13 @@ export async function updatePipelineConfig(
   if (parsed.data.reabertura_campos !== undefined) {
     nextSettings.reabertura_campos = parsed.data.reabertura_campos;
   }
+  // #2995 — o recorte de encerrados antigos do quadro. `0` é um valor com
+  // significado ("desliguei") e por isso a chave é gravada como veio: pular o
+  // zero deixaria o número antigo no banco e o quadro seguiria escondendo card
+  // de quem acabou de desligar a opção.
+  if (parsed.data.ocultar_encerrados_dias !== undefined) {
+    nextSettings.ocultar_encerrados_dias = parsed.data.ocultar_encerrados_dias;
+  }
 
   // Campo que passa a ser do Contato e que uma regra ativa do gatilho por data
   // lê (#2791): a regra seguiria ligada e pararia de disparar em silêncio.
@@ -114,6 +121,9 @@ export async function updatePipelineConfig(
       won_reasons_count: parsed.data.won_reasons?.length ?? null,
       won_reason_required: parsed.data.won_reason_required ?? null,
       reabertura: parsed.data.reabertura ?? null,
+      // #2995: quantos cards o quadro deixa de mostrar é decisão de quem opera
+      // — a auditoria registra o número (ou `0`, o desligamento).
+      ocultar_encerrados_dias: parsed.data.ocultar_encerrados_dias ?? null,
     },
   });
 
