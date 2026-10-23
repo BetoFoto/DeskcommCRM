@@ -6407,6 +6407,14 @@ export const DICIONARIO: Traducoes = {
   "A mensagem está na fila e sai assim que o canal aceitar.": {
     es: "El mensaje está en la cola y sale en cuanto el canal lo acepte.",
   },
+  // #3274 — o veto da camada "valores e negociação só com a equipe" na mensagem
+  // escrita pela IA (`commercial_requires_human`, frase no mapa MOTIVO_DA_PARADA).
+  "Esta empresa deixou valores e negociação só com a equipe, e a mensagem escrita pela IA falava disso: ela não foi enviada e a conversa passou para o atendimento humano.": {
+    es: "Esta empresa dejó los valores y la negociación solo con el equipo, y el mensaje escrito por la IA hablaba de eso: no se envió y la conversación pasó a la atención humana.",
+  },
+  "Esta empresa deixou valores e negociação só com a equipe, e a mensagem escrita pela IA falava disso: ela não foi enviada. A conversa não foi passada para a equipe nesta execução — abra a conversa e confira quem vai responder ao cliente.": {
+    es: "Esta empresa dejó los valores y la negociación solo con el equipo, y el mensaje escrito por la IA hablaba de eso: no se envió. La conversación no pasó al equipo en esta ejecución: abre la conversación y revisa quién va a responder al cliente.",
+  },
   // ─── lib/channels/frases-de-falha.ts (texto de tela por código do adapter) ───
   "O número escolhido não está conectado no momento. Reconecte em Conexões — a mensagem sai sozinha quando ele voltar.": {
     es: "El número elegido no está conectado en este momento. Reconéctalo en Conexiones y el mensaje saldrá solo en cuanto vuelva a estar conectado.",
@@ -7677,6 +7685,10 @@ export const DICIONARIO: Traducoes = {
   },
   "Gerando…": { es: "Generando…" },
   "Regenerar códigos de recuperação": { es: "Regenerar códigos de recuperación" },
+  "Você está sem códigos de recuperação válidos: os gerados antes da última atualização deixaram de valer, e cada código só vale uma vez. Sem eles, perder o celular tira o seu acesso.": {
+    es: "No tienes códigos de recuperación válidos: los generados antes de la última actualización dejaron de valer, y cada código solo vale una vez. Sin ellos, perder el celular te deja sin acceso.",
+  },
+  "Gere novos códigos de recuperação": { es: "Genera nuevos códigos de recuperación" },
   "Habilite MFA antes de gerar códigos.": { es: "Habilita MFA antes de generar códigos." },
   "Sessões ativas": { es: "Sesiones activas" },
 
@@ -14490,6 +14502,25 @@ export const DICIONARIO: Traducoes = {
     { es: "Intentando enviar" },
   "Este número mandou uma mensagem agora há pouco. O WhatsApp exige um intervalo entre elas — tente de novo em alguns segundos.":
     { es: "Este número envió un mensaje hace un momento. WhatsApp exige un intervalo entre mensajes. Intenta de nuevo en unos segundos." },
+  // A REMOÇÃO do destinatário (issue #3338). Acrescentadas no fim do bloco,
+  // nunca reordenando o arquivo. ("Manter" já existe, no bloco das telas de
+  // configuração — a mesma palavra, e uma segunda entrada seria uma tradução a
+  // mais para divergir.)
+  "Remover destinatário": { es: "Eliminar destinatario" },
+  "Remover o destinatário dos avisos?": { es: "¿Eliminar el destinatario de los avisos?" },
+  "A configuração de avisos é apagada e este número volta a ser um número comum: o que ele mandar passa a virar atendimento no Inbox. O histórico de entregas desta tela continua aqui.":
+    { es: "Se borra la configuración de avisos y este número vuelve a ser un número común: lo que envíe pasará a convertirse en una atención en el Inbox. El historial de envíos de esta pantalla sigue aquí." },
+  "Também param de sair, até você cadastrar um número de novo: os avisos da Agenda que usam o mesmo número dos casos e as automações com a ação \"Mensagem para a equipe\".":
+    { es: "También dejan de enviarse, hasta que registres un número de nuevo: los avisos de la Agenda que usan el mismo número de los casos y las automatizaciones con la acción «Mensaje para el equipo»." },
+  "Diferente de desligar os avisos: aqui o número sai da configuração e volta a entrar no Inbox.":
+    { es: "A diferencia de desactivar los avisos: aquí el número sale de la configuración y vuelve a entrar en el Inbox." },
+  "Removendo…": { es: "Eliminando…" },
+  "Destinatário removido.": { es: "Destinatario eliminado." },
+  // As duas frases da ROTA (`app/api` fica fora da varredura do guarda de
+  // espanhol): entram por DISCIPLINA, como as vizinhas.
+  "Não foi possível remover o destinatário.": { es: "No se pudo eliminar el destinatario." },
+  "Não foi possível remover o destinatário. Tente de novo.":
+    { es: "No se pudo eliminar el destinatario. Inténtalo de nuevo." },
   // O CORPO do aviso de passagem na Central. Ele é traduzido no SERVIDOR, no
   // instante do insert, e não por `t()` na tela — porque na tela ele é DADO (o
   // que a Central mostra é o corpo como ele veio, e há um teste que guarda

@@ -59247,6 +59247,16 @@ end;$$;
 revoke all on function public.fn_lgpd_anonymize_contact(uuid,uuid) from public,anon,authenticated,service_role;
 grant execute on function public.fn_lgpd_anonymize_contact(uuid,uuid) to authenticated;
 
+-- ---- códigos de recuperação na forma antiga saem (migration 0759) ----
+--
+-- O servidor grava `code_hash` como o HMAC-SHA256 de 32 bytes
+-- (`lib/auth/recovery-codes.ts`); nenhuma linha gravada antes casa com ele. O
+-- critério é o formato, não a data: re-aplicar este bloco a cada `update.sh`
+-- não apaga código novo, e quem atualizar tarde apaga só o que o código antigo
+-- gravou até lá. Decisão do dono no doc 195 (opção A).
+delete from public.user_recovery_codes
+ where octet_length(code_hash) <> 32;
+
 -- ---- anexos do campo `file` do negócio (migration 0731, #3229) ----
 --
 -- Cria função (a nova `fn_enfileirar_midia_vencida`), então fica ANTES da
