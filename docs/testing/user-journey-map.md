@@ -521,6 +521,29 @@ diálogo e é asserida na spec.
 
 ---
 
+## J52 — Campanha pelo número oficial, com modelo aprovado `[P1]` (2026-10-15)
+
+Contexto: issue #1330, fatia 4. Número oficial só aceita texto livre dentro das
+24 h da última mensagem do cliente, e a campanha fala com quem não escreveu —
+a campanha de texto num número oficial falhava em cada envio. Agora, no número
+oficial, o formulário oferece os modelos aprovados DAQUELE número
+(`GET /api/v1/campaigns/modelos`), o mapa de onde sai cada variável
+(`lib/campanhas/modelo.ts`) e a prévia (`components/channels/PreviaDoModelo.tsx`,
+a mesma do inbox). Migration 0710.
+
+Spec: `tests/e2e/campanha-com-modelo-aprovado.spec.ts`, na `SPECS_PARTE_5`. Os
+casos 1 e 2 rodam no CI; o 3 precisa do dublê do provedor (ambiente do
+`next start`) e pula sem ele — o comando está no cabeçalho da spec.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J52.1 | Escolher um número oficial na nova campanha | o campo de texto some; aparece o seletor de modelos do número, o pausado desabilitado, a mídia do cabeçalho já com o link salvo, «Falta escolher a origem de» até tudo ter origem, e a prévia com «[Primeiro nome do contato]» e o texto fixo | **PASS pela tela** — Evidência: `evidence/campanha-com-modelo-aprovado/01-modelo-escolhido-com-previa.png` |
+| J52.2 | Contar o público com um contato cujo nome é só telefone | 1 pode receber; o outro fica de fora com «Falta um dado que a mensagem usa» | **PASS pela tela** — `evidence/campanha-com-modelo-aprovado/02-publico-com-quem-fica-de-fora.png` |
+| J52.3 | Salvar e preparar | a campanha grava `message_mode = template` e o mapa; o destinatário guarda os valores em `variables.modelo` e o texto preenchido em `rendered_body` (o que o agente lê) | **PASS pela tela + banco** — `evidence/campanha-com-modelo-aprovado/03-detalhe-do-rascunho.png`, `evidence/campanha-com-modelo-aprovado/04-lista-preparada.png` |
+| J52.4 | Enviar teste (com o dublê do provedor) | o provedor recebe nome, idioma, `templateParams` na ordem do contrato e `headerMedia`; a conversa guarda o modelo com o texto preenchido | **PASS pela tela, local** — `evidence/campanha-com-modelo-aprovado/05-teste-enviado.png`; no CI pula (sem dublê) |
+| J52.5 | Falha da plataforma no envio | da pessoa (131050, 131049, 131026) segue para a próxima com o motivo em frase; do envio inteiro (132015, 131048, 131042…) pausa a campanha com o motivo | **PASS (unit)** — `lib/channels/erro-da-plataforma.test.ts`; rodada **NÃO MEDIDA** pela tela |
+| J52.6 | Entrega e leitura pelo oficial direto | o trigger de ack lê `delivered_at`/`read_at` e o destinatário vira entregue/lido | **PASS (banco)** — do #2937: `tests/invariants/ack-da-api-oficial-alcanca-o-destinatario.test.ts` |
+
 ## J9 — Ver o que o follow-up já fez, e intervir sem matá-lo `[P1]`
 
 Contexto do código: o dossiê do enrollment (`/app/ai/followups/enrollments/[id]`,
@@ -1577,6 +1600,17 @@ Spec: `tests/e2e/inbox-selecionada-no-escuro.spec.ts`.
 | J47.1 | Tema escuro, conversa aberta pela lista | o nome do contato na linha selecionada tem contraste ≥ 4,5 contra o fundo EFETIVO (cor computada, camadas translúcidas compostas) | **PASS pela tela** — Evidência: `evidence/inbox-selecionada-no-escuro/01-selecionada-no-escuro.png` |
 | J47.2 | A classe da selecionada | `bg-accent-soft`, nenhum degrau fixo `bg-accent-50…950`; a não selecionada não ganha o fundo | **PASS (unit)** — `tests/unit/selecionada-legivel-no-escuro.test.tsx` |
 | J47.3 | Tema escuro, conversa aberta E marcada no lote, com o mouse ou o foco de teclado | a linha fica num tom só (o botão não pinta por cima do fundo da linha), o foco aparece como anel, e o nome e a prévia seguem com contraste ≥ 4,5 contra o fundo efetivo | **PASS pela tela** — Evidência: `evidence/inbox-selecionada-no-escuro/02-aberta-e-marcada-com-foco.png` |
+
+## J51 — Ver os contatos no celular `[P1]` (2026-10-21)
+
+ADR-0006, fase F3. Abaixo de `md` a tabela de Contatos vira um cartão por linha,
+só com classes `max-md:` (o DOM é o mesmo do computador). Spec:
+`tests/e2e/contatos-em-cartao-no-celular.spec.ts` (parte 6), 390×844 com toque
+emulado, login `agent`.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J51.1 | Lista a 390px, selecionar e abrir | nem a página nem a caixa da tabela rolam para o lado; cabeçalho `display:none`; cartões entre 15 e 375px; nome, conversa, editar e excluir ≥ 44px; a caixa pega o toque a 20px do centro; «Selecionar todos os contatos visíveis» marca as linhas e abre a barra de lote; o nome abre a ficha; a 1280px volta a tabela sem o botão | a medir (CI) + UNIT `app/app/contacts/_client.test.tsx` |
 
 ## J48 — Instalar o app no celular e ser avisado `[P0]` (2026-10-20)
 

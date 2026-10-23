@@ -58053,6 +58053,28 @@ begin
   end;
 end; $$;
 
+-- ---- o endereço do servidor aceita sublinhado (migration 0669, issue #2804) ----
+-- A CHECK `platform_smtp_settings_host` recusava `_`, e o `.env` sempre aceitou:
+-- quem roda um relé na própria VPS em Docker (`meu_relay`,
+-- `supabase_inbucket_…`) apontava o CRM para o contêiner e recebia a mensagem
+-- crua do Postgres na tela. O que não é nome de máquina — espaço, barra,
+-- `http://` — segue recusado.
+--
+-- Drop e add JUNTOS, no mesmo bloco: o `update.sh` roda sem `ON_ERROR_STOP`, e
+-- a versão que soltasse a constraint para recriá-la em seguida deixaria uma
+-- janela sem validação se a atualização morresse no meio. Idempotente: reaplicar
+-- derruba e recria a mesma constraint.
+
+do $constraint$
+begin
+  alter table public.platform_smtp_settings
+    drop constraint if exists platform_smtp_settings_host;
+  alter table public.platform_smtp_settings
+    add constraint platform_smtp_settings_host
+    check (smtp_host is null or smtp_host ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$');
+end
+$constraint$;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -61011,4 +61033,72 @@ alter table public.webhook_sources
 comment on column public.webhook_sources.reuse_open_lead_on_capture is
   'Opção da fonte (issue #3101), DESLIGADA por padrão: quando um envio NÃO traz external_id e o contato casado já tem card ABERTO no mesmo funil, o card é atualizado (campos e etapa da fonte, só para a frente) em vez de a captação abrir outro. Só liga em fonte com assinatura configurada, como a opção irmã. O desfecho da linha de captação é `atualizado`. Desligada, cada envio continua virando um card novo, como sempre.';
 
+-- ---- teto do adiamento da reconexão (migration 0738) ----
+-- manifest: prospecting_campaigns.channel_down_since — desde quando a campanha espera o canal voltar ao `WORKING`. Sem ele o adiamento da reconexão (#3073) não tem TETO: uma sessão presa fora de `WORKING` deixa a campanha "Ativa" sem enviar e sem aviso (STARTING não gera aviso de saúde). Com a coluna, o tick pausa quando a espera passa de TETO_DO_ADIAMENTO_MS; nulo = a campanha não está esperando.
+alter table public.prospecting_campaigns
+  add column if not exists channel_down_since timestamptz;
+
 notify pgrst, 'reload schema';
+
+-- ---- campanha com modelo aprovado (migration 0710) ----
+-- ═══ Por que a campanha precisa de modelo ═══
+--
+-- Número oficial (API da plataforma, direto ou por provedor parceiro) só aceita
+-- texto livre para quem escreveu nas últimas 24 horas. Uma campanha fala
+-- justamente com quem NÃO escreveu: com `message_body` sozinho, cada destinatário
+-- de um número oficial virava falha (`131047`, ou recusa do parceiro antes de
+-- sair). O corpo da campanha oficial é um modelo aprovado, e cada variável dele
+-- (`{{1}}`, `{{2}}`…) diz DE ONDE sai o valor — nome do contato, campo do
+-- negócio, texto fixo —, nunca o valor: quem resolve é a preparação, contato a
+-- contato, e o valor resolvido fica em `campaign_recipients.variables`.
+--
+-- ═══ Por que `message_mode` tem CHECK ═══
+--
+-- Vocabulário FECHADO: só existe o que o despacho sabe mandar. Linha legada não
+-- existe (a coluna nasce aqui com default `text`, que é o que toda campanha
+-- anterior é). Vigiado por `tests/invariants/vocabulario-banco-x-typescript.test.ts`
+-- contra `MODOS_DA_MENSAGEM` em `lib/campanhas/tipos.ts`.
+--
+-- Idempotente: `add column if not exists`, constraints recriadas por nome.
+
+alter table public.campaigns
+  add column if not exists message_mode text not null default 'text',
+  add column if not exists provider_template_name text,
+  add column if not exists provider_template_language text,
+  add column if not exists provider_template_variables jsonb not null default '{}'::jsonb;
+
+-- A troca das duas restrições vai num bloco DO só: o `update.sh` reaplica o
+-- baseline sem ON_ERROR_STOP e em autocommit, e com `drop` e `add` soltos uma
+-- falha no `add` deixaria `campaigns` SEM a guarda. Dentro do bloco, ou as duas
+-- trocas valem, ou nada muda e a restrição de antes continua. Não há dado a
+-- corrigir antes: as colunas nascem aqui com default que cumpre as duas, e quem
+-- já tem as restrições só tem linhas que já as cumprem (CHECK validado).
+do $campanha_modelo$
+begin
+  alter table public.campaigns drop constraint if exists campaigns_message_mode_check;
+  alter table public.campaigns
+    add constraint campaigns_message_mode_check check (message_mode in ('text', 'template'));
+
+  -- Modelo sem nome ou sem idioma não sai: a plataforma identifica a definição
+  -- pelos DOIS (o mesmo nome em `es` e `es_AR` são modelos diferentes).
+  alter table public.campaigns drop constraint if exists campaigns_modelo_exige_nome_e_idioma;
+  alter table public.campaigns
+    add constraint campaigns_modelo_exige_nome_e_idioma check (
+      message_mode <> 'template'
+      or (coalesce(btrim(provider_template_name), '') <> ''
+          and coalesce(btrim(provider_template_language), '') <> '')
+    );
+end
+$campanha_modelo$;
+
+comment on column public.campaigns.message_mode is
+  'text = corpo livre em message_body (número por QR); template = modelo aprovado (número oficial). Migration 0710.';
+comment on column public.campaigns.provider_template_name is
+  'Nome do modelo aprovado na plataforma, quando message_mode = template.';
+comment on column public.campaigns.provider_template_language is
+  'Idioma exato do modelo (es, es_AR, pt_BR…): nome + idioma identificam a definição.';
+comment on column public.campaigns.provider_template_variables is
+  'slotKey ("1", "header:1", "button0:1") → origem do valor ({kind: contact_first_name|contact_name|lead_custom|fixed}). Nunca o valor: ele é resolvido por contato na preparação.';
+
+-- O ack pelos carimbos de entrega e leitura (`fn_campanha_sincroniza_ack`) já
+-- vem do bloco da #2937: esta migration não o redefine.
