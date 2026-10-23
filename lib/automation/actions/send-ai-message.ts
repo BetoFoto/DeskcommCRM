@@ -203,14 +203,21 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
         leadId: lead?.id ?? null,
         metadata: { source: "automation_rule", acao: TIPO, rule_id: ctx.ruleId },
       });
+      // O motivo diz o que ACONTECEU: a frase de `commercial_requires_human` na
+      // aba Atividade afirma que a conversa passou para a equipe, e o
+      // orquestrador pode recusar a passagem (conversa fora do atendimento da
+      // IA, falha de escrita). Nesse caso a mensagem também não sai, mas ninguém
+      // foi avisado por esta execução — e a tela precisa dizer isso.
       return {
         type: TIPO,
         status: "skipped",
-        detail: {
-          reason: "commercial_requires_human",
-          conversation_id: conversationId,
-          passagem_para_a_equipe: passagem.triggered,
-        },
+        detail: passagem.triggered
+          ? { reason: "commercial_requires_human", conversation_id: conversationId, passagem_para_a_equipe: true }
+          : {
+              reason: "commercial_requires_human_sem_passagem",
+              conversation_id: conversationId,
+              passagem_para_a_equipe: false,
+            },
       };
     }
 

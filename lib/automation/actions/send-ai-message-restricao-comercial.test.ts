@@ -298,8 +298,10 @@ describe("send_ai_message × leitura da camada que FALHA", () => {
     const r = await executar(cliente);
 
     expect(sendMessageHandler).not.toHaveBeenCalled();
+    // E o motivo NÃO é o da passagem feita: a frase de `commercial_requires_human`
+    // na aba Atividade diz que a conversa passou para a equipe, o que aqui é falso.
     expect(r.detail).toMatchObject({
-      reason: "commercial_requires_human",
+      reason: "commercial_requires_human_sem_passagem",
       passagem_para_a_equipe: false,
     });
   });

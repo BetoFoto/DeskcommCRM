@@ -6412,6 +6412,9 @@ export const DICIONARIO: Traducoes = {
   "Esta empresa deixou valores e negociação só com a equipe, e a mensagem escrita pela IA falava disso: ela não foi enviada e a conversa passou para o atendimento humano.": {
     es: "Esta empresa dejó los valores y la negociación solo con el equipo, y el mensaje escrito por la IA hablaba de eso: no se envió y la conversación pasó a la atención humana.",
   },
+  "Esta empresa deixou valores e negociação só com a equipe, e a mensagem escrita pela IA falava disso: ela não foi enviada. A conversa não foi passada para a equipe nesta execução — abra a conversa e confira quem vai responder ao cliente.": {
+    es: "Esta empresa dejó los valores y la negociación solo con el equipo, y el mensaje escrito por la IA hablaba de eso: no se envió. La conversación no pasó al equipo en esta ejecución: abre la conversación y revisa quién va a responder al cliente.",
+  },
   // ─── lib/channels/frases-de-falha.ts (texto de tela por código do adapter) ───
   "O número escolhido não está conectado no momento. Reconecte em Conexões — a mensagem sai sozinha quando ele voltar.": {
     es: "El número elegido no está conectado en este momento. Reconéctalo en Conexiones y el mensaje saldrá solo en cuanto vuelva a estar conectado.",
