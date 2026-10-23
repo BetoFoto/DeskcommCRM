@@ -13,7 +13,9 @@
  *     (`"131050"`); o parceiro grava `error_code = <rótulo do adapter>` e o
  *     número no começo de `error_message` (`"131050 — título — explicação"`);
  *   - da recusa síncrona do envio: o adapter marca `[plataforma:131050]` no
- *     texto, ou o código do próprio parceiro (`INVALID_TEMPLATE_PARAMS`,
+ *     texto, ou o envio de modelo põe o código depois do prefixo do canal
+ *     (`<canal>_132000: …`, `meta/send-template-for-session.ts`), ou o código
+ *     do próprio parceiro (`INVALID_TEMPLATE_PARAMS`,
  *     `message_allowance_exceeded`), ou a recusa do pré-voo deste sistema
  *     (`template_not_approved`).
  *
@@ -58,6 +60,7 @@ const DO_ENVIO_INTEIRO = new Set([
 
 const CODIGO_MARCADO = /\[plataforma:([A-Za-z0-9_]+)\]/;
 const CODIGO_NO_COMECO = /^\s*(\d{2,6})\b/;
+const CODIGO_DEPOIS_DO_CANAL = /^\s*[a-z]+_(\d{2,6}):/;
 const CODIGO_DO_PARCEIRO =
   /\b(INVALID_TEMPLATE_PARAMS|INVALID_TEMPLATE_HEADER|INVALID_TEMPLATE_BUTTON_PARAM|TEMPLATE_REQUIRED|message_allowance_exceeded)\b/;
 const CODIGO_DO_PRE_VOO = /^(template_not_approved|template_missing_values)\b/;
@@ -82,6 +85,8 @@ export function codigoDaPlataforma(
   if (preVoo) return preVoo[1]!;
   const doParceiro = CODIGO_DO_PARCEIRO.exec(texto);
   if (doParceiro) return doParceiro[1]!;
+  const depoisDoCanal = CODIGO_DEPOIS_DO_CANAL.exec(texto);
+  if (depoisDoCanal) return depoisDoCanal[1]!;
   const noComeco = CODIGO_NO_COMECO.exec(texto);
   if (noComeco) return noComeco[1]!;
   return null;

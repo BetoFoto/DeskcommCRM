@@ -26,6 +26,14 @@ describe("codigoDaPlataforma", () => {
     );
   });
 
+  it("recusa síncrona do envio de modelo: o código depois do prefixo do canal", () => {
+    expect(codigoDaPlataforma("meta_error", "meta_132000: (#132000) Number of parameters does not match")).toBe("132000");
+    expect(codigoDaPlataforma("datafy_error", "datafy_132015: Template is paused")).toBe("132015");
+    // Sem código na resposta (`<canal>_erro`) ou só o rótulo do adapter: nada a ler.
+    expect(codigoDaPlataforma("meta_error", "meta_erro: build_failed")).toBeNull();
+    expect(codigoDaPlataforma("zernio_error", "zernio_template_failed: timeout")).toBeNull();
+  });
+
   it("recusa do pré-voo deste sistema", () => {
     expect(codigoDaPlataforma("zernio_error", 'template_not_approved: "x" (es) está PAUSED')).toBe("template_not_approved");
   });
