@@ -1,10 +1,10 @@
 /**
  * A LEGENDA SÓ EXISTE ONDE O CANAL A LEVA (#3151).
  *
- * Áudio é o ÚNICO tipo que não leva texto: os adaptadores de canal em
- * `lib/channels/` (WAHA, oficial, Datafy e Zernio) mandam a nota de voz SEM `caption` — ao contrário de imagem,
- * vídeo e documento, que levam. Pedir
- * legenda de um áudio é escrever um texto que nunca chega.
+ * Áudio é o ÚNICO tipo que não leva texto: todos os adaptadores de canal em
+ * `lib/channels/` mandam a nota de voz SEM `caption` — ao contrário de imagem,
+ * vídeo e documento, que levam. Pedir legenda de um áudio é escrever um texto
+ * que nunca chega.
  *
  * A régua mora aqui, num módulo puro, porque DOIS lugares precisam da MESMA
  * resposta: o diálogo de prévia (para mostrar ou esconder o campo) e o envio do
