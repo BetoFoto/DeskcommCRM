@@ -35,14 +35,22 @@
  *   - o envio real ao canal: `sendMessageHandler` é dublê, como no vizinho
  *     `send-ai-message.test.ts`.
  *
- * ═══ Sabotagem medida (previsão escrita ANTES de rodar) ═══
+ * ═══ Sabotagem medida ═══
  *
  *   apagar a régua inteira de `send-ai-message.ts`
- *     → previsto 3 vermelhos: os casos 1 (camada ligada + texto comercial), 4
- *       (falha fechada) e 5 (passagem recusada). Os casos 2 e 3 continuam verdes
- *       porque provam o caminho de HOJE (camada ligada + texto neutro; camada
- *       desligada) — são eles que impedem uma ação que nunca envia nada de
- *       satisfazer este arquivo.
+ *     → previsto 3 vermelhos, observado 4.
+ *
+ *       Os três previstos: o caso 1 (camada ligada + texto comercial), o 4
+ *       (falha fechada) e o 5 (passagem recusada). O quarto é o caso 3, e a
+ *       lição fica escrita porque a previsão errou: ele prova que a camada
+ *       DESLIGADA mantém o comportamento de hoje, e para isso mede a LEITURA da
+ *       camada (`idas`). Sem a régua não há leitura nenhuma — o caso fica
+ *       vermelho por uma razão que não é a do defeito. Quem apagar a régua vê
+ *       quatro, não três.
+ *
+ *       O único verde nas duas direções é o caso 2 (camada ligada + texto
+ *       neutro), que existe justamente para impedir que uma ação que nunca envia
+ *       nada satisfaça este arquivo.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
