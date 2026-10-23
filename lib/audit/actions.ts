@@ -142,6 +142,10 @@ export const AUDIT_ACTIONS = [
   "message.received",
   "message.edited",
   "message.revoked",
+  // A revogação chegou pelo CANAL — o autor apagou no aplicativo, e não pela
+  // tela do CRM (cuja ação é `message.revoked`). É a única trilha de quem apaga
+  // sem passar por tela nenhuma (#3277).
+  "message.revoked_in_channel",
   "message.hidden_in_crm",
   "message.restored_in_crm",
   // Uma rodada do cron `recover-stuck-messages` que de fato marcou mensagem
@@ -392,6 +396,11 @@ export const AUDIT_ACTIONS = [
   "template.created",
   "template.updated",
   "template.deleted",
+  // A reordenação (#3244) é um ato próprio, e não `template.updated`: quem
+  // audita "quem mudou este texto?" não pode receber junto "quem mudou esta
+  // linha de lugar" — o conteúdo não foi tocado nenhuma vez (é o que a issue
+  // pede: preservar os cadastros).
+  "template.reordered",
   "auth.signup_requested",
   "auth.signup_failed",
   "auth.signup_confirmed",
@@ -410,6 +419,12 @@ export const AUDIT_ACTIONS = [
   // Rodada do cron que devolve ao agente o handoff parado além do prazo da
   // organização — só quando devolveu (ou falhou) alguma.
   "conversation.handoff_auto_return_run",
+  // A devolução AO RODÍZIO (issue #2985, fatia 1): a conversa que o rodízio
+  // entregou e ninguém respondeu volta para a fila, e a pessoa fica fora dela
+  // por 24 h. O par é o mesmo do handoff acima: uma linha por conversa devolvida
+  // (o que aconteceu, com quem) e uma por rodada com efeito (o que o cron fez).
+  "conversation.returned_to_routing_queue",
+  "conversation.routing_return_run",
   "conversation.note_added",
   "conversation.note_deleted",
   // Rascunho sugerido por integração (issue #1611): quem criou o texto que a
@@ -651,6 +666,15 @@ export const AUDIT_ACTIONS = [
   // 0648). Risco é parte do desenho — quem tiver o link entra sem pedir —, então
   // "quando foi que ligaram isso?" é a primeira pergunta depois de um incidente.
   "agenda.meet_acesso_aberto_alterado",
+  // O aviso de agendamento no WhatsApp do dono (migration 0753). Quatro códigos
+  // pela mesma razão dos do aviso de caso: "saiu", "não saiu em definitivo",
+  // "mudaram a configuração" e "mandaram o teste" são perguntas diferentes, e o
+  // painel filtra por `action`. SEM o texto e com o destino MASCARADO — o que
+  // entra no `api_audit_log` não sai pela cascata de LGPD.
+  "agenda.aviso_whatsapp_enviado",
+  "agenda.aviso_whatsapp_falhou",
+  "agenda.aviso_whatsapp_configurado",
+  "agenda.aviso_whatsapp_teste",
   // A rodada que AVISOU alguém do próprio compromisso. Mensagem que saiu para o
   // telefone de um cliente é efeito, e efeito audita — mas só a rodada que
   // enviou: a que varreu e não achou ninguém a avisar não é mutação.
@@ -851,6 +875,10 @@ export const AUDIT_ACTIONS = [
   // "Cliente pela agenda" ligada ou desligada (migration 0262). Ligar reescreve
   // etiquetas de toda a organização; metadata leva as contagens.
   "crm.cliente_pela_agenda_alterado",
+  // A lista de etiquetas de contato INTERNO (#2353) mudou. Decisão de
+  // configuração da organização que muda o que vira card no funil e o que a IA
+  // responde: "desde quando a equipe parou de virar lead?" só tem resposta aqui.
+  "crm.tags_internas_alteradas",
   // A etiqueta da ORGANIZAÇÃO renomeada, juntada ou excluída na tela de Tags
   // (issue #852, fatia S4). É um código só porque a linha já carrega
   // `metadata.acao` (renomear/juntar/excluir) e o alcance da operação (contatos,
@@ -1245,6 +1273,13 @@ export const AUDIT_ACTIONS = [
   "agenda.service_refresh",
   "agenda.service_resource",
   "agenda.service_unblock",
+  // Reenvio de mensagem que falhou, na mesma linha (POST /api/v1/messages/{id}/retry).
+  "message.retried",
+  // Participante ligado a / desligado de um negócio (`crm_lead_links` com
+  // target_kind='contact', #3083). metadata leva só o contact_id e se havia
+  // papel — nunca o texto do papel, que é livre.
+  "lead.participant_added",
+  "lead.participant_removed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

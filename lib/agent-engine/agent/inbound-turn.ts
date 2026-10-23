@@ -42,6 +42,15 @@ import type { ChannelAdapter, ChannelSendResult } from '../channel-adapter';
 import { withFields, type Logger } from '../obs/logger';
 import { etiquetasParaOMatcher } from './etiquetas-do-matcher';
 import {
+  criarColetorDeFerramentas,
+  envolverFerramentasComTraco,
+  montarTracoDoTurno,
+  registrarTracoDoTurno,
+  type ColetorDeFerramentas,
+  type DesfechoDoTurno,
+  type StatusDoTurno,
+} from './traco-do-turno';
+import {
   corpoDaMensagem,
   getLeadContext,
   textoDoClienteNaUltimaMensagem,
@@ -121,6 +130,7 @@ import {
   buildHandoffSummary,
   detectAmbiguousOptOut,
   detectHumanHandoffRequest,
+  ehRespostaDeRobo,
   isLeadInHandoff,
   performHumanHandoff,
 } from './human-handoff';
@@ -214,6 +224,11 @@ import {
 } from '@/lib/escalacao/briefing-da-passagem';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
 import { CORRECAO_DO_TURNO_MUDO, turnoMudoPedeCorrecao } from './turno-mudo';
+import {
+  desfechoSemCandidato,
+  previaPedeCorrecaoDoTurnoMudo,
+  tetoDePassosAtingido,
+} from './desfecho-da-previa';
 import { criarTravaDeDuplicata } from './near-dup';
 import { vetoReason } from '@/lib/leads/veto-activity';
 import { corposEnviadosDesdeUltimaInbound } from './memoria-envio';
@@ -461,7 +476,9 @@ export const AGENT_TOOL_DEFS = {
             'código do motivo: requested_human quando o cliente pede uma pessoa; critical_stage ' +
               'quando uma etapa exige finalização humana (ex.: concluir um agendamento já coletado). ' +
               'Não use critical_stage só porque o cliente mencionou agendamento. ' +
-              'Sem este campo, mantém requested_human. Não altera as condições para encaminhar.',
+              'Sem este campo, a passagem fica registrada como low_confidence (você não resolveu sozinho); ' +
+              'quando o cliente pedir uma pessoa, informe requested_human. ' +
+              'Não altera as condições para encaminhar.',
           ),
         por_que: z
           .string()
@@ -1506,6 +1523,16 @@ export interface AgentTurnInput {
   conversationId: string;
   /** Id da mensagem que criou o job inbound; não é usado por follow-ups. */
   inboundMessageId?: string;
+  /**
+   * Traço do turno (issue #2869): o coletor de ferramentas e o desfecho que a
+   * execução preenche enquanto roda. OPCIONAL de propósito — quem chama o turno
+   * sem traço (a prévia antiga, caminhos internos) não paga nada, e quem
+   * instala é `runAgentTurn` (e `runAgentPreview`), que é também quem grava a linha.
+   */
+  tracoDoTurno?: {
+    coletor: ColetorDeFerramentas;
+    desfecho: DesfechoDoTurno;
+  };
   /** monta a abertura APÓS o ritual de leitura (inbound vs. bloco temporal do follow-up). */
   buildOpening: (ritual: {
     previous: LeadCheckpointRow | null;
@@ -1652,6 +1679,10 @@ export async function deteccoesDeterministicasDoAssistido(
   let optedOutThisTurn = false;
   let lgpd: AvisoDeEscalacaoOpts['lgpd'];
   let contextoLido = false;
+  // O histórico lido vive FORA do try: é dele que a guarda do menu de robô
+  // (issue 3106) tira as marcas de automação. Sem contexto lido ele fica vazio,
+  // e a guarda devolve "é de gente" — o lado seguro (a passagem é irrevogável).
+  let historicoDoTurno: readonly LeadContextMessage[] = [];
   try {
     const abertura = await getLeadContext(
       pool,
@@ -1667,6 +1698,7 @@ export async function deteccoesDeterministicasDoAssistido(
     if (abertura.ok) {
       contextoLido = true;
       inboundsPendentes = inboundsNaoRespondidos(abertura.context.messages);
+      historicoDoTurno = abertura.context.messages;
       optedOutThisTurn = abertura.context.contact.is_blocked;
       lgpd = abertura.lgpd;
     } else {
@@ -1740,10 +1772,17 @@ export async function deteccoesDeterministicasDoAssistido(
     'motivo' | 'optedOutThisTurn' | 'lgpd'
   > => resto;
 
+  // A GUARDA DO MENU DE ROBÔ (issue 3106): o casamento determinístico não passa
+  // a conversa quando o que casou é fala de automação — menu numerado, mensagem
+  // que se declara robô, ou a saudação que chega segundos depois do nosso disparo
+  // (ver `ehRespostaDeRobo`). Aqui o turno segue para o rascunho do assistido, que
+  // é o desenho do autor da issue: quem lê a mensagem é o modelo, e ele sabe
+  // reconhecer robô. A palavra-chave CONFIGURADA na tela não passa pela guarda: é
+  // escolha de quem opera o agente, e não a regra que esta issue corrige.
   if (
     inboundsPendentes.some(
       (texto) =>
-        detectHumanHandoffRequest(texto) ||
+        (detectHumanHandoffRequest(texto) && !ehRespostaDeRobo(texto, historicoDoTurno)) ||
         matchesHandoffKeyword(texto, agent.handoffKeywords),
     )
   ) {
@@ -1845,60 +1884,153 @@ export async function runAgentTurn(
   job: JobRow,
   pool: pg.Pool,
   ctx: { workerId: string },
-  input: AgentTurnInput,
+  entradaDoChamador: AgentTurnInput,
 ): Promise<void> {
   const leadIdDoJob = job.contact_id;
   if (leadIdDoJob === null) {
     throw new Error('job de turno sem contact_id — o CHECK da fila deveria impedir');
   }
+  // Traço do turno (#2869): o coletor e o desfecho nascem aqui, o turno os
+  // preenche, e o `finally` grava UMA linha em `agent_turn_traces` — inclusive
+  // quando o turno falha ou é devolvido à fila. Mora AQUI, e não num envoltório
+  // por fora, para que os quatro call sites (e os dublês que os testes fazem
+  // de `runAgentTurn`) sigam iguais. A gravação nunca lança.
+  const coletor = criarColetorDeFerramentas();
+  const desfecho: DesfechoDoTurno = {};
+  const input: AgentTurnInput = { ...entradaDoChamador, tracoDoTurno: { coletor, desfecho } };
   const logDaEscolta = withFields(deps.log, {
     job_id: job.id,
     tenant_id: job.organization_id,
     lead_id: leadIdDoJob,
   });
-  await comHandoffSeOrcamentoAcabar(
-    {
-      pool,
-      tenantId: job.organization_id,
-      leadId: leadIdDoJob,
+  let status: StatusDoTurno = 'completed';
+  let erro: unknown = null;
+  try {
+    await comHandoffSeOrcamentoAcabar(
+      {
+        pool,
+        tenantId: job.organization_id,
+        leadId: leadIdDoJob,
+        conversationId: input.conversationId,
+        briefingDoCheckpoint: () =>
+          briefingDoCheckpointDuravel(pool, job.organization_id, leadIdDoJob, logDaEscolta),
+        // O canal nasce DENTRO da closure: instanciá-lo aqui faria todo turno feliz
+        // pagar por um adapter que só o caminho de erro usa. Sem `agentActorId` de
+        // propósito — quando o teto estoura antes da primeira chamada, não houve
+        // agente resolvido para creditar.
+        avisarLead: () =>
+          avisarLeadLendoOContato(
+            pool,
+            {
+              tenantId: job.organization_id,
+              leadId: leadIdDoJob,
+              conversationId: input.conversationId,
+              channelSessionId: input.channelSessionId,
+              jobId: job.id,
+            },
+            {
+              motivo: 'orcamento_de_ia',
+              channel: (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(
+                pool,
+              ),
+              // #2112: a escolta roda no turno INTEIRO, inclusive num follow-up —
+              // o tipo do turno é o que diz qual janela o gate do aviso avalia.
+              origem: tipoDeEnvio(eTurnoDeResposta(job)),
+              now: deps.clock?.() ?? new Date(),
+              log: logDaEscolta,
+              ...(deps.knobs.disclosureMode !== undefined
+                ? { disclosureMode: deps.knobs.disclosureMode }
+                : {}),
+              ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+            },
+          ),
+        log: logDaEscolta,
+      },
+      () => executarTurnoDoAgente(deps, job, pool, ctx, input),
+    );
+  } catch (e) {
+    erro = e;
+    // Job devolvido à fila (cap de envio, janela horária, handoff) não é falha
+    // do turno: é um turno que não devia acontecer agora, e o motivo fica no
+    // registro para quem for ler depois.
+    status = e instanceof JobSettledError ? 'aborted' : 'failed';
+    throw e;
+  } finally {
+    await gravarTracoDoTurno(deps.log, pool, {
+      organizationId: job.organization_id,
+      jobId: job.id,
+      previewRunId: null,
       conversationId: input.conversationId,
-      briefingDoCheckpoint: () =>
-        briefingDoCheckpointDuravel(pool, job.organization_id, leadIdDoJob, logDaEscolta),
-      // O canal nasce DENTRO da closure: instanciá-lo aqui faria todo turno feliz
-      // pagar por um adapter que só o caminho de erro usa. Sem `agentActorId` de
-      // propósito — quando o teto estoura antes da primeira chamada, não houve
-      // agente resolvido para creditar.
-      avisarLead: () =>
-        avisarLeadLendoOContato(
-          pool,
-          {
-            tenantId: job.organization_id,
-            leadId: leadIdDoJob,
-            conversationId: input.conversationId,
-            channelSessionId: input.channelSessionId,
-            jobId: job.id,
-          },
-          {
-            motivo: 'orcamento_de_ia',
-            channel: (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(
-              pool,
-            ),
-            // #2112: a escolta roda no turno INTEIRO, inclusive num follow-up —
-            // o tipo do turno é o que diz qual janela o gate do aviso avalia.
-            origem: tipoDeEnvio(eTurnoDeResposta(job)),
-            now: deps.clock?.() ?? new Date(),
-            log: logDaEscolta,
-            ...(deps.knobs.disclosureMode !== undefined
-              ? { disclosureMode: deps.knobs.disclosureMode }
-              : {}),
-            ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
-          },
-        ),
-      log: logDaEscolta,
-    },
-    () => executarTurnoDoAgente(deps, job, pool, ctx, input),
+      contactId: job.contact_id,
+      config: input.resolvedAgent?.config ?? null,
+      isDryRun: false,
+      status,
+      erro,
+      desfecho,
+      coletor,
+    });
+  }
+}
+
+/** Monta e grava a linha do traço — o único lugar do turno que fala com a tabela. */
+async function gravarTracoDoTurno(
+  log: Logger,
+  pool: pg.Pool,
+  dados: {
+    organizationId: string;
+    jobId: string | null;
+    previewRunId: string | null;
+    conversationId: string | null;
+    contactId: string | null;
+    config: TurnAgentResolution['config'];
+    isDryRun: boolean;
+    status: StatusDoTurno;
+    erro: unknown;
+    desfecho: DesfechoDoTurno;
+    coletor: ColetorDeFerramentas;
+  },
+): Promise<void> {
+  // O agente que o turno resolveu vence o que o chamador passou (que falta no
+  // follow-up e na resposta de caso).
+  const config = dados.desfecho.config ?? dados.config;
+  await registrarTracoDoTurno(
+    pool,
+    montarTracoDoTurno({
+      organizationId: dados.organizationId,
+      jobId: dados.jobId,
+      previewRunId: dados.previewRunId,
+      conversationId: dados.conversationId,
+      contactId: dados.contactId,
+      agentId: config?.agentId ?? null,
+      agentVersionId: config?.versionId ?? null,
+      isDryRun: dados.isDryRun,
+      status: dados.status,
+      // O motivo do aborto é do turno quando ele sabe (`desfecho`); o erro, do
+      // envoltório — a linha tem os dois campos porque são perguntas diferentes.
+      abortReason: dados.desfecho.abortReason ?? null,
+      errorCode:
+        dados.erro === null ? null : dados.erro instanceof Error ? dados.erro.name : 'erro',
+      errorMessage:
+        dados.erro === null
+          ? null
+          : dados.erro instanceof Error
+            ? dados.erro.message
+            : String(dados.erro),
+      provider: dados.desfecho.provider ?? config?.provider ?? null,
+      model: dados.desfecho.model ?? config?.model ?? null,
+      messagesSent: dados.desfecho.messagesSent ?? 0,
+      // A janela REALMENTE carregada ainda não é medida (ver o cabeçalho da
+      // migration 0721): `null` diz "não se sabe", e a janela PEDIDA não entra
+      // aqui para não passar por medição.
+      historicoMensagens: null,
+      knowledgeSourceIds: config?.knowledgeSourceIds ?? [],
+      ferramentas: dados.coletor.listar(),
+      ferramentasTruncadas: dados.coletor.truncado(),
+    }),
+    log,
   );
 }
+
 
 /**
  * Este turno termina em mensagem PARA O LEAD? Só esses são adiados pela janela
@@ -2137,6 +2269,9 @@ async function executarTurnoDoAgente(
         inbound: liveJob().kind === 'inbound_turn',
       }, { log: runLog, jev: deps.jev });
   const agentConfig = routed.config;
+  // O traço grava o agente que o turno RESOLVEU: follow-up e resposta de caso
+  // não passam `resolvedAgent`, e sem isto a linha ficaria sem agente nem fontes.
+  if (input.tracoDoTurno !== undefined) input.tracoDoTurno.desfecho.config = agentConfig;
   // #2155 — o destino do card. `in` porque o ramo de preview/campanha devolve um
   // objeto literal SEM estes campos: sem a guarda, o tipo da união recusa a leitura.
   const destinoPipelineId = 'destinationPipelineId' in routed ? (routed.destinationPipelineId ?? null) : null;
@@ -2509,11 +2644,20 @@ async function executarTurnoDoAgente(
   const mensagemDoJob =
     currentInboundText ?? latestInboundSignal(openingContext.context.messages);
   const inboundsPendentes = inboundsNaoRespondidos(openingContext.context.messages);
+  // A GUARDA DO MENU DE ROBÔ (issue 3106): o casamento determinístico segue
+  // existindo, mas NÃO passa a conversa quando o que casou é fala de automação do
+  // outro lado — menu de opções numeradas ("4 - Falar com um atendente"), mensagem
+  // que se declara robô, ou saudação que chega segundos depois do NOSSO disparo de
+  // Prospecção/campanha (`ehRespostaDeRobo`). Nesses casos o turno segue para o
+  // MODELO, que vê a mensagem e já sabe reconhecer robô — o desenho do autor da
+  // issue. A guarda roda aqui, no mesmo ponto onde a detecção sempre rodou (antes
+  // do modelo e sem gastar token quando ela barra).
   if (
     !preview &&
     inboundsPendentes.some(
       (texto) =>
-        detectHumanHandoffRequest(texto) ||
+        (detectHumanHandoffRequest(texto) &&
+          !ehRespostaDeRobo(texto, openingContext.context.messages)) ||
         (agentConfig !== null && matchesHandoffKeyword(texto, agentConfig.handoffKeywords)),
     )
   ) {
@@ -4071,7 +4215,9 @@ async function executarTurnoDoAgente(
               // `insertInboxItem` à mão neste ponto é o que deixava o `dedupe`
               // sem guarda.
               await abreAvisoDoEspelhoRecusado(pool, tenantId, {
-                leadId,
+                // O NEGÓCIO resolvido pelo espelho, não `leadId` (que aqui é o
+                // contact_id): a Central abre o aviso por `crm_leads.id`.
+                ...(mirror.negocioId !== undefined ? { negocioId: mirror.negocioId } : {}),
                 motivo: mirror.reason,
                 detalhe: mirror.detail,
                 etapaDeDestino: update.transition.to,
@@ -4637,11 +4783,17 @@ async function executarTurnoDoAgente(
             conferirAfirmacoes,
           )
         : rawTools;
-    const tools = wrapToolsWithBreaker(previewTools, {
-      thresholds: deps.knobs.breaker,
-      readOnlyTools: READ_ONLY_TOOLS,
-      log: runLog, // os warns dos gates do breaker saem carimbados com o run
-    });
+    const tools = envolverFerramentasComTraco(
+      wrapToolsWithBreaker(previewTools, {
+        thresholds: deps.knobs.breaker,
+        readOnlyTools: READ_ONLY_TOOLS,
+        log: runLog, // os warns dos gates do breaker saem carimbados com o run
+      }),
+      // O envoltório do traço fica POR FORA do breaker: assim a chamada que o
+      // breaker bloqueou também aparece na linha, marcada como `bloqueada` — é
+      // justamente a que mais falta faz numa investigação (#2869).
+      input.tracoDoTurno?.coletor,
+    );
 
     // F3-11: stage-classifier auxiliar. Roda ANTES do turno (modelo BARATO pelo seam
     // agnóstico) e sugere o estágio; a sugestão entra como HINT no SUFIXO por-lead — o modelo
@@ -5009,20 +5161,46 @@ async function executarTurnoDoAgente(
     // Erro da chamada de correção propaga e o job falha na fila (retry /
     // dead-letter visível). As condições são as do próprio pedido
     // (turno-mudo.ts): razões legítimas de silêncio nem chegam a corrigir.
+    // #3093 — a PRÉVIA DO RASCUNHO pede a MESMA correção quando o modelo deixou
+    // TEXTO SOLTO (escreveu a resposta fora do `send_message` e encerrou). Em
+    // produção essa é a causa nº 3 da issue: o `turno-mudo.ts` pede uma correção
+    // e o cliente acaba atendido. A prévia tinha `!preview` na condição, então o
+    // texto solto morria no `no_candidate` e o painel não podia dizer se houve
+    // decisão ou parada. Aqui a prévia do rascunho roda a MESMA correção, UMA
+    // vez, com a mesma conversa e as mesmas ferramentas — e, sem candidato depois
+    // dela, o que resta é a decisão (o CORRECAO_DO_TURNO_MUDO autoriza o modelo a
+    // encerrar sem chamar nada, doutrina do #2938).
+    //
+    // Só o rascunho ASSISTIDO: a prévia de TESTE (sandbox) mostra o que o agente
+    // produziu e uma segunda chamada esconderia o defeito que ela existe para
+    // revelar. Só com texto solto: silêncio sem texto é decisão já tomada, e
+    // pedir de novo pagaria uma chamada de modelo para ouvir a mesma coisa.
     let correcaoTruncou = false;
+    // A correção também pode gastar o teto dela (3 passos) só em consultas: na
+    // prévia isso é a mesma falha do teto da primeira chamada, não decisão.
+    let tetoNaCorrecao = false;
     const correcaoDoTurnoMudoPedida =
-      !preview &&
-      liveJob().kind === 'inbound_turn' &&
-      turnoMudoPedeCorrecao({
-        tentativasDeEnvio,
-        enviadas: outcomes.length,
-        turnoDescartado,
-        passouParaAEquipe,
-        capDeEnvio: capDeEnvioAtingido(),
-      });
+      preview?.kind === 'assisted'
+        ? previaPedeCorrecaoDoTurnoMudo({
+            textoEscrito: turn.result.text,
+            candidatos: preview.result.candidates.length,
+            tentativasDeEnvio,
+          })
+        : !preview &&
+          liveJob().kind === 'inbound_turn' &&
+          turnoMudoPedeCorrecao({
+            tentativasDeEnvio,
+            enviadas: outcomes.length,
+            turnoDescartado,
+            passouParaAEquipe,
+            capDeEnvio: capDeEnvioAtingido(),
+          });
     if (correcaoDoTurnoMudoPedida) {
       runLog.warn('turno terminou sem mensagem ao cliente — pedindo UMA correção', {
-        job_id: liveJob().id,
+        // `liveJob()` LANÇA na prévia (`preview_operational_job_forbidden`, #2996):
+        // o rascunho vai sem id de job, e o log segue honesto.
+        job_id: job?.id ?? null,
+        previa: preview?.kind ?? null,
       });
       const pedidoDeCorrecao: ModelMessage = { role: 'user', content: CORRECAO_DO_TURNO_MUDO };
       const correcao = await runModelCall(
@@ -5033,7 +5211,7 @@ async function executarTurnoDoAgente(
           leadId: leadId || null,
           jobId: job?.id,
           agentId: agentConfig?.agentId ?? null,
-          purpose: 'agent_turn',
+          purpose: preview ? 'agent_preview' : 'agent_turn',
           system,
           messages: [...openingMessages, ...turn.result.responseMessages, pedidoDeCorrecao],
           tools,
@@ -5053,6 +5231,11 @@ async function executarTurnoDoAgente(
       // Sinal de FALHA da correção: terminou no teto de tokens. Silêncio com
       // finishReason normal (stop/tool-calls) é resposta escolhida, não defeito.
       correcaoTruncou = correcao.result.finishReason === 'length';
+      tetoNaCorrecao = tetoDePassosAtingido({
+        passosUsados: correcao.result.steps?.length ?? 0,
+        maxSteps: Math.min(maxSteps, 3),
+        finishReason: correcao.result.finishReason,
+      });
       mensagensDoTurno = [...mensagensDoTurno, pedidoDeCorrecao, ...correcao.result.responseMessages];
       if (runError !== null) throw runError;
       if (outcomes.some((o) => o.kind === 'failed')) {
@@ -5233,13 +5416,31 @@ async function executarTurnoDoAgente(
     // turno. Aqui o lead já recebeu resposta, mas a conversa ficaria sem
     // checkpoint e sem dono, e o próximo inbound cairia no mesmo bloqueio, agora
     // sem nada tendo mudado no meio.
-    // Prévia sem candidato e sem impedimento: quem opera precisa saber que o agente não propôs nada.
+    // Prévia sem candidato e sem impedimento: quem opera precisa saber POR QUE.
+    //
+    // #3093 — o mesmo `no_candidate` cobria decisão e falha da geração, e o
+    // painel não podia dizer ao atendente se o agente decidiu não responder ou se
+    // a geração parou no meio. A decisão mora em `desfecho-da-previa.ts` (pura,
+    // testável) e devolve o código da CAUSA: `output_truncated` (o mesmo nome do
+    // log do turno real), `max_steps_exhausted` (o teto de `max_steps`) ou
+    // `no_candidate` — que depois desta separação significa só a DECISÃO de não
+    // responder. `null` quando há candidato ou quando um impedimento já explica
+    // o desfecho (veto, mídia, ferramenta desconhecida).
     const avisarSemCandidato = (p: NonNullable<typeof preview>): void => {
-      if (p.result.candidates.length === 0 && p.result.impediments.length === 0)
-        p.result.impediments.push({
-          code: 'no_candidate',
-          message: 'O agente não propôs uma resposta. Revise o cenário ou a configuração.',
-        });
+      const desfecho = desfechoSemCandidato({
+        candidatos: p.result.candidates.length,
+        impedimentos: p.result.impediments.length,
+        // A correção que termina truncada ou no teto dela é FALHA, não decisão
+        // — a produção trata o mesmo sinal como `correction_truncated_failed`.
+        saidaTruncada: saidaTruncada || correcaoTruncou,
+        tetoDePassosAtingido:
+          tetoDePassosAtingido({
+            passosUsados: turn.result.steps?.length ?? 0,
+            maxSteps,
+            finishReason: turn.result.finishReason,
+          }) || tetoNaCorrecao,
+      });
+      if (desfecho !== null) p.result.impediments.push(desfecho);
     };
     // ⚠️ RASCUNHO (modo assistido) não fecha o turno com checkpoint. O checkpoint
     // da prévia não é gravado (a prévia retorna antes do `insertCheckpoint`, logo
@@ -5653,6 +5854,13 @@ async function executarTurnoDoAgente(
       );
     }
 
+    // O traço precisa do que só o turno vê: quantas mensagens saíram e qual
+    // modelo respondeu (quem grava a linha é o envoltório, e ele não passa por aqui).
+    if (input.tracoDoTurno !== undefined) {
+      input.tracoDoTurno.desfecho.messagesSent = outcomes.length;
+      input.tracoDoTurno.desfecho.model = turn.model;
+    }
+
     runLog.info('turno do agente concluído', {
       kind: liveJob().kind,
       messages_sent: outcomes.length,
@@ -5670,24 +5878,23 @@ export async function runAgentPreview(
   pool: pg.Pool,
   preview: TurnPreview,
 ): Promise<void> {
-  await executarTurnoDoAgente(
-    deps,
-    null,
-    pool,
-    { workerId: '' },
-    {
-      channelSessionId: preview.channelId ?? '',
-      conversationId: preview.context.context.conversation_id ?? '',
-      buildOpening: ({
-        previous,
-        leadState,
-        context,
-        notesIndexBlock,
-        projeta,
-        entregues,
-        compromissosBlock,
-      }) =>
-        buildOpeningMessage(
+  // A PRÉVIA também deixa traço (issue #2869): é por ela que o operador confere
+  // o que o agente faria, e a linha entra com `is_dry_run = true` para nunca ser
+  // confundida com um turno que falou com alguém de verdade.
+  const coletor = criarColetorDeFerramentas();
+  const desfecho: DesfechoDoTurno = {};
+  let erro: unknown = null;
+  try {
+    await executarTurnoDoAgente(
+      deps,
+      null,
+      pool,
+      { workerId: '' },
+      {
+        tracoDoTurno: { coletor, desfecho },
+        channelSessionId: preview.channelId ?? '',
+        conversationId: preview.context.context.conversation_id ?? '',
+        buildOpening: ({
           previous,
           leadState,
           context,
@@ -5695,10 +5902,37 @@ export async function runAgentPreview(
           projeta,
           entregues,
           compromissosBlock,
-        ),
-    },
-    preview,
-  );
+        }) =>
+          buildOpeningMessage(
+            previous,
+            leadState,
+            context,
+            notesIndexBlock,
+            projeta,
+            entregues,
+            compromissosBlock,
+          ),
+      },
+      preview,
+    );
+  } catch (e) {
+    erro = e;
+    throw e;
+  } finally {
+    await gravarTracoDoTurno(deps.log, pool, {
+      organizationId: preview.organizationId,
+      jobId: null,
+      previewRunId: preview.runId,
+      conversationId: preview.context.context.conversation_id ?? null,
+      contactId: preview.contactId,
+      config: preview.agent,
+      isDryRun: true,
+      status: erro === null ? 'completed' : 'failed',
+      erro,
+      desfecho,
+      coletor,
+    });
+  }
 }
 
 /**
