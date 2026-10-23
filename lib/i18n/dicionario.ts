@@ -15371,6 +15371,12 @@ export const DICIONARIO: Traducoes = {
   "O modelo foi desativado pela plataforma.": { es: "La plataforma desactivó la plantilla." },
   "Os valores enviados não batem com as variáveis do modelo.": { es: "Los valores enviados no coinciden con las variables de la plantilla." },
   "O modelo não existe neste número com este idioma.": { es: "La plantilla no existe en este número con este idioma." },
+  "Este modelo não está na lista de modelos do número. Sincronize em Conexões, na aba Modelos.": {
+    es: "Esta plantilla no está en la lista de plantillas del número. Sincroniza en Conexiones, en la pestaña Modelos.",
+  },
+  "O modelo mudou na plataforma depois de configurado. Configure o envio de novo.": {
+    es: "La plantilla cambió en la plataforma después de configurarse. Configura el envío de nuevo.",
+  },
   "O texto do modelo com os valores ficou longo demais.": { es: "El texto de la plantilla con los valores quedó demasiado largo." },
   "O conteúdo viola a política de modelos da plataforma.": { es: "El contenido viola la política de plantillas de la plataforma." },
   "O formato de um valor não confere com o modelo (por exemplo, falta o link da imagem do cabeçalho).": { es: "El formato de un valor no coincide con la plantilla (por ejemplo, falta el enlace de la imagen del encabezado)." },

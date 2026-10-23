@@ -1,4 +1,8 @@
-import { codigoDaPlataforma, fraseDaFalha } from "@/lib/channels/erro-da-plataforma";
+import {
+  codigoDaPlataforma,
+  FRASES_DA_PLATAFORMA,
+  recusaDoEnvioDeModelo,
+} from "@/lib/channels/erro-da-plataforma";
 import { FRASES_DE_FALHA, fraseDaFalhaDeCanal } from "@/lib/channels/frases-de-falha";
 import type { Message } from "@/lib/types/messaging";
 
@@ -39,8 +43,12 @@ const SINAL_DE_TEXTO_CRU =
  * 1. a frase nossa do código (`FRASES_DA_CONVERSA`);
  * 2. a frase da recusa da plataforma de modelos (`erro-da-plataforma.ts`),
  *    achada no código OU no texto — o envio grava o código genérico do adapter
- *    e põe a causa no texto (`template_missing_values: 1`, `[plataforma:132000]`),
- *    e a frase genérica do canal mandaria conferir uma conexão que funciona;
+ *    e põe a causa no texto (`template_missing_values: 1`, `[plataforma:132000]`,
+ *    `<canal>_132000: …`), e a frase genérica do canal mandaria conferir uma
+ *    conexão que funciona;
+ * 2b. recusa do envio de modelo cujo código não tem frase nossa (`<canal>_100: …`):
+ *    o texto do provedor, sem o nosso prefixo — foi a pista do #2659. Barrado pelo
+ *    filtro de texto cru, a genérica; nunca a frase do canal;
  * 3. a frase do código em `FRASES_DE_FALHA`;
  * 4. o `error_message` sem sinal de texto cru — o título que a plataforma
  *    grava para um código que nenhum dos mapas conhece é a única pista. Vai
@@ -53,9 +61,19 @@ export function motivoDaFalhaDaMensagem(
 ): string {
   const codigo = mensagem.error_code ?? "";
   if (Object.hasOwn(FRASES_DA_CONVERSA, codigo)) return t(FRASES_DA_CONVERSA[codigo] as string);
-  const daPlataforma = codigoDaPlataforma(mensagem.error_code, mensagem.error_message);
-  // `null` no texto cru: aqui só vale a frase do mapa, nunca o texto da plataforma.
-  if (fraseDaFalha(daPlataforma, null)) return t(fraseDaFalha(daPlataforma, null) as string);
+  const recusa = recusaDoEnvioDeModelo(mensagem.error_message);
+  const daPlataforma = codigoDaPlataforma(mensagem.error_code, mensagem.error_message) ?? recusa?.codigo ?? null;
+  if (daPlataforma !== null && Object.hasOwn(FRASES_DA_PLATAFORMA, daPlataforma)) {
+    return t(FRASES_DA_PLATAFORMA[daPlataforma] as string);
+  }
+  if (recusa) {
+    const { codigo: codigoDaRecusa, textoDoProvedor } = recusa;
+    if (!textoDoProvedor || SINAL_DE_TEXTO_CRU.test(textoDoProvedor)) return t("Não foi possível enviar esta mensagem.");
+    // O código fica à vista: o `details` da plataforma às vezes vem sem ele.
+    return /^\d+$/.test(codigoDaRecusa) && !textoDoProvedor.includes(`#${codigoDaRecusa}`)
+      ? `(#${codigoDaRecusa}) ${textoDoProvedor}`
+      : textoDoProvedor;
+  }
   if (fraseDaFalhaDeCanal(codigo)) {
     // `as string`, e não `!`: é a forma que a cerca de i18n desembrulha para cobrar o espanhol de cada frase.
     return t(FRASES_DE_FALHA[codigo] as string);

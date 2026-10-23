@@ -87,6 +87,27 @@ export function codigoDaPlataforma(
   return null;
 }
 
+/**
+ * A recusa do ENVIO DE MODELO como `meta/send-template-for-session.ts` a grava,
+ * debaixo do código genérico do adapter: `<prefixo do canal>_<código>: <texto do
+ * provedor>` (o `api_error`; `erro` quando a resposta não trouxe código), ou
+ * `template_missing:` / `template_stale:` (a conferência contra o espelho).
+ *
+ * `codigoDaPlataforma` não lê este prefixo — e ensiná-lo mudaria também quando a
+ * campanha pausa (`falhaDoEnvioInteiro`), que é decisão de outro conserto. Quem
+ * só quer a FRASE (a tela da conversa) lê os dois.
+ */
+const RECUSA_DO_MODELO = /^(?:[a-z]+_(\d{2,6}|erro)|(template_missing|template_stale)):\s*/;
+
+export function recusaDoEnvioDeModelo(
+  errorMessage: string | null | undefined,
+): { codigo: string; textoDoProvedor: string } | null {
+  const texto = (errorMessage ?? "").trim();
+  const achado = RECUSA_DO_MODELO.exec(texto);
+  if (!achado) return null;
+  return { codigo: (achado[1] ?? achado[2])!, textoDoProvedor: texto.slice(achado[0].length) };
+}
+
 /** `true` quando a falha vale para todos os envios seguintes, não só para esta pessoa. */
 export function falhaDoEnvioInteiro(codigo: string | null): boolean {
   return codigo !== null && DO_ENVIO_INTEIRO.has(codigo);
@@ -96,8 +117,11 @@ export function falhaDoEnvioInteiro(codigo: string | null): boolean {
  * A frase para quem opera, por código. Em português: a tela traduz na borda
  * (`t()`), como todo texto do produto. Código sem frase própria cai no texto
  * cru que a plataforma mandou — melhor que um "erro desconhecido".
+ *
+ * Exportada para a tela escrever `t(FRASES_DA_PLATAFORMA[codigo] as string)`: é a
+ * forma que a cerca de i18n desembrulha para cobrar o espanhol de cada frase.
  */
-const FRASE: Record<string, string> = {
+export const FRASES_DA_PLATAFORMA: Record<string, string> = {
   "131050": "A pessoa desligou as mensagens de marketing desta empresa no WhatsApp. Não tente de novo.",
   "131049":
     "O WhatsApp limitou quantas promoções esta pessoa recebe. Dá para tentar de novo depois de 24 horas.",
@@ -128,10 +152,13 @@ const FRASE: Record<string, string> = {
     "Acabou a cota mensal de mensagens do provedor do número. Cadastre um meio de pagamento lá.",
   template_not_approved: "O modelo não está aprovado na plataforma neste momento.",
   template_missing_values: "Falta o valor de uma variável do modelo para este contato.",
+  // A conferência contra o espelho (`send-template-for-session.ts`), não a plataforma.
+  template_missing: "Este modelo não está na lista de modelos do número. Sincronize em Conexões, na aba Modelos.",
+  template_stale: "O modelo mudou na plataforma depois de configurado. Configure o envio de novo.",
 };
 
 export function fraseDaFalha(codigo: string | null, textoCru: string | null | undefined): string | null {
-  if (codigo !== null && FRASE[codigo]) return FRASE[codigo]!;
+  if (codigo !== null && Object.hasOwn(FRASES_DA_PLATAFORMA, codigo)) return FRASES_DA_PLATAFORMA[codigo]!;
   const cru = (textoCru ?? "").trim();
   return cru === "" ? null : cru.slice(0, 300);
 }

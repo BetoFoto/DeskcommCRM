@@ -150,6 +150,18 @@ describe("JanelaFechadaAviso", () => {
     expect(opcoes.description).toBe("Falta o valor de uma variável do modelo para este contato.");
   });
 
+  it("modelo recusado pela plataforma (132000): a causa, não 'confira a conexão'", async () => {
+    const [, opcoes] = await enviarERecusar(
+      "meta_error", "meta_132000: (#132000) Number of parameters does not match the expected number of params",
+    );
+    expect(opcoes.description).toBe("Os valores enviados não batem com as variáveis do modelo.");
+  });
+
+  it("modelo recusado com código sem frase nossa (100): o texto da plataforma", async () => {
+    const [, opcoes] = await enviarERecusar("meta_error", "meta_100: Parameter name is missing or empty");
+    expect(opcoes.description).toBe("(#100) Parameter name is missing or empty");
+  });
+
   it("modelo recusado pelo modo de teste: o aviso conta a frase nossa", async () => {
     const [, opcoes] = await enviarERecusar(
       "pre_go_live", "Envio automático bloqueado pelo modo de teste do canal.",

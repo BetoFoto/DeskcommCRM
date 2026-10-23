@@ -44,6 +44,55 @@ describe("motivoDaFalhaDaMensagem: a recusa do modelo diz a causa", () => {
   });
 });
 
+// O envio de modelo (`send-template-for-session.ts`) grava `<canal>_<código>: <texto
+// do provedor>` debaixo do código genérico do adapter. Na v3 isso caía na frase do
+// canal — "Confira a conexão em Conexões" —, uma instrução falsa para modelo recusado.
+describe("motivoDaFalhaDaMensagem: o prefixo do envio de modelo", () => {
+  const CONEXAO = /Confira a conexão/;
+
+  it("código da plataforma com frase nossa: a frase (132000)", () => {
+    const m = motivo("meta_error", "meta_132000: (#132000) Number of parameters does not match the expected number of params");
+    expect(m).toBe("Os valores enviados não batem com as variáveis do modelo.");
+  });
+
+  it("código sem frase nossa: o texto do provedor, com o código à vista (100, o #2659)", () => {
+    const m = motivo("meta_error", "meta_100: Parameter name is missing or empty");
+    expect(m).toBe("(#100) Parameter name is missing or empty");
+    expect(m).not.toMatch(CONEXAO);
+  });
+
+  it("o código já no texto do provedor não sai repetido", () => {
+    expect(motivo("meta_error", "meta_131009: (#131009) Parameter value is not valid"))
+      .toBe("(#131009) Parameter value is not valid");
+  });
+
+  it.each([
+    ["template_missing: promo (pt_BR) não está no espelho", /^Este modelo não está na lista de modelos do número/],
+    ["template_stale: promo mudou na Meta desde a configuração", /^O modelo mudou na plataforma depois de configurado/],
+  ])("conferência contra o espelho: %s tem frase própria", (texto, frase) => {
+    const m = motivo("meta_error", texto);
+    expect(m).toMatch(frase);
+    expect(m).not.toMatch(CONEXAO);
+  });
+
+  it("recusa sem código e com texto cru: a genérica, nunca a frase do canal", () => {
+    expect(motivo("meta_error", "meta_erro: fetch failed http://servico-interno:3000/x")).toBe(GENERICA);
+  });
+
+  it("recusa com código e texto do provedor barrado pelo filtro: a genérica", () => {
+    expect(motivo("meta_error", "meta_500: connect ECONNREFUSED 10.0.0.5:443")).toBe(GENERICA);
+  });
+
+  // DECLARADO no PR: estes dois mudaram de frase. A da plataforma vence a do canal
+  // para o código numérico gravado pelo webhook.
+  it.each([
+    ["131026", "Não foi possível entregar: o número não tem WhatsApp ou o aplicativo está desatualizado."],
+    ["131047", "Passaram mais de 24 horas da última mensagem do cliente: fora da janela, só modelo aprovado."],
+  ])("webhook %s: a frase da plataforma", (codigo, frase) => {
+    expect(motivo(codigo, "Message undeliverable")).toBe(frase);
+  });
+});
+
 describe("motivoDaFalhaDaMensagem: o texto cru do canal não aparece", () => {
   it("código com frase própria: a frase, não o texto do transporte", () => {
     const m = motivo("channel_session_not_working", "fetch failed http://servico-interno:3000/api/sendText");
