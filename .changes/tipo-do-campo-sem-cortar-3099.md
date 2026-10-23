@@ -6,4 +6,4 @@ titulo: Funis: o seletor de tipo não corta mais os rótulos longos
 
 Em Configurações › Funis, o botão "Tipo do campo" tinha 8rem e cortava "Lista de várias escolhas" e "Lista de varias opciones" sem reticências. A coluna passa a 13rem (18px de folga sobre o maior rótulo em espanhol) e o gatilho ganha o rótulo inteiro no `title`.
 
-Contribuição de @Tong-bit-art (#PR_PLACEHOLDER), a partir da issue #3099.
+Contribuição de @Tong-bit-art (#3340), a partir da issue #3099.
