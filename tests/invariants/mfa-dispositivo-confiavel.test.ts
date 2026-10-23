@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { sql } from "./gov-helpers";
 
 /**
- * Migration 0723 — "confiar neste dispositivo". A confiança é uma linha de
+ * Migration 0747 — "confiar neste dispositivo". A confiança é uma linha de
  * `mfa_trusted_devices` amarrada ao `session_id` do JWT, e `fn_session_mfa_proven`
  * (a que as definer de agenda, resposta, roteamento etc. chamam) passa a aceitá-la.
  *
@@ -52,7 +52,7 @@ beforeAll(() => {
   `);
 });
 
-describe("0723 — dispositivo confiável da MFA", () => {
+describe("0747 — dispositivo confiável da MFA", () => {
   it("authenticated NÃO lê nem grava a tabela (senão se dispensaria do código sozinho)", () => {
     const tentativa = (stmt: string) =>
       comoUsuario(`
