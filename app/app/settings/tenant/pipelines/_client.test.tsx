@@ -48,6 +48,7 @@ globalThis.ResizeObserver = class {
 import { updatePipelineConfig } from "@/app/actions/settings/updatePipelineConfig";
 import { importarOpcoesCsv } from "@/lib/leads/campos-pesquisaveis";
 import { ROTULOS_DO_TIPO } from "@/lib/schemas/rotulos-do-campo";
+import { NAV_DESTINATIONS } from "@/lib/navigation/registry";
 import {
   PipelinesClient,
   TIPOS_DE_CAMPO,
@@ -827,5 +828,21 @@ describe("Configurações › Funis com listas longas (#3176)", () => {
       (URL as { createObjectURL?: unknown }).createObjectURL = semObjectURL;
       HTMLAnchorElement.prototype.click = cliqueOriginal;
     }
+  });
+});
+
+describe("organização sem nenhum funil", () => {
+  it("manda criar em Funis, com link — e não para quem instalou o sistema", () => {
+    // O texto dizia que criar funil "é feito por quem instalou o sistema, direto
+    // no banco". Falso desde que a lista de Funis ganhou o botão "Novo funil":
+    // o dono ficava procurando alguém para fazer o que ele mesmo faz num clique.
+    render(<PipelinesClient pipelines={[]} podeEditarConfig />);
+    const vazio = screen.getByTestId("sem-funil-configuracao");
+    expect(vazio.textContent).not.toMatch(/banco|quem instalou/i);
+    const funis = NAV_DESTINATIONS.find((d) => d.href === "/app/kanban");
+    expect(funis).toBeTruthy();
+    const link = screen.getByTestId("link-criar-funil");
+    expect(link.getAttribute("href")).toBe(funis!.href);
+    expect(link.textContent).toContain(funis!.label);
   });
 });
