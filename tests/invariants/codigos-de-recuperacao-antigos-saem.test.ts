@@ -44,9 +44,13 @@ const NOVO_USADO = `'\\x${"cd".repeat(32)}'`;
 const ANTIGO = `convert_to('{"type":"Buffer","data":[160,13,118,100,110,186,145,176,87,132,21,84,213,200,51,79,73,141,197,146,237,116,75,206,64,79,33,254,39,28,211,110]}', 'UTF8')`;
 const ANTIGO_USADO = `convert_to('{"type":"Buffer","data":[128,8,15,241,111,71,205,144,235,125,54,61,219,69,188,74,181,47,32,229,247,230,176,83,114,250,182,248,232,6,242,252]}', 'UTF8')`;
 
-/** Semeia 2 antigos + 2 novos, aplica `bloco` `vezes` vezes, devolve o que ficou. */
+/**
+ * Semeia 2 antigos + 2 novos, aplica `bloco` `vezes` vezes, devolve o que ficou.
+ * O psql também imprime as etiquetas dos comandos (BEGIN, DELETE 2…); a linha
+ * do resultado é a que começa com `RESTOU=`.
+ */
 function aplicar(bloco: string, vezes: number): string {
-  return sql(`
+  const saida = sql(`
     begin;
     insert into auth.users (id, email) values ('${USUARIO}', 'inv-0759@invariant.test') on conflict do nothing;
     delete from public.user_recovery_codes where user_id = '${USUARIO}';
@@ -56,10 +60,13 @@ function aplicar(bloco: string, vezes: number): string {
       ('${USUARIO}', ${NOVO}::bytea, null),
       ('${USUARIO}', ${NOVO_USADO}::bytea, now());
     ${Array.from({ length: vezes }, () => bloco).join("\n")}
-    select coalesce(string_agg(octet_length(code_hash)::text || ':' || (used_at is not null)::text, ','
+    select 'RESTOU=' || coalesce(string_agg(octet_length(code_hash)::text || ':' || (used_at is not null)::text, ','
                     order by encode(code_hash, 'hex')), '')
       from public.user_recovery_codes where user_id = '${USUARIO}';
     rollback;`);
+  const linha = saida.split("\n").find((l) => l.startsWith("RESTOU="));
+  if (linha === undefined) throw new Error(`sem a linha RESTOU= na saída do psql:\n${saida}`);
+  return linha.slice("RESTOU=".length);
 }
 
 describe("0759 — códigos de recuperação antigos saem, os novos ficam", () => {
