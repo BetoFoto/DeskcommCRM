@@ -2097,6 +2097,26 @@ fresca ponta a ponta com a marca de um revendedor — `install.sh` numa VPS, res
 quem compra funciona inteira. Os defeitos de marca que mais custam caro moram exatamente aí,
 porque são vistos primeiro por um terceiro. **A receita para fechá-la está em J10, abaixo.**
 
+## J57 — Vendas e dinheiro no celular `[P1]` (2026-10-23)
+
+ADR-0006, fase F4. Telas do gestor que, a 390px, deixavam ação fora da tela ou
+alvo pequeno para o dedo: Conexões, Webhooks, Radar, Propostas, Faturamento e
+Meta Ads. Conserto só de classes `max-md:`/`sm:` (o DOM é o mesmo do
+computador). Spec: `tests/e2e/comercial-no-celular.spec.ts` (parte 7), 390×844
+com toque emulado, login `admin` (Conexões é só admin). Sem WAHA: Conexões mede
+só o que aparece sem canal conectado de verdade.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J57.1 | Conexões a 390px | o `<main>` não rola para o lado; «Conectar novo WhatsApp» e «Agendar pausa» entre 15 e 375px; «Configurar responsáveis por número» ≥ 44px | a medir (CI) |
+| J57.2 | Webhooks a 390px | as 4 abas entre 15 e 375px, a fila não rola por dentro, e a borda de cima de cada aba (3px) recebe o toque, com controle: 1px acima da aba não a acerta | a medir (CI) |
+| J57.3 | Radar a 390px | «Assumir» dentro da tela; o título do item com ≥ 150px; o link da lista «sem próximo passo» ≥ 44px | a medir (CI) |
+| J57.4 | Lista de propostas a 390px | cabeçalho `display:none`; a caixa da tabela não rola para o lado; a primeira caixa do link do título ≥ 44px (o retângulo inteiro somaria as linhas do título quebrado e passaria sem o conserto) | a medir (CI) |
+| J57.5 | Proposta enviada a 390px | «Marcar como aceita», «Marcar como recusada» e «Revisar esta proposta» entre 15 e 375px | a medir (CI) |
+| J57.6 | Meta Ads sem conta a 390px | o `<main>` não rola para o lado (o `-m-6` acompanha o `p-4` do `<main>`) | a medir (CI) |
+| J57.7 | Faturamento a 390px e a 1280px | a linha do lançamento vira cartão; «Pagar» e «×» com ≥ 44×44px, dentro da tela, sem um cobrir o outro; a 1280px a linha volta a `table-row` e «Pagar» volta a texto | classe conferida (unit) `tests/unit/pagar-e-remover-sao-alvos-separados.test.tsx`; geometria a medir (CI) |
+| J57.8 | Nome da campanha no Meta Ads | a 1ª coluna e o nome dentro dela param em 9rem abaixo de `md` e voltam a 22rem acima | classe conferida (unit) `tests/unit/meta-ads-connect-rate-na-tela.test.tsx`; geometria a medir (CI) — a spec de hoje não chega à tabela: sem conta Meta no CI ela não aparece |
+
 ## J10 — Instalação fresca com a marca do revendedor `[P0]` (receita manual)
 
 **Por que isto é receita escrita e não spec.** O lugar natural desses casos seria
