@@ -59,6 +59,10 @@
  * `erro_de_pedido`, que continua NÃO caindo para a reserva (o mesmo corpo seria
  * recusado de novo lá). Reserva para outro provedor, aviso na tela e
  * auto-renovação da janela continuam fora deste módulo.
+ *
+ * `passar_para_humano` é a DECISÃO; quem a executa ainda não existe:
+ * `run-model-call` só age em `tentar_reserva` e relança o resto (#3371 segue
+ * aberta para essa fiação).
  */
 
 /**
@@ -207,7 +211,9 @@ export type DecisaoDaQueda = QuedaParaAReserva | PassarParaHumano;
  * recusado seria recusado de novo pela outra credencial, gastando duas chamadas
  * para colher dois erros. SEM reserva, porém, o erro de pedido passa para o
  * humano como os demais (#3371, item 3): a falha — nossa ou da assinatura — não
- * pode virar silêncio.
+ * pode virar silêncio. (É a DECISÃO; hoje `run-model-call` só executa
+ * `tentar_reserva` e relança o resto: a passagem para humano sem reserva segue
+ * pendente na #3371.)
  *
  * "Passar para um humano" é decisão de produto já tomada na issue: sem chave de
  * reserva o agente não pode ficar calado. O TEXTO que o atendente lê não mora
