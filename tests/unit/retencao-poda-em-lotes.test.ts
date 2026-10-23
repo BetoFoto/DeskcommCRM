@@ -375,7 +375,7 @@ describe("podarHistorico — o laço de lotes", () => {
     };
     const r = await podarHistorico(db, {});
 
-    // 17 drenos: 15 pelo rpc (o 15º é o aviso de agendamento, 0707) + a mídia +
+    // 17 drenos: 15 pelo rpc (o 15º é o aviso de agendamento, 0753) + a mídia +
     // a décima poda (o DELETE do admin).
     expect(r.falhas).toHaveLength(17);
     expect(r.falhas.some((f) => f.includes("conversation_drafts"))).toBe(true);

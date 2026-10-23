@@ -1,5 +1,5 @@
 /**
- * QUEM CONFIGURA O AVISO DE AGENDAMENTO, E QUEM LÊ O QUE — migration 0707.
+ * QUEM CONFIGURA O AVISO DE AGENDAMENTO, E QUEM LÊ O QUE — migration 0753.
  *
  * O mesmo desenho e os mesmos três eixos de `aviso-de-caso-escrita.test.ts`,
  * pela mesma razão: as duas tabelas ficam fora de `rls-isolation.test.ts` (a

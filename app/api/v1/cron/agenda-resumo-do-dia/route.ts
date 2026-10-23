@@ -1,5 +1,5 @@
 /**
- * O RESUMO DAS 7H do aviso de agendamento no WhatsApp do dono (migration 0707).
+ * O RESUMO DAS 7H do aviso de agendamento no WhatsApp do dono (migration 0753).
  *
  * ═══ POR QUE DE DEZ EM DEZ MINUTOS, E NÃO UMA VEZ AO DIA ═══
  *

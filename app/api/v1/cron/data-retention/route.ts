@@ -137,7 +137,7 @@ export interface ResultadoDaRetencao {
   avisos_de_caso_apagados: number;
   lotes_avisos_de_caso: number;
   avisos_de_caso_tem_resto: boolean;
-  /** O registro de entrega do aviso de agendamento no WhatsApp do dono (0707). */
+  /** O registro de entrega do aviso de agendamento no WhatsApp do dono (0753). */
   avisos_de_agendamento_apagados: number;
   lotes_avisos_de_agendamento: number;
   avisos_de_agendamento_tem_resto: boolean;
@@ -601,7 +601,7 @@ export async function podarHistorico(
   // poda aqui é volume de operação — e é a poda de horizonte mais curto das
   // sete, porque a única pergunta que a linha responde é de semanas.
   const avisosDeCaso = await executarDreno(falhas, "fn_expurgar_avisos_de_caso_vencidos", () => drenar(db, "fn_expurgar_avisos_de_caso_vencidos", avisoDeCaso.dias), zerado);
-  // A do aviso de agendamento (0707) é a mesma pergunta de semanas sobre o
+  // A do aviso de agendamento (0753) é a mesma pergunta de semanas sobre o
   // mesmo canal, e por isso segue o MESMO knob e o mesmo piso do aviso de caso:
   // dois knobs para "o aviso saiu?" seriam dois números para o operador errar.
   const avisosDeAgendamento = await executarDreno(falhas, "fn_expurgar_avisos_de_agendamento_vencidos", () => drenar(db, "fn_expurgar_avisos_de_agendamento_vencidos", avisoDeCaso.dias), zerado);

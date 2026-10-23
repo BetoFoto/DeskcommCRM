@@ -58075,9 +58075,9 @@ begin
 end
 $constraint$;
 
--- ---- aviso de agendamento no WhatsApp (migration 0707) ----
+-- ---- aviso de agendamento no WhatsApp (migration 0753) ----
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0707 — O WhatsApp do dono é avisado dos agendamentos.
+-- 0753 — O WhatsApp do dono é avisado dos agendamentos.
 --
 -- ─── O que não existia ────────────────────────────────────────────────────
 --
@@ -58447,7 +58447,7 @@ revoke all     on function public.fn_expurgar_avisos_de_agendamento_vencidos(int
 grant  execute on function public.fn_expurgar_avisos_de_agendamento_vencidos(int,int) to service_role;
 
 comment on table public.config_aviso_de_agendamento is
-  'Aviso de agendamento no WhatsApp do dono (0707). Uma linha por organização. Escrita só por fn_definir_aviso_de_agendamento.';
+  'Aviso de agendamento no WhatsApp do dono (0753). Uma linha por organização. Escrita só por fn_definir_aviso_de_agendamento.';
 comment on table public.entregas_de_aviso_de_agendamento is
   'Uma linha por evento de agenda avisado (unique organization_id+event_id) e uma por resumo diário (unique organization_id+dia). O texto nunca é guardado, só corpo_hash.';
 

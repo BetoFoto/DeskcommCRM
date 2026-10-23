@@ -666,7 +666,7 @@ export const AUDIT_ACTIONS = [
   // 0648). Risco é parte do desenho — quem tiver o link entra sem pedir —, então
   // "quando foi que ligaram isso?" é a primeira pergunta depois de um incidente.
   "agenda.meet_acesso_aberto_alterado",
-  // O aviso de agendamento no WhatsApp do dono (migration 0707). Quatro códigos
+  // O aviso de agendamento no WhatsApp do dono (migration 0753). Quatro códigos
   // pela mesma razão dos do aviso de caso: "saiu", "não saiu em definitivo",
   // "mudaram a configuração" e "mandaram o teste" são perguntas diferentes, e o
   // painel filtra por `action`. SEM o texto e com o destino MASCARADO — o que

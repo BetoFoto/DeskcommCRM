@@ -2,7 +2,7 @@
  * Agenda › **Aviso de agendamento** (`/app/agenda/avisos`).
  *
  * O WhatsApp do dono recebe cada horário marcado, remarcado ou cancelado e, às
- * 7h, o resumo do dia (migration 0707). `admin`, como o aviso de caso: a tela
+ * 7h, o resumo do dia (migration 0753). `admin`, como o aviso de caso: a tela
  * escolhe um número conectado e manda nome de cliente para um celular — o mesmo
  * gate da rota e da RLS de `config_aviso_de_agendamento`.
  *

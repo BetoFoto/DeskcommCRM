@@ -17087,7 +17087,7 @@ export const DICIONARIO: Traducoes = {
   "O agente gastou o teto de passos da configuração em consultas e terminou sem propor uma resposta. Nada foi enviado. Gere de novo; se repetir, aumente \"Ações por atendimento\" no agente ou reduza o que ele precisa consultar antes de responder.": {
     es: "El agente gastó el tope de pasos de la configuración en consultas y terminó sin proponer una respuesta. No se envió nada. Genera de nuevo; si se repite, aumenta \"Acciones por atención\" en el agente o reduce lo que necesita consultar antes de responder.",
   },
-  // ── Aviso de agendamento no WhatsApp (migration 0707) ──
+  // ── Aviso de agendamento no WhatsApp (migration 0753) ──
   "Aviso de agendamento": { es: "Aviso de cita" },
   "Receba no WhatsApp cada horário marcado, remarcado ou cancelado, e às 7h o resumo do dia.": { es: "Recibe en WhatsApp cada cita agendada, reprogramada o cancelada, y a las 7h el resumen del día." },
   "Das 22h às 7h não sai aviso, para não acordar ninguém: o que for marcado nesse horário aparece no resumo das 7h. O horário é o da empresa.": { es: "De 22h a 7h no se envían avisos, para no despertar a nadie: lo que se agende en ese horario aparece en el resumen de las 7h. El horario es el de la empresa." },
