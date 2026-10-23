@@ -253,6 +253,9 @@ export function Faturamento({
       <ListaDeLancamentos
         lancamentos={lancamentos.data ?? []}
         contas={contas.data ?? []}
+        // O lançamento novo nasce na moeda da organização, e esta é a régua do
+        // valor digitado (#3367) — mesma moeda que ordena os blocos acima.
+        moeda={moedaDaOrg}
         podeLancar={podeLancar}
         onCriar={(corpo) => criar.mutate(corpo)}
         onPagar={(id) => pagar.mutate(id)}

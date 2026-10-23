@@ -10,12 +10,13 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useMoedaDaOrgAtiva } from "@/hooks/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { apiClient } from "@/lib/api/client";
-import { formatCents, parseReaisToCents } from "@/lib/money";
+import { MOEDA_PADRAO, formatCents, parseReaisToCents } from "@/lib/money";
 import { randomId } from "@/lib/random-id";
 
 type Parcela = {
@@ -181,7 +182,12 @@ function FormularioDeParcela({
   const [vencimento, setVencimento] = useState("");
   const [valor, setValor] = useState("");
 
-  const cents = parseReaisToCents(valor);
+  // A parcela nasce na moeda da organização, e esta é a régua do valor digitado
+  // (#3367): em dólar `1,300` é mil e trezentos. O leitor de sessão é a mesma
+  // coluna (`organizations.currency`) que `moedaDaOrganizacao` lê no servidor —
+  // a mesma do preço sugerido que vem da agenda.
+  const moeda = useMoedaDaOrgAtiva() ?? MOEDA_PADRAO;
+  const cents = parseReaisToCents(valor, moeda);
   const pode = !criando && Number(numero) > 0 && vencimento !== "" && cents !== null;
 
   return (

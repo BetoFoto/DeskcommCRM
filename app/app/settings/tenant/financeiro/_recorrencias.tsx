@@ -13,8 +13,9 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useMoedaDaOrgAtiva } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
-import { formatCents, parseReaisToCents } from "@/lib/money";
+import { MOEDA_PADRAO, formatCents, parseReaisToCents } from "@/lib/money";
 
 export type Recorrencia = {
   id: string;
@@ -64,7 +65,12 @@ export function Recorrencias({
     setEditandoId(null);
   };
 
-  const cents = parseReaisToCents(valor);
+  // A recorrência nasce na moeda da organização, e esta é a régua do valor
+  // digitado (#3367): em dólar `1,300` é mil e trezentos. O leitor de sessão lê
+  // a mesma coluna (`organizations.currency`) que `moedaDaOrganizacao` lê no
+  // servidor — a mesma com que as contas do catálogo já nascem.
+  const moeda = useMoedaDaOrgAtiva() ?? MOEDA_PADRAO;
+  const cents = parseReaisToCents(valor, moeda);
   const diaNumero = Number(dia);
   const diaValido = Number.isInteger(diaNumero) && diaNumero >= 1 && diaNumero <= 31;
   const pode = nome.trim().length >= 2 && cents !== null && cents > 0 && diaValido && contaId !== "";
