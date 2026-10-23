@@ -236,7 +236,7 @@ export function EditContactDialog({
             O TIPO DE CONTATO (issue 3005, fatia 1). Não é campo de formulário
             comum (`form.register`): o `Select` do Radix devolve o valor pelo
             `onValueChange`, e é ele que grava no form. Cliente é o padrão que o
-            BANCO já aplica (migration 0728) — o seletor abre mostrando o que a
+            BANCO já aplica (migration 0746) — o seletor abre mostrando o que a
             coluna diz, e a troca para Fornecedor sai no PATCH.
           */}
           <div className="space-y-2">

@@ -955,7 +955,7 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
             <div className="font-medium">{displayName}</div>
             {/*
               O TIPO DO CONTATO (issue 3005, fatia 1): lido da COLUNA
-              (`contacts.contact_type`, migration 0728), nunca da etiqueta
+              (`contacts.contact_type`, migration 0746), nunca da etiqueta
               `fornecedor` — mesma régua do selo "Pessoal" da ficha: remover a
               tag não pode apagar o que o banco diz. Só o fornecedor ganha selo
               porque cliente é o padrão; um selo em toda conversa não informa nada.

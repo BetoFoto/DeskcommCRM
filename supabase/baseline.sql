@@ -60967,8 +60967,8 @@ do $$ begin
  end if;
 end $$;
 
--- ---- 0728: tipo de contato — cliente ou fornecedor (issue 3005, fatia 1) ----
--- Espelho idempotente da migration 0728. É este apêndice que chega a todo
+-- ---- 0746: tipo de contato — cliente ou fornecedor (issue 3005, fatia 1) ----
+-- Espelho idempotente da migration 0746. É este apêndice que chega a todo
 -- self-host: o install.sh aplica o baseline num banco novo e o update.sh o
 -- re-aplica num banco existente; nenhum dos dois roda as migrations.
 --

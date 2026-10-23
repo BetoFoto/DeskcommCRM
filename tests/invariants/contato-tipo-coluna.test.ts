@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { columnExists, indexExists, seedGov, sql, GOV_ORG } from "./gov-helpers";
 
 /**
- * O TIPO DO CONTATO NO BANCO (issue 3005, fatia 1, migration 0728).
+ * O TIPO DO CONTATO NO BANCO (issue 3005, fatia 1, migration 0746).
  *
  * A marca mora em `contacts.contact_type`, coluna nova de propósito: reutilizar
  * `is_personal` (0563) trancaria a conversa — aquela marca entra no predicado de
@@ -27,8 +27,8 @@ import { columnExists, indexExists, seedGov, sql, GOV_ORG } from "./gov-helpers"
  *   que a busca por fornecedor não usa → cai "índice parcial".
  * - Meter `contact_type` no predicado de stop do envio (a marca virando veto,
  *   que é justamente o que a issue NÃO quer): cai "fornecedor segue elegível".
- * Linha para reverter: `supabase/migrations/20261023120000_0728_contato_tipo.sql`
- * (e o apêndice 0728 no fim de `supabase/baseline.sql`).
+ * Linha para reverter: `supabase/migrations/20261023160001_0746_contato_tipo.sql`
+ * (e o apêndice 0746 no fim de `supabase/baseline.sql`).
  */
 
 /** Contato sintético desta prova — nenhum dado de pessoa real (LGPD). */

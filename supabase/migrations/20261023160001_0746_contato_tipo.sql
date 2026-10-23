@@ -1,6 +1,6 @@
 -- manifest: **Contato nasce com TIPO — `contacts.contact_type` com default `'cliente'`, CHECK `cliente|fornecedor` e índice parcial dos fornecedores (issue 3005, fatia 1).** A marca é coluna nova de propósito: reutilizar `is_personal` trancaria a conversa (aquela marca VETA todo envio, e a issue diz o oposto do fornecedor: "continua recebendo mensagem normalmente"), e `is_blocked` é descadastro (LGPD), não papel. Dois tipos não cabem num booleano. Nenhuma coluna de quem/quando: auditoria + timeline já carregam isso (mesma decisão da 0563). O painel próprio do fornecedor, o executivo de contas e o vínculo contato-contato NÃO entram aqui — são as fatias seguintes (#2791). Idempotente: `add column if not exists`, `drop constraint if exists` + `add`, `create index if not exists`. Apêndice espelhado no fim do `baseline.sql`; `MANIFEST.md` é histórico e não recebe linha.
 
--- 0728 — tipo de contato: cliente ou fornecedor (issue 3005, fatia 1).
+-- 0746 — tipo de contato: cliente ou fornecedor (issue 3005, fatia 1).
 --
 -- `contact_type text DEFAULT 'cliente' NOT NULL`: o contato NASCE cliente sem
 -- ninguém informar — o default é a decisão 1 da issue ("Cliente (padrão)") —, e

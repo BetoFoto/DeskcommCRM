@@ -26,7 +26,7 @@ export const PHONE_REGEX = /^\+\d{8,15}$/;
  * guarda estes dois valores, e uma terceira palavra no schema que o banco não
  * conhece seria `23514` no caminho de gravação.
  *
- * O default é do BANCO (`'cliente'`, migration 0728), não do Zod: um PATCH que
+ * O default é do BANCO (`'cliente'`, migration 0746), não do Zod: um PATCH que
  * não fala de tipo não pode materializar `contact_type` no payload e reescrever
  * a coluna de quem já é fornecedor — mesma régua do `source` no PATCH, que
  * ficou sem default exatamente por isso (`contactPatchSchema`, mais abaixo).
