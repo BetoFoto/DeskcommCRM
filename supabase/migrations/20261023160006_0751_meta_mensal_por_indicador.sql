@@ -1,6 +1,6 @@
 -- manifest: **Meta mensal de um indicador, por organização (#3025, fatia 1: quantidade de vendas ganhas).** A tabela nova `crm_metas` guarda o ALVO da empresa — `organization_id`, `periodo` (sempre o 1º dia do mês na data de calendário), `indicador` (`vendas_ganhas` nesta fatia), `pipeline_id` opcional (nulo = a empresa inteira) e `alvo` (quantidade). A leitura é org-scoped sem gate de papel (a tela de Desempenho mostra a meta da empresa a qualquer membro); a ESCRITA é `manager+` com auditoria, pela Server Action `definirMetaMensal`. Aditiva e idempotente: o mesmo bloco entra no fim do `baseline.sql`, que é o arquivo que o kit self-host aplica.
 -- ============================================================================
--- 0730 — META MENSAL POR INDICADOR (#3025, fatia 1)
+-- 0751 — META MENSAL POR INDICADOR (#3025, fatia 1)
 --
 -- ─── O que faltava ──────────────────────────────────────────────────────────
 -- A tela Desempenho mostrava só o REALIZADO: contagens por atendente e as

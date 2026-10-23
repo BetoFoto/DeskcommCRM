@@ -6,7 +6,7 @@
  * O Desempenho mostrava só o realizado. "Estamos em quantos por cento da meta?"
  * não tinha resposta porque não havia DENOMINADOR: o alvo vivia na cabeça de
  * quem cobra o time. Esta rota lê o alvo cadastrado (`crm_metas`, migration
- * 0730) e conta o realizado na MESMA janela — nunca em janelas diferentes, que
+ * 0751) e conta o realizado na MESMA janela — nunca em janelas diferentes, que
  * fechariam a conta errado na virada do mês.
  *
  * ─── O realizado é "negócio GANHO fechado dentro da janela" ─────────────────
