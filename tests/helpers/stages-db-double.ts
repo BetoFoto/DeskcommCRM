@@ -80,6 +80,14 @@ export interface LeadRow {
   status?: "open" | "won" | "lost" | "archived";
   closed_at?: string | null;
   position_in_stage?: number;
+  /**
+   * #2995 — as duas colunas de ATIVIDADE, que o recorte NÃO pode usar: o corte é
+   * por data de encerramento. O caso do ganho de dois dias com atividade de
+   * meses atrás só mede o corte certo se as duas existirem para serem
+   * ignoradas — por isso moram aqui, e não num `as` no teste.
+   */
+  last_activity_at?: string | null;
+  updated_at?: string | null;
 }
 
 export function negocio(id: string, stageId: string, over: Partial<LeadRow> = {}): LeadRow {
