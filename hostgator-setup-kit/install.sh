@@ -1771,6 +1771,14 @@ esac
   # ele era compilado aqui na VPS e nenhum update jamais o alcançava.
   envq WORKER_IMAGE "${IMG_WORKER}:${TAG_ALVO}"
   envq WORKER_PULL_POLICY "$PULL_POLICY_ALVO"
+  # O par de prazos do desligamento (#2823) — os dois GRAVADOS juntos porque um
+  # sem o outro é o defeito que a issue mediu: `WORKER_STOP_GRACE_PERIOD` é o que
+  # o compose passa ao `docker stop` (sem ele, o padrão de 10 s do Docker mata o
+  # contêiner antes dos 30 s que o worker se dá) e `SHUTDOWN_GRACE_MS` é o prazo
+  # INTERNO, contado do sinal. O de fora tem de ser maior; 40 s para 30 s dá 10 s
+  # de folga para fechar pool e healthz. Mexeu num, mexa no outro.
+  envq WORKER_STOP_GRACE_PERIOD "${WORKER_STOP_GRACE_PERIOD:-40s}"
+  envq SHUTDOWN_GRACE_MS "${SHUTDOWN_GRACE_MS:-30000}"
   envq SCHEDULER_IMAGE "${IMG_SCHEDULER}:${TAG_ALVO}"
   envq SCHEDULER_PULL_POLICY "$PULL_POLICY_ALVO"
   # A telefonia por SIP (profile `telefonia`, desligado por padrão) também segue

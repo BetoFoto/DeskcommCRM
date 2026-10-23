@@ -36,6 +36,8 @@ import { blocoVozVendedor, personalizacaoDaOrganizacao } from "./personalizar";
 import { campaignConfigSchema, type OfertaDaCampanha } from "./schema";
 import { prepararCandidatos } from "./preparo";
 import { ProspectingError } from "./provider";
+// O carimbo do pedido da prospecção: `prospecting:` — nunca `rule:` (#3072).
+import { pedidoDaProspeccao } from "./pedido-da-prospeccao";
 import { OrgNaoOperanteError } from "@/lib/organizacao/operante";
 import {
   withProspectingLock,
@@ -409,7 +411,7 @@ export async function sendNextCandidate(
           {
             organization_id: c.organization_id,
             actor: { type: "ai_agent", id: p.id, agent_id: cfg.agent_id, role: "ai_operator" },
-            requestId: `prospecting:${p.id}`,
+            requestId: pedidoDaProspeccao(p.id),
             serviceBoundary: boundary,
             // O RECIBO E A IDEMPOTÊNCIA do candidato moram na PRIMEIRA bolha: é a
             // linha `messages` de id estável (`p.message_id`) que o `sending`
@@ -552,7 +554,7 @@ export async function sendNextCandidate(
         // Por que as seguintes não saíram, quando a conversa deixou de ser fria.
         ...(parouEm || lancouEm ? { stopped_reason: parouEm ?? lancouEm } : {}),
       },
-      requestId: `prospecting:${p.id}`,
+      requestId: pedidoDaProspeccao(p.id),
     });
   } catch (error) {
     // Organização parada: a porta de saída lança ANTES de qualquer envio, então

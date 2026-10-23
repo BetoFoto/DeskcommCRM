@@ -5427,11 +5427,12 @@ revoke execute on function public.fn_can_view_conversation(uuid, uuid) from anon
 grant execute on function public.fn_can_view_conversation(uuid, uuid)
   to authenticated, service_role;
 
-drop policy if exists "conversations_select" on public.conversations;
-create policy "conversations_select" on public.conversations
-  for select using (
-    public.fn_can_view_conversation(organization_id, assigned_to_user_id)
-  );
+-- `conversations_select` nasce na 0035 com o escopo da conversa, linha por linha.
+-- Desde a 0726 a policy resolve o escopo em conjunto, uma vez por consulta, e vive
+-- no bloco da 0726, lá embaixo, junto do `fn_conversation_scope()`. A versão
+-- linha-por-linha que vivia aqui era reinstalada a cada update.sh e valia até
+-- aquele bloco, e era ela que fazia a caixa de entrada custar ~7 ms por linha
+-- (#3090): quem derruba o clone antigo é o `drop` colado no bloco final.
 
 drop policy if exists "conversations_agent_write" on public.conversations;
 drop policy if exists "conversations_agent_insert" on public.conversations;
@@ -7572,6 +7573,78 @@ create policy "message_templates_write" on message_templates
       or (owner_user_id is null and fn_role_at_least(organization_id, 'manager'))
     )
   );
+
+-- ---- ordem da resposta rápida (migration 0729) ----
+-- Espelho exato da migration 20261023120003_0729_ordem_da_resposta_rapida.sql.
+-- Fica colado ao bloco da tabela (migration 0060), e não no fim do arquivo, para
+-- não disputar a cauda com toda migration nova de outro PR.
+
+-- manifest: A Resposta rápida ganha ORDEM própria, definida por arrastar e soltar na tela `/app/templates` e respeitada pelo slash-menu do Inbox: coluna `ordem` (numeric, como `position_in_stage`) em `message_templates` (issue #3244). A resposta NOVA nasce no topo — um passo acima da primeira, gravado pela criação —, como a mais recente já nascia, e o backfill preserva a ordem que a tela mostrava (`updated_at` desc); ele só roda quando a coluna nasce, então reaplicar o `baseline.sql` num banco já ordenado não reescreve a escolha de ninguém.
+--
+-- 0729: `message_templates.ordem` é a POSIÇÃO da resposta rápida na lista da organização.
+--
+-- ─── O defeito que isto resolve ─────────────────────────────────────────────
+-- A listagem (`app/api/v1/message-templates/route.ts`) devolvia as respostas
+-- rápidas por `updated_at desc`: a ordem era a de mais recentemente EDITADO, não
+-- a que o operador escolhe. Editar o corpo de uma resposta a empurrava para o
+-- topo da lista e para o topo do slash-menu do Inbox, e não havia como voltar —
+-- a tela não oferecia reordenar. A ordem passa a ser DADO da linha, e é ela que
+-- a tela arrasta e o Inbox herda.
+--
+-- ─── Por que fracionária (numeric) e não inteiro ────────────────────────────
+-- A posição nasce do VIZINHO (`depois_de`), não de um número mandado pela tela:
+-- soltar entre duas respostas grava a média entre elas (`lib/templates/ordem.ts`)
+-- e só a linha arrastada é escrita — as vizinhas ficam intactas, e um PATCH de
+-- conteúdo não reescreve a lista. Inteiro exigiria renumerar a lista inteira a
+-- cada arrasto (e renumerar linha que o papel não pode escrever pela RLS).
+-- `numeric`, como `position_in_stage`: a coluna guarda exatamente o número que a
+-- rota gravou. A média é calculada em JS (double); quando ela não cabe mais
+-- estritamente entre as duas vizinhas, ou quando elas empatam, a rota renumera a
+-- lista visível com passos de `1000`.
+--
+-- ─── Idempotente ────────────────────────────────────────────────────────────
+-- O `do` abaixo não é enfeite: `install.sh` (banco novo) e `update.sh` (banco
+-- existente) aplicam ESTE arquivo, e o apêndice do `baseline.sql` repete o mesmo
+-- texto. O `if not exists` da coluna seria suficiente para não quebrar, mas não
+-- para o BACKFILL: sem o guarda da coluna, cada `update.sh` renumeraria a lista
+-- pela data de edição e apagaria a ordem que o operador escolheu. O guarda mede
+-- o nascimento da coluna, não o conteúdo — por isso a escolha do usuário
+-- sobrevive a toda atualização. Em banco novo a tabela está vazia e o backfill
+-- não escreve linha nenhuma.
+
+do $$
+begin
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'message_templates'
+      and column_name = 'ordem'
+  ) then
+    alter table public.message_templates
+      add column ordem numeric not null default 0;
+
+    with numeradas as (
+      select
+        id,
+        row_number() over (
+          partition by organization_id
+          order by updated_at desc, id
+        )::numeric * 1000 as posicao
+      from public.message_templates
+    )
+    update public.message_templates as m
+      set ordem = numeradas.posicao
+      from numeradas
+      where numeradas.id = m.id;
+  end if;
+end $$;
+
+-- O índice da LEITURA: a listagem filtra por organização e ordena por `ordem`
+-- (é o caminho de toda abertura do Inbox e da tela). O `idx_message_templates_org`
+-- da 0060 fica: ele serve a RLS e as contagens por organização.
+create index if not exists idx_message_templates_org_ordem
+  on public.message_templates (organization_id, ordem);
 
 -- ---- snooze por conversa (migration 0062) ----
 alter table conversations
@@ -57668,6 +57741,318 @@ begin
 end;$$;
 notify pgrst,'reload schema';
 
+
+-- ---- o escopo da conversa avaliado uma vez por consulta (migration 0726) ----
+-- manifest: O escopo de leitura da conversa passa a ser avaliado UMA VEZ por consulta (`fn_conversation_scope()`) em vez de uma vez por linha (`fn_can_view_conversation`): a caixa de entrada deixa de custar ~7 ms por linha no RLS (#3090)
+--
+-- ─── O defeito, medido (issue #3090) ────────────────────────────────────────
+--
+-- A policy `conversations_select` (migration 0035) chamava
+-- `fn_can_view_conversation(organization_id, assigned_to_user_id)` em TODA linha
+-- candidata. Aquela função é `stable security definer set search_path = public`;
+-- o corpo dela chama `fn_is_platform_admin()` e, até DUAS vezes por linha,
+-- `fn_user_role_in_org(p_org)`, que por sua vez chama `fn_support_context()`
+-- (join de 4 tabelas + `auth.jwt()` + subconsulta de MFA em `auth.mfa_factors`).
+--
+-- Medido em Postgres descartável (mesmo baseline, 142 conversas, uma organização,
+-- um dono e um atendente; a linha é a média de 3 execuções como `authenticated`):
+--
+--   `select count(*) from conversations` (RLS) .................. 226 ms (pg15) / 232 ms (pg17)
+--   `fn_user_role_in_org(org)` por linha ....................... 84,8 ms para 142 linhas
+--   `fn_can_view_conversation(org, responsável)` por linha ..... 214 ms para 142 linhas
+--   o MESMO papel lido direto da tabela (index scan) ........... 0,09 ms para 142 linhas
+--
+-- O custo é o NÚMERO DE CHAMADAS: o trabalho por linha é 2× `fn_user_role_in_org`
+-- (cada um refazendo `fn_support_context()`, que não depende da linha nem da
+-- organização — depende só da sessão). No `pg_stat_statements` do autor, as
+-- consultas do PostgREST sobre `conversations` ficam entre 720 ms e 1430 ms, e
+-- numa instalação maior o custo cresce linear com o número de conversas até
+-- estourar o statement timeout de 8 s.
+--
+-- ─── O conserto: o que é da SESSÃO sai do caminho por linha ────────────────
+--
+-- `fn_conversation_scope()` devolve, por organização a que o usuário tem acesso
+-- (`fn_user_org_ids()` — a MESMA fonte que `fn_user_role_in_org` usa para dizer
+-- "não é membro"), duas respostas:
+--
+--   · `org_wide_read` — enxerga a organização inteira (papel viewer/manager/admin
+--     ou `visibility_mode = 'all'`);
+--   · `sees_unassigned` — enxerga a fila sem responsável (`own_and_unassigned`).
+--
+-- A policy passa a comparar a LINHA com esse conjunto, e o ramo de plataforma
+-- vira um InitPlan sem argumento. O plano medido depois (142 conversas, um
+-- atendente) é esta forma, e é ela que o invariante cobra:
+--
+--   InitPlan 1  -> Result                      -- `(select fn_is_platform_admin())`, 1×
+--   Seq Scan on conversations
+--     Filter: (InitPlan 1).col1
+--          OR ANY (organization_id = (hashed SubPlan 2).col1)
+--          OR ((assigned_to_user_id = auth.uid()) AND ANY (organization_id = (hashed SubPlan 3).col1))
+--          OR ((assigned_to_user_id IS NULL) AND ANY (organization_id = (hashed SubPlan 4).col1))
+--     SubPlan 2 -> Function Scan on fn_conversation_scope s   loops=1  (org_wide_read)
+--     SubPlan 3 -> Function Scan on fn_conversation_scope s_1 loops=1  (membro)
+--     SubPlan 4 -> Function Scan on fn_conversation_scope s_2 loops=1  (sees_unassigned)
+--
+-- Nenhuma chamada de função por linha: cada subplano sem correlação é calculado
+-- UMA vez no início da consulta (o `loops=1` é o que se mede) e o filtro por
+-- linha é teste de pertinência em conjunto — o `hashed SubPlan`. As três
+-- disjunções precisam de três conjuntos diferentes (tudo / membro / fila), então
+-- são três avaliações por consulta, não uma: o que sai do caminho é a ORDEM de
+-- grandeza por LINHA (142 chamadas de `fn_can_view_conversation`, cada uma com
+-- 2× `fn_user_role_in_org`, viram 3 leituras do conjunto e nenhuma por linha).
+-- A prova de execução única, além do plano, está medida com uma sonda
+-- `volatile` que grava uma linha a cada execução: uma execução por subplano
+-- (o caso mais difícil — o planejador não pode memoizar nem pular uma volatile).
+-- O invariante `tests/invariants/escopo-da-conversa-avaliado-uma-vez.test.ts`
+-- cobra as duas pontas: o plano não chama `fn_can_view_conversation` por linha,
+-- e a sonda roda uma vez por consulta, não uma vez por conversa.
+--
+-- Resultado da mesma medição depois: `select count(*)` em 142 conversas .........
+-- 4,9 ms (pg17) / 6,9 ms (pg15) — ~40× menos, e o custo deixa de crescer com o
+-- número de LINHAS avaliadas (as 142 candidatas passam por teste de pertinência
+-- em array; quem cresce é o tamanho do conjunto, uma linha por organização).
+--
+-- ─── Visibilidade IDÊNTICA (a policy não afrouxa nem aperta) ────────────────
+--
+-- A escada da 0035 é preservada cláusula por cláusula:
+--
+--   1. `fn_is_platform_admin()` ⇒ tudo (InitPlan, primeira disjunção);
+--   2. não é membro da organização ⇒ nada. `fn_user_org_ids()` devolve
+--      exatamente as organizações em que `fn_user_role_in_org(org)` NÃO é nulo
+--      (as `user_organizations` não revogadas MAIS a organização da sessão de
+--      suporte ativa, quando há uma) — quem não está no conjunto não casa com
+--      nenhuma disjunção, nem quando a conversa está atribuída a ele;
+--   3. papel viewer/manager/admin ⇒ tudo (dobrado em `org_wide_read`);
+--   4. responsável = `auth.uid()` ⇒ vê, em qualquer organização em que seja
+--      membro (o `and organization_id in (…)` do 3º ramo é a alínea 2);
+--   5. resto ⇒ `visibility_mode`: `'all'` entra em `org_wide_read`;
+--      `'own_and_unassigned'` é o único valor que entra em `sees_unassigned`;
+--      qualquer outro valor (inclusive `'own'` e um valor inválido no JSON)
+--      fica nas duas colunas como falso — só o responsável vê, que é o
+--      `else false` da escada. A chave ausente continua caindo no default
+--      `own_and_unassigned` (G1-06a), pelo `coalesce` idêntico ao da 0035.
+--
+-- O caso 5 é onde um atalho erra: `sees_unassigned` NÃO é `mode <> 'own'`
+-- (isso daria fila visível a um valor inválido); é `mode = 'own_and_unassigned'`.
+--
+-- ─── O que NÃO mudou (e por quê) ────────────────────────────────────────────
+--
+-- · `fn_can_view_conversation` segue intacta e continua sendo a fonte da verdade
+--   da escada: ela é chamada por `conversation_notes`, `ai_reply_drafts`,
+--   `conversation_assignment_events`, `crm_cases` e pelos comandos de atribuição
+--   (`messages` não a chama: a policy dela consulta `conversations` e por isso
+--   herda a regra nova) — trocar o corpo dela mudaria o
+--   custo de todas elas e ampliaria o raio desta fatia sem necessidade. O novo
+--   invariante compara, pessoa por pessoa, o que a policy devolve com o que ela
+--   devolve: se as duas escadas divergirem no futuro, o teste fica vermelho.
+-- · O `SET search_path = public` das funções chamadas por linha FICA. Medido nas
+--   duas majors: o `SET` custa ~2 ms POR CONSULTA, não por linha (com `SET`,
+--   `fn_user_org_ids()` interna deixa de ser embutida: 2,606 ms contra 0,491 ms
+--   do scan embutido, para 142 linhas), e removê-lo de uma `security definer`
+--   é justamente o sequestro de `search_path` que a convenção do repositório
+--   evita. O ganho desta fatia não vem de mexer nele: mesmo com o `SET`, o custo
+--   por LINHA desapareceu. O corpo continua chamando `fn_user_org_ids()` em vez
+--   de ler `user_organizations` direto: é ela a fonte única de "quem é membro"
+--   (inclui a organização da sessão de suporte ativa) e forkar essa regra para
+--   economizar 2 ms por consulta seria repetir a definição de isolamento em dois
+--   lugares.
+-- · `fn_support_context()`, `fn_user_role_in_org()` e `fn_user_org_ids()` não são
+--   tocadas: elas seguem sendo o caminho de quem precisa do papel de UMA
+--   organização (as rotas, os comandos, os outros consumidores).
+
+-- A escada por organização, resolvida uma vez por consulta.
+--
+-- `stable` + `security definer` + search_path blindado, como as irmãs
+-- `fn_can_view_conversation`/`fn_can_view_lead`: o corpo lê `user_organizations`
+-- e `organizations` (RLS de ambas mostra só o que é do próprio usuário, mas o
+-- definer mantém o comportamento independente de quem chama) e o EXECUTE fica
+-- com authenticated/service_role.
+create or replace function public.fn_conversation_scope()
+returns table (organization_id uuid, org_wide_read boolean, sees_unassigned boolean)
+language sql stable security definer
+set search_path = public
+as $$
+  select o.organization_id,
+         public.fn_user_role_in_org(o.organization_id) in ('viewer','manager','admin')
+           or coalesce((select z.settings->>'visibility_mode' from public.organizations z
+                        where z.id = o.organization_id), 'own_and_unassigned') = 'all',
+         coalesce((select z.settings->>'visibility_mode' from public.organizations z
+                   where z.id = o.organization_id), 'own_and_unassigned') = 'own_and_unassigned'
+  from public.fn_user_org_ids() as o(organization_id);
+$$;
+
+revoke all on function public.fn_conversation_scope() from public, anon;
+grant execute on function public.fn_conversation_scope() to authenticated, service_role;
+
+-- A policy: o mesmo resultado da 0035, sem uma chamada por linha.
+drop policy if exists "conversations_select" on public.conversations;
+create policy "conversations_select" on public.conversations
+  for select using (
+    (select public.fn_is_platform_admin())
+    or organization_id in (
+         select s.organization_id from public.fn_conversation_scope() s where s.org_wide_read
+       )
+    or (
+         assigned_to_user_id = auth.uid()
+         and organization_id in (select s.organization_id from public.fn_conversation_scope() s)
+       )
+    or (
+         assigned_to_user_id is null
+         and organization_id in (
+              select s.organization_id from public.fn_conversation_scope() s where s.sees_unassigned
+            )
+       )
+  );
+
+-- 0734 — avaliação única de permissões (#3087)
+-- manifest: Avalia papel e contexto de suporte uma vez por verificação RBAC (#3087), preservando regras, grants e limites.
+-- Mesmo RBAC; o InitPlan avalia o papel uma vez por chamada, não uma vez
+-- para cada linha da tabela de níveis. Não altera timeout, grants ou triggers.
+CREATE OR REPLACE FUNCTION public.fn_user_role_in_org(p_org uuid)
+RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $f$
+ with context AS MATERIALIZED (select public.fn_support_context() s)
+ select case when s->>'status'='active' and (s->>'organization_id')::uuid=p_org
+ then case when s->>'access_mode'='full' then 'admin' else 'viewer' end
+ else (select role from public.user_organizations where user_id=auth.uid() and organization_id=p_org and revoked_at is null limit 1) end
+ from context;
+$f$;
+
+CREATE OR REPLACE FUNCTION public.fn_role_at_least(p_org uuid, p_min text)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path TO public
+AS $$
+  with levels(role, lvl) as (
+    values ('viewer',1),('agent',2),('manager',3),('admin',4)
+  )
+  select coalesce(
+    (select user_lvl.lvl >= min_lvl.lvl
+     from levels user_lvl
+     join levels min_lvl on min_lvl.role = p_min
+     where user_lvl.role = (select public.fn_user_role_in_org(p_org))),
+    false
+  );
+$$;
+
+-- Explicita a mesma superfície RPC já existente; nunca expor os helpers ao anon.
+REVOKE EXECUTE ON FUNCTION public.fn_role_at_least(uuid,text), public.fn_user_role_in_org(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.fn_role_at_least(uuid,text), public.fn_user_role_in_org(uuid) TO authenticated, service_role;
+
+-- ---- o telefone ganho alcança fn_upsert_wa_contact; a junção não emite (migration 0744) ----
+-- manifest: **O telefone de ficha vazia passa a emitir `contact.phone_added` também em `fn_upsert_wa_contact` (#3315).** O gatilho "quando um contato ganhar um telefone" (0670) só rodava pelo PATCH de contatos e pela captura (`#3307`); `fn_upsert_wa_contact` preenchia `phone_number` de ficha vazia em silêncio. A função passa a chamar `public.emit_event('contact.phone_added', 'contact', …)` na MESMA transação e SÓ na transição de vazio para preenchido — `phone_number = v_alt` (promoção de grafia do MESMO número) NÃO emite, e `perform` não faz HTTP (doutrina: função de banco nunca faz HTTP). Trava a linha (`for update`) antes de ler o estado anterior, senão a corrida com outro webhook poderia medir o vazio que já não existe. **`fn_mesclar_contatos` NÃO emite, de propósito:** as duas fichas já existiam e o número já estava no CRM (na ficha do perdedor), então emitir repetiria a automação para a mesma pessoa e o mesmo número; além disso a junção roda sob a sessão do usuário (rota `/api/v1/contacts/merge`) e o `emit_event` recusa `contact.phone_added` vindo de `authenticated` (0670) — emitir ali quebraria a junção pela tela. Idempotente: `create or replace` com assinatura, `search_path` e grants INALTERADOS; espelho idêntico no apêndice do `baseline.sql`, antes da VARREDURA anon. Gates: `tests/invariants/telefone-ganho-nos-caminhos-sql.test.ts`.
+
+create or replace function public.fn_upsert_wa_contact(
+  p_org uuid, p_kind text, p_phone text, p_lid text, p_chat_id text, p_notify text
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+  v_conflito text;
+  v_lid text := nullif(regexp_replace(coalesce(p_lid, ''), '@.*$', ''), '');
+  v_phone text := nullif(p_phone, '');
+  v_digits text;
+  v_alt text;
+  v_telefone_antes text;
+begin
+  -- Celular BR de 12 dígitos (local 6–9) ganha o nono. A grafia sem o 9 fica
+  -- em v_alt só para a BUSCA — não se escreve mais.
+  if v_phone is not null then
+    v_digits := regexp_replace(v_phone, '\D', '', 'g');
+    if v_digits ~ '^55[1-9][0-9][6-9][0-9]{7}$' then
+      v_alt := '+' || v_digits;
+      v_phone := '+55' || substring(v_digits from 3 for 2) || '9' || substring(v_digits from 5);
+    elsif v_digits ~ '^55[1-9][0-9]9[6-9][0-9]{7}$' then
+      v_phone := '+' || v_digits;
+      v_alt := '+55' || substring(v_digits from 3 for 2) || substring(v_digits from 6);
+    end if;
+  end if;
+
+  if v_lid is not null then
+    select id into v_id from public.contacts
+     where organization_id = p_org and wa_lid = v_lid and is_merged_into is null
+     limit 1;
+  end if;
+
+  if v_id is null and v_phone is not null then
+    select id into v_id from public.contacts
+     where organization_id = p_org and is_merged_into is null
+       and phone_number in (v_phone, v_alt)
+     order by case when phone_number = v_phone then 0 else 1 end
+     limit 1;
+  end if;
+
+  if v_id is not null and v_phone is not null and exists (
+    select 1 from public.contacts
+     where organization_id = p_org and phone_number = v_phone
+       and is_merged_into is null and id <> v_id
+  ) then
+    v_conflito := v_phone;
+    v_phone := null;
+  end if;
+
+  if v_id is not null then
+    -- (#3315) O estado ANTES da gravação, com a linha JÁ travada: é ele que
+    -- decide se houve TRANSIÇÃO de vazio para preenchido. `phone_number = v_alt`
+    -- não é transição — é a promoção da grafia de 12 para a canônica de 13, do
+    -- MESMO número que já estava na ficha, e não "um contato ganhou telefone".
+    select phone_number into v_telefone_antes
+      from public.contacts where id = v_id for update;
+
+    update public.contacts set
+      -- Promove 12→13 quando é a MESMA pessoa e o canônico está livre.
+      -- Outro número (pessoa diferente) continua intocável.
+      phone_number = case
+        when v_phone is not null and (phone_number is null or phone_number = v_alt) then v_phone
+        else phone_number
+      end,
+      display_name = coalesce(display_name, nullif(p_notify, '')),
+      source_metadata = source_metadata
+        || case when v_lid is not null then jsonb_build_object('waha_lid', v_lid) else '{}'::jsonb end
+        || case when p_chat_id is not null then jsonb_build_object('waha_chat_id', p_chat_id) else '{}'::jsonb end
+        || case when nullif(p_notify, '') is not null then jsonb_build_object('notify_name', p_notify) else '{}'::jsonb end
+        || case when v_conflito is not null then jsonb_build_object('telefone_em_conflito', v_conflito) else '{}'::jsonb end,
+      updated_at = now()
+    where id = v_id;
+
+    -- (#3315) `contact.phone_added` sai da MESMA transação da gravação, e só
+    -- quando ELA preencheu a ficha que estava vazia — a regra que este gatilho
+    -- dispara lê o contato para decidir, e a guarda `no_phone` mata com
+    -- `no_phone` quem chega sem número. Emitir antes da gravação entregaria à
+    -- regra um contato ainda vazio — e o defeito é MUDO.
+    --
+    -- Sem disparo em dobro: emitiu aqui, o `update` de `lib/channels/zernio/ingest.ts`
+    -- (que exige `phone_number is null`) já não casa linha nenhuma e não emite.
+    if v_phone is not null and v_telefone_antes is null then
+      perform public.emit_event(
+        'contact.phone_added', 'contact', v_id,
+        jsonb_build_object('phone_number', v_phone), '{}'::jsonb, p_org);
+    end if;
+
+    return v_id;
+  end if;
+
+  begin
+    insert into public.contacts (organization_id, phone_number, source, consent, tags, source_metadata, display_name)
+    values (p_org, v_phone, 'whatsapp', '{}'::jsonb, '{}'::text[],
+      case when v_lid is not null
+        then jsonb_build_object('waha_lid', v_lid, 'waha_chat_id', p_chat_id, 'notify_name', nullif(p_notify, ''))
+        else jsonb_build_object('waha_chat_id', p_chat_id, 'notify_name', nullif(p_notify, '')) end,
+      nullif(p_notify, ''))
+    returning id into v_id;
+    return v_id;
+  exception when unique_violation then
+    select id into v_id from public.contacts
+     where organization_id = p_org and is_merged_into is null
+       and (
+         (v_phone is not null and phone_number = v_phone)
+         or (v_alt is not null and phone_number = v_alt)
+         or (v_lid is not null and wa_lid = v_lid)
+       )
+     order by case when phone_number = v_phone then 0 else 1 end
+     limit 1;
+    return v_id;
+  end;
+end; $$;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -60570,3 +60955,14 @@ create view public.external_db_connections_safe
 
 revoke all on public.external_db_connections_safe from anon;
 grant select on public.external_db_connections_safe to authenticated;
+
+-- ─── 0717: Desambiguação de calendar_service_professionals (#3219) ───────────
+-- Remove a FK redundante para organizations(id), preservando calendar_service_professional_member_fk
+-- que já referencia user_organizations(organization_id, user_id). Isso elimina a ambiguidade
+-- de relacionamento Many-to-Many detectada pelo PostgREST (PGRST201).
+-- Só cai quando a FK que a substitui já existe: o update.sh roda sem ON_ERROR_STOP.
+do $$ begin
+ if exists(select 1 from pg_constraint where conname='calendar_service_professional_member_fk' and conrelid='public.calendar_service_professionals'::regclass) then
+  alter table public.calendar_service_professionals drop constraint if exists calendar_service_professionals_organization_id_fkey;
+ end if;
+end $$;
