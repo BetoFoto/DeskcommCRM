@@ -133,6 +133,13 @@ describe("parseReaisToCents — o separador vem da MOEDA da organização (#3331
     expect(MOEDA_PADRAO).toBe("BRL");
   });
 
+  it("sinal repetido é sempre milhar, em qualquer moeda", () => {
+    expect(parseReaisToCents("1.234.567", "USD")).toBe(123456700);
+    expect(parseReaisToCents("1,234,567", "USD")).toBe(123456700);
+    expect(parseReaisToCents("1.234.567", "BRL")).toBe(123456700);
+    expect(parseReaisToCents("1,234,567", "BRL")).toBe(123456700);
+  });
+
   it("moeda que o Intl recusa cai na régua do padrão, sem lançar", () => {
     expect(() => parseReaisToCents("1.300", "BR")).not.toThrow();
     expect(parseReaisToCents("1.300", "BR")).toBe(130000);

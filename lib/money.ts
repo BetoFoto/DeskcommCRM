@@ -34,7 +34,9 @@
  *
  * Quem chama sem moeda — preço de catálogo, honorário, comanda, faturamento —
  * fica com a régua do padrão (`MOEDA_PADRAO`), que é exatamente a de antes
- * deste parâmetro existir: nenhum chamador atual muda de comportamento.
+ * deste parâmetro existir: nenhum chamador atual muda de comportamento,
+ * exceto num caso: sinal repetido (`1,234,567`) passa a ser lido como milhar
+ * também na régua do real, onde antes virava 1.234,57.
  *
  * O papel de cada sinal sai do MESMO `Intl` que escreve o preço em
  * `formatCents` (ver `separadoresDaMoeda`), e não de uma tabela na mão: se o
@@ -77,7 +79,9 @@ export function parseReaisToCents(input: string, moeda: string = MOEDA_PADRAO): 
     const sinal: "," | "." = lastComma >= 0 ? "," : ".";
     const pos = lastComma >= 0 ? lastComma : lastDot;
     const digitosDepois = s.length - pos - 1;
-    const papel = papelDoSinal(sinal);
+    // Sinal que aparece MAIS DE UMA VEZ nunca é o decimal (só há um decimal):
+    // `1.234.567` em dólar é milhar, não 1.234,57.
+    const papel = s.indexOf(sinal) !== pos ? "grupo" : papelDoSinal(sinal);
     if (papel === "grupo") {
       // O grupo de milhar tem sempre 3 dígitos; fora disso a leitura que
       // sobra é a decimal (o "1,30" em dólar, que não é grupo em lugar algum).
