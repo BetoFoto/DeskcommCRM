@@ -10,7 +10,7 @@ create or replace function public.fn_attendant_metrics(
   p_from timestamptz,
   p_to timestamptz,
   p_owner uuid default null,
-  -- (0732) A etiqueta do contato que SAI da conta das conversas. `null` = sem recorte.
+  -- (0754) A etiqueta do contato que SAI da conta das conversas. `null` = sem recorte.
   p_excluir_etiqueta text default null
 ) returns jsonb
 language sql stable
@@ -79,7 +79,7 @@ as $$
       and assigned_to_user_id is not null
       and assigned_at >= p_from and assigned_at < p_to
       and (p_owner is null or assigned_to_user_id = p_owner)
-      -- (0732) conversa cujo CONTATO carrega a etiqueta pedida sai da conta.
+      -- (0754) conversa cujo CONTATO carrega a etiqueta pedida sai da conta.
       and not exists (select 1 from contatos_excluidos e where e.id = contact_id)
     group by assigned_to_user_id
   ),
@@ -137,7 +137,7 @@ as $$
     select
       c.assigned_to_user_id as user_id,
       avg(extract(epoch from (fr.first_human_out - fr.first_in))) as avg_first_response_seconds,
-      -- (0732) MEDIANA da 1ª resposta: o valor do MEIO da amostra ordenada (com
+      -- (0754) MEDIANA da 1ª resposta: o valor do MEIO da amostra ordenada (com
       -- tamanho par, `percentile_cont(0.5)` interpola os dois do meio — o mesmo de
       -- `mediana()` em `lib/metrics/mediana-e-recorte-por-etiqueta.ts`). Grupo sem
       -- par válido não existe no agregado e o campo sai `null` (não medida), NUNCA 0.
@@ -160,7 +160,7 @@ as $$
     where c.organization_id = p_org
       and c.assigned_to_user_id is not null
       and (p_owner is null or c.assigned_to_user_id = p_owner)
-      -- (0732) o MESMO recorte do `conv_agg`: média e mediana nascem do mesmo conjunto,
+      -- (0754) o MESMO recorte do `conv_agg`: média e mediana nascem do mesmo conjunto,
       -- para uma nunca divergir da outra.
       and not exists (select 1 from contatos_excluidos e where e.id = c.contact_id)
       and fr.first_in is not null
@@ -176,7 +176,7 @@ as $$
     union select user_id from voice_agg
   )
   select jsonb_build_object(
-    -- (0732) a etiqueta QUE FOI USADA e o total de conversas que ela tirou da conta
+    -- (0754) a etiqueta QUE FOI USADA e o total de conversas que ela tirou da conta
     -- vêm declarados na resposta: recorte sem número declarado vira número torto.
     'excluded_tag', p_excluir_etiqueta,
     'excluded_conversations', (select total from conversas_excluidas),

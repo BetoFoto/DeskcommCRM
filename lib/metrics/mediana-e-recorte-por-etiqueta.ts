@@ -4,7 +4,7 @@
  * ─── O que mora aqui e o que fica no SQL ─────────────────────────────────────
  *
  * A conta é da RPC `fn_attendant_metrics` (0037/0235/0266/0596), que ganha a
- * mediana e o recorte por etiqueta na migration 0732. Reimplementar a média aqui
+ * mediana e o recorte por etiqueta na migration 0754. Reimplementar a média aqui
  * seria uma SEGUNDA versão da verdade — a mesma razão escrita em
  * `lib/metrics/canais.ts`. Este módulo guarda a RÉGUA, em código puro, e faz o
  * que o SQL sozinho não faz:
