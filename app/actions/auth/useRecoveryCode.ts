@@ -41,7 +41,7 @@ export async function useRecoveryCode(
 
   const parsed = inputSchema.safeParse({
     email: rawInput.email?.trim().toLowerCase(),
-    code: normalizeRecoveryCode(rawInput.code ?? ""),
+    code: normalizeRecoveryCode(String(rawInput.code ?? "")),
   });
   if (!parsed.success) {
     await delay(200);

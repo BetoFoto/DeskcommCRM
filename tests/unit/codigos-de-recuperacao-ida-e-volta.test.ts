@@ -10,7 +10,7 @@
  * converte o valor recebido para `bytea` pela regra de entrada do Postgres
  * (`\x` + hex, ou formato escape) e compara BYTES, como o banco compara.
  */
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 import { createClient as createSupabaseJs } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
@@ -122,6 +122,7 @@ async function emitir(): Promise<string[]> {
 }
 
 beforeEach(() => {
+  vi.stubEnv("INTERNAL_SECRET", "segredo-da-instalacao");
   banco.linhas = [];
   vi.mocked(redirect).mockClear();
   vi.mocked(createClient).mockResolvedValue({
@@ -160,15 +161,24 @@ describe("código de recuperação: gerar e usar", () => {
   });
 
   // Linhas gravadas antes desta versão — o texto JSON do Buffer, que era o que
-  // a gravação produzia, e o sha256 cru do código — não passam a valer.
+  // a gravação produzia, ou qualquer digest calculável sem o segredo da
+  // instalação — não passam a valer.
   it.each([
     ["o texto JSON do Buffer (o que a versão anterior gravava)", (c: string) => Buffer.from(JSON.stringify(createHash("sha256").update(c).digest()), "utf8")],
     ["o sha256 cru do código", (c: string) => createHash("sha256").update(c).digest()],
+    ["o sha256 com o prefixo, sem o segredo", (c: string) => createHash("sha256").update(`recovery-code:v2:${c}`).digest()],
+    ["o HMAC com outro segredo", (c: string) => createHmac("sha256", "outro-segredo").update(`recovery-code:v2:${c}`).digest()],
   ])("código gravado na forma antiga — %s — continua recusado", async (_nome, formaAntiga) => {
     const codigo = "KQ7MXP3T";
     banco.linhas.push({ id: "antiga", user_id: "eu", code_hash: formaAntiga(codigo), used_at: null });
     expect(await usar(codigo)).toEqual({ ok: false, error: "invalid_or_used" });
     expect(entrou()).toBe(false);
     expect(banco.linhas[0]!.used_at).toBeNull();
+  });
+
+  it("sem o segredo da instalação, regenerar recusa sem gravar nada", async () => {
+    vi.stubEnv("INTERNAL_SECRET", "");
+    await expect(regenerateRecoveryCodes()).rejects.toThrow(/INTERNAL_SECRET/);
+    expect(banco.linhas).toHaveLength(0);
   });
 });

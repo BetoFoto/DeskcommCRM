@@ -41,6 +41,7 @@ const VERIFICADO = { id: "f1", factor_type: "totp", status: "verified" };
 const NAO_CONFIRMADO = { id: "f2", factor_type: "totp", status: "unverified" };
 
 beforeEach(() => {
+  vi.stubEnv("INTERNAL_SECRET", "segredo-da-instalacao");
   estado.nivel = "aal1";
   estado.fatores = [];
   estado.escritas = [];

@@ -6,7 +6,7 @@
  * `hashRecoveryCode` — the SAME string is written by the actions and used by
  * the login lookup, so both sides cross PostgREST in the same form.
  */
-import { createHash, randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // 31 chars, ambiguity-free
 const CODE_LEN = 8;
@@ -40,14 +40,19 @@ export function normalizeRecoveryCode(input: string): string {
 
 /**
  * Literal `bytea` em hex (`\x` + 64 dígitos): uma string atravessa o corpo JSON
- * do insert e a URL do filtro sem mudar, e o Postgres a lê como os 32 bytes do
- * digest nos dois casos. (Um Buffer não: no JSON ele vira o texto
+ * do insert e a URL do filtro sem mudar, e o Postgres a lê como os mesmos 32
+ * bytes nos dois casos. (Um Buffer não: no JSON ele vira o texto
  * `{"type":"Buffer",...}`, e na URL vira o digest decodificado como UTF-8.)
  *
- * O prefixo versiona o que entra no digest: nenhuma linha gravada antes desta
- * forma casa com ela — códigos antigos precisam ser gerados de novo.
+ * HMAC com o `INTERNAL_SECRET` da instalação: só o servidor produz um valor que
+ * casa, e nenhuma linha gravada antes desta forma casa com ela — códigos
+ * antigos precisam ser gerados de novo. Trocar o `INTERNAL_SECRET` invalida os
+ * códigos emitidos (a pessoa gera outros em Segurança). Sem o segredo, lança:
+ * melhor recusar o fluxo que gravar um valor que qualquer um calcula.
  */
 export function hashRecoveryCode(code: string): string {
-  const digest = createHash("sha256").update(`recovery-code:v2:${normalizeRecoveryCode(code)}`).digest("hex");
-  return `\\x${digest}`;
+  const segredo = process.env.INTERNAL_SECRET?.trim();
+  if (!segredo) throw new Error("INTERNAL_SECRET ausente: códigos de recuperação indisponíveis");
+  const mac = createHmac("sha256", segredo).update(`recovery-code:v2:${normalizeRecoveryCode(code)}`).digest("hex");
+  return `\\x${mac}`;
 }

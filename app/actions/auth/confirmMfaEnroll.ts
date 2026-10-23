@@ -60,6 +60,11 @@ export async function confirmMfaEnroll(
   // recusa ANTES de verificar o fator: depois, o fator ficaria ativo sem códigos.
   if (!isServiceRoleConfigured()) return { ok: false, error: "service_unavailable" };
 
+  // Gerados antes do desafio pelo mesmo motivo: se o hash não puder ser feito,
+  // a falha vem antes de o fator ficar ativo.
+  const codes = generateRecoveryCodes();
+  const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(c) }));
+
   const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({
     factorId,
   });
@@ -90,13 +95,6 @@ export async function confirmMfaEnroll(
     });
     return { ok: false, error: "verify_failed", message: verifyErr.message };
   }
-
-  // Generate + hash 10 recovery codes.
-  const codes = generateRecoveryCodes();
-  const rows = codes.map((c) => ({
-    user_id: user.id,
-    code_hash: hashRecoveryCode(c),
-  }));
 
   // Substitui o conjunto anterior: os códigos mostrados agora são os únicos que valem.
   const admin = createAdminClient();

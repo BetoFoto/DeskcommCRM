@@ -122,6 +122,7 @@ function provedor(opcoes: Opcoes) {
 let cruas: string[] = [];
 
 beforeEach(() => {
+  vi.stubEnv("INTERNAL_SECRET", "segredo-da-instalacao");
   cruas = [];
   vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     cruas.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));

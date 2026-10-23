@@ -41,13 +41,13 @@ export async function regenerateRecoveryCodes(): Promise<RegenerateRecoveryCodes
   // valem para o dia a dia e não para emitir uma credencial que dispensa o fator.
   if ((await sessionAal()) !== "aal2") return { ok: false, error: "mfa_required" };
 
-  const codes = generateRecoveryCodes();
-  const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(c) }));
-
   // A tabela só aceita escrita do client de serviço (migration 0755): sem ele a
   // instalação não tem como gravar os códigos, e a resposta diz isso em vez de
   // tentar pelo client do usuário.
   if (!isServiceRoleConfigured()) return { ok: false, error: "service_unavailable" };
+
+  const codes = generateRecoveryCodes();
+  const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(c) }));
   const admin = createAdminClient();
   const d = await admin.from("user_recovery_codes").delete().eq("user_id", user.id);
   const delErr: unknown = d.error;
