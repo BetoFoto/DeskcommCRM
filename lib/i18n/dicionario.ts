@@ -136,6 +136,10 @@ export const DICIONARIO: Traducoes = {
   "Atualizar o card quando o envio repete o mesmo cadastro": { es: "Actualizar la tarjeta cuando el envío repite el mismo registro" },
   "Só para integrações entre sistemas: ligado, um envio com o mesmo external_id que traga dado novo atualiza o card desta fonte — os campos, o título e a etapa pedida em stage, sempre para a frente. Desligado, o padrão, o envio repetido continua sendo reenvio e nada no card muda, nem o que a equipe corrigiu à mão.": { es: "Solo para integraciones entre sistemas: activado, un envío con el mismo external_id que traiga datos nuevos actualiza la tarjeta de esta fuente — los campos, el título y la etapa pedida en stage, siempre hacia adelante. Desactivado, lo predeterminado, el envío repetido sigue siendo un reenvío y nada en la tarjeta cambia, ni lo que el equipo corrigió a mano." },
   "Configure a assinatura da fonte antes de deixar a integração atualizar o card. Para remover a assinatura, desligue primeiro a atualização pelo external_id.": { es: "Configura la firma de la fuente antes de permitir que la integración actualice la tarjeta. Para quitar la firma, desactiva primero la actualización por external_id." },
+  // Reuso do card aberto do contato na captação (#3101).
+  "Reaproveitar o card aberto do contato": { es: "Reutilizar la tarjeta abierta del contacto" },
+  "Configure a assinatura da fonte antes de reaproveitar o card aberto do contato. Para remover a assinatura, desligue primeiro o reaproveitamento do card aberto.": { es: "Configura la firma de la fuente antes de reutilizar la tarjeta abierta del contacto. Para quitar la firma, desactiva primero la reutilización de la tarjeta abierta." },
+  "Só para fontes com assinatura: ligado, um envio de quem já tem card aberto neste funil atualiza esse card — os campos novos e a etapa da fonte, sempre para a frente — em vez de abrir um segundo card. Desligado, o padrão, cada envio continua virando um card novo.": { es: "Solo para fuentes con firma: activado, un envío de alguien que ya tiene una tarjeta abierta en este embudo actualiza esa tarjeta — los campos nuevos y la etapa de la fuente, siempre hacia adelante — en vez de abrir una segunda tarjeta. Desactivado, lo predeterminado, cada envío sigue creando una tarjeta nueva." },
 
   // A conferência de fato (#2231): a terceira camada do before_send.
   "Conferir afirmações de fato na resposta": { es: "Verificar las afirmaciones de hecho de la respuesta" },
@@ -1577,6 +1581,25 @@ export const DICIONARIO: Traducoes = {
   Lembrar: { es: "Recordar" },
   Fechar: { es: "Cerrar" },
   "Devolver ao automático": { es: "Devolver al automático" },
+
+  // ─── Inbox: caixa bloqueada até assumir (#3012) ───
+  "Assuma esta conversa para responder.": { es: "Asume esta conversación para responder." },
+  "Bloquear a caixa de mensagem até o atendente assumir a conversa": {
+    es: "Bloquear el cuadro de mensaje hasta que el agente asuma la conversación",
+  },
+  "Com a opção ligada, quem abre uma conversa sem responsável não consegue digitar nem enviar até clicar em Assumir. O botão Assumir continua sempre visível, e quem já assumiu continua respondendo normalmente.":
+    {
+      es: "Con la opción activada, quien abre una conversación sin responsable no puede escribir ni enviar hasta hacer clic en Asumir. El botón Asumir sigue siempre visible, y quien ya asumió sigue respondiendo con normalidad.",
+    },
+  "Regras de atendimento que valem para esta empresa inteira. Não mudam permissões: papel e acesso continuam decidindo o que cada pessoa alcança.":
+    {
+      es: "Reglas de atención que valen para toda esta empresa. No cambian permisos: el rol y el acceso siguen decidiendo qué alcanza cada persona.",
+    },
+  "Aplicar regras de atendimento": { es: "Aplicar reglas de atención" },
+  "Bloqueio da caixa de mensagem salvo.": { es: "Bloqueo del cuadro de mensaje guardado." },
+  "Não foi possível salvar o bloqueio da caixa de mensagem.": {
+    es: "No se pudo guardar el bloqueo del cuadro de mensaje.",
+  },
 
   // ─── Inbox: lote por seleção múltipla (#2484, fatia F1) ───
   "Ações em lote": { es: "Acciones en lote" },
@@ -11383,6 +11406,11 @@ export const DICIONARIO: Traducoes = {
   "Habilidade instalada": { es: "Habilidad instalada" },
   "Preparar de novo": { es: "Preparar de nuevo" },
   "Ver o que ele aprendeu": { es: "Ver lo que aprendió" },
+  // Leitura do material na tela (#3059): abrir o material e ler o conteúdo.
+  "Ler o material": { es: "Leer el material" },
+  "Voltar ao acervo": { es: "Volver al acervo" },
+  "Resposta": { es: "Respuesta" },
+  "Não consegui ler este material agora.": { es: "No pude leer este material ahora." },
   "O que o agente sabe": { es: "Lo que el agente sabe" },
   "Não publicado": { es: "No publicado" },
   // Editor da jornada (Equipe › Atendimento) — issue #2312.
@@ -14517,6 +14545,15 @@ export const DICIONARIO: Traducoes = {
   "Não consegui carregar as pessoas relacionadas.": {
     es: "No pude cargar las personas relacionadas.",
   },
+  // ─── #3083 F1: o ESCRITOR do vínculo (adicionar, remover, dar papel) ───
+  "Adicionar participante": { es: "Agregar participante" },
+  "Nenhuma pessoa relacionada ainda.": { es: "Todavía no hay personas relacionadas." },
+  "Pagante, passageiro…": { es: "Pagador, pasajero…" },
+  "Participante adicionado.": { es: "Participante agregado." },
+  "Participante removido.": { es: "Participante eliminado." },
+  "Este contato já é o contato principal do negócio.": {
+    es: "Este contacto ya es el contacto principal del negocio.",
+  },
   "Confira os links marcados: só endereços http(s) valem.": {
     es: "Revisa los enlaces marcados: solo son válidas las direcciones http(s).",
   },
@@ -17125,6 +17162,14 @@ export const DICIONARIO: Traducoes = {
   "site com problemas": { es: "sitio con problemas" },
   "sem sinais positivos": { es: "sin señales positivas" },
   "verificação pendente": { es: "verificación pendiente" },
+  // ─── Evolução dos ganhos no Desempenho (issue #3024, fatia 1) ─────────────
+  "Ganhos por período": { es: "Ganados por período" },
+  "Granularidade": { es: "Granularidad" },
+  "Sem ganhos no período.": { es: "Sin ganancias en el período." },
+  "Erro ao carregar a evolução dos ganhos.": {
+    es: "No se pudo cargar la evolución de las ganancias.",
+  },
+  "Série cortada no teto de leitura.": { es: "Serie cortada en el límite de lectura." },
 };
 
 /**
