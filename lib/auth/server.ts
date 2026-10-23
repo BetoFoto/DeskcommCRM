@@ -609,9 +609,17 @@ export async function mfaEmDividaEstrita(): Promise<boolean> {
  * ao desafio, de volta para onde estava. É a mesma pergunta das rotas
  * (`mfaEmDivida`), para que a tela e as rotas por trás dela respondam igual.
  *
- * Não custa leitura nova no `/app`: `isMfaEnrolled` é `cache` da requisição e o
- * layout já a pediu; `sessionAal` lê o token da própria sessão. Falha ao ler os
- * fatores LANÇA (o `isMfaEnrolled`), como nas rotas — nenhuma tela renderiza.
+ * A régua é a BRANDA de propósito: dispositivo confiável vale em `/app` — com
+ * `mfaEmDividaEstrita` aqui, confiar no dispositivo não teria efeito nenhum. Quem
+ * age pelo poder de plataforma segue devendo o código (`mfaEmDivida` decide), e o
+ * `/admin` tem portão próprio, que exige o `aal2` (`requirePlatformAdmin`).
+ *
+ * Custo: sem fator, ou com `aal2`, nada de novo (`isMfaEnrolled` é `cache` da
+ * requisição e o layout já a pediu; `sessionAal` lê o token). Sessão `aal1` COM
+ * fator faz duas leituras a mais: a org ativa, via `agindoPeloPoderDePlataforma`,
+ * que roda antes para todo platform admin, e o rpc `fn_session_mfa_proven`.
+ * Falha ao ler os fatores LANÇA (o `isMfaEnrolled`), como nas rotas — nenhuma tela
+ * renderiza; erro do rpc também lança.
  */
 export async function exigirProvaDeMfa(): Promise<void> {
   if (!(await mfaEmDivida())) return;
