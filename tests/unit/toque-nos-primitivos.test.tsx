@@ -11,7 +11,9 @@
  * As contas, para quem for mexer:
  *  - `Switch`: `h-5` com `border-2` dá caixa de padding de 16 px, e é nela que o
  *    `::before` absoluto se ancora. `-inset-3.5` soma 14 px de cada lado: 44 px.
- *    `-inset-3` daria 40.
+ *    `-inset-3` daria 40. `pointer-coarse:my-3` põe 12 px em cima e embaixo:
+ *    passo de 44 px entre interruptores empilhados, e as áreas encostam sem se
+ *    sobrepor (sem a margem, numa pilha a cada 28 px, o de baixo ganha o toque).
  *  - itens de menu e de seleção: `py-1.5` em volta de `text-sm` dá 32 px;
  *    `pointer-coarse:min-h-11` leva a 44 só com ponteiro grosso.
  *  - `TabsList`: `h-9` com `overflow-x-auto` (que força `overflow-y` a rolar)
@@ -60,6 +62,9 @@ describe("primitivos com alvo de dedo", () => {
         "pointer-coarse:before:absolute",
         "pointer-coarse:before:-inset-3.5",
         "pointer-coarse:before:content-['']",
+        // Passo de 44 px entre interruptores empilhados: sem a margem, o
+        // `::before` do vizinho de baixo cobre a borda deste e ganha o toque.
+        "pointer-coarse:my-3",
       ]),
     );
     // O desenho continua o mesmo: 20 px de altura.

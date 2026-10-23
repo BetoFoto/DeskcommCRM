@@ -1461,14 +1461,12 @@ jobs:
       # Graph, assinatura do WAHA ligada, seed extra) não entra aqui: ganha
       # parte própria, com número seguinte.
       #
-      # As quatro vieram de partes diferentes, e cada uma semeia o que usa ou
-      # só lê os seeds de passo: `agente-novo-e-uso` (da 1) cria o agente pela
-      # tela; `capacidades-do-agente` (da 2) roda os próprios seeds se faltar
-      # algo e devolve o rascunho como achou; `extensoes-versao` (da 5) sobe o
-      # catálogo de extensões dela e o limpa no `afterAll`;
-      # `prova-painel-provedores` (da 6) lê o catálogo da OpenRouter que o
-      # passo `seed-e2e-catalogo-openrouter` semeia em toda parte comum.
-      # Nenhuma cita WAHA, Graph ou webhook.
+      # As specs desta parte vieram de partes diferentes, por tempo de
+      # execução, ou nasceram aqui; a lista abaixo é a fonte, e este
+      # comentário não a enumera para não envelhecer a cada spec nova. A
+      # regra de entrada: cada uma semeia o que usa ou só lê os seeds de
+      # passo (ex.: o catálogo da OpenRouter que `seed-e2e-catalogo-openrouter`
+      # semeia em toda parte comum), e nenhuma cita WAHA, Graph ou webhook.
       SPECS_PARTE_7: >-
         celular-toque-nos-controles.spec.ts
         agente-novo-e-uso.spec.ts
