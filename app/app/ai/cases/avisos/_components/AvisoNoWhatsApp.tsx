@@ -45,6 +45,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useT } from "@/hooks/i18n/useT";
+import { useTelefoneExemplo } from "@/hooks/contacts/useTelefoneExemplo";
+import { usePaisDaOrgAtiva } from "@/hooks/auth/AuthProvider";
+import { perfilDoPais } from "@/lib/legal/perfil-do-pais";
 import {
   useAvisoDeCaso,
   useSalvarAvisoDeCaso,
@@ -70,7 +73,9 @@ const FRASE_EXTRA_DO_TESTE = {
     "Este número mandou uma mensagem agora há pouco. O WhatsApp exige um intervalo entre elas — tente de novo em alguns segundos.",
 } as const;
 
-const RASCUNHO_VAZIO = { canal: "", telefone: "", rotulo: "", ligado: false };
+const RASCUNHO_VAZIO = {
+  canal: "", telefone: "", rotulo: "", ligado: false, respostaWhatsappHabilitada: false,
+};
 type Rascunho = typeof RASCUNHO_VAZIO;
 
 function rascunhoDoEstado(estado: EstadoDoAviso | undefined): Rascunho {
@@ -80,6 +85,7 @@ function rascunhoDoEstado(estado: EstadoDoAviso | undefined): Rascunho {
     telefone: estado.config.telefone,
     rotulo: estado.config.rotulo ?? "",
     ligado: estado.config.ligado,
+    respostaWhatsappHabilitada: estado.config.resposta_whatsapp_habilitada,
   };
 }
 
@@ -141,6 +147,8 @@ export function AvisoNoWhatsApp() {
  */
 function FormularioDoAviso({ estado }: { estado: EstadoDoAviso }) {
   const t = useT();
+  const telefoneExemplo = useTelefoneExemplo();
+  const noBrasil = perfilDoPais(usePaisDaOrgAtiva()).codigo === "BR";
   const salvar = useSalvarAvisoDeCaso();
   const testar = useTestarAvisoDeCaso();
 
@@ -177,6 +185,7 @@ function FormularioDoAviso({ estado }: { estado: EstadoDoAviso }) {
         telefone: rascunho.telefone,
         rotulo: rascunho.rotulo.trim() === "" ? null : rascunho.rotulo.trim(),
         ligado: rascunho.ligado,
+        resposta_whatsapp_habilitada: rascunho.respostaWhatsappHabilitada,
         ...(confirma ? { confirma_contato: true } : {}),
       });
       setConfirmarContato(null);
@@ -247,7 +256,7 @@ function FormularioDoAviso({ estado }: { estado: EstadoDoAviso }) {
           id="telefone"
           inputMode="tel"
           className="w-full sm:w-72"
-          placeholder="+5531999998888"
+          placeholder={telefoneExemplo}
           value={rascunho.telefone}
           onChange={(e) =>
             setRascunho((r) => ({ ...r, telefone: normalizarTelefoneDeAviso(e.target.value) }))
@@ -255,13 +264,34 @@ function FormularioDoAviso({ estado }: { estado: EstadoDoAviso }) {
           aria-invalid={rascunho.telefone !== "" && !telefoneOk}
         />
         <p className="text-xs text-muted-foreground">
-          {t("Comece pelo código do país. Um celular do Brasil fica assim: +55, DDD e o número.")}
+          {/* A explicação brasileira fica para o Brasil; fora dele, o exemplo do país da organização. */}
+          {noBrasil
+            ? t("Comece pelo código do país. Um celular do Brasil fica assim: +55, DDD e o número.")
+            : t("Comece pelo código do país, por exemplo {exemplo}.").replace("{exemplo}", () => telefoneExemplo)}
         </p>
         {rascunho.telefone !== "" && !telefoneOk ? (
           <p className="text-xs text-destructive" data-testid="telefone-invalido">
             {t("Esse número ainda não está completo.")}
           </p>
         ) : null}
+      </div>
+
+      <div className="flex items-start gap-3 rounded-lg border p-3">
+        <Switch
+          id="resposta-whatsapp-habilitada"
+          checked={rascunho.respostaWhatsappHabilitada}
+          disabled={!jaSalvo || salvar.isPending}
+          onCheckedChange={(v) => setRascunho((r) => ({ ...r, respostaWhatsappHabilitada: v }))}
+          aria-label={t("Responder casos por este WhatsApp")}
+        />
+        <div className="space-y-1">
+          <Label htmlFor="resposta-whatsapp-habilitada" className="text-sm font-medium">
+            {t("Responder casos por este WhatsApp")}
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            {t("Permite usar RESPONDER ou PERGUNTAR no número que recebe os avisos. Desligado por padrão.")}
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">

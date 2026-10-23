@@ -95,6 +95,95 @@ describe("tela de atualização — o botão não fica atrás do changelog", () 
 });
 
 /**
+ * #2755 (item 3): O "SEM SMTP" APARECE NA TELA, E NÃO SÓ NO LOG.
+ *
+ * Até aqui o painel de atualização exibia o log do `update.sh` e mais nada.
+ * Numa instalação sem SMTP, quem administrava descobria que o e-mail não saía
+ * quando alguém reclamava de não ter recebido a recuperação de senha. O aviso
+ * passou a ser lido pelo próprio painel, no caminho de leitura que já existe
+ * (`GET /api/v1/system/version`) e com a régua da ação que sofre com isso
+ * (`semSmtpNaInstalacao`) — sem campo novo de banco.
+ *
+ * Os DOIS lados importam: o aviso APARECE quando falta SMTP e NÃO aparece
+ * quando o campo não veio (quem não é dono, ou instalação fora do servidor
+ * único). Ausente é "não sei", e sobre o que não se sabe esta tela não afirma.
+ */
+describe("tela de atualização — o aviso de 'sem SMTP'", () => {
+  const SEM_SMTP: SystemVersion = {
+    current_version: "1.0.0",
+    is_owner: true,
+    latest_version: "1.0.0",
+    update_available: false,
+    agent_online: true,
+    smtp_configured: false,
+    notes: null,
+    run: null,
+  };
+
+  it("⭐ sem SMTP: o aviso aparece, diz o que não sai e onde configurar", () => {
+    renderTela(SEM_SMTP);
+
+    expect(screen.getByTestId("aviso-sem-smtp")).toBeInTheDocument();
+    expect(screen.getByText("Sem SMTP configurado", { exact: false })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Configure o servidor de e-mail em \/admin\/email/),
+    ).toBeInTheDocument();
+    // O SMTP de /admin/email só chega ao serviço de login pelo update.sh
+    // (`sincronizar_smtp_do_gotrue`); sem o passo, o aviso some e o e-mail segue sem sair.
+    expect(screen.getByTestId("aviso-sem-smtp").textContent).toMatch(/update\.sh/);
+    // Sem SMTP, convite e LGPD ainda saem pela Resend (lib/email/roteador.ts):
+    // o aviso fala do serviço de login, nunca de "nenhum e-mail".
+    expect(screen.getByTestId("aviso-sem-smtp").textContent).not.toMatch(/e-mail nenhum/);
+  });
+
+  it("o aviso vem ANTES do conteúdo — ele é da instalação, não do estado da atualização", () => {
+    renderTela(SEM_SMTP);
+
+    const aviso = screen.getByTestId("aviso-sem-smtp");
+    const conteudo = screen.getByText("É a mais recente. Não há nada a fazer.");
+
+    expect(
+      Boolean(aviso.compareDocumentPosition(conteudo) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+  });
+
+  it("atravessa o estado de espera: o dono vê o aviso mesmo com atualização em curso", () => {
+    renderTela({
+      ...SEM_SMTP,
+      latest_version: "1.5.0",
+      update_available: true,
+      run: {
+        id: "66666666-6666-4666-8666-666666666666",
+        status: "dispatched",
+        last_step: null,
+        from_version: "1.0.0",
+        to_version: "1.5.0",
+        log_tail: "",
+        dispatched_at: new Date().toISOString(),
+      },
+    });
+
+    expect(screen.getByText("Pedido enviado — esperando o servidor pegar")).toBeInTheDocument();
+    expect(screen.getByTestId("aviso-sem-smtp")).toBeInTheDocument();
+  });
+
+  it("⭐ CONTROLE — COM SMTP configurado: nenhum aviso", () => {
+    renderTela({ ...SEM_SMTP, smtp_configured: true });
+
+    expect(screen.queryByTestId("aviso-sem-smtp")).toBeNull();
+  });
+
+  it("campo ausente (quem não é dono, ou fora do servidor único): a tela não afirma nada", () => {
+    const semCampo: SystemVersion = { ...SEM_SMTP };
+    delete semCampo.smtp_configured;
+
+    renderTela(semCampo);
+
+    expect(screen.queryByTestId("aviso-sem-smtp")).toBeNull();
+  });
+});
+
+/**
  * O #1040: a rodada de atualização sabe que houve disputa de banco, e a tela
  * CONTA isso — em português de gente — e diz onde está o detalhe. Até aqui o
  * aviso morria só no `.update.log`, no disco da VPS, e quem apertou o botão
@@ -181,5 +270,75 @@ describe("tela de atualização — a rodada conta a disputa do banco", () => {
 
     expect(screen.getByText(/foram 3 passadas e 2 retentativas/)).toBeInTheDocument();
     expect(screen.getByText(/\.update\.log/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * #2757 (ajuste 3): a volta que o agente fez SOZINHO aparece na tela.
+ *
+ * Antes disto o painel mostrava a versão mudar sem explicação — o registro da
+ * volta automática ficava só no `.update-agent.log` da VPS. O aviso nomeia as
+ * três coisas que o dono precisa saber: para onde voltou, a hora e o porquê, em
+ * linguagem de gente (nada de `healthcheck`, código de saída ou nome de campo).
+ *
+ * CONTROLE: uma volta PEDIDA pela tela não é "sozinho" e não ganha o aviso — o
+ * texto de sempre ("Voltei o sistema...") continua sendo o certo ali.
+ */
+describe("tela de atualização — o aviso da volta automática (#2757)", () => {
+  const QUANDO = "2026-10-16T17:10:00.000Z";
+
+  function volta(overrides: Partial<NonNullable<SystemVersion["run"]>> = {}): SystemVersion {
+    return {
+      current_version: "1.4.2",
+      is_owner: true,
+      latest_version: "1.5.0",
+      update_available: true,
+      agent_online: true,
+      notes: null,
+      run: {
+        id: "77777777-7777-4777-8777-777777777777",
+        status: "failed_rolled_back",
+        last_step: "app",
+        from_version: "1.4.2",
+        to_version: "1.5.0",
+        log_tail: "o site não respondeu em 2 healthchecks seguidos logo depois da atualização",
+        finished_at: QUANDO,
+        volta_automatica: true,
+        ...overrides,
+      },
+    };
+  }
+
+  it("⭐ diz para onde voltou, a hora e o porquê — em linguagem de gente", () => {
+    renderTela(volta());
+
+    const aviso = screen.getByTestId("volta-automatica");
+    const texto = aviso.textContent ?? "";
+    // A hora é a do navegador de quem lê; o teste calcula a mesma, sem fixar fuso.
+    const d = new Date(QUANDO);
+    const hora = `${String(d.getHours()).padStart(2, "0")}h${String(d.getMinutes()).padStart(2, "0")}`;
+
+    expect(texto).toContain("voltou sozinho");
+    expect(texto).toContain("1.4.2");
+    expect(texto).toContain("1.5.0");
+    expect(texto).toContain(hora);
+    expect(texto).toMatch(/site não respondeu/);
+    // O que a tela NÃO pode fazer: despejar o jargão do log em quem só quer saber o que houve.
+    expect(texto).not.toMatch(/healthcheck|update\.sh|exit|rc=/);
+  });
+
+  it("sem a hora (run antigo, sem finished_at): o aviso sai sem inventar horário", () => {
+    renderTela(volta({ finished_at: null }));
+
+    const texto = screen.getByTestId("volta-automatica").textContent ?? "";
+    expect(texto).toMatch(/voltou sozinho/);
+    expect(texto).not.toMatch(/\d{2}h\d{2}/);
+  });
+
+  it("CONTROLE — volta pedida pela tela: nenhum aviso de 'sozinho'", () => {
+    renderTela(volta({ volta_automatica: false }));
+
+    expect(screen.queryByTestId("volta-automatica")).toBeNull();
+    expect(screen.getByText("Voltei o sistema para a versão", { exact: false })).toBeInTheDocument();
   });
 });

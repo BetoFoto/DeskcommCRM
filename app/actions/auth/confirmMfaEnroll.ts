@@ -3,6 +3,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { ipDoCliente } from "@/lib/http/ip-do-cliente";
+import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit, isServiceRoleConfigured } from "@/lib/audit";
@@ -27,7 +29,7 @@ export async function confirmMfaEnroll(
   const supabase = await createClient();
   const hdrs = await headers();
   const requestId = hdrs.get("x-request-id");
-  const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const ip = ipDoCliente(hdrs);
   const userAgent = hdrs.get("user-agent") ?? null;
 
   const {
@@ -43,6 +45,13 @@ export async function confirmMfaEnroll(
     factorId,
   });
   if (challengeErr || !challenge) {
+    // Mesma razão de `enrollMfa`: o motivo fica no servidor (#3161). O `code`
+    // do TOTP não entra — só o código de erro do provedor e o motivo.
+    logger.error("[mfa-confirmacao] o provedor recusou o desafio do fator", {
+      factor_id: factorId,
+      code: challengeErr?.code,
+      error: challengeErr?.message,
+    });
     return { ok: false, error: "challenge_failed", message: challengeErr?.message };
   }
 
@@ -52,6 +61,14 @@ export async function confirmMfaEnroll(
     code,
   });
   if (verifyErr) {
+    // Aqui é onde o código de 6 dígitos é recusado: o motivo do provedor é a
+    // única pista de que o relógio do celular, o fator ou a janela do desafio
+    // são o problema. O código TOTP em si NUNCA entra no log — nem o segredo.
+    logger.error("[mfa-confirmacao] o provedor recusou o código do fator", {
+      factor_id: factorId,
+      code: verifyErr.code,
+      error: verifyErr.message,
+    });
     return { ok: false, error: "verify_failed", message: verifyErr.message };
   }
 

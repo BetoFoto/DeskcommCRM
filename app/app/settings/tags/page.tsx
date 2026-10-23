@@ -34,10 +34,12 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { tagsInternasDaOrg } from "@/lib/schemas/settings";
 import type { LinhaDeVocabulario } from "@/lib/schemas/tags";
 import { createClient } from "@/lib/supabase/server";
 
 import { PainelDeTags } from "./_painel";
+import { TagsInternasForm } from "./_tags-internas-form";
 
 export const metadata = { title: "Tags" };
 export const dynamic = "force-dynamic";
@@ -77,6 +79,18 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
   const pageCount = Math.max(1, Math.ceil(total / 100));
   const pageUrl = (page: number) => "/app/settings/tags?" + new URLSearchParams({ page: String(page), busca: search });
 
+  // A lista de contato interno (#2353) lê o `settings` da própria organização
+  // pela SESSÃO: a policy `orgs_select` isola a linha, e o admin client aqui
+  // mostraria o settings de qualquer tenant se alguém trocasse o id.
+  const { data: linhaDaOrganizacao } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", activeOrg.orgId)
+    .maybeSingle();
+  const tagsInternas = tagsInternasDaOrg(
+    (linhaDaOrganizacao as { settings?: unknown } | null)?.settings,
+  );
+
   const idioma = user.idioma;
   const t = (texto: string) => traduzir(texto, idioma);
 
@@ -113,6 +127,10 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
             <PainelDeTags key={pageNumber+":"+search} tags={result.data.items as LinhaDeVocabulario[]} idioma={idioma} paginado />}
         </>
       )}
+
+      {/* #2353: a lista de contato interno não depende do vocabulário (que pode
+          ter falhado acima) — vive em `settings` e é independente dele. */}
+      <TagsInternasForm tags={tagsInternas} idioma={idioma} />
     </div>
   );
 }

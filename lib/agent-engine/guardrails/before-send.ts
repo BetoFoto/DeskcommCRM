@@ -68,6 +68,7 @@ import type { DisclosureMode } from './disclosure/template';
 import { escalateLgpdVeto, isLegalBasisValid } from './lgpd/legal-basis';
 import type { LgpdInput } from './lgpd/legal-basis';
 import { detectHumanPromise } from './human-promise';
+import { detectarPromessaDeRetornoDoAssistente } from './retorno-do-assistente';
 import { detectarVazamentoInterno, renderVetoDeVazamento } from './vazamento-interno';
 import { detectarAfirmacaoClinica, renderVetoDeAfirmacaoClinica } from './afirmacao-clinica';
 // Módulo PURO de propósito (`capabilities`, não `index`): o seam não arrasta o
@@ -78,6 +79,10 @@ import type { ChannelProvider } from '@/lib/channels/capabilities';
 import { aplicarAjustesDeEstilo, lerAjustesDeEstiloDaOrg } from './ajustes-de-estilo-da-org';
 import type { AjusteDeEstilo, LeituraDosAjustes } from './ajustes-de-estilo-da-org';
 import { renderVetoDeAfirmacao, type ConferenciaDeFato } from './factual-claim';
+// A régua de contato interno (#2353) na forma SQL — o `stop` deste arquivo é o
+// segundo caminho de envio que não passa pelo gate de elegibilidade, e é ele que
+// barra o texto FIXO do worker e o modelo aprovado.
+import { sqlContatoInterno } from '@/lib/contacts/tags-internas';
 
 /** O que os gates enxergam — carregado UMA vez sob o lock, por tentativa de envio. */
 export interface GateContext {
@@ -90,6 +95,16 @@ export interface GateContext {
    * OR o sinal lido no `get_lead_context` deste turno.
    */
   optedOut: boolean;
+  /**
+   * POR QUE o `stop` vale, quando `optedOut` é true por leitura da FONTE (#2353):
+   * `contato_bloqueado` (bloqueio/opt-out/força-humano) ou `contato_interno` (o
+   * contato tem uma etiqueta da lista interna da organização — o mesmo veto, e por
+   * isso o mesmo gate, mas o motivo NÃO é opt-out e não pode sair rotulado como se
+   * fosse). `undefined` = o chamador não disse (ctx montado à mão por teste e
+   * preview, ou o opt-out veio de `optedOutThisTurn`): o veto sai com o código e o
+   * texto de sempre.
+   */
+  motivoDoStop?: MotivoDoStop;
   /**
    * Canal desta tentativa. Nenhum gate pergunta QUEM é o provider (invariante 1
    * de `docs/doctrine/restricao-de-canal.md`) — só o entrega a `capabilitiesOf`
@@ -340,18 +355,35 @@ export interface Gate {
   evaluate(ctx: GateContext): GateVerdict;
 }
 
+/**
+ * POR QUE o gate `stop` veta. Duas causas, UM gate: a trava de opt-out/bloqueio
+ * (`contato_bloqueado`, o motivo histórico) e a etiqueta de contato interno
+ * (`contato_interno`, #2353). O código vai para o modelo no veto e para o
+ * `before_send_traces` — o rótulo do motivo é contrato.
+ */
+export type MotivoDoStop = 'contato_bloqueado' | 'contato_interno';
+
 /** Gate 1 — STOP/opt-out/força-humano: veto IRREVOGÁVEL (regra dura nº 2), 1ª linha. */
 const stopGate: Gate = {
   name: 'stop',
   evaluate: (ctx) =>
     ctx.optedOut
-      ? {
-          pass: false,
-          code: 'contato_bloqueado',
-          reason:
-            'o lead optou por sair do atendimento (bloqueio/opt-out irrevogável) — não é ' +
-            'possível enviar nada a ele; encerre o turno sem tentar de novo.',
-        }
+      ? ctx.motivoDoStop === 'contato_interno'
+        ? {
+            pass: false,
+            code: 'contato_interno',
+            reason:
+              'este contato é INTERNO (tem uma etiqueta da lista de contatos internos da ' +
+              'organização) — não recebe atendimento automático, como numa conversa em ' +
+              '"Assumir"; encerre o turno sem tentar de novo.',
+          }
+        : {
+            pass: false,
+            code: 'contato_bloqueado',
+            reason:
+              'o lead optou por sair do atendimento (bloqueio/opt-out irrevogável) — não é ' +
+              'possível enviar nada a ele; encerre o turno sem tentar de novo.',
+          }
       : { pass: true },
 };
 
@@ -441,35 +473,46 @@ export const semanticPromiseGate: Gate = {
  * Gate anti-alucinação de casos humanos (spec 15 §10.2, Wave 4) — a garantia DURA da
  * invariante "o lead nunca recebe promessa-de-humano sem caso aberto". Off (`casesEnabled`
  * false) ou já há caso (`hasOpenCase`/`openedCaseThisTurn` — a IA abriu um NESTE turno) =
- * no-op. Só veta quando ALGUMA das duas camadas — o detector léxico (`detectHumanPromise`) ou o sinal semântico (`ctx.semanticPromise?.prometeuRetornoHumano`) — acha uma promessa
- * clara na candidata E nenhum caso existe. O fail-safe de 2ª camada (auto-abre caso e
- * re-roda a cadeia) vive na orquestração do `send_message` (inbound-turn.ts), não aqui — o
- * gate em si é síncrono/puro como os demais. Posição 6.5 de `BEFORE_SEND_GATES` (logo após
- * `semanticPromiseGate`, antes do `disclosureGate`): roda depois das duas camadas de
- * promessa comercial (preço/desconto) porque é uma categoria distinta de promessa
- * (envolvimento humano, não oferta).
+ * no-op. Só veta quando ALGUMA das camadas — o detector léxico de humano
+ * (`detectHumanPromise`), o sinal semântico (`ctx.semanticPromise?.prometeuRetornoHumano`)
+ * ou o detector léxico de retorno do assistente (`detectarPromessaDeRetornoDoAssistente`,
+ * issue #2916) — acha uma promessa clara na candidata E nenhum caso existe. O fail-safe de
+ * 2ª camada (auto-abre caso e re-roda a cadeia) vive na orquestração do `send_message`
+ * (inbound-turn.ts), não aqui — o gate em si é síncrono/puro como os demais. Posição 6.5 de
+ * `BEFORE_SEND_GATES` (logo após `semanticPromiseGate`, antes do `disclosureGate`): roda
+ * depois das duas camadas de promessa comercial (preço/desconto) porque é uma categoria
+ * distinta de promessa (envolvimento humano, não oferta).
  */
 export const casePromiseGate: Gate = {
   name: 'case_promise',
   evaluate: (ctx) => {
     if (!ctx.casesEnabled) return { pass: true };
     if (ctx.hasOpenCase || ctx.openedCaseThisTurn) return { pass: true };
-    // Lê os DOIS sinais, em OU — e o OU é o ponto. Exigir os dois faria o conserto
-    // não consertar nada: o léxico é o filtro BARATO e continua valendo sozinho
-    // (roda sem chamada de modelo, e pega as duas frases que nomeiam o alvo colado
-    // ao verbo); o semântico pega as outras cinco — as 5 de 7 que a medição de
-    // 2026-09-16 flagrou vazando. O `?.` é obrigatório: o fixture de
-    // `tests/invariants/case-guardrail.test.ts` passa `semanticPromise: null`.
+    // Lê TRÊS sinais, em OU — e o OU é o ponto. Exigir todos faria o conserto
+    // não consertar nada: o léxico de humano (`detectHumanPromise`) é o filtro
+    // BARATO e continua valendo sozinho (roda sem chamada de modelo, e pega as
+    // duas frases que nomeiam o alvo colado ao verbo); o semântico pega as outras
+    // cinco — as 5 de 7 que a medição de 2026-09-16 flagrou vazando; e o léxico de
+    // retorno do assistente (`detectarPromessaDeRetornoDoAssistente`, issue #2916)
+    // pega a promessa de RETOMAR A CONVERSA ("retomamos daqui a duas horas") que o
+    // semântico não marca de forma confiável (é modelo — varia entre execuções). O
+    // `?.` é obrigatório: o fixture de `tests/invariants/case-guardrail.test.ts`
+    // passa `semanticPromise: null`.
     const lexico = detectHumanPromise(ctx.body, ctx.humanPromiseExtraTargets);
     const semantico = ctx.semanticPromise?.prometeuRetornoHumano === true;
-    if (!lexico && !semantico) return { pass: true };
+    const retornoLexico = detectarPromessaDeRetornoDoAssistente(ctx.body);
+    if (!lexico && !semantico && !retornoLexico) return { pass: true };
     // #1873, opção (a): o follow-up agendado é destino SÓ para a promessa do próprio
-    // assistente ("te retorno amanhã de manhã"). O léxico só casa alvo humano explícito
-    // (equipe, setor, responsável…), então o que ele acusa exige caso sempre. E o
-    // `=== true` é fechado de propósito: o parser degrada `retornoSoDoAssistente` para
-    // `false` em qualquer falha, e falha nunca libera.
+    // assistente ("te retorno amanhã de manhã", "retomamos daqui a duas horas"). O
+    // léxico de humano só casa alvo humano explícito (equipe, setor, responsável…),
+    // então o que ele acusa exige caso sempre — um lembrete para o assistente voltar
+    // a falar não põe ninguém da empresa para trabalhar. E o `=== true` é fechado de
+    // propósito: o parser degrada `retornoSoDoAssistente` para `false` em qualquer
+    // falha, e falha nunca libera. `retornoLexico` (issue #2916) entra como destino de
+    // follow-up pelo mesmo motivo do sinal semântico: quem volta a falar é o próprio
+    // assistente, e o `schedule_followup` é o compromisso que o cliente espera.
     const promessaDoAssistente =
-      !lexico && ctx.semanticPromise?.retornoSoDoAssistente === true;
+      !lexico && (ctx.semanticPromise?.retornoSoDoAssistente === true || retornoLexico);
     if (promessaDoAssistente && ctx.followup?.agendadoNesteTurno === true) return { pass: true };
     return {
       pass: false,
@@ -1301,6 +1344,15 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
   // antiga aberta, e o pool o reempresta nela — o envio seguinte rodaria dentro
   // da transação de quem falhou. O finally lê desta marcação.
   let erroNaTransacao: Error | undefined;
+  // #2426: marca que a transação já foi commitada/rollbackada à mão. Nada pode ser
+  // rollbackado de novo depois disso (um `rollback` tardio só geraria WARNING no pg e
+  // esconderia o erro real). O finally continua lendo `erroNaTransacao`.
+  let transacaoFechada = false;
+  // #2426: trace capturado assim que a cadeia evalua, para a auditoria DURÁVEL ser gravada
+  // FORA da janela da transação (commit no caminho enviado, rollback no veto/erro) — nunca
+  // enquanto a tx aberta segura o `contacts` (readStopFlags). `undefined` = a cadeia ainda
+  // não avaliou (falha numa leitura sob o lock) → nada a persistir.
+  let traceDaAuditoria: GateTraceEntry[] | undefined;
   try {
     await client.query('begin');
     // Serialização por número: dois workers no MESMO channel_session esperam a vez.
@@ -1338,14 +1390,15 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     )
       throw new Error('reply_scope_mismatch');
 
-    const optedOut =
-      args.optedOutThisTurn ||
-      (await readStopFlags(
-        client,
-        args.tenantId,
-        args.leadId,
-        meetingPolicy?.humanCommand === true || replyPolicy !== null,
-      ));
+    // O motivo sai da MESMA leitura (uma coluna a mais no mesmo select): quem
+    // veta por etiqueta interna não pode ser anunciado ao modelo como opt-out.
+    const stopDaFonte = await readStopFlags(
+      client,
+      args.tenantId,
+      args.leadId,
+      meetingPolicy?.humanCommand === true || replyPolicy !== null,
+    );
+    const optedOut = args.optedOutThisTurn || stopDaFonte.stopped;
     const pacingCfg = await loadChannelKnobs(
       client,
       args.tenantId,
@@ -1392,6 +1445,9 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       now: args.now,
       body: bodyDoModelo,
       optedOut,
+      ...(args.optedOutThisTurn !== true && stopDaFonte.motivo !== null
+        ? { motivoDoStop: stopDaFonte.motivo }
+        : {}),
       provider,
       messagingWindow: { lastInboundAt, ...(args.isTemplate === true ? { isTemplate: true } : {}) },
       pacing: {
@@ -1433,57 +1489,71 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     // sem ninguém poder auditar depois. A linha entra ANTES da cadeia porque a
     // reescrita acontece antes dela, e leva só rótulos — nunca o corpo (sem PII).
     const trace: GateTraceEntry[] = [...rastroDoEstilo(estilo, args.body, bodyDoModelo), ...traceDaCadeia];
+    traceDaAuditoria = trace;
     ctx.body = evaluatedBody;
     emitTrace(args.log, args.channelSessionId, trace);
-    // Auditoria DURÁVEL por run (F4-08 acceptance 3): escrita autônoma (pool, fora da tx
-    // serializada) — o trace do VETO tem de sobreviver ao rollback abaixo. Nunca bloqueia
-    // o message-plane: falha aqui vira log.error (o trace do logger já é o backup), não
-    // exceção. ponytail: 1 insert por tentativa; se virar gargalo, batelar por run.
-    const traceId = await persistTrace(args, trace, veto);
 
-    // Wave 3 (CORE 2), cenário 11: o agente decidir NÃO falar é evento. Silêncio
-    // com motivo é informação; silêncio sem registro é abandono. Só o VETO entra
-    // — gate que passou é telemetria e fica na tabela de origem.
-    if (veto && traceId) {
-      try {
-        const r = await emitVetoActivity({
-          pool: args.pool,
-          organizationId: args.tenantId,
-          contactId: args.leadId,
-          traceId,
-          gate: veto.gate,
-          code: veto.code,
-          agentId: args.agentId ?? null,
-        });
-        if (!r.routed) {
-          args.log.info('veto sem negócio para pendurar: registrado no event_log', {
-            channel_session_id: args.channelSessionId,
-            reason: r.reason,
-          });
-        }
-      } catch (err) {
-        // A timeline do veto não pode derrubar o veto.
-        args.log.error('falha ao registrar atividade de veto (segue)', {
-          channel_session_id: args.channelSessionId,
-          error: err instanceof Error ? err.name : 'unknown',
-        });
-      }
-    }
-
-    // Veto de LGPD (F4-09): escala à inbox do runtime (regra dura nº 13) para o DPO/comercial
-    // regularizar. Escrita autônoma no pool (fora da tx serializada), como o trace — sobrevive
-    // ao rollback do veto e nunca derruba o message-plane (o gate já barrou o envio).
-    if (veto !== null && veto.code.startsWith('lgpd_')) {
-      await escalateLgpdVeto(
-        args.pool,
-        { tenantId: args.tenantId, leadId: args.leadId, code: veto.code },
-        args.log,
-      );
-    }
+    // #2426 — as escritas DURÁVEIS (trace de auditoria, timeline do veto, escalação LGPD)
+    // saem da JANELA da transação. `before_send_traces` (e a timeline do veto) têm FK para
+    // `contacts`: feitas pelo `args.pool` ENQUANTO esta tx aberta segura o `contacts`
+    // (readStopFlags), enfileiravam atrás de um DDL pendente de `ALTER TABLE contacts` — o
+    // insert esperava o DDL, o DDL esperava a tx (ACCESS SHARE) e a tx esperava o insert.
+    // Mesmo ciclo medido no #2363 (8m47s idle in transaction); a aresta que o #2121 não
+    // encerrou, porque uma das bordas mora no Node e o Postgres não a detecta. Autônomas no
+    // pool, sobrevivem ao rollback por natureza — gravá-las DEPOIS do commit/rollback as tira
+    // da janela sem mudar o desfecho.
+    //
+    // O envio (`args.send`) continua DENTRO da tx, sob o advisory lock do número: tirá-lo
+    // derrubaria a serialização anti-ban (a vez por número e a gravação do pacing no mesmo
+    // commit). Fechar essa outra aresta (o `send_ledger` e a `messages`, gravados noutra
+    // conexão/Supabase dentro do handler) exige o advisory lock de SESSÃO proposto no #2426 —
+    // redesign que precisa de prova com 2 conexões (job `invariants`), fora desta fatia.
 
     if (veto !== null) {
-      // Nada foi escrito: rollback fecha a tx e solta o lock. O envio NÃO acontece.
+      // Nada foi escrito na tx: rollback fecha a transação e solta o lock. O envio NÃO acontece.
       await client.query('rollback');
+      transacaoFechada = true;
+      // Auditoria DURÁVEL por run (F4-08 acc 3): escrita autônoma no pool — o trace do VETO
+      // tem de sobreviver ao rollback ACIMA. Nunca bloqueia o message-plane: falha aqui vira
+      // log.error (o trace do logger já é o backup), não exceção.
+      const traceId = await persistTrace(args, trace, veto);
+      // Wave 3 (CORE 2), cenário 11: o agente decidir NÃO falar é evento. Silêncio com motivo
+      // é informação; silêncio sem registro é abandono. Só o VETO entra na timeline.
+      if (traceId) {
+        try {
+          const r = await emitVetoActivity({
+            pool: args.pool,
+            organizationId: args.tenantId,
+            contactId: args.leadId,
+            traceId,
+            gate: veto.gate,
+            code: veto.code,
+            agentId: args.agentId ?? null,
+          });
+          if (!r.routed) {
+            args.log.info('veto sem negócio para pendurar: registrado no event_log', {
+              channel_session_id: args.channelSessionId,
+              reason: r.reason,
+            });
+          }
+        } catch (err) {
+          // A timeline do veto não pode derrubar o veto.
+          args.log.error('falha ao registrar atividade de veto (segue)', {
+            channel_session_id: args.channelSessionId,
+            error: err instanceof Error ? err.name : 'unknown',
+          });
+        }
+      }
+      // Veto de LGPD (F4-09): escala à inbox do runtime (regra dura nº 13) para o DPO/comercial
+      // regularizar. Escrita autônoma no pool, como o trace — sobrevive ao rollback e nunca
+      // derruba o message-plane (o gate já barrou o envio).
+      if (veto.code.startsWith('lgpd_')) {
+        await escalateLgpdVeto(
+          args.pool,
+          { tenantId: args.tenantId, leadId: args.leadId, code: veto.code },
+          args.log,
+        );
+      }
       return { status: 'vetoed', trace, ...veto };
     }
 
@@ -1507,20 +1577,29 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       }
     }
     await client.query('commit');
+    transacaoFechada = true;
+    // Auditoria DURÁVEL por run (F4-08 acc 3): gravada DEPOIS do commit — antes, o insert em
+    // `before_send_traces` (FK `contacts`) saía pelo pool enquanto a tx aberta segurava o
+    // `contacts` e podia enfileirar atrás de um DDL (#2426). Autônoma no pool; falha vira
+    // log.error (o logger é o backup).
+    await persistTrace(args, trace, null);
     return { status: 'sent', outcome, trace };
   } catch (err) {
     erroNaTransacao = err instanceof Error ? err : new Error(String(err));
-    await rollback(client, err);
+    // Uma tx já fechada (commit/rollback explícito acima) não pode ser rollback de novo.
+    if (!transacaoFechada) {
+      await rollback(client, err);
+      // Auditoria da tentativa que ERROU (ex.: envio com o transporte fora): o rollback desfaz
+      // a tx, mas a linha de auditoria é autônoma no pool e sobrevive — gravada AQUI, fora da
+      // janela, para não reabrir o ciclo do #2426. O veto já gravou o seu no ramo dele.
+      if (traceDaAuditoria !== undefined) await persistTrace(args, traceDaAuditoria, null);
+    }
     throw err;
   } finally {
     client.release(erroNaTransacao);
   }
 }
 
-/**
- * STOP direto da fonte (pós-fusão, mesmo banco): `contacts.is_blocked` OR
- * `contacts.force_human`, lidos sob o lock — não existe mais cache no harness.
- */
 /**
  * O canal desta sessão, do banco (migration 0087) — nunca suposto.
  *
@@ -1548,21 +1627,64 @@ export async function loadChannelProvider(
   return provider === undefined ? DEFAULT_CHANNEL_PROVIDER : (provider as ChannelProvider);
 }
 
-async function readStopFlags(
+/**
+ * STOP direto da fonte (pós-fusão, mesmo banco): `contacts.is_blocked` OR
+ * `contacts.force_human` OR `contacts.is_personal` OR `contacts.ai_opt_out` OR a
+ * etiqueta de contato INTERNO (#2353), lidos sob o lock — não existe mais cache
+ * no harness.
+ *
+ * `ai_opt_out` é a marca PERMANENTE "sempre atendimento humano" (issue 2379):
+ * `force_human` é a trava de handoff, que a devolução limpa; esta é a que ela
+ * não alcança, e por isso as duas estão no mesmo predicado.
+ *
+ * A etiqueta interna entra pela MESMA régua do gate de elegibilidade
+ * (`lib/contacts/tags-internas.ts`), na forma SQL de lá — este é o segundo
+ * caminho de envio que NÃO passa pelo gate de elegibilidade, e era por ele que o
+ * texto FIXO do worker e o modelo aprovado continuavam saindo para quem ganhou a
+ * etiqueta depois de o contato existir. O motivo devolvido separa as duas causas:
+ * contato interno não é opt-out, e o veto não pode sair dizendo que é.
+ *
+ * ⚠️ O ramo do ENCONTRO (`humanMeetingCommand` — o comando de um humano) segue
+ * com `is_blocked or is_personal`: a etiqueta interna NÃO cala o caminho manual,
+ * que é o que a feature promete ("a conversa segue normal na Inbox, inclusive
+ * para envio manual"). É o mesmo desenho do `ai_opt_out`, que também está só no
+ * outro ramo.
+ *
+ * Exportada para a suíte de invariantes poder medir o predicado REAL contra
+ * Postgres de verdade (`tests/invariants/contato-interno-barra-o-envio.test.ts`):
+ * SQL transcrito dentro do teste mediria o teste contra ele mesmo.
+ */
+export async function readStopFlags(
   db: Queryable,
   organizationId: string,
   contactId: string,
   humanMeetingCommand = false,
-): Promise<boolean> {
+): Promise<{ stopped: boolean; motivo: MotivoDoStop | null }> {
   // Pessoal não recebe nem via encontro (spec 21, etapa 11): o `or is_personal`
   // vale nos DOIS ramos — o veto segue o bloqueio até aqui.
-  const { rows } = await db.query<{ stopped: boolean }>(
+  //
+  // O `cross join lateral` avalia a régua da etiqueta UMA vez por linha e a
+  // entrega nos dois lugares em que ela decide: o `stopped` e o motivo do veto.
+  const { rows } = await db.query<{ stopped: boolean; contato_interno: boolean }>(
     humanMeetingCommand
-      ? 'select (is_blocked or is_personal) as stopped from contacts where organization_id = $1 and id = $2'
-      : 'select (is_blocked or force_human or is_personal) as stopped from contacts where organization_id = $1 and id = $2',
+      ? 'select (is_blocked or is_personal) as stopped, false as contato_interno from contacts where organization_id = $1 and id = $2'
+      // `ai_opt_out` (issue 2379): a marca permanente "sempre atendimento
+      // humano" entra no MESMO stop, e não numa nova consulta — o custo é
+      // nulo e a garantia é que nenhum escritor futuro de `force_human` consegue
+      // devolver a IA para um contato que a operação trancou.
+      : `select (is_blocked or force_human or is_personal or ai_opt_out or i.contato_interno) as stopped,
+                i.contato_interno
+           from contacts
+           cross join lateral (select (${sqlContatoInterno('contacts')}) as contato_interno) i
+          where organization_id = $1 and id = $2`,
     [organizationId, contactId],
   );
-  return rows[0]?.stopped === true;
+  const linha = rows[0];
+  if (linha?.stopped !== true) return { stopped: false, motivo: null };
+  return {
+    stopped: true,
+    motivo: linha.contato_interno === true ? 'contato_interno' : 'contato_bloqueado',
+  };
 }
 
 /**

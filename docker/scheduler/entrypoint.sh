@@ -38,14 +38,20 @@ APP_ORIGIN="http://app:3000"
 # já deixaria o token vencer. É barata: só toca conexão perto de expirar, e
 # rodada vazia não audita.
 #
-# SYNC a cada 15 min, e NÃO na mesma cadência. Os custos são diferentes: renovar
-# é uma requisição por conexão que está vencendo; sincronizar é uma por
-# calendário, sempre. Colar as duas obrigaria a escolher entre renovar raro
-# demais (e a agenda morre) ou sincronizar caro demais (e gasta cota do cliente).
+# SYNC a cada minuto. Uma página incompleta deixa o próximo passo imediatamente
+# elegível no banco; esse cron frequente drena a paginação sem esperar 15 min por
+# página. Calendários sem trabalho continuam espaçados pela própria RPC, que
+# agenda a próxima leitura em 15 min após concluir. A renovação permanece a cada
+# 10 min: ela tem outro custo e outro prazo.
 #
 # ⚠️ E o comentário fica AQUI, fora da string: dentro de CRONS= ele não seria
 # comentário, seria DADO — e crase em prosa dentro de aspas duplas o shell
 # EXECUTA. Foi o que quebrou o entrypoint na primeira tentativa desta linha.
+#
+# A DEVOLUÇÃO AO RODÍZIO (issue #2985) entra na MESMA cadência do irmão
+# `handoff-devolucao`, 5 em 5 minutos, pelo mesmo motivo: o piso do prazo é
+# 5 min e uma varredura por minuto seriam 60 varreduras/h em toda instalação
+# para um prazo que a maioria deixa em dezenas de minutos.
 CRONS="
 * * * * *|240|api/v1/cron/prospecting
 * * * * *|25|api/v1/cron/agent-dispatcher
@@ -58,6 +64,7 @@ CRONS="
 */5 * * * *|25|api/v1/cron/storage-redaction?limit=50
 */5 * * * *|25|api/v1/cron/snooze-watcher
 */5 * * * *|60|api/v1/cron/handoff-devolucao
+*/5 * * * *|60|api/v1/cron/rodizio-devolucao
 # A CAMPANHA. Minuto a minuto, e a rodada manda no máximo uma mensagem por
 # número: é o cron que dá a cadência base, e o ritmo da campanha e do canal
 # (channel_knobs + pacing_ledger) só sabem torná-la mais lenta.
@@ -73,7 +80,7 @@ CRONS="
 * * * * *|25|api/v1/cron/channel-pause-scheduler
 */10 * * * *|60|api/v1/cron/contact-avatars
 */10 * * * *|60|api/v1/cron/agenda-google-refresh
-*/15 * * * *|90|api/v1/cron/agenda-google-sync
+* * * * *|90|api/v1/cron/agenda-google-sync
 # A IDA. Cadência mais curta que a volta de propósito: quem marcou pela tela
 # espera ver o compromisso no celular dele em minutos, e a ida é barata (só
 # manda o que mudou). A volta é cara — varre calendário inteiro — e por isso
@@ -84,12 +91,22 @@ CRONS="
 # antes em avisar entre 30 e 45 minutos antes. Barato: só olha compromisso
 # confirmado, futuro e ainda não avisado.
 */5 * * * *|45|api/v1/cron/agenda-reminder
+# O LEMBRETE DE TAREFA. A cada 5 minutos porque a antecedência é escolhida
+# pela PESSOA (15 min, 1 h que é o padrão, ou 1 dia): uma varredura mais lenta
+# transformaria avisar 15 minutos antes em avisar até 20. Barato: só tarefa
+# com prazo na janela, com responsável, e que ainda não virou item da Central.
+*/5 * * * *|45|api/v1/cron/task-reminder
 */15 * * * *|45|api/v1/cron/agenda-expira-pendentes
 */15 * * * *|60|api/v1/cron/risk-watcher
 # O CASO PARADO. De hora em hora, e não a cada 5 minutos: o prazo é de 24h, e
 # uma varredura mais frequente só gastaria consulta para descobrir o mesmo nada.
 7 * * * *|60|api/v1/cron/case-stale-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
+# O NOME DA AGENDA. O webhook não traz o nome salvo no celular; esta varredura
+# pergunta ao canal e preenche a ficha. Dez em dez minutos porque quem acabou
+# de conectar o número está olhando a inbox agora. Lote de 5 e prazo de 45 s
+# dentro da rota: o pior caso cabe nos 60 s com folga.
+*/10 * * * *|60|api/v1/cron/contact-names
 17 * * * *|60|api/v1/cron/contact-proposals-watcher
 23 * * * *|60|api/v1/cron/followup-sem-agente
 # O ANIVERSÁRIO. De hora em hora, e não uma vez ao dia, porque quem decide o
