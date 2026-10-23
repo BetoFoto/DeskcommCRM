@@ -74,6 +74,13 @@ function renderForm(ui: React.ReactElement) {
   return renderRTL(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+/** O `value_cents` que o formulário tentou gravar na primeira chamada da API. */
+function valorGravado(): number {
+  const chamada = editar.mutateAsync.mock.calls[0];
+  if (!chamada) throw new Error("o formulário não chamou a gravação");
+  return (chamada[0] as { patch: { value_cents: number } }).patch.value_cents;
+}
+
 beforeEach(() => {
   orgAtiva.atual = { currency: "USD", country: null, orgId: "org-1" };
   editar.mutateAsync.mockReset();
@@ -120,9 +127,7 @@ describe("o valor do negócio é lido na moeda da organização (#3331)", () => 
     await usuario.click(screen.getByRole("button", { name: /Salvar/ }));
 
     await waitFor(() => expect(editar.mutateAsync).toHaveBeenCalled());
-    expect(
-      (editar.mutateAsync.mock.calls[0][0] as { patch: { value_cents: number } }).patch.value_cents,
-    ).toBe(130000);
+    expect(valorGravado()).toBe(130000);
   });
 
   it("e em real nada muda: `1,300` continua um e trinta (a vírgula é o decimal)", async () => {
@@ -140,8 +145,6 @@ describe("o valor do negócio é lido na moeda da organização (#3331)", () => 
 
     await usuario.click(screen.getByRole("button", { name: /Salvar/ }));
     await waitFor(() => expect(editar.mutateAsync).toHaveBeenCalled());
-    expect(
-      (editar.mutateAsync.mock.calls[0][0] as { patch: { value_cents: number } }).patch.value_cents,
-    ).toBe(130);
+    expect(valorGravado()).toBe(130);
   });
 });
