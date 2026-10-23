@@ -61033,6 +61033,11 @@ alter table public.webhook_sources
 comment on column public.webhook_sources.reuse_open_lead_on_capture is
   'Opção da fonte (issue #3101), DESLIGADA por padrão: quando um envio NÃO traz external_id e o contato casado já tem card ABERTO no mesmo funil, o card é atualizado (campos e etapa da fonte, só para a frente) em vez de a captação abrir outro. Só liga em fonte com assinatura configurada, como a opção irmã. O desfecho da linha de captação é `atualizado`. Desligada, cada envio continua virando um card novo, como sempre.';
 
+-- ---- teto do adiamento da reconexão (migration 0738) ----
+-- manifest: prospecting_campaigns.channel_down_since — desde quando a campanha espera o canal voltar ao `WORKING`. Sem ele o adiamento da reconexão (#3073) não tem TETO: uma sessão presa fora de `WORKING` deixa a campanha "Ativa" sem enviar e sem aviso (STARTING não gera aviso de saúde). Com a coluna, o tick pausa quando a espera passa de TETO_DO_ADIAMENTO_MS; nulo = a campanha não está esperando.
+alter table public.prospecting_campaigns
+  add column if not exists channel_down_since timestamptz;
+
 notify pgrst, 'reload schema';
 
 -- ---- campanha com modelo aprovado (migration 0710) ----
