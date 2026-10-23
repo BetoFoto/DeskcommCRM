@@ -601,3 +601,36 @@ describe("lista pesquisável: o controle de múltipla escolha no funil (#3182)",
     expect(screen.queryByLabelText(/Permitir várias escolhas 1/i)).toBeNull();
   });
 });
+
+describe("o botão de acrescentar campo e a cota do negócio (#3111)", () => {
+  function funilCom(negocio: number, contato: number): PipelineRow {
+    return {
+      ...FUNIL,
+      settings: {
+        fields: [
+          ...Array.from({ length: negocio }, (_, i) => ({
+            key: `n${i}`,
+            label: `Negócio ${i}`,
+            type: "text" as const,
+          })),
+          ...Array.from({ length: contato }, (_, i) => ({
+            key: `c${i}`,
+            label: `Contato ${i}`,
+            type: "text" as const,
+            escopo: "contato" as const,
+          })),
+        ],
+      },
+    };
+  }
+
+  it("os campos do contato não escondem o botão: 20 do negócio + 30 do contato ainda acrescenta", () => {
+    render(<PipelinesClient pipelines={[funilCom(20, 30)]} podeEditarConfig />);
+    expect(screen.getByRole("button", { name: /Adicionar campo/i })).toBeInTheDocument();
+  });
+
+  it("50 campos do negócio escondem o botão, com ou sem contato junto", () => {
+    render(<PipelinesClient pipelines={[funilCom(50, 5)]} podeEditarConfig />);
+    expect(screen.queryByRole("button", { name: /Adicionar campo/i })).toBeNull();
+  });
+});
