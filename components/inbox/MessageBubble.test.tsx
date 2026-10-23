@@ -464,6 +464,22 @@ describe("MessageBubble — mensagem que falhou", () => {
     expect(document.body.textContent).not.toContain("http://servico-interno");
   });
 
+  // O tooltip do selo "Falhou" conta a MESMA frase da linha visível — antes
+  // ele mostrava o `error_message` cru. Sabotagem: devolver `error_message` à
+  // frente do código em `motivoDaFalhaDaMensagem` deixa este caso VERMELHO.
+  it("o tooltip do 'Falhou' diz a mesma frase da linha, sem o texto cru", async () => {
+    render(<MessageBubble message={msg({
+      status: "failed", error_code: "channel_session_not_working",
+      error_message: "fetch failed http://servico-interno:3000/api/sendText",
+    })} />);
+    fireEvent.focus(screen.getByText("Falhou"));
+    const dica = await screen.findByRole("tooltip");
+    const frase = "O número escolhido não está conectado no momento.";
+    expect(dica).toHaveTextContent(frase);
+    expect(screen.getByTestId("motivo-da-falha")).toHaveTextContent(frase);
+    expect(document.body.textContent).not.toContain("servico-interno");
+  });
+
   it("código sem frase cai na frase genérica", () => {
     render(<MessageBubble message={msg({ status: "failed", error_code: "codigo_novo" })} />);
     expect(screen.getByTestId("motivo-da-falha")).toHaveTextContent("Não foi possível enviar esta mensagem.");

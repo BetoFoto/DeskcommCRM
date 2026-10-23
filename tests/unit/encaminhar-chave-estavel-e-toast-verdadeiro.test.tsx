@@ -166,12 +166,21 @@ describe("encaminhar: o toast diz a verdade sobre o desfecho", () => {
 
     expect(toastSuccess).not.toHaveBeenCalled();
     expect(toastError).toHaveBeenCalledTimes(1);
-    expect(toastError.mock.calls[0]![0]).toContain("waha_error");
+    expect(toastError.mock.calls[0]![0]).toBe(
+      "Não foi possível encaminhar: Não conseguimos falar com o serviço de WhatsApp. Confira se ele está no ar.",
+    );
   });
 
-  it("o motivo gravado pelo envio vence o código do adaptador", async () => {
+  // O texto livre do canal pode trazer o endereço interno do serviço. O toast
+  // conta a MESMA frase do selo "Falhou" da bolha (`motivoDaFalhaDaMensagem`),
+  // nunca o `error_message` cru. Sabotagem: devolver `error_message` à frente
+  // do código no helper deixa este caso VERMELHO.
+  it("o texto cru do canal não chega ao toast", async () => {
     post.mockResolvedValueOnce({
-      data: { status: "failed", error_code: "waha_error", error_message: "Connection Closed" },
+      data: {
+        status: "failed", error_code: "waha_error",
+        error_message: "fetch failed http://servico-interno:3000/api/sendText",
+      },
     });
     const { result } = renderHook(() => useEncaminharMensagem(), { wrapper });
 
@@ -180,7 +189,8 @@ describe("encaminhar: o toast diz a verdade sobre o desfecho", () => {
     });
 
     expect(toastError).toHaveBeenCalledTimes(1);
-    expect(toastError.mock.calls[0]![0]).toContain("Connection Closed");
+    expect(toastError.mock.calls[0]![0]).not.toContain("servico-interno");
+    expect(toastError.mock.calls[0]![0]).toContain("Não conseguimos falar com o serviço de WhatsApp.");
   });
 
   it("envio ENTREGUE: toast de sucesso, sem toast de erro", async () => {

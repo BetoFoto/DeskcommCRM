@@ -1,28 +1,30 @@
+import { FRASES_DE_FALHA, fraseDaFalhaDeCanal } from "@/lib/channels/frases-de-falha";
 import type { Message } from "@/lib/types/messaging";
 
 /**
- * O MOTIVO de uma mensagem que ficou `failed` — a régua do selo "Falhou".
+ * O MOTIVO de uma mensagem que ficou `failed`, na frase que a pessoa lê.
  *
- * ─── Por que como módulo, e não inline (era inline) ────────────────────────
+ * ─── Uma régua só, para todo lugar que conta a falha ───────────────────────
  *
- * A régua nasceu no tooltip do balão (`components/inbox/MessageBubble.tsx`) e
- * passou a valer para o toast do encaminhamento (#2835): quando o envio falha,
- * a bolha no destino mostra "Falhou" com o motivo no tooltip e quem encaminhou
- * lê o MESMO motivo no toast. Duas cadeias montadas à mão divergiriam no dia em
- * que uma delas ganhasse um ramo — e o sintoma seria a tela e o toast contando
- * histórias diferentes sobre a mesma linha `failed`.
+ * A mesma linha `failed` aparece em quatro pontos: o tooltip do selo "Falhou",
+ * a linha visível embaixo da bolha, o toast do "Tentar de novo" e o toast do
+ * encaminhamento (#2835). Eram duas réguas: a linha visível e o reenvio já
+ * traduziam o código (#3192), e o tooltip e o encaminhamento mostravam o
+ * `error_message` cru — o texto livre do canal, que pode trazer o endereço
+ * interno do serviço (`fetch failed http://servico-interno:3000/...`). A mesma
+ * falha contava duas histórias, e uma delas vazava a rede da instalação.
  *
- * A precedência é a do dado: `error_message` (o que o canal disse, já gravado
- * pelo envio) vence `error_code` (o código curto que o adaptador devolve),
- * que vence o genérico. Os textos passam por `t()` porque a mensagem pode vir
- * de um código do NOSSO dicionário; o que o provedor mandou em texto livre
- * atravessa `traduzir` como está — dado, não interface, e traduzir seria
- * errado.
+ * Por isso `error_message` NÃO entra aqui: o que vale é o `error_code` passado
+ * por `FRASES_DE_FALHA`, e código sem frase cai no genérico. O texto cru segue
+ * gravado na linha para diagnóstico; só não chega à tela.
  */
 export function motivoDaFalhaDaMensagem(
-  mensagem: Pick<Message, "error_message" | "error_code">,
+  mensagem: Pick<Message, "error_code">,
   t: (texto: string) => string,
 ): string {
-  if (mensagem.error_message) return t(mensagem.error_message);
-  return mensagem.error_code ? t(mensagem.error_code) : t("Erro desconhecido");
+  const codigo = mensagem.error_code ?? "";
+  return fraseDaFalhaDeCanal(codigo)
+    // `as string`, e não `!`: é a forma que a cerca de i18n desembrulha para cobrar o espanhol de cada frase.
+    ? t(FRASES_DE_FALHA[codigo] as string)
+    : t("Não foi possível enviar esta mensagem.");
 }
