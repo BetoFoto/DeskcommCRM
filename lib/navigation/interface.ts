@@ -67,10 +67,23 @@ const SIMPLIFICADA: readonly NavDestinationId[] = [
  * porta que desfaz a decisão desaparece junto com as outras, e não há caminho de
  * volta pela tela — só por banco. Quem administra tem de poder desfazer o que
  * escolheu, sempre.
+ *
+ * As QUATRO portas pessoais — Perfil, Segurança, Notificações e App no celular —
+ * andam juntas (issue #3295). As duas últimas ficaram de fora e o resultado foi
+ * que, na interface simplificada, quem mais precisa da preferência não achava a
+ * tela: é em Notificações que a pessoa liga o lembrete de tarefa e informa o
+ * próprio WhatsApp, e é em App no celular que se instala o sistema na tela de
+ * início. São preferências de CADA UM — moram no `raw_user_meta_data` da própria
+ * pessoa, e o administrador não configura por ela. Escondidas, não havia porta
+ * nenhuma até elas: a tela só abria por URL digitada de memória. Nenhuma das
+ * duas entra em `ESSENCIAIS_DE_ADMIN`: sendo pessoais, ficam visíveis para todo
+ * vínculo em qualquer preset, como Perfil e Segurança.
  */
 export const PORTAS_ESSENCIAIS = [
   "/app/settings/profile",
   "/app/settings/security",
+  "/app/settings/notifications",
+  "/app/settings/aplicativo",
   "/app/team",
   "/app/settings/tenant",
 ] as const;
