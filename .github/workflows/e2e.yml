@@ -2031,6 +2031,22 @@ jobs:
           path: ~/.cache/playwright-apt/*.deb
           key: ${{ steps.debs.outputs.prefixo }}${{ steps.debs.outputs.imagem }}
 
+      # O B-5 de `atender-pelo-celular` (parte 6) gera um ogg/opus com o ffmpeg,
+      # e o app — `next start` NESTE executor, não a imagem — converte com ele
+      # para AAC (`?formato=aac`, F2 da ADR-0006). O executor não traz ffmpeg
+      # garantido: instala, e a sonda reprova ALTO se faltar um dos dois
+      # encoders, em vez de o B-5 cair por um motivo que não é o produto.
+      - name: Instalar o ffmpeg e sondar os encoders (áudio no celular, F2)
+        if: matrix.parte == 6
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends ffmpeg
+          fi
+          ffmpeg -hide_banner -encoders | grep -E ' (aac|libopus) '
+          test "$(ffmpeg -hide_banner -encoders | grep -cE ' (aac|libopus) ')" -ge 2
+
       # `.env.local` é CÓPIA do `.env.e2e`, não uma terceira redação dele.
       #
       # O arquivo precisa existir porque alguns seeds leem `.env.local` do disco,
