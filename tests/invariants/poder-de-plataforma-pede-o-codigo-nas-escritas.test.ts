@@ -42,8 +42,8 @@ function como(usuario: string, aal: Aal, corpo: string): string | undefined {
     ?.slice(2);
 }
 
-/** INSERT em `user_organizations`: virar admin de uma organização (`user_orgs_insert`). */
-const entrarComoAdmin = (usuario: string, aal: Aal, org: string) =>
+/** INSERT em `user_organizations` (`user_orgs_insert`). */
+const filiar = (usuario: string, aal: Aal, org: string) =>
   como(
     usuario,
     aal,
@@ -110,24 +110,24 @@ beforeAll(() => {
   `);
 });
 
-describe("0757 — admin da plataforma COM fator, sem o código nesta sessão, não escreve pelo poder de plataforma", () => {
-  it("não se torna admin de outra organização", () => {
+describe("0757 — com fator e sem o código nesta sessão, o ramo de plataforma não vale", () => {
+  it("user_orgs_insert", () => {
     confiar(false);
-    expect(() => entrarComoAdmin(PLAT, "aal1", OUTRA)).toThrow(RLS);
+    expect(() => filiar(PLAT, "aal1", OUTRA)).toThrow(RLS);
   });
 
-  it("não altera outra organização", () => {
+  it("orgs_write_platform_admin", () => {
     expect(renomear(PLAT, "aal1", OUTRA)).toBe("0");
   });
 
-  it("não cria contato em outra organização", () => {
+  it("tenant_isolation_contacts_write", () => {
     expect(() => criarContato(PLAT, "aal1", OUTRA)).toThrow(RLS);
   });
 
-  it("o dispositivo confiável não substitui o código fora da própria organização", () => {
+  it("dispositivo confiável não substitui o código no ramo de plataforma", () => {
     confiar(true);
     try {
-      expect(() => entrarComoAdmin(PLAT, "aal1", OUTRA)).toThrow(RLS);
+      expect(() => filiar(PLAT, "aal1", OUTRA)).toThrow(RLS);
       expect(renomear(PLAT, "aal1", OUTRA)).toBe("0");
       expect(() => criarContato(PLAT, "aal1", OUTRA)).toThrow(RLS);
     } finally {
@@ -136,23 +136,23 @@ describe("0757 — admin da plataforma COM fator, sem o código nesta sessão, n
   });
 });
 
-describe("0757 — com o código provado nesta sessão, o poder de plataforma escreve", () => {
-  it("se torna admin de outra organização", () => {
-    expect(entrarComoAdmin(PLAT, "aal2", OUTRA)).toBe("ok");
+describe("0757 — com o código provado nesta sessão, o ramo de plataforma vale", () => {
+  it("user_orgs_insert", () => {
+    expect(filiar(PLAT, "aal2", OUTRA)).toBe("ok");
   });
 
-  it("altera outra organização", () => {
+  it("orgs_write_platform_admin", () => {
     expect(renomear(PLAT, "aal2", OUTRA)).toBe("1");
   });
 
-  it("cria contato em outra organização", () => {
+  it("tenant_isolation_contacts_write", () => {
     expect(criarContato(PLAT, "aal2", OUTRA)).toBe("ok");
   });
 });
 
 describe("0757 — o que não muda", () => {
   it("admin da plataforma SEM fator cadastrado (verificação opcional) escreve como antes", () => {
-    expect(entrarComoAdmin(PLAT_SEM_FATOR, "aal1", OUTRA)).toBe("ok");
+    expect(filiar(PLAT_SEM_FATOR, "aal1", OUTRA)).toBe("ok");
     expect(renomear(PLAT_SEM_FATOR, "aal1", OUTRA)).toBe("1");
     expect(criarContato(PLAT_SEM_FATOR, "aal1", OUTRA)).toBe("ok");
   });
@@ -168,7 +168,7 @@ describe("0757 — o que não muda", () => {
 
   it("CONTROLE: membro comum não escreve em outra organização, com ou sem o código", () => {
     for (const aal of ["aal1", "aal2"] as const) {
-      expect(() => entrarComoAdmin(MEMBRO, aal, OUTRA)).toThrow(RLS);
+      expect(() => filiar(MEMBRO, aal, OUTRA)).toThrow(RLS);
       expect(renomear(MEMBRO, aal, OUTRA)).toBe("0");
       expect(() => criarContato(MEMBRO, aal, OUTRA)).toThrow(RLS);
     }
