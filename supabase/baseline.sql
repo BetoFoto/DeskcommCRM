@@ -56481,7 +56481,7 @@ revoke all on function public.fn_reply_inbound_revision() from public,anon,authe
 
 notify pgrst, 'reload schema';
 
--- ---- o histórico importado não é mensagem recebida (migration 0723, #999) ----
+-- ---- o histórico importado não é mensagem recebida (migration 0760, #999) ----
 --
 -- ─── O defeito ──────────────────────────────────────────────────────────────
 --
@@ -56555,7 +56555,7 @@ begin
   if new.type = 'reaction' then
     return new;
   end if;
-  -- O HISTÓRICO IMPORTADO É PASSADO, NÃO ATENDIMENTO (0723, #999). Sem este
+  -- O HISTÓRICO IMPORTADO É PASSADO, NÃO ATENDIMENTO (0760, #999). Sem este
   -- corte, cada mensagem trazida do celular reabria a conversa e abria demanda
   -- com SLA. Mesma chave e mesmo texto da 0686.
   if coalesce(new.metadata->>'historico_importado','') = 'true' then
@@ -56579,7 +56579,7 @@ begin
   if new.type = 'reaction' then
     return new;
   end if;
-  -- O histórico importado não vira evento, em NENHUMA direção (0723, #999):
+  -- O histórico importado não vira evento, em NENHUMA direção (0760, #999):
   -- `message.received` acordaria a IA para responder quem falou há meses, e
   -- `message.sent`/`message.outbound` alimentaria webhook e métrica com o
   -- passado. Mesma chave e mesmo texto da 0686.
@@ -56623,7 +56623,7 @@ begin
   -- A revisão de contexto é "o cliente falou de novo" — e a reação não é fala.
   -- Sem o corte, um 👍 somava +1 e invalidava o rascunho de resposta da tela à
   -- toa, além de contar junto com a reabertura (que este bloco também acabou de
-  -- desligar). O histórico importado tampouco é fala de agora (0723, #999).
+  -- desligar). O histórico importado tampouco é fala de agora (0760, #999).
   if new.direction='inbound' and new.type <> 'reaction'
      and coalesce(new.metadata->>'historico_importado','') <> 'true' then
     update public.conversations set reply_context_revision=reply_context_revision+1 where organization_id=new.organization_id and id=new.conversation_id and contact_id=new.contact_id;
@@ -56677,6 +56677,72 @@ comment on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid,
 revoke all on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) from public;
 revoke execute on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) from anon, authenticated;
 grant execute on function public.fn_upsert_wa_conversation_importada(uuid, uuid, uuid, timestamptz) to service_role;
+
+notify pgrst, 'reload schema';
+
+-- ---- estado da importação do histórico do WhatsApp (migration 0761, #999) ----
+--
+-- A importação traz do celular as conversas anteriores à conexão do número, em
+-- RODADAS curtas que retomam de onde pararam (`lib/channels/historico/rodada.ts`).
+-- O cursor e os contadores precisam sobreviver entre uma rodada e outra, e a
+-- tela precisa ler o andamento: daí a tabela.
+--
+-- Uma `rodando` por número (índice único parcial): impede duas IMPORTAÇÕES
+-- `rodando` no mesmo número, que andariam o mesmo acervo com cursores
+-- diferentes. NÃO impede duas EXECUÇÕES da mesma importação (é a mesma linha).
+-- O que a rodada faz é gravar com update condicional
+-- (`... where id = $1 and status = 'rodando'`): a importação que saiu de
+-- `rodando` durante a rodada (cancelada, por exemplo) não é sobrescrita. Duas
+-- execuções SIMULTÂNEAS, ambas vendo `rodando`, passam as duas pelo update; a
+-- deduplicação por `external_id` evita linha repetida, mas o cursor e os
+-- contadores ficam com a última. Serializar as rodadas é de quem as dispara.
+-- `previa`,
+-- `concluida`, `erro` e `cancelada` não entram no índice: o histórico de
+-- importações fica.
+--
+-- Leitura por membro da organização (`fn_user_org_ids`, o padrão das tabelas
+-- por org); escrita só pelo `service_role`: nenhuma policy de escrita e nenhum
+-- grant de escrita para `authenticated`.
+--
+-- Não cria função; fica ANTES das proteções do fim do arquivo (0325/0274), que
+-- precisam ver toda tabela de organização na primeira aplicação.
+--
+-- Gate: `tests/invariants/importacoes-de-historico-rls.test.ts`.
+
+create table if not exists public.importacoes_de_historico (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  channel_session_id uuid not null references public.channel_sessions(id) on delete cascade,
+  status text not null default 'previa'
+    check (status in ('previa', 'rodando', 'concluida', 'erro', 'cancelada')),
+  dias int not null check (dias in (30, 90, 180, 365)),
+  cursor jsonb not null default '{}'::jsonb,
+  previa jsonb,
+  conversas_feitas int not null default 0,
+  mensagens_gravadas int not null default 0,
+  mensagens_existentes int not null default 0,
+  mensagens_ignoradas int not null default 0,
+  midias_baixadas int not null default 0,
+  midias_indisponiveis int not null default 0,
+  erro text,
+  criada_por uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists importacoes_de_historico_uma_rodando_idx
+  on public.importacoes_de_historico (channel_session_id)
+  where status = 'rodando';
+create index if not exists importacoes_de_historico_org_idx
+  on public.importacoes_de_historico (organization_id, created_at desc);
+
+alter table public.importacoes_de_historico enable row level security;
+drop policy if exists tenant_isolation_importacoes_de_historico_select on public.importacoes_de_historico;
+create policy tenant_isolation_importacoes_de_historico_select on public.importacoes_de_historico
+  for select using (organization_id in (select public.fn_user_org_ids()));
+revoke all on public.importacoes_de_historico from public, anon, authenticated;
+grant select on public.importacoes_de_historico to authenticated;
+grant all on public.importacoes_de_historico to service_role;
 
 notify pgrst, 'reload schema';
 
@@ -63176,83 +63242,3 @@ create policy channel_sessions_tenant_delete on public.channel_sessions
       and public.fn_role_at_least(organization_id, 'admin'))
     or public.fn_is_platform_admin_full()
   );
-
--- ---- estado da importação do histórico do WhatsApp (migration 0724, #999) ----
---
--- A importação traz do celular as conversas anteriores à conexão do número, em
--- RODADAS curtas que retomam de onde pararam (`lib/channels/historico/rodada.ts`).
--- O cursor e os contadores precisam sobreviver entre uma rodada e outra, e a
--- tela precisa ler o andamento: daí a tabela.
---
--- Uma `rodando` por número (índice único parcial): impede duas IMPORTAÇÕES
--- `rodando` no mesmo número, que andariam o mesmo acervo com cursores
--- diferentes. NÃO impede duas EXECUÇÕES da mesma importação (é a mesma linha).
--- O que a rodada faz é gravar com update condicional
--- (`... where id = $1 and status = 'rodando'`): a importação que saiu de
--- `rodando` durante a rodada (cancelada, por exemplo) não é sobrescrita. Duas
--- execuções SIMULTÂNEAS, ambas vendo `rodando`, passam as duas pelo update; a
--- deduplicação por `external_id` evita linha repetida, mas o cursor e os
--- contadores ficam com a última. Serializar as rodadas é de quem as dispara.
--- `previa`,
--- `concluida`, `erro` e `cancelada` não entram no índice: o histórico de
--- importações fica.
---
--- Leitura por membro da organização (`fn_user_org_ids`, o padrão das tabelas
--- por org); escrita só pelo `service_role`: nenhuma policy de escrita e nenhum
--- grant de escrita para `authenticated`.
---
--- Não cria função, então pode ficar depois da VARREDURA anon no baseline.
---
--- Gate: `tests/invariants/importacoes-de-historico-rls.test.ts`.
-
-create table if not exists public.importacoes_de_historico (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references public.organizations(id) on delete cascade,
-  channel_session_id uuid not null references public.channel_sessions(id) on delete cascade,
-  status text not null default 'previa'
-    check (status in ('previa', 'rodando', 'concluida', 'erro', 'cancelada')),
-  dias int not null check (dias in (30, 90, 365)),
-  cursor jsonb not null default '{}'::jsonb,
-  previa jsonb,
-  conversas_feitas int not null default 0,
-  mensagens_gravadas int not null default 0,
-  mensagens_existentes int not null default 0,
-  mensagens_ignoradas int not null default 0,
-  midias_baixadas int not null default 0,
-  midias_indisponiveis int not null default 0,
-  erro text,
-  criada_por uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create unique index if not exists importacoes_de_historico_uma_rodando_idx
-  on public.importacoes_de_historico (channel_session_id)
-  where status = 'rodando';
-create index if not exists importacoes_de_historico_org_idx
-  on public.importacoes_de_historico (organization_id, created_at desc);
-
-alter table public.importacoes_de_historico enable row level security;
-drop policy if exists tenant_isolation_importacoes_de_historico_select on public.importacoes_de_historico;
-create policy tenant_isolation_importacoes_de_historico_select on public.importacoes_de_historico
-  for select using (organization_id in (select public.fn_user_org_ids()));
-revoke all on public.importacoes_de_historico from public, anon, authenticated;
-grant select on public.importacoes_de_historico to authenticated;
-grant all on public.importacoes_de_historico to service_role;
-
-notify pgrst, 'reload schema';
-
--- ---- período de 180 dias na importação do histórico (migration 0725, #999) ----
---
--- A 0724 já está aplicada onde a importação rodou (prova de 21/10), e o
--- `create table if not exists` dela não refaz o CHECK: daí uma migration nova
--- em vez de editar a 0724. Tela, rota e banco mudam no MESMO commit, ou a
--- prévia de 180 dias falha com 23514 no insert.
-
-alter table public.importacoes_de_historico
-  drop constraint if exists importacoes_de_historico_dias_check;
-alter table public.importacoes_de_historico
-  add constraint importacoes_de_historico_dias_check
-  check (dias in (30, 90, 180, 365));
-
-notify pgrst, 'reload schema';

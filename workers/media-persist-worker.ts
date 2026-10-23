@@ -250,7 +250,7 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
 
   // Histórico importado (#999) é guardado para análise de atendimento depois:
   // sem transcrição nem visão automática, que são pagas e responderiam a conversa
-  // de meses atrás. A chave é texto 'true' (contrato da 0723).
+  // de meses atrás. A chave é texto 'true' (contrato da 0760).
   const historicoImportado = msg.metadata?.historico_importado === "true";
 
   if (!isGroup && !historicoImportado) {

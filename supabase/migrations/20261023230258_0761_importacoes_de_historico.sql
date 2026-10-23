@@ -1,6 +1,6 @@
--- manifest: **Estado da importação do histórico do WhatsApp (#999).** Cria `importacoes_de_historico`: uma linha por importação pedida num número conectado, com a janela (`dias` 30/90/365), o estado (`previa`/`rodando`/`concluida`/`erro`/`cancelada`), o `cursor` de onde a próxima rodada retoma (`indiceConversa`, `offsetMensagens`, `desde`), a prévia e os contadores (conversas feitas, mensagens gravadas, já existentes, ignoradas, mídias baixadas e indisponíveis). Índice único parcial: no máximo UMA importação `rodando` por número (duas importações do mesmo número andariam o mesmo acervo); o índice não barra duas execuções da MESMA importação: a rodada grava com update condicional (`status = 'rodando'`), que não sobrescreve importação cancelada no meio, e serializar execuções simultâneas é de quem dispara a rodada. RLS: membro da organização lê; escrita só `service_role` (a rodada e as rotas). Tabela nova, sem função, sem dado; idempotente; apêndice igual no fim do `baseline.sql`.
+-- manifest: **Estado da importação do histórico do WhatsApp (#999).** Cria `importacoes_de_historico`: uma linha por importação pedida num número conectado, com a janela (`dias` 30/90/180/365), o estado (`previa`/`rodando`/`concluida`/`erro`/`cancelada`), o `cursor` de onde a próxima rodada retoma (`indiceConversa`, `offsetMensagens`, `desde`), a prévia e os contadores (conversas feitas, mensagens gravadas, já existentes, ignoradas, mídias baixadas e indisponíveis). Índice único parcial: no máximo UMA importação `rodando` por número (duas importações do mesmo número andariam o mesmo acervo); o índice não barra duas execuções da MESMA importação: a rodada grava com update condicional (`status = 'rodando'`), que não sobrescreve importação cancelada no meio, e serializar execuções simultâneas é de quem dispara a rodada. RLS: membro da organização lê; escrita só `service_role` (a rodada e as rotas). Tabela nova, sem função, sem dado; idempotente; apêndice igual no fim do `baseline.sql`.
 
--- ---- estado da importação do histórico do WhatsApp (migration 0724, #999) ----
+-- ---- estado da importação do histórico do WhatsApp (migration 0761, #999) ----
 --
 -- A importação traz do celular as conversas anteriores à conexão do número, em
 -- RODADAS curtas que retomam de onde pararam (`lib/channels/historico/rodada.ts`).
@@ -24,7 +24,8 @@
 -- por org); escrita só pelo `service_role`: nenhuma policy de escrita e nenhum
 -- grant de escrita para `authenticated`.
 --
--- Não cria função, então pode ficar depois da VARREDURA anon no baseline.
+-- Não cria função; fica ANTES das proteções do fim do arquivo (0325/0274), que
+-- precisam ver toda tabela de organização na primeira aplicação.
 --
 -- Gate: `tests/invariants/importacoes-de-historico-rls.test.ts`.
 
@@ -34,7 +35,7 @@ create table if not exists public.importacoes_de_historico (
   channel_session_id uuid not null references public.channel_sessions(id) on delete cascade,
   status text not null default 'previa'
     check (status in ('previa', 'rodando', 'concluida', 'erro', 'cancelada')),
-  dias int not null check (dias in (30, 90, 365)),
+  dias int not null check (dias in (30, 90, 180, 365)),
   cursor jsonb not null default '{}'::jsonb,
   previa jsonb,
   conversas_feitas int not null default 0,

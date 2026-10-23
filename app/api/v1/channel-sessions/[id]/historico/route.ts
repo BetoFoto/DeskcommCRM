@@ -29,7 +29,7 @@ type Context = { params: Promise<{ id: string }> };
  *   - `importar` → `previa` → `rodando`;
  *   - `cancelar` → `previa`/`rodando`/`erro` → `cancelada`;
  *   - `retomar`  → `erro` → `rodando`, limpando o erro.
- * Fora disso, 409. Uma `rodando` por número: o índice único parcial da 0724
+ * Fora disso, 409. Uma `rodando` por número: o índice único parcial da 0761
  * garante, e a rota traduz o 23505 em 409.
  *
  * A tabela só aceita escrita do service role (RLS), daí o cliente admin, e
