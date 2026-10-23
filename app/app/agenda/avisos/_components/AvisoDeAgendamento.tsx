@@ -34,6 +34,7 @@ import {
   useSalvarAvisoDeAgendamento,
   useTestarAvisoDeAgendamento,
 } from "@/hooks/agenda/useAvisoDeAgendamento";
+import { useTelefoneExemplo } from "@/hooks/contacts/useTelefoneExemplo";
 import { useT } from "@/hooks/i18n/useT";
 import type { EstadoDaTelaDoAvisoDeAgendamento } from "@/lib/agenda/tela-do-aviso-de-agendamento";
 import {
@@ -116,6 +117,7 @@ function FormularioDoAviso({ estado }: { estado: EstadoDaTelaDoAvisoDeAgendament
   const t = useT();
   const salvar = useSalvarAvisoDeAgendamento();
   const testar = useTestarAvisoDeAgendamento();
+  const telefoneExemplo = useTelefoneExemplo();
   const [rascunho, setRascunho] = useState<Rascunho>(() => rascunhoDoEstado(estado));
   const [confirmarContato, setConfirmarContato] = useState<string | null>(null);
 
@@ -224,7 +226,7 @@ function FormularioDoAviso({ estado }: { estado: EstadoDaTelaDoAvisoDeAgendament
               id="telefone"
               inputMode="tel"
               className="w-full sm:w-72"
-              placeholder="+5531999998888"
+              placeholder={telefoneExemplo}
               value={rascunho.telefone}
               onChange={(e) => setRascunho((r) => ({ ...r, telefone: normalizarTelefoneDeAviso(e.target.value) }))}
               aria-invalid={rascunho.telefone !== "" && !telefoneOk}
