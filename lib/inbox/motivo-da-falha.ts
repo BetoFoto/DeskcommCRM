@@ -1,3 +1,4 @@
+import { codigoDaPlataforma, fraseDaFalha } from "@/lib/channels/erro-da-plataforma";
 import { FRASES_DE_FALHA, fraseDaFalhaDeCanal } from "@/lib/channels/frases-de-falha";
 import type { Message } from "@/lib/types/messaging";
 
@@ -21,6 +22,10 @@ const FRASES_DA_CONVERSA: Record<string, string> = {
  * Node, linha de stack e o prefixo de código que o adapter põe na frente
  * (`canal_400: …`, `canal_unknown`). É esse texto que traz o endereço interno
  * do serviço (`fetch failed http://servico-interno:3000/...`).
+ *
+ * ponytail: lista do que barrar — cobre as formas que os escritores de hoje
+ * produzem. Forma nova de texto cru (outro esquema de URL, host sem porta)
+ * passa; o conserto é dar frase ao código do adapter, não alongar esta lista.
  */
 const SINAL_DE_TEXTO_CRU =
   /https?:\/\/|[Ff]etch failed|\bE[A-Z_]{4,}\b|\b\d{1,3}(?:\.\d{1,3}){3}\b|\b[A-Za-z][\w.-]*:\d{2,5}\b|^[a-z0-9]+_[a-z0-9_]+|\n\s+at\s/;
@@ -31,12 +36,16 @@ const SINAL_DE_TEXTO_CRU =
  * novo", no encaminhamento (#2835) e no envio de modelo com a janela fechada.
  *
  * A ordem, e o porquê:
- * 1. a frase nossa do código (`FRASES_DA_CONVERSA`, depois `FRASES_DE_FALHA`);
- * 2. o `error_message` sem sinal de texto cru — os títulos de falha da
- *    plataforma oficial (`meta/status-update.ts`) só têm frase para 131026 e
- *    131047, e o título é a única pista dos outros. Vai SEM `t()`: é dado do
- *    provedor, não chave de dicionário;
- * 3. a frase genérica. O texto cru não some: segue na linha, para diagnóstico.
+ * 1. a frase nossa do código (`FRASES_DA_CONVERSA`);
+ * 2. a frase da recusa da plataforma de modelos (`erro-da-plataforma.ts`),
+ *    achada no código OU no texto — o envio grava o código genérico do adapter
+ *    e põe a causa no texto (`template_missing_values: 1`, `[plataforma:132000]`),
+ *    e a frase genérica do canal mandaria conferir uma conexão que funciona;
+ * 3. a frase do código em `FRASES_DE_FALHA`;
+ * 4. o `error_message` sem sinal de texto cru — o título que a plataforma
+ *    grava para um código que nenhum dos mapas conhece é a única pista. Vai
+ *    SEM `t()`: é dado do provedor, não chave de dicionário;
+ * 5. a frase genérica. O texto cru não some: segue na linha, para diagnóstico.
  */
 export function motivoDaFalhaDaMensagem(
   mensagem: Pick<Message, "error_message" | "error_code">,
@@ -44,6 +53,9 @@ export function motivoDaFalhaDaMensagem(
 ): string {
   const codigo = mensagem.error_code ?? "";
   if (Object.hasOwn(FRASES_DA_CONVERSA, codigo)) return t(FRASES_DA_CONVERSA[codigo] as string);
+  const daPlataforma = codigoDaPlataforma(mensagem.error_code, mensagem.error_message);
+  // `null` no texto cru: aqui só vale a frase do mapa, nunca o texto da plataforma.
+  if (fraseDaFalha(daPlataforma, null)) return t(fraseDaFalha(daPlataforma, null) as string);
   if (fraseDaFalhaDeCanal(codigo)) {
     // `as string`, e não `!`: é a forma que a cerca de i18n desembrulha para cobrar o espanhol de cada frase.
     return t(FRASES_DE_FALHA[codigo] as string);

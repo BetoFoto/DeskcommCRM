@@ -145,6 +145,11 @@ describe("JanelaFechadaAviso", () => {
     expect(opcoes.description).toBe("Não foi possível enviar esta mensagem.");
   });
 
+  it("o caso de 21/09: falta o valor do cabeçalho, e o aviso diz isso", async () => {
+    const [, opcoes] = await enviarERecusar("canal_x_error", "template_missing_values: 1");
+    expect(opcoes.description).toBe("Falta o valor de uma variável do modelo para este contato.");
+  });
+
   it("modelo recusado pelo modo de teste: o aviso conta a frase nossa", async () => {
     const [, opcoes] = await enviarERecusar(
       "pre_go_live", "Envio automático bloqueado pelo modo de teste do canal.",

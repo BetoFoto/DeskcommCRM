@@ -21,9 +21,26 @@ describe("motivoDaFalhaDaMensagem: a frase nossa aparece", () => {
     expect(m).not.toMatch(/automação/);
   });
 
-  it("título da plataforma oficial sem frase própria é a única pista: aparece", () => {
+  it("título de um código que nenhum mapa conhece é a única pista: aparece", () => {
+    expect(motivo("131999", "Some new platform failure title."))
+      .toBe("Some new platform failure title.");
+  });
+});
+
+// O envio de modelo grava o código GENÉRICO do adapter e põe a causa no texto.
+// A frase genérica do canal ("confira a conexão") mentiria: em 21/09 um modelo
+// com cabeçalho de imagem virou `template_missing_values: 1` (JanelaFechadaAviso).
+describe("motivoDaFalhaDaMensagem: a recusa do modelo diz a causa", () => {
+  it.each([
+    ["template_missing_values: 1", "Falta o valor de uma variável do modelo para este contato."],
+    ["canal_x_template_failed: 400 bad [plataforma:132000]", "Os valores enviados não batem com as variáveis do modelo."],
+  ])("código genérico do adapter + %s", (texto, frase) => {
+    expect(motivo("canal_x_error", texto)).toBe(frase);
+  });
+
+  it("código numérico da plataforma com frase própria: a frase em português, não o título", () => {
     expect(motivo("131049", "This message was not delivered to maintain healthy ecosystem engagement."))
-      .toBe("This message was not delivered to maintain healthy ecosystem engagement.");
+      .toMatch(/^O WhatsApp limitou quantas promoções/);
   });
 });
 

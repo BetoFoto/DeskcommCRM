@@ -171,14 +171,16 @@ describe("encaminhar: o toast diz a verdade sobre o desfecho", () => {
     );
   });
 
-  // #2835: o motivo gravado pelo envio vence o código do adaptador — quando o
-  // texto é NOSSO. Aqui o código tem frase própria ("…nesta automação"), e é a
-  // frase do envio que vale: num encaminhamento não há automação.
-  it("o motivo gravado pelo envio vence o código do adaptador", async () => {
+  // Revisão deliberada do #2835 ("o motivo gravado pelo envio vence o código do
+  // adaptador"): o texto gravado pode ser o cru do transporte, com endereço
+  // interno. Agora a frase NOSSA do código vence o texto gravado — e a de canal
+  // excluído, na conversa, não fala de automação. O texto gravado só aparece
+  // quando nenhuma frase conhece o código (ver `lib/inbox/motivo-da-falha.ts`).
+  it("a frase nossa do código vence o texto gravado, sem falar de automação", async () => {
     post.mockResolvedValueOnce({
       data: {
         status: "failed", error_code: "channel_archived",
-        error_message: "Este número foi excluído da Central de Conexões.",
+        error_message: "texto que o envio gravou",
       },
     });
     const { result } = renderHook(() => useEncaminharMensagem(), { wrapper });
