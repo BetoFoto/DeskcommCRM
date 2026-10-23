@@ -759,6 +759,7 @@ jobs:
         j20-elegibilidade-atendimento-manual.spec.ts
         juntar-contatos-duplicados.spec.ts
         lote-no-quadro-do-funil.spec.ts
+        quadro-do-funil-colunas.spec.ts
         motivos-de-perda-do-funil.spec.ts
         importar-leads-planilha.spec.ts
         relatorio-de-atividades.spec.ts
