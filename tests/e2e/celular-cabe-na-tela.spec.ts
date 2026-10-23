@@ -318,6 +318,46 @@ async function esperarORodapeAcomodar(page: Page): Promise<void> {
 
 const creds = lerCreds();
 
+/**
+ * As tabelas de `components/ui/table.tsx` cuja caixa rola para o lado. Essa caixa
+ * tem `overflow-auto` própria, então a tabela larga NÃO alarga o `<main>` e a
+ * régua de estouro não a vê (ver o cabeçalho): é aqui que o cartão se prova.
+ * Devolve o cabeçalho de cada uma, para o log dizer QUAL rola.
+ */
+async function tabelasQueRolamNaPropriaCaixa(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLTableElement>("main table"))
+      .map((tabela) => ({ tabela, caixa: tabela.parentElement }))
+      .filter(({ caixa }) => caixa?.classList.contains("overflow-auto"))
+      .filter(({ caixa }) => caixa!.scrollWidth - caixa!.clientWidth > 1)
+      .map(({ tabela }) => (tabela.querySelector("thead")?.textContent ?? "").trim().slice(0, 60)),
+  );
+}
+
+/**
+ * O ranking por atendente (semeado, então SEMPRE presente) e o "Por canal"
+ * (presente só quando o banco tem conversa por canal) viram cartão a 390px: o
+ * cabeçalho some. O texto procurado vale em português e em espanhol.
+ */
+async function conferirOsCartoesDoPainel(page: Page): Promise<void> {
+  const ranking = page.locator("main table", { has: page.locator("th", { hasText: /mediana/ }) });
+  await expect(ranking, "o ranking semeado não apareceu no painel").toHaveCount(1);
+  expect(
+    await ranking.locator("thead").evaluate((el) => getComputedStyle(el).display),
+    "o cabeçalho do ranking continua à vista a 390px: a linha não virou cartão",
+  ).toBe("none");
+
+  const canais = page.locator("main table", {
+    has: page.locator("th", { hasText: /Sem resposta|Sin respuesta/ }),
+  });
+  if ((await canais.count()) > 0) {
+    expect(
+      await canais.locator("thead").evaluate((el) => getComputedStyle(el).display),
+      "o cabeçalho de Por canal continua à vista a 390px",
+    ).toBe("none");
+  }
+}
+
 test("as superfícies não estouram a tela em 360 nem em 390px", async ({ page }) => {
   await loginComoAdmin(page, creds);
 
@@ -335,6 +375,12 @@ test("as superfícies não estouram a tela em 360 nem em 390px", async ({ page }
       if (estouro > 1) {
         estouros.push(`${rota} em ${largura}px: passa ${estouro}px de ${janela} (body ${body}, main ${main})`);
       }
+      if (nome === "painel" || nome === "relatorios") {
+        for (const tabela of await tabelasQueRolamNaPropriaCaixa(page)) {
+          estouros.push(`${rota} em ${largura}px: a tabela "${tabela}" rola para o lado dentro da própria caixa`);
+        }
+      }
+      if (nome === "painel" && largura === 390) await conferirOsCartoesDoPainel(page);
     }
   }
 
@@ -361,6 +407,17 @@ test("nenhum controle do painel fica abaixo de 44px de altura em 360px", async (
   await loginComoAdmin(page, creds);
   await page.setViewportSize({ width: 360, height: 844 });
   await abrir(page, "/app/metrics");
+
+  // O "Salvar" da régua de abandono só aparece com o campo alterado, e era ele
+  // o controle de 28px (`h-7` derrubava o `h-11` do botão). Sem alterar o
+  // campo, este caso media o painel SEM o botão. Não salva: só faz aparecer.
+  const regua = page.locator('main input[inputmode="numeric"]');
+  await expect(regua, "o campo da régua de abandono não está no painel").toHaveCount(1);
+  const botoes = page.locator("main button");
+  const antes = await botoes.count();
+  const horas = Number(await regua.inputValue());
+  await regua.fill(String(horas >= 2160 ? horas - 1 : horas + 1));
+  await expect.poll(() => botoes.count(), { message: "o Salvar da régua não apareceu" }).toBe(antes + 1);
 
   const curtos = await page.evaluate((piso) => {
     const fora: Array<{ marca: string; texto: string; w: number; h: number }> = [];
