@@ -6407,6 +6407,11 @@ export const DICIONARIO: Traducoes = {
   "A mensagem está na fila e sai assim que o canal aceitar.": {
     es: "El mensaje está en la cola y sale en cuanto el canal lo acepte.",
   },
+  // #3274 — o veto da camada "valores e negociação só com a equipe" na mensagem
+  // escrita pela IA (`commercial_requires_human`, frase no mapa MOTIVO_DA_PARADA).
+  "Esta empresa deixou valores e negociação só com a equipe, e a mensagem escrita pela IA falava disso: ela não foi enviada e a conversa passou para o atendimento humano.": {
+    es: "Esta empresa dejó los valores y la negociación solo con el equipo, y el mensaje escrito por la IA hablaba de eso: no se envió y la conversación pasó a la atención humana.",
+  },
   // ─── lib/channels/frases-de-falha.ts (texto de tela por código do adapter) ───
   "O número escolhido não está conectado no momento. Reconecte em Conexões — a mensagem sai sozinha quando ele voltar.": {
     es: "El número elegido no está conectado en este momento. Reconéctalo en Conexiones y el mensaje saldrá solo en cuanto vuelva a estar conectado.",

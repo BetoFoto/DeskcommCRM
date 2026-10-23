@@ -33,6 +33,8 @@ import { logger } from "@/lib/logger";
 import { autorizarContatoParaIA } from "@/lib/ai/elegibilidade/autorizacao";
 import { decidirPreGoLiveDoCanalViaSupabase } from "@/lib/ai/elegibilidade/consulta-pre-go-live";
 import { mensagemDeErro } from "@/lib/automation/actions/erro-legivel";
+import { comercialExigeHumanoViaSupabase, restricaoComercialBarra } from "@/lib/escalacao/assunto-comercial";
+import { triggerHandoff } from "@/lib/ai/handoff/orchestrator";
 
 const TIPO = "send_ai_message";
 
@@ -149,6 +151,69 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
       contactId: contact.id,
       reason: `automacao:${ctx.ruleId}`,
     });
+
+    // ─── #3274 — A RESTRIÇÃO COMERCIAL, TAMBÉM AQUI ──────────────────────────
+    //
+    // Esta ação escreve com IA e entrega por `sendMessageHandler` sem atravessar
+    // a cadeia `before_send`. Nas outras portas que falam com o cliente, o gate
+    // `commercial_restriction` barra o corpo com preço e passa a conversa para a
+    // equipe (`#2877`, levado adiante pelo `#3270`). Sem esta régua, a automação
+    // entregava exatamente o preço que a cadeia barra no `send_message` — o mesmo
+    // defeito que o atalho do texto fixo do follow-up tinha, e o motivo desta
+    // régua aqui ser a MESMA das outras portas, não uma cópia.
+    //
+    // A regra e a falha FECHADA vivem em `lib/escalacao/assunto-comercial.ts`
+    // (o dono): `restricaoComercialBarra` só vai ao banco quando o corpo tem cara
+    // de preço, e leitura que estoura vale como camada LIGADA. O desfecho é o do
+    // veto de lá: motivo `commercial_requires_human` e passagem para a equipe
+    // pelo caminho de CRM que já existe (`triggerHandoff`), sem evento novo.
+    //
+    // Fica DEPOIS de `autorizarContatoParaIA` de propósito: o orquestrador só
+    // passa bot→humano uma conversa que a IA poderia estar atendendo agora, e no
+    // gate `allowlist` é este carimbo que a torna elegível. Antes dele, o pedido
+    // viraria um silêncio — nem a mensagem, nem a equipe avisada.
+    if (
+      await restricaoComercialBarra(
+        texto,
+        () => comercialExigeHumanoViaSupabase(ctx.admin, ctx.organizationId),
+        (mensagem, contexto) =>
+          logger.warn(`[automation.send_ai_message] ${mensagem}`, {
+            organizationId: ctx.organizationId,
+            ruleId: ctx.ruleId,
+            ...contexto,
+          }),
+      )
+    ) {
+      logger.info("[automation.send_ai_message] mensagem não enviada — restrição comercial da organização", {
+        organizationId: ctx.organizationId,
+        ruleId: ctx.ruleId,
+        conversationId,
+      });
+      const lead = ctx.context.lead as { id?: string } | undefined;
+      const passagem = await triggerHandoff({
+        serviceBoundary: boundary,
+        conversationId,
+        organizationId: ctx.organizationId,
+        // O MESMO motivo e o MESMO texto que a cadeia usa ao vetar: quem lê a
+        // passagem na tela de atendimento vê a mesma frase, venha ela do agente
+        // do turno ou desta automação.
+        reason: "low_confidence",
+        origem: "runtime_nativo",
+        motivoTexto: "Resposta comercial barrada; valores e negociação são exclusivos da equipe.",
+        leadId: lead?.id ?? null,
+        metadata: { source: "automation_rule", acao: TIPO, rule_id: ctx.ruleId },
+      });
+      return {
+        type: TIPO,
+        status: "skipped",
+        detail: {
+          reason: "commercial_requires_human",
+          conversation_id: conversationId,
+          passagem_para_a_equipe: passagem.triggered,
+        },
+      };
+    }
+
     await espacarEnvio(sessionId);
     const message = await sendMessageHandler(
       ctx.admin,
