@@ -9,6 +9,7 @@
 import { z } from "zod";
 
 import { ehHexValido } from "@/lib/branding/rampa";
+import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { IDIOMAS } from "@/lib/i18n/idiomas";
 import { MOEDAS_SERVIDAS } from "@/lib/money";
 
@@ -274,6 +275,49 @@ export const customFieldSchema = z.object({
 });
 export type CustomFieldDef = z.infer<typeof customFieldSchema>;
 
+/**
+ * A COTA DE CAMPOS DO NEGÓCIO por funil (issue #3111).
+ *
+ * O teto de 50 nasceu quando TODO campo do funil era do NEGÓCIO. Desde a #2791
+ * os campos do CONTATO também são declarados no funil padrão (`escopo:
+ * "contato"`) e passaram a DISPUTAR a mesma cota: a instalação do autor, com 20
+ * campos do negócio + 20 do contato, chegava a 40 de 50 e travava antes de
+ * cobrir o negócio.
+ *
+ * A cota continua 50, e passa a valer SÓ para o NEGÓCIO. O campo do contato não
+ * aparece no card e o valor dele mora em `contacts.custom_fields`, não em
+ * `crm_leads.custom_fields` — não é um campo do funil na conta que importa.
+ * Não há cota própria do contato: nada no produto limita quantos campos uma
+ * ficha de contato pode declarar.
+ *
+ * A régua do NEGÓCIO NÃO afrouxou: a ausência de `escopo` lê como `negocio`
+ * (mesma leitura de `lib/leads/campos-do-funil.ts`), então toda definição que já
+ * existe continua contando e 51 campos do negócio seguem recusados.
+ */
+export const MAX_CAMPOS_DO_NEGOCIO = 50;
+
+/** A recusa do teto, legível: diz o número e o que não entra na conta. */
+export const MENSAGEM_DO_TETO_DE_CAMPOS_DO_NEGOCIO = `O funil aceita no máximo ${MAX_CAMPOS_DO_NEGOCIO} campos do negócio. Os campos do contato não entram nesta conta.`;
+
+/**
+ * `fields` do PATCH: a cota conta só os campos do NEGÓCIO.
+ *
+ * O array segue sendo `customFieldSchema[]` (a forma de cada campo não mudou) —
+ * o que mudou é O QUE a cota conta. Quem escreve a mensagem é esta régua, para
+ * a tela do funil e a captação dizerem a mesma frase.
+ */
+export const camposDoFunilPatchSchema = z
+  .array(customFieldSchema)
+  .superRefine((campos, ctx) => {
+    const doNegocio = campos.filter((campo) => campo.escopo !== "contato").length;
+    if (doNegocio > MAX_CAMPOS_DO_NEGOCIO) {
+      ctx.addIssue({
+        code: "custom",
+        message: `${MENSAGEM_DO_TETO_DE_CAMPOS_DO_NEGOCIO} Recebidos ${doNegocio}.`,
+      });
+    }
+  });
+
 /** Os campos que a retomada de negócio encerrado pode copiar (issue #1538). */
 export const CAMPOS_COPIAVEIS_NA_RETOMADA = [
   "custom_fields",
@@ -295,7 +339,7 @@ export const pipelineConfigPatchSchema = z.object({
       lost: z.string().min(1).max(40).optional(),
     })
     .optional(),
-  fields: z.array(customFieldSchema).max(50).optional(),
+  fields: camposDoFunilPatchSchema.optional(),
   /**
    * Os motivos de perda do funil (issue #1537): texto puro continua valendo —
    * nenhum funil existente precisa migrar dado — e quem quiser agrupar no
@@ -421,6 +465,29 @@ export const marcaDaOrganizacaoSchema = z.object({
     .trim()
     .refine(ehHexValido, { message: "Use uma cor no formato #rrggbb" })
     .nullable(),
+  /**
+   * O remetente do e-mail de AUTOMAÇÃO da organização (#3287, fatia 1) — o nome
+   * de exibição e o "responder para".
+   *
+   * `email_from_name` é texto livre (limite de 120, o mesmo do nome da empresa:
+   * cabeçalho `From:` longo é o que os clientes de e-mail cortam). Vazio vira
+   * `null` na tela, e `null` é "use o da plataforma".
+   */
+  email_from_name: z.string().trim().max(120).nullable(),
+  /**
+   * `email_reply_to` valida com o MESMO piso de "cara de endereço" do disparo
+   * (`lib/email/remetente-da-organizacao.ts`): recusar aqui é o conserto que a
+   * pessoa vê na tela, em vez de um `Reply-To:` torto que o provedor devolveria
+   * como erro opaco no meio de um envio real.
+   */
+  email_reply_to: z
+    .string()
+    .trim()
+    .max(254)
+    .refine((valor) => valor === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor), {
+      message: "Use um endereço de e-mail como contato@suaempresa.com",
+    })
+    .nullable(),
 });
 export type MarcaDaOrganizacaoInput = z.infer<typeof marcaDaOrganizacaoSchema>;
 
@@ -456,10 +523,21 @@ export const agendaSettingsSchema = agendaSettingsWriteSchema.catch({confirmatio
  * `fn_marcar_contato_como_cliente`. Ausente, `false`, a string `"true"` ou
  * qualquer lixo é desligado aqui E lá. Se os dois idiomas divergissem, a tela
  * mostraria o selo de uma regra que o trigger não aplica.
+ *
+ * `internal_contact_tags` (#2353): a lista de etiquetas que marcam um contato
+ * INTERNO (equipe, sócio, família, fornecedor). Contato com uma delas não vira
+ * card e não recebe atendimento da IA — ver `lib/contacts/tags-internas.ts`.
+ * Mora no MESMO bolso jsonb porque já existia para a chave acima: nenhuma
+ * coluna nem tabela nova, e o par (liga/desliga + lista) fica no lugar em que a
+ * organização já procura as regras de CRM. Ausente/lixo → lista vazia (nenhum
+ * contato é interno), que é o comportamento de antes desta chave existir.
  */
+export const internalContactTagsSchema = z.array(z.string()).catch([]);
+
 export const crmSettingsSchema = z
   .object({
     cliente_pela_agenda: z.boolean().catch(false),
+    internal_contact_tags: internalContactTagsSchema,
     /**
      * `telefone_de_ficha_vazia` (issue #2593): o telefone que o cliente diz
      * numa conversa entra SOZINHO na ficha SEM número — sem passar pela fila de
@@ -478,7 +556,7 @@ export const crmSettingsSchema = z
      */
     telefone_de_ficha_vazia: z.boolean().catch(false),
   })
-  .catch({ cliente_pela_agenda: false, telefone_de_ficha_vazia: false });
+  .catch({ cliente_pela_agenda: false, internal_contact_tags: [], telefone_de_ficha_vazia: false });
 
 /**
  * `organizations.settings.notificacoes.conteudo_na_tela_bloqueada` — o que o
@@ -518,6 +596,20 @@ export function clientePelaAgendaLigado(settings: unknown): boolean {
       ? (settings as Record<string, unknown>).crm
       : undefined;
   return crmSettingsSchema.parse(crm ?? {}).cliente_pela_agenda === true;
+}
+
+/**
+ * As etiquetas de contato INTERNO desta organização, na forma em que o banco as
+ * guarda (`normalizarTag`: minúscula, aparada, sem repetição). Nunca lança — um
+ * jsonb torto devolve lista vazia, que é "nenhum contato é interno", o mesmo
+ * estado de toda organização que nunca configurou a lista.
+ */
+export function tagsInternasDaOrg(settings: unknown): string[] {
+  const crm =
+    settings && typeof settings === "object" && !Array.isArray(settings)
+      ? (settings as Record<string, unknown>).crm
+      : undefined;
+  return normalizarTags(crmSettingsSchema.parse(crm ?? {}).internal_contact_tags);
 }
 
 /**
