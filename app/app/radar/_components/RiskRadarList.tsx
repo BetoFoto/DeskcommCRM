@@ -297,7 +297,16 @@ function RadarRow({ lead }: { lead: AtRiskLead }) {
           )}
         </div>
       </Link>
-      <div className="flex shrink-0 items-center gap-2 self-center max-md:w-full max-md:justify-end max-md:self-auto max-md:px-4 max-md:pb-3">
+      {/* No celular a seta some, então sem compromisso nem "Assumir" a faixa de
+          ações ficaria vazia e ainda somaria o `pb-3`: ela some junto. As
+          classes de computador são as mesmas nos dois casos. */}
+      <div
+        className={`flex shrink-0 items-center gap-2 self-center ${
+          lead.agenda?.appointment_id || canClaim
+            ? "max-md:w-full max-md:justify-end max-md:self-auto max-md:px-4 max-md:pb-3"
+            : "max-md:hidden"
+        }`}
+      >
         {lead.agenda?.appointment_id ? <Link className="text-xs underline max-md:inline-flex max-md:min-h-11 max-md:items-center" href={`/app/agenda?compromisso=${lead.agenda.appointment_id}`}>{t("Ver compromisso")}</Link> : null}
         {canClaim ? (
           <Button

@@ -170,26 +170,41 @@ test.describe("vendas e dinheiro no celular", () => {
   });
 
   test.afterAll(async () => {
-    if (ids.lancamento) await admin.from("financial_entries").delete().eq("id", ids.lancamento);
-    if (ids.conta) await admin.from("financial_accounts").delete().eq("id", ids.conta);
-    if (ids.demanda) await admin.from("demandas").delete().eq("id", ids.demanda);
-    if (ids.proposta) await admin.from("crm_proposals").delete().eq("id", ids.proposta);
-    if (ids.negocio) await admin.from("crm_leads").delete().eq("id", ids.negocio);
-    if (ids.contato) await admin.from("contacts").delete().eq("id", ids.contato);
+    // Cada passo roda mesmo que o anterior falhe, e o que falhou é cobrado no
+    // fim: limpeza que engole erro deixa dado de teste para trás calada.
+    const erros: string[] = [];
+    const confere = (passo: string, res: { error: { message: string } | null }) => {
+      if (res.error) erros.push(`${passo}: ${res.error.message}`);
+    };
+
+    // Filhos antes de pais: o lançamento prende a conta (`on delete restrict`),
+    // e demanda e proposta apontam para o negócio, que aponta para o contato.
+    if (ids.lancamento) confere("apagar lançamento", await admin.from("financial_entries").delete().eq("id", ids.lancamento));
+    if (ids.conta) confere("apagar conta", await admin.from("financial_accounts").delete().eq("id", ids.conta));
+    if (ids.demanda) confere("apagar demanda", await admin.from("demandas").delete().eq("id", ids.demanda));
+    if (ids.proposta) confere("apagar proposta", await admin.from("crm_proposals").delete().eq("id", ids.proposta));
+    if (ids.negocio) confere("apagar negócio", await admin.from("crm_leads").delete().eq("id", ids.negocio));
+    if (ids.contato) confere("apagar contato", await admin.from("contacts").delete().eq("id", ids.contato));
 
     const org = await admin.from("organizations").select("settings").eq("id", c.org_id).single();
+    confere("ler organizations.settings para devolver", org);
     if (!org.error) {
       const { proposals: _ligada, ...resto } = (org.data.settings ?? {}) as Record<string, unknown>;
       const devolvida = propostasAntes === undefined ? resto : { ...resto, proposals: propostasAntes };
-      await admin.from("organizations").update({ settings: devolvida }).eq("id", c.org_id);
+      confere("devolver organizations.settings", await admin.from("organizations").update({ settings: devolvida }).eq("id", c.org_id));
     }
     if (moduloAntes === null) {
-      await admin.from("platform_config").delete().eq("chave", CHAVE_MODULO);
+      confere("devolver platform_config", await admin.from("platform_config").delete().eq("chave", CHAVE_MODULO));
     } else {
-      await admin
-        .from("platform_config")
-        .upsert({ chave: CHAVE_MODULO, valor: moduloAntes, eh_segredo: false, semeado_do_env: false }, { onConflict: "chave" });
+      confere(
+        "devolver platform_config",
+        await admin
+          .from("platform_config")
+          .upsert({ chave: CHAVE_MODULO, valor: moduloAntes, eh_segredo: false, semeado_do_env: false }, { onConflict: "chave" }),
+      );
     }
+
+    if (erros.length > 0) throw new Error(`a limpeza da spec deixou dado para trás:\n${erros.join("\n")}`);
   });
 
   test("[P1] o gestor alcança cada ação de vendas e dinheiro no celular", async ({ page }, info) => {
@@ -219,12 +234,26 @@ test.describe("vendas e dinheiro no celular", () => {
       const nome = (await aba.textContent()) ?? "aba";
       await dentroDaTela(aba, nome);
       // A borda de cima recebe o toque: a fila não recorta a aba de 44px.
-      const acerta = await aba.evaluate((el) => {
+      //
+      // DESVIO DE MÉTODO, DECLARADO: o toque é sondado a 3px da borda de cima,
+      // não no meio da aba (21px). Antes do conserto a fila tinha `h-9` com
+      // `overflow-x-auto` (que recorta também na vertical) e só 28px úteis; a
+      // aba de 44px, centrada, sobrava 8px para cima e 8px para baixo, numa
+      // faixa recortada que o dedo não alcança. O meio da aba acerta antes E
+      // depois do conserto, então não separaria os dois; 3px cai dentro da
+      // faixa recortada de antes.
+      //
+      // Controle negativo: 1px ACIMA da aba o mesmo `elementFromPoint` NÃO pode
+      // devolver a aba. Sem ele, uma sonda que acertasse a aba em qualquer
+      // ponto passaria verde aqui sem provar nada sobre a borda.
+      const toque = await aba.evaluate((el) => {
         const r = el.getBoundingClientRect();
-        const alvo = document.elementFromPoint(r.left + r.width / 2, r.top + 3);
-        return alvo !== null && (alvo === el || el.contains(alvo));
+        const x = r.left + r.width / 2;
+        const ehAba = (alvo: Element | null) => alvo !== null && (alvo === el || el.contains(alvo));
+        return { borda: ehAba(document.elementFromPoint(x, r.top + 3)), acima: ehAba(document.elementFromPoint(x, r.top - 1)) };
       });
-      expect(acerta, `${nome}: a borda de cima não recebe o toque`).toBe(true);
+      expect(toque.acima, `${nome}: controle — 1px acima da aba ainda acerta a aba`).toBe(false);
+      expect(toque.borda, `${nome}: a borda de cima não recebe o toque`).toBe(true);
     }
     await semRolagemNoMain(page, "Webhooks");
     await foto("02-webhooks");
@@ -254,9 +283,14 @@ test.describe("vendas e dinheiro no celular", () => {
       .locator("table")
       .evaluate((tabela) => tabela.parentElement!.scrollWidth - tabela.parentElement!.clientWidth);
     expect(caixa, "a caixa da tabela de propostas rola para o lado").toBeLessThanOrEqual(1);
-    const r = await medir(linkDaProposta);
-    expect(r.height, "o título da proposta").toBeGreaterThanOrEqual(PISO_DE_TOQUE);
-    expect(r.right).toBeLessThanOrEqual(BORDA_DIREITA);
+    // A altura da PRIMEIRA caixa do link, não a do retângulo inteiro: sem o
+    // conserto o link é `inline` numa coluna estreita, o título longo quebra em
+    // várias linhas e o `getBoundingClientRect` somaria todas (passaria de
+    // 44px sem alvo nenhum de 44px). Inline, a primeira caixa é uma linha de
+    // texto (~20px); com `max-md:flex max-md:min-h-11` ela é a caixa do link.
+    const primeiraCaixa = await linkDaProposta.evaluate((el) => el.getClientRects()[0]?.height ?? 0);
+    expect(primeiraCaixa, "a caixa do link do título da proposta").toBeGreaterThanOrEqual(PISO_DE_TOQUE);
+    expect((await medir(linkDaProposta)).right).toBeLessThanOrEqual(BORDA_DIREITA);
     await semRolagemNoMain(page, "Propostas");
     await foto("04-propostas");
 
