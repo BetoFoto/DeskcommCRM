@@ -27,6 +27,34 @@
  * barra de rolagem. O conteúdo simplesmente SOME pela direita, sem aviso e sem
  * jeito de alcançá-lo. É por isso que a medida tem de ser explícita.
  *
+ * ═══ E o `<main>`, desde 2026-10-23 — a régua do `body` era cega ═════════════
+ *
+ * A régua acima, sozinha, NÃO VIA o estouro de tela nenhuma do app. O `<main>`
+ * da casca (`app/app/_components/AppShell.tsx`) tem `overflow-auto`: o que passa
+ * da largura rola DENTRO dele, e o `body` continua exatamente da largura da
+ * janela. Uma tabela de 500px numa tela de 390px dava `body - janela = 0`.
+ *
+ * Por isso a conta é `Math.max(body - janela, main.scrollWidth - main.clientWidth)`.
+ * O `body` fica, porque ainda pega o que escapa da casca (sobreposto `fixed`,
+ * portal); o `<main>` pega o que estoura no conteúdo, que é onde as telas
+ * estouram. `estabilizar()` passou a olhar as duas larguras pelo mesmo motivo.
+ *
+ * O que se espera que a régua nova acuse (previsto pela leitura do código; o
+ * run do CI com só a régua trocada é a medida), e o que ela NÃO acusa:
+ *  - em `/app/metrics`, com dados, a Previsão — uma `<table>` crua
+ *    (`PrevisaoPanel.tsx`), cinco colunas sem invólucro, num Card sem
+ *    `overflow-hidden` — passa da tela e leva o `<main>` junto;
+ *  - o ranking por atendente NÃO entra nessa conta: ele usa a `Table` de
+ *    `components/ui/table.tsx`, que já embrulha tudo num `overflow-auto`
+ *    próprio. Tabela assim rola na própria caixa e nunca alarga o `<main>`, então
+ *    "o `<main>` não transborda" não prova cartão nenhum. Cartão se prova com
+ *    asserção própria (cabeçalho escondido e a caixa da tabela sem rolagem).
+ *
+ * Para a Previsão e o ranking EXISTIREM na hora de medir, o arquivo semeia pelo
+ * service role um negócio aberto com valor e data prevista no mês seguinte (numa
+ * etapa com chance de fechamento, criada para isso) e um ganho atribuído ao
+ * admin — e apaga os dois, e a etapa, no fim.
+ *
  * ═══ Três casos, e o motivo de não serem onze ════════════════════════════════
  *
  * A primeira versão tinha um `test` por combinação (4 superfícies × 2 larguras,
@@ -36,10 +64,10 @@
  * repetir o código. Onze logins são até dez esperas dessas, e o veredito que
  * chega ao log é `Test timeout`, que se lê como tela travada.
  *
- * A correção é estrutural e não cosmética: as oito combinações viraram UM caso
- * que percorre as duas larguras e as quatro superfícies com um login só. O teto
- * declarado abaixo cobre o login (mais a janela TOTP, no pior caso) e as oito
- * navegações.
+ * A correção é estrutural e não cosmética: as combinações viraram UM caso que
+ * percorre as duas larguras e todas as superfícies com um login só. O teto
+ * declarado abaixo cobre o login (mais a janela TOTP, no pior caso) e as dez
+ * navegações (cinco superfícies desde 2026-10-23, com Relatórios).
  *
  * ═══ Espera estabilizar, e isto passou a importar mais ═══════════════════════
  *
@@ -47,7 +75,7 @@
  * modal, menu, seletor, dica — eram ~24 classes que não geravam CSS nenhum).
  * Medir no meio de uma transição dá "falso vermelho hoje, falso verde amanhã",
  * com o produto quebrado igual. Então as medições abaixo esperam a largura do
- * `body` PARAR de mudar.
+ * `body` E a do `<main>` PARAREM de mudar.
  *
  * ═══ O que esta spec NÃO prova ═══════════════════════════════════════════════
  *
@@ -62,16 +90,18 @@ import * as path from "node:path";
 import { test, expect, type Page } from "./helpers/test";
 
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+import { admin, creds as credsDaOrganizacao, insere } from "./qa-l12-comum";
 
 const EVIDENCE = path.join(process.cwd(), "evidence", "celular-quase-nativo-20261005");
 mkdirSync(EVIDENCE, { recursive: true });
 
 /**
  * O teto por caso. O piso que o gate cobra é o padrão do Playwright mais uma
- * janela TOTP inteira (30s + 30s); o dobro disso é o que cabe, além do login, as
- * oito navegações do primeiro caso.
+ * janela TOTP inteira (30s + 30s). Eram 120s para oito navegações; com
+ * Relatórios o primeiro caso faz dez, e cada uma espera `networkidle` e três
+ * leituras quietas — 180s, para o veredito de um CI lento não ser `Test timeout`.
  */
-test.describe.configure({ timeout: 120_000 });
+test.describe.configure({ timeout: 180_000 });
 
 /** O piso de alvo de toque da Apple HIG, adotado pelo princípio 4 da estratégia. */
 const PISO_DE_TOQUE = 44;
@@ -84,24 +114,138 @@ const PISO_DE_TOQUE = 44;
 const LARGURAS = [360, 390] as const;
 
 /**
- * As quatro superfícies que alguém abre no celular. `/admin/**` fica fora por
+ * As superfícies que alguém abre no celular. `/admin/**` fica fora por
  * doutrina própria (princípio 6: super-admin não otimiza para celular).
+ * Relatórios entrou em 2026-10-23 (ADR-0006, F4): é a outra tela de números do
+ * gestor, ao lado do painel.
  */
 const SUPERFICIES = [
   { rota: "/app/inbox", nome: "inbox" },
   { rota: "/app/kanban", nome: "funis" },
   { rota: "/app/agenda", nome: "agenda" },
   { rota: "/app/metrics", nome: "painel" },
+  { rota: "/app/activities", nome: "relatorios" },
 ] as const;
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-/** Espera a largura do `body` parar de mudar — fim das transições. */
+/** Só letras e dígitos: entra no `slug` da etapa, que aceita `[a-z0-9_-]`. */
+const MARCA = `${Date.now()}`.slice(-7);
+const negociosSemeados: string[] = [];
+const etapasSemeadas: string[] = [];
+
+/** O dia 15 do mês que vem, em `YYYY-MM-DD` — cai na Previsão como um mês. */
+function diaDoMesQueVem(): string {
+  const hoje = new Date();
+  return new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, 15))
+    .toISOString()
+    .slice(0, 10);
+}
+
+test.beforeAll(async () => {
+  const c = credsDaOrganizacao();
+  const donoId = c.users.admin!.id;
+
+  // O funil que a Previsão lê: o mesmo critério de `/api/v1/pipelines/default`.
+  const { data: funil, error: erroDoFunil } = await admin
+    .from("crm_pipelines")
+    .select("id")
+    .eq("organization_id", c.org_id)
+    .eq("is_archived", false)
+    .order("is_default", { ascending: false })
+    .order("position", { ascending: true })
+    .limit(1)
+    .single();
+  if (erroDoFunil || !funil) throw new Error(`funil padrão: ${erroDoFunil?.message ?? "nenhum"}`);
+  const funilId = (funil as { id: string }).id;
+
+  // Etapa com chance de fechamento: sem ela o negócio cai no balde "sem
+  // probabilidade" (um parágrafo), e a tabela de meses — o que estoura — não
+  // aparece. Nenhuma etapa nasce calibrada (`win_probability` é nulo por padrão).
+  const etapaComChance = await insere("crm_stages", {
+    organization_id: c.org_id,
+    pipeline_id: funilId,
+    name: `Previsao ${MARCA}`,
+    slug: `previsao-${MARCA}`,
+    position: 999_999,
+    win_probability: 50,
+  });
+  etapasSemeadas.push(etapaComChance);
+
+  // O ganho: um funil só tem UMA etapa de ganho ativa (`uniq_crm_stages_pipeline_won`);
+  // usa a que existe e só cria quando não há.
+  const { data: ganha } = await admin
+    .from("crm_stages")
+    .select("id")
+    .eq("pipeline_id", funilId)
+    .eq("is_won", true)
+    .eq("is_archived", false)
+    .maybeSingle();
+  let etapaGanha = (ganha as { id: string } | null)?.id;
+  if (!etapaGanha) {
+    etapaGanha = await insere("crm_stages", {
+      organization_id: c.org_id,
+      pipeline_id: funilId,
+      name: `Ganho ${MARCA}`,
+      slug: `ganho-${MARCA}`,
+      position: 1_000_000,
+      is_won: true,
+    });
+    etapasSemeadas.push(etapaGanha);
+  }
+
+  negociosSemeados.push(
+    await insere("crm_leads", {
+      organization_id: c.org_id,
+      pipeline_id: funilId,
+      stage_id: etapaComChance,
+      title: `Previsao no celular ${MARCA}`,
+      value_cents: 123_456_789,
+      currency: "BRL",
+      expected_close_date: diaDoMesQueVem(),
+      owner_user_id: donoId,
+    }),
+  );
+  // `trg_crm_lead_close_on_stage` fecha como ganho (status e `closed_at`) ao
+  // nascer na etapa de ganho: é o que `fn_attendant_metrics` conta.
+  negociosSemeados.push(
+    await insere("crm_leads", {
+      organization_id: c.org_id,
+      pipeline_id: funilId,
+      stage_id: etapaGanha,
+      title: `Ganho no celular ${MARCA}`,
+      value_cents: 50_000,
+      currency: "BRL",
+      owner_user_id: donoId,
+    }),
+  );
+});
+
+test.afterAll(async () => {
+  if (negociosSemeados.length) await admin.from("crm_leads").delete().in("id", negociosSemeados);
+  if (etapasSemeadas.length) await admin.from("crm_stages").delete().in("id", etapasSemeadas);
+});
+
+/** Quanto o conteúdo passa da janela: o `body` OU o `<main>` (ver o cabeçalho). */
+async function medirEstouro(page: Page): Promise<{ body: number; main: number; janela: number }> {
+  return page.evaluate(() => {
+    const principal = document.querySelector<HTMLElement>("main");
+    return {
+      // ⚠️ `body.scrollWidth`, NUNCA `documentElement.scrollWidth` — ver o
+      // cabeçalho deste arquivo. A escolha errada aqui faz o gate medir zero.
+      body: document.body.scrollWidth - document.documentElement.clientWidth,
+      main: principal ? principal.scrollWidth - principal.clientWidth : 0,
+      janela: document.documentElement.clientWidth,
+    };
+  });
+}
+
+/** Espera a largura do `body` e a do `<main>` pararem de mudar — fim das transições. */
 async function estabilizar(page: Page): Promise<void> {
   await page.waitForFunction(
     () => {
-      const janela = window as unknown as { __larguraAnterior?: number; __quietos?: number };
-      const agora = document.body.scrollWidth;
+      const janela = window as unknown as { __larguraAnterior?: string; __quietos?: number };
+      const agora = `${document.body.scrollWidth}:${document.querySelector("main")?.scrollWidth ?? 0}`;
       if (janela.__larguraAnterior === agora) {
         janela.__quietos = (janela.__quietos ?? 0) + 1;
       } else {
@@ -174,7 +318,7 @@ async function esperarORodapeAcomodar(page: Page): Promise<void> {
 
 const creds = lerCreds();
 
-test("as quatro superfícies não estouram a tela em 360 nem em 390px", async ({ page }) => {
+test("as superfícies não estouram a tela em 360 nem em 390px", async ({ page }) => {
   await loginComoAdmin(page, creds);
 
   const estouros: string[] = [];
@@ -182,17 +326,15 @@ test("as quatro superfícies não estouram a tela em 360 nem em 390px", async ({
     await page.setViewportSize({ width: largura, height: 844 });
     for (const { rota, nome } of SUPERFICIES) {
       await abrir(page, rota);
-      const { body, janela } = await page.evaluate(() => ({
-        // ⚠️ `body.scrollWidth`, NUNCA `documentElement.scrollWidth` — ver o
-        // cabeçalho deste arquivo. A escolha errada aqui faz o gate medir zero.
-        body: document.body.scrollWidth,
-        janela: document.documentElement.clientWidth,
-      }));
+      const { body, main, janela } = await medirEstouro(page);
       await page.screenshot({ path: path.join(EVIDENCE, `${largura}-${nome}.png`) });
       // Tolerância de 1px para arredondamento de subpixel, e não mais: o defeito
       // que isto pega mede dezenas ou centenas de pixels (476px na tela do
       // agente, 214px no painel da agenda).
-      if (body - janela > 1) estouros.push(`${rota} em ${largura}px: ${body} > ${janela}`);
+      const estouro = Math.max(body, main);
+      if (estouro > 1) {
+        estouros.push(`${rota} em ${largura}px: passa ${estouro}px de ${janela} (body ${body}, main ${main})`);
+      }
     }
   }
 
