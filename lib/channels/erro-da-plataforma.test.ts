@@ -29,6 +29,8 @@ describe("codigoDaPlataforma", () => {
   it("recusa síncrona do envio de modelo: o código depois do prefixo do canal", () => {
     expect(codigoDaPlataforma("meta_error", "meta_132000: (#132000) Number of parameters does not match")).toBe("132000");
     expect(codigoDaPlataforma("datafy_error", "datafy_132015: Template is paused")).toBe("132015");
+    // Código de um dígito também é da plataforma (4 = limite de chamadas do app), e não pausa.
+    expect(codigoDaPlataforma("meta_error", "meta_4: (#4) Application request limit reached")).toBe("4");
     // Sem código na resposta (`<canal>_erro`) ou só o rótulo do adapter: nada a ler.
     expect(codigoDaPlataforma("meta_error", "meta_erro: build_failed")).toBeNull();
     expect(codigoDaPlataforma("zernio_error", "zernio_template_failed: timeout")).toBeNull();

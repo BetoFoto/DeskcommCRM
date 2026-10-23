@@ -60,7 +60,7 @@ const DO_ENVIO_INTEIRO = new Set([
 
 const CODIGO_MARCADO = /\[plataforma:([A-Za-z0-9_]+)\]/;
 const CODIGO_NO_COMECO = /^\s*(\d{2,6})\b/;
-const CODIGO_DEPOIS_DO_CANAL = /^\s*[a-z]+_(\d{2,6}):/;
+const CODIGO_DEPOIS_DO_CANAL = /^\s*[a-z]+_(\d{1,6}):/;
 const CODIGO_DO_PARCEIRO =
   /\b(INVALID_TEMPLATE_PARAMS|INVALID_TEMPLATE_HEADER|INVALID_TEMPLATE_BUTTON_PARAM|TEMPLATE_REQUIRED|message_allowance_exceeded)\b/;
 const CODIGO_DO_PRE_VOO = /^(template_not_approved|template_missing_values)\b/;
