@@ -32,7 +32,8 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
-import { ROLE_RANK, escreveComoPlatformAdmin } from "@/lib/auth/types";
+import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
+import { ROLE_RANK } from "@/lib/auth/types";
 import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { createClient } from "@/lib/supabase/server";
 
@@ -75,10 +76,11 @@ export async function definirMetaMensal(
   if (supportWriteError(authUser.support)) return { ok: false, error: "forbidden_role" };
   const activeOrg = await resolveActiveOrg(authUser);
   if (!activeOrg) return { ok: false, error: "forbidden_tenant" };
-  // `podeAdministrarEmpresa` NÃO serve aqui: ela cobra `admin`, e o gerente que a
-  // porta, a página e a RLS deixam entrar veria o formulário recusar o salvar.
-  const donoDaInstalacao = escreveComoPlatformAdmin(authUser) && !authUser.support;
-  if (!donoDaInstalacao && ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
+  // O piso é `manager`, não o `admin` de `podeAdministrarEmpresa`: o gerente que a
+  // porta, a página e a RLS deixam entrar não pode ver o formulário recusar o
+  // salvar. A regra única segue valendo para o atalho do dono da instalação
+  // (scope `full`, fora do suporte), o mesmo que a RLS aceita.
+  if (!podeAdministrarEmpresa(authUser, activeOrg) && ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
     return { ok: false, error: "forbidden_role" };
   }
 
