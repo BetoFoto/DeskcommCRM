@@ -24,7 +24,7 @@ export function EmojiButton({ disabled, onPick }: Props) {
     // TooltipProvider ancestral e o Radix lança sem ele — o throw derruba a
     // árvore inteira, não só a dica. Provider/Tooltip/Trigger não criam nó
     // nenhum: quem entra na linha de ações continua sendo o mesmo botão
-    // "h-9 w-9", então a altura dela não muda.
+    // size="icon", então a altura dela não muda.
     <TooltipProvider delayDuration={200}>
       <Popover open={open} onOpenChange={setOpen}>
         <Tooltip>
@@ -34,7 +34,9 @@ export function EmojiButton({ disabled, onPick }: Props) {
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="h-9 w-9 shrink-0"
+                // Some no toque: o teclado do sistema já tem emoji, e o seletor de
+                // 352px disputa largura num celular de 390.
+                className="shrink-0 pointer-coarse:hidden"
                 aria-label={t("Emoji")}
                 disabled={disabled}
               >
