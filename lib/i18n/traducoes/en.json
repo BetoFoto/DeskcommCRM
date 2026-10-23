@@ -599,7 +599,7 @@
   "Acesso da IA no WhatsApp": "AI access on WhatsApp",
   "Teste com pessoas de confiança antes de liberar o atendimento automático.": "Test with people you trust before enabling automatic support.",
   "Não foi possível carregar o acesso da IA.": "Couldn't load AI access.",
-  "Use um telefone com DDI por linha, por exemplo +5511999998888.": "Use one phone number with country code per line, for example +5511999998888.",
+  "Use um telefone com DDI por linha, por exemplo {exemplo}.": "Use one phone number with country code per line, for example {exemplo}.",
   "Acesso da IA atualizado.": "AI access updated.",
   "Não foi possível confirmar o salvamento. Reabra este painel para conferir a configuração.": "Couldn't confirm the save. Reopen this panel to check the setting.",
   "Somente os números desta lista podem receber respostas automáticas neste canal.": "Only the numbers on this list can receive automatic replies on this channel.",
@@ -8096,6 +8096,7 @@
   "Casos em que o aviso chegou": "Cases where the alert arrived",
   "Casos sem aviso": "Cases without an alert",
   "Comece pelo código do país. Um celular do Brasil fica assim: +55, DDD e o número.": "Start with the country code. A cell phone number in Brazil looks like this: +55, area code, and the number.",
+  "Comece pelo código do país, por exemplo {exemplo}.": "Start with the country code, for example {exemplo}.",
   "Como a conexão não existe mais, o aviso foi desligado sozinho. Escolha outra conexão abaixo e ligue de novo.": "Since the connection no longer exists, the alert turned itself off. Choose another connection below and turn it back on.",
   "Como chamar esse número (opcional)": "What to call this number (optional)",
   "Conecte um WhatsApp lendo o QR code na tela de Conexões. É por ele que os avisos vão sair.": "Connect a WhatsApp by scanning the QR code on the Connections screen. Alerts will go out through it.",
@@ -9359,5 +9360,6 @@
   "Pessoa da equipe": "Team member",
   "Vai para o WhatsApp cadastrado em Avisos.": "It goes to the WhatsApp number registered under Alerts.",
   "O resumo leva o nome da regra, o cliente, o telefone, o valor, a pontuação e um atalho para o negócio no CRM (quando a instalação tem endereço público). O que foi conversado com o cliente não vai na mensagem.": "The summary carries the rule name, the customer, the phone, the value, the score and a shortcut to the deal in the CRM (when the installation has a public address). What was said in the conversation with the customer is not in the message.",
-  "A variável Resumo do negócio leva o nome da regra, o cliente, o telefone, o valor, a pontuação e um atalho para o negócio no CRM (quando a instalação tem endereço público), e nada do que foi conversado com o cliente. O resto do corpo vai como você escrever, inclusive as outras variáveis.": "The Deal summary variable carries the rule name, the customer, the phone, the value, the score and a shortcut to the deal in the CRM (when the installation has a public address), and nothing that was said in the conversation with the customer. The rest of the body goes out as you write it, including the other variables."
+  "A variável Resumo do negócio leva o nome da regra, o cliente, o telefone, o valor, a pontuação e um atalho para o negócio no CRM (quando a instalação tem endereço público), e nada do que foi conversado com o cliente. O resto do corpo vai como você escrever, inclusive as outras variáveis.": "The Deal summary variable carries the rule name, the customer, the phone, the value, the score and a shortcut to the deal in the CRM (when the installation has a public address), and nothing that was said in the conversation with the customer. The rest of the body goes out as you write it, including the other variables.",
+  "Aplicar regras de atendimento": "Apply service rules"
 }
