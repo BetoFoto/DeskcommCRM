@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit, isServiceRoleConfigured } from "@/lib/audit";
 import { generateRecoveryCodes, hashRecoveryCode } from "@/lib/auth/recovery-codes";
+import { sessionAal } from "@/lib/auth/server";
 
 export type RegenerateRecoveryCodesResult =
   | { ok: true; recovery_codes: string[] }
@@ -32,6 +33,11 @@ export async function regenerateRecoveryCodes(): Promise<RegenerateRecoveryCodes
   const { data: factors } = await supabase.auth.mfa.listFactors();
   const hasFactor = factors?.totp?.some((f) => f.status === "verified");
   if (!hasFactor) return { ok: false, error: "mfa_not_enrolled" };
+
+  // Exige o código provado NESTA sessão (`aal2`), como desligar a verificação:
+  // códigos novos desligam o fator pela porta da recuperação, então uma sessão
+  // só com a senha — ou de um dispositivo confiável — não pode emiti-los.
+  if ((await sessionAal()) !== "aal2") return { ok: false, error: "mfa_required" };
 
   const codes = generateRecoveryCodes();
   const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(c) }));
