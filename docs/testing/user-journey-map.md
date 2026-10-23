@@ -1563,6 +1563,25 @@ real, não pela tela).
 
 **Evidência:** ainda não versionada. A spec grava as duas fotos (o card com o link gerado e o painel da empresa com o mesmo link) na pasta `evidence/cobranca-link-pelo-dono/` quando roda; elas entram aqui, citadas, depois da primeira rodada verde do `e2e`.
 
+## J55 — Cuidar da equipe pelo celular `[P1]` (2026-10-23)
+
+ADR-0006, fase F4. O gestor cuida do time pelo celular: Equipe (membros e
+convites), a aba Atendimento (plantão e horários), os pedidos de LGPD e as
+etiquetas. Abaixo de `md` as tabelas viram cartão só com classes `max-md:`; nas
+etiquetas, o `Card` com `overflow-hidden` cortava Renomear, Juntar e Excluir.
+Spec: `tests/e2e/equipe-no-celular.spec.ts` (parte 7), 390×844 com toque
+emulado, login `admin`. A área de toque do interruptor de Disponibilidade fica
+fora: depende do `Switch` de outro PR da F4.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J55.1 | Membros a 390px | o `<main>` não rola para o lado; cabeçalho `display:none`; o invólucro da tabela não rola; o ⋯ do agente ≥ 44px e entre 0 e 390px | a medir (CI) + UNIT `TeamMembersClient.test.tsx` |
+| J55.2 | Convites a 390px | cabeçalho `display:none`; invólucro sem rolagem; «Copiar link» e ⋯ ≥ 44px e dentro da tela | a medir (CI) |
+| J55.3 | Atendimento a 390px | cabeçalho `display:none`; invólucro sem rolagem; o interruptor «Disponibilidade de …» dentro da tela; «Editar horário de …» ≥ 44px | a medir (CI) |
+| J55.4 | Editor de horários | a linha `janela` não passa da borda do diálogo nem rola; cada campo de hora com `scrollWidth ≤ clientWidth`; Cancelar fecha sem gravar | a medir (CI) + UNIT `editor-da-jornada-copia-e-resumo.test.tsx` |
+| J55.5 | Pedidos de LGPD a 390px | cabeçalho `display:none`; invólucro sem rolagem; «Ver» ≥ 44×44px e dentro da tela | a medir (CI) + UNIT `RequestsTable.test.tsx` |
+| J55.6 `[P1]` | Etiquetas a 390px | Cor, Renomear, Juntar e Excluir com `right ≤ 390` e 44px de altura; a 1280px as colunas Leads e Regras voltam | a medir (CI) + UNIT `tags-acoes-alcancaveis.test.tsx` |
+
 ## J46 — O anúncio que trouxe a pessoa aparece na conversa e no painel `[P1]` (2026-10-12)
 
 Contexto: pedido de uma operação real (loja com vários produtos anunciados). O

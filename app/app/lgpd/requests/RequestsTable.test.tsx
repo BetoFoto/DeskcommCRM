@@ -47,3 +47,14 @@ describe("RequestsTable: para onde o Ver leva", () => {
     expect(screen.getByRole("link", { name: "Ver" })).toHaveAttribute("href", `/account-suspended?pedido=${PEDIDO}`);
   });
 });
+
+describe("RequestsTable: o Ver no celular", () => {
+  it("só encolhe para 28px de md para cima; abaixo, fica com 44px de altura e de largura", () => {
+    render(<RequestsTable />);
+    const ver = screen.getByRole("link", { name: "Ver" });
+    // `h-7` sem prefixo derrubava o `h-11` do size="sm" no tailwind-merge.
+    expect(ver.className.split(/\s+/)).not.toContain("h-7");
+    expect(ver).toHaveClass("h-11", "md:h-7", "max-md:min-w-11");
+    expect(document.querySelector("thead")).toHaveClass("max-md:hidden");
+  });
+});

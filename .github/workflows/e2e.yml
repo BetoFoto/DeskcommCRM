@@ -1472,6 +1472,7 @@ jobs:
       SPECS_PARTE_7: >-
         agente-novo-e-uso.spec.ts
         capacidades-do-agente.spec.ts
+        equipe-no-celular.spec.ts
         extensoes-versao.spec.ts
         prova-painel-provedores.spec.ts
 
