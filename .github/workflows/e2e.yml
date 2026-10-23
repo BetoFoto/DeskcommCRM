@@ -1474,6 +1474,7 @@ jobs:
         capacidades-do-agente.spec.ts
         extensoes-versao.spec.ts
         prova-painel-provedores.spec.ts
+        comercial-no-celular.spec.ts
 
       # ─── FORA_DO_CI — as que ficaram fora, e o motivo de cada uma ───
       #
