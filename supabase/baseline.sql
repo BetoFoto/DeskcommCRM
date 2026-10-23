@@ -47271,17 +47271,65 @@ notify pgrst, 'reload schema';
 -- `fn_attendant_metrics` (0037/0266) e `fn_channel_metrics` (0590) ganham o conjunto de
 -- candidatas antes do `cross join lateral`; o resto do corpo, inclusive o filtro da janela
 -- dentro do agregado, é o mesmo de antes. O porquê de cada predicado está na migration.
+-- (issue #3212, migration 0754) `fn_attendant_metrics` ganha a MEDIANA da 1ª resposta e o
+-- recorte por etiqueta do contato: o bloco abaixo é o espelho da função VIGENTE, EDITADO no
+-- lugar (sem bloco novo) — a média não muda um byte e `fn_channel_metrics` não é tocada nesta
+-- fatia. A assinatura de 4 argumentos é derrubada antes do `create or replace` (senão a
+-- chamada posicional de 4 argumentos fica ambígua) e o `revoke`/`grant` é reemitido para ela.
+
+-- A assinatura de 4 argumentos sai: com as duas vivas a chamada POSICIONAL de 4 argumentos
+-- fica ambígua (`function is not unique`) — e é assim que a suíte de invariantes e outros
+-- leitores chamam a função. `create or replace` não substitui assinatura diferente.
+drop function if exists public.fn_attendant_metrics(uuid, timestamptz, timestamptz, uuid);
 
 create or replace function public.fn_attendant_metrics(
   p_org uuid,
   p_from timestamptz,
   p_to timestamptz,
-  p_owner uuid default null
+  p_owner uuid default null,
+  -- (0754) A etiqueta do contato que SAI da conta das conversas. `null` = sem recorte.
+  p_excluir_etiqueta text default null
 ) returns jsonb
 language sql stable
 set search_path = public
 as $$
   with
+  -- ─── #3212: o recorte por ETIQUETA DO CONTATO ───────────────────────────
+  --
+  -- «Quanto tempo o fornecedor segura o atendimento» não tinha resposta: não havia como
+  -- tirar da régua as conversas de um contato que carrega uma etiqueta. As etiquetas
+  -- existem em `contacts.tags` (0033/0034, com índice GIN) e NENHUMA métrica as lia.
+  --
+  -- O recorte é do CONTATO e vale para as três contas de CONVERSA — a contagem
+  -- (`conversations_handled`), a média e a mediana. `won`/`lost` são NEGÓCIOS e
+  -- `calls_answered` é LIGAÇÃO: nenhum dos dois é conversa de contato, e nenhum é tocado.
+  --
+  -- A comparação normaliza os DOIS lados com `lower(btrim(...))`: etiqueta é texto que o
+  -- operador digita (`Fornecedor ` e `fornecedor` são a mesma), e é a MESMA normalização de
+  -- `contatoCarregaEtiqueta()` em `lib/metrics/mediana-e-recorte-por-etiqueta.ts` — o par
+  -- TS×SQL é comparado lado a lado em `tests/invariants/mediana-e-recorte-por-etiqueta.test.ts`.
+  contatos_excluidos as (
+    select ct.id
+    from public.contacts ct
+    where p_excluir_etiqueta is not null
+      and ct.organization_id = p_org
+      and exists (
+        select 1
+        from unnest(coalesce(ct.tags, '{}'::text[])) as t
+        where lower(btrim(t)) = lower(btrim(p_excluir_etiqueta))
+      )
+  ),
+  -- ETIQUETA NÃO INFORMADA NÃO RECORTA: `p_excluir_etiqueta` nulo esvazia o conjunto acima e
+  -- este total sai 0 — a resposta DECLARA o que foi tirado, e «nada» é resposta legítima.
+  conversas_excluidas as (
+    select count(*) as total
+    from public.conversations c
+    where c.organization_id = p_org
+      and c.assigned_to_user_id is not null
+      and c.assigned_at >= p_from and c.assigned_at < p_to
+      and (p_owner is null or c.assigned_to_user_id = p_owner)
+      and exists (select 1 from contatos_excluidos e where e.id = c.contact_id)
+  ),
   lead_agg as (
     select
       owner_user_id as user_id,
@@ -47308,6 +47356,8 @@ as $$
       and assigned_to_user_id is not null
       and assigned_at >= p_from and assigned_at < p_to
       and (p_owner is null or assigned_to_user_id = p_owner)
+      -- (0754) conversa cujo CONTATO carrega a etiqueta pedida sai da conta.
+      and not exists (select 1 from contatos_excluidos e where e.id = contact_id)
     group by assigned_to_user_id
   ),
   -- (0235) Chamada de voz ATENDIDA conta como trabalho.
@@ -47363,7 +47413,14 @@ as $$
   ttfr as (
     select
       c.assigned_to_user_id as user_id,
-      avg(extract(epoch from (fr.first_human_out - fr.first_in))) as avg_first_response_seconds
+      avg(extract(epoch from (fr.first_human_out - fr.first_in))) as avg_first_response_seconds,
+      -- (0754) MEDIANA da 1ª resposta: o valor do MEIO da amostra ordenada (com
+      -- tamanho par, `percentile_cont(0.5)` interpola os dois do meio — o mesmo de
+      -- `mediana()` em `lib/metrics/mediana-e-recorte-por-etiqueta.ts`). Grupo sem
+      -- par válido não existe no agregado e o campo sai `null` (não medida), NUNCA 0.
+      percentile_cont(0.5) within group (
+        order by extract(epoch from (fr.first_human_out - fr.first_in))
+      ) as median_first_response_seconds
     from public.conversations c
     -- A linha de fora do candidato nunca entrou na média; ela só existia para
     -- ser varrida. O lateral e o filtro de baixo estão INTACTOS.
@@ -47380,6 +47437,9 @@ as $$
     where c.organization_id = p_org
       and c.assigned_to_user_id is not null
       and (p_owner is null or c.assigned_to_user_id = p_owner)
+      -- (0754) o MESMO recorte do `conv_agg`: média e mediana nascem do mesmo conjunto,
+      -- para uma nunca divergir da outra.
+      and not exists (select 1 from contatos_excluidos e where e.id = c.contact_id)
       and fr.first_in is not null
       and fr.first_human_out is not null
       and fr.first_human_out > fr.first_in
@@ -47393,6 +47453,10 @@ as $$
     union select user_id from voice_agg
   )
   select jsonb_build_object(
+    -- (0754) a etiqueta QUE FOI USADA e o total de conversas que ela tirou da conta
+    -- vêm declarados na resposta: recorte sem número declarado vira número torto.
+    'excluded_tag', p_excluir_etiqueta,
+    'excluded_conversations', (select total from conversas_excluidas),
     'funnel', coalesce((
       select jsonb_agg(
         jsonb_build_object(
@@ -47422,6 +47486,7 @@ as $$
           'lost', coalesce(la.lost, 0),
           'conversations_handled', coalesce(ca.conversations_handled, 0),
           'avg_first_response_seconds', tf.avg_first_response_seconds,
+          'median_first_response_seconds', tf.median_first_response_seconds,
           'calls_answered', coalesce(va.calls_answered, 0),
           'call_seconds', (coalesce(va.call_ms, 0) / 1000)::bigint
         ) order by coalesce(la.won, 0) desc, a.user_id
@@ -47434,6 +47499,13 @@ as $$
     ), '[]'::jsonb)
   );
 $$;
+-- SECURITY INVOKER não é coberta pela VARREDURA anon da 0116 (que só olha definer), e a
+-- função é nova: sem isto ela nasceria com o EXECUTE default de PUBLIC (e de anon, que o
+-- ALTER DEFAULT PRIVILEGES do dump grava no catálogo).
+revoke all on function public.fn_attendant_metrics(uuid, timestamptz, timestamptz, uuid, text)
+  from public, anon;
+grant execute on function public.fn_attendant_metrics(uuid, timestamptz, timestamptz, uuid, text)
+  to authenticated, service_role;
 
 create or replace function public.fn_channel_metrics(
   p_org uuid,

@@ -10498,6 +10498,9 @@ export const DICIONARIO: Traducoes = {
   "Sua performance": { es: "Tu rendimiento" },
   "Sem atividade no período (ganhos/perdidos, conversas ou respostas).": { es: "Sin actividad en el período (ganados/perdidos, conversaciones o respuestas)." },
   "1ª resposta (média)": { es: "1ª respuesta (promedio)" },
+  // #3212 — a mediana entra AO LADO da média na mesma coluna: o texto antigo
+  // fica (nada é renomeado) e a chave nova declara as DUAS leituras.
+  "1ª resposta (média / mediana)": { es: "1ª respuesta (promedio / mediana)" },
   "Por canal": { es: "Por canal" },
   "Sem atividade no período.": { es: "Sin actividad en el período." },
   "Erro ao carregar os canais.": { es: "Error al cargar los canales." },
