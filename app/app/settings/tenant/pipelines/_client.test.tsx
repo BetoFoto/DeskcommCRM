@@ -652,6 +652,7 @@ describe("lista pesquisável: o controle de múltipla escolha no funil (#3182)",
 
   it("nasce desligado e ligar grava `multiple: true` no patch salvo", () => {
     render(<PipelinesClient pipelines={[FUNIL_FORNECEDORES]} podeEditarConfig />);
+    abrirEditores();
     const caixa = screen.getByLabelText(/Permitir várias escolhas 1/i);
     expect(caixa).not.toBeChecked();
 
@@ -672,6 +673,7 @@ describe("lista pesquisável: o controle de múltipla escolha no funil (#3182)",
       settings: { fields: [{ ...CAMPO_FORNECEDORES, multiple: true }] },
     };
     render(<PipelinesClient pipelines={[jaMultiplo]} podeEditarConfig />);
+    abrirEditores();
     const caixa = screen.getByLabelText(/Permitir várias escolhas 1/i);
     expect(caixa).toBeChecked();
 
@@ -685,6 +687,9 @@ describe("lista pesquisável: o controle de múltipla escolha no funil (#3182)",
 
   it("o controle é só do `searchable_select` — num `select` comum ele não existe", () => {
     render(<PipelinesClient pipelines={[FUNIL_SEM_OPCOES]} podeEditarConfig />);
+    abrirEditores();
+    // controle: o editor ABRIU — sem isto o `toBeNull` abaixo passa com a tela fechada.
+    expect(screen.getByLabelText(/Escopo do campo 1/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Permitir várias escolhas 1/i)).toBeNull();
   });
 });
