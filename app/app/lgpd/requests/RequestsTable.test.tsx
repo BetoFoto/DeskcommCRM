@@ -49,7 +49,7 @@ describe("RequestsTable: para onde o Ver leva", () => {
 });
 
 describe("RequestsTable: o Ver no celular", () => {
-  it("só encolhe para 28px de md para cima; abaixo, fica com 44px de altura e de largura", () => {
+  it("abaixo de md fica com 44×44px; de md para cima, a altura de antes: 28px entre md e lg e 32px de lg para cima (o lg:h-8 do size vence)", () => {
     render(<RequestsTable />);
     const ver = screen.getByRole("link", { name: "Ver" });
     // `h-7` sem prefixo derrubava o `h-11` do size="sm" no tailwind-merge.

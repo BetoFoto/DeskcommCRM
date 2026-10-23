@@ -121,10 +121,22 @@ test.describe("cuidar da equipe pelo celular", () => {
     });
   });
 
+  // Nenhuma das três tem filho semeado (o contato não ganha conversa); mesmo
+  // assim a ordem é a de filho antes de pai. Cada delete confere o `error` E a
+  // linha devolvida: `.delete()` sem linha casada não dá erro, só apaga nada.
   test.afterAll(async () => {
-    if (conviteId) await admin.from("team_invites").delete().eq("id", conviteId);
-    if (pedidoId) await admin.from("lgpd_requests").delete().eq("id", pedidoId);
-    if (contatoId) await admin.from("contacts").delete().eq("id", contatoId);
+    const falhas: string[] = [];
+    for (const [tabela, id] of [
+      ["team_invites", conviteId],
+      ["lgpd_requests", pedidoId],
+      ["contacts", contatoId],
+    ] as const) {
+      if (!id) continue;
+      const { data, error } = await admin.from(tabela).delete().eq("id", id).select("id");
+      if (error) falhas.push(`${tabela} ${id}: ${error.message}`);
+      else if (data?.length !== 1) falhas.push(`${tabela} ${id}: ${data?.length ?? 0} linha(s) apagada(s)`);
+    }
+    if (falhas.length > 0) throw new Error(`limpeza da spec não saiu: ${falhas.join("; ")}`);
   });
 
   test("[P1] equipe, plantão, LGPD e etiquetas cabem a 390px e as ações ficam ao alcance", async ({ page }) => {
@@ -169,8 +181,8 @@ test.describe("cuidar da equipe pelo celular", () => {
     await esperarAlvoNaTela(editar, "Editar horário");
     await page.screenshot({ path: path.join(EVIDENCIA, "02-atendimento.png"), fullPage: true });
 
-    // O editor de horários: a linha da janela cabe no diálogo, e cada campo
-    // de hora mostra o horário inteiro. Fecha em Cancelar, sem gravar nada.
+    // O editor de horários: a linha da janela não estoura. Fecha em Cancelar,
+    // sem gravar nada.
     await editar.tap();
     const dialogo = page.getByRole("dialog");
     await expect(dialogo).toBeVisible();
@@ -179,21 +191,29 @@ test.describe("cuidar da equipe pelo celular", () => {
     }
     const janela = dialogo.getByTestId("janela").first();
     await expect(janela).toBeVisible();
-    const caixaDoDialogo = await medir(dialogo);
+    // Sem a borda direita da LINHA contra a do diálogo: a linha é um flex com a
+    // largura do pai, e a caixa dela não cresce quando os filhos transbordam —
+    // aquela asserção era verde sempre. Também sem a borda de cada campo contra
+    // a do diálogo: o respiro de 24px do diálogo engolia o estouro do 2º campo.
+    // Quem acusa é o scrollWidth da linha e a lixeira, o último filho, contra a
+    // borda da própria linha. Reprodução aproximada da linha (342px, Chrome 155
+    // headless, 2026-10-23): sem `min-w-0` a linha sobra 69px e a lixeira vai a
+    // 410px de 342; com o conserto, 0 e 342.
     const caixaDaJanela = await medir(janela);
-    expect(caixaDaJanela.right, "a linha da janela passa da borda do diálogo").toBeLessThanOrEqual(
-      caixaDoDialogo.right,
-    );
     expect(await janela.evaluate((el) => el.scrollWidth - el.clientWidth), "a linha da janela estoura").toBeLessThanOrEqual(
       1,
     );
-    for (const campo of await janela.locator('input[type="time"]').all()) {
-      const sobra = await campo.evaluate((el) => el.scrollWidth - el.clientWidth);
-      expect(sobra, "o campo de hora corta o horário").toBeLessThanOrEqual(0);
-      expect((await medir(campo)).right, "o campo de hora passa da borda do diálogo").toBeLessThanOrEqual(
-        caixaDoDialogo.right,
-      );
-    }
+    expect(
+      (await medir(janela.getByRole("button", { name: "Remover janela" }))).right,
+      "a lixeira passa da borda da linha da janela",
+    ).toBeLessThanOrEqual(caixaDaJanela.right + 1);
+    // NÃO se mede se o horário aparece inteiro DENTRO do campo. A sonda óbvia,
+    // `scrollWidth - clientWidth` no próprio `input[type="time"]`, é morta no
+    // Chromium: medido em 2026-10-23 (Chrome 155, headless), um campo de hora
+    // com 40px de largura e 16px de respiro de cada lado — corte certo — deu
+    // scrollWidth = clientWidth = 36, enquanto o controle, um `type="text"` do
+    // mesmo tamanho com texto comprido, deu 157 contra 36. O conteúdo do campo
+    // de hora mora no shadow DOM do navegador, fora do alcance da página.
     await page.screenshot({ path: path.join(EVIDENCIA, "03-editor-de-horario.png") });
     await dialogo.getByRole("button", { name: "Cancelar" }).tap();
     await expect(dialogo).toBeHidden();
@@ -209,6 +229,10 @@ test.describe("cuidar da equipe pelo celular", () => {
     await page.screenshot({ path: path.join(EVIDENCIA, "04-lgpd.png"), fullPage: true });
 
     // ── 5. Etiquetas: o bloqueio ───────────────────────────────────────────
+    // A tabela de 3 colunas precisa de ~294px (estimativa de leitura, não
+    // medida). Com o `p-6` sem prefixo da página, o Card ficava com 308px por
+    // dentro (390 − 2×16 do <main> − 2×24 da página − 2×1 da borda): ~14px de
+    // folga. Com `md:p-6`, 356px: ~62px.
     await page.goto(`/app/settings/tags?busca=${ETIQUETA}`);
     const etiqueta = page.locator("tbody tr").filter({ hasText: ETIQUETA });
     await expect(etiqueta).toBeVisible({ timeout: 30_000 });
