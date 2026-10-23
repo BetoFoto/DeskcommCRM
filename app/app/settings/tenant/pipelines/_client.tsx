@@ -39,6 +39,7 @@ import {
   OPERADORES_DE_MOSTRA,
   type OperadorDeMostra,
 } from "@/lib/schemas/mostrar-quando";
+import { irAoDesafioDeMfa } from "@/lib/auth/ir-ao-desafio-de-mfa";
 import { CaretDown, Plus, Trash } from "@/lib/ui/icons";
 import { AgentMappingSection, ancoraDoMapeamento } from "./_mapping";
 import { StagesSection, ancoraDasEtapas } from "./_stages";
@@ -761,6 +762,7 @@ function PipelineEditor({
     startTransition(async () => {
       const r = await updatePipelineConfig(pipeline.id, patch);
       if (r.ok) toast.success(`${pipeline.name} ${t("atualizado.")}`);
+      else if (r.error === "mfa_required") irAoDesafioDeMfa();
       else toast.error(`${t("Erro:")} ${r.error}`);
     });
   }
