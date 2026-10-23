@@ -9731,6 +9731,7 @@ isOneToOne: false
           organization_id: string
           path_token: string
           redirect_to: string | null
+          reuse_open_lead_on_capture: boolean
           secret_encrypted: string | null
           update_existing_lead_on_capture: boolean
           updated_at: string
@@ -9753,6 +9754,7 @@ isOneToOne: false
           organization_id: string
           path_token: string
           redirect_to?: string | null
+          reuse_open_lead_on_capture?: boolean
           secret_encrypted?: string | null
           update_existing_lead_on_capture?: boolean
           updated_at?: string
@@ -9775,6 +9777,7 @@ isOneToOne: false
           organization_id?: string
           path_token?: string
           redirect_to?: string | null
+          reuse_open_lead_on_capture?: boolean
           secret_encrypted?: string | null
           update_existing_lead_on_capture?: boolean
           updated_at?: string
