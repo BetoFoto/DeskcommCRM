@@ -130,3 +130,12 @@ describe("Configurações › Segurança — regenerar sem o código desta sess�
     await waitFor(() => expect(irAoDesafioDeMfa).toHaveBeenCalledTimes(1));
   });
 });
+
+describe("Configurações › Segurança — Exigir da equipe no celular (ADR-0006, F4)", () => {
+  it("Nível mínimo e Dias de carência têm 44px de altura abaixo de md", () => {
+    // Contrato de classe: o jsdom não aplica media query, e nenhuma spec mede esta tela.
+    renderTela({ podeExigirDaEquipe: true });
+    expect(screen.getByLabelText("Nível mínimo")).toHaveClass("max-md:min-h-11");
+    expect(screen.getByLabelText("Dias de carência")).toHaveClass("max-md:min-h-11");
+  });
+});

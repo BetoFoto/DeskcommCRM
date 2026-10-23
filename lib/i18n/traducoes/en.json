@@ -8711,7 +8711,7 @@
   "Linhas no corpo": "Lines in the body",
   "atualizada — já vale para os agentes.": "updated — it already applies to the agents.",
   "Editar skill": "Edit skill",
-  "Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na conversa quando uma das palavras-chave aparece na mensagem do cliente.": "Saving creates a new version (the old one stays in the history). The body only enters the conversation when one of the keywords appears in the client's message.",
+  "Salvar cria uma versão nova (a antiga fica no histórico). O corpo só entra na conversa quando uma das palavras-chave aparece na mensagem do cliente, ou quando a conversa ou o contato tem uma das etiquetas de ativação.": "Saving creates a new version (the old one stays in the history). The body only enters the conversation when one of the keywords appears in the client's message, or when the conversation or the contact has one of the activation tags.",
   "Não foi possível carregar a skill.": "Could not load the skill.",
   "Esta skill veio de um pacote com arquivos. Para mudar o texto, edite o pacote e envie o .zip de novo.": "This skill came from a package with files. To change the text, edit the package and upload the .zip again.",
   "Descrição (aparece no índice do agente)": "Description (appears in the agent's index)",
@@ -9125,6 +9125,13 @@
   "Dê um nome ao plano.": "Give the plan a name.",
   "O plano precisa de pelo menos um passo.": "The plan needs at least one step.",
   "Escreva o título de todos os passos.": "Write the title of every step.",
+  "O nome do plano pode ter até {n} caracteres.": "The plan name can have up to {n} characters.",
+  "A descrição do plano pode ter até {n} caracteres.": "The plan description can have up to {n} characters.",
+  "O plano pode ter no máximo {n} passos.": "The plan can have at most {n} steps.",
+  "Cabem no máximo {n} planos por organização.": "An organization can have at most {n} plans.",
+  "O título do passo {p} pode ter até {n} caracteres.": "The title of step {p} can have up to {n} characters.",
+  "A descrição do passo {p} pode ter até {n} caracteres.": "The description of step {p} can have up to {n} characters.",
+  "O prazo do passo {p} precisa ser um número inteiro de dias, de 0 a {n}.": "The due date of step {p} must be a whole number of days, from 0 to {n}.",
   "O que é salvo aqui é o que o editor de regras oferece na ação Aplicar um plano de tarefas.": "What is saved here is what the rule editor offers in the Apply a task plan action.",
   "Aplicar um plano de tarefas ao negócio": "Apply a task plan to the deal",
   "Plano de tarefa": "Task plan",
@@ -9378,5 +9385,9 @@
   "Vai para o WhatsApp cadastrado em Avisos.": "It goes to the WhatsApp number registered under Alerts.",
   "O resumo leva o nome da regra, o cliente, o telefone, o valor, a pontuação e um atalho para o negócio no CRM (quando a instalação tem endereço público). O que foi conversado com o cliente não vai na mensagem.": "The summary carries the rule name, the customer, the phone, the value, the score and a shortcut to the deal in the CRM (when the installation has a public address). What was said in the conversation with the customer is not in the message.",
   "A variável Resumo do negócio leva o nome da regra, o cliente, o telefone, o valor, a pontuação e um atalho para o negócio no CRM (quando a instalação tem endereço público), e nada do que foi conversado com o cliente. O resto do corpo vai como você escrever, inclusive as outras variáveis.": "The Deal summary variable carries the rule name, the customer, the phone, the value, the score and a shortcut to the deal in the CRM (when the installation has a public address), and nothing that was said in the conversation with the customer. The rest of the body goes out as you write it, including the other variables.",
-  "Aplicar regras de atendimento": "Apply service rules"
+  "Aplicar regras de atendimento": "Apply service rules",
+  "Etiquetas de ativação": "Activation tags",
+  "Etiquetas que ativam (opcional)": "Tags that activate it (optional)",
+  "odonto, clínica": "dental, clinic",
+  "Se a conversa ou o contato tiver uma destas etiquetas, a skill entra mesmo sem a palavra-chave.": "If the conversation or the contact has one of these tags, the skill is used even without the keyword."
 }

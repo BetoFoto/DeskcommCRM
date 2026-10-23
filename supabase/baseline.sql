@@ -59060,6 +59060,108 @@ end;$$;
 revoke all on function public.fn_lgpd_anonymize_contact(uuid,uuid) from public,anon,authenticated,service_role;
 grant execute on function public.fn_lgpd_anonymize_contact(uuid,uuid) to authenticated;
 
+-- ---- marca embaralhada de quem foi apagado a pedido; a importação do histórico a consulta (migration 0750, doc 186) ----
+-- Espelho idempotente de supabase/migrations/20261023160005_0750_lgpd_marca_de_apagamento.sql;
+-- o porquê inteiro está no cabeçalho de lá. Fica ACIMA da varredura anon porque cria função.
+--
+-- O PROBLEMA. A anonimização zera o telefone do contato. O WhatsApp do número,
+-- porém, ainda guarda as conversas antigas dessa pessoa, e a importação do
+-- histórico as traria de volta — como contato novo, porque nada no CRM lembra
+-- que aquele número pediu para ser apagado. Apagar a pedido não se desfaz
+-- (403 `lgpd_anonymization_irreversible`); esta função o desfaria calada.
+--
+-- O MECANISMO É O DA PROSPECÇÃO (migration 0370), não um novo: ao apagar, a
+-- prospecção guarda `hmac(telefone, sal)` com um sal aleatório por linha e
+-- recusa recadastrar quem casa. Aqui é igual, numa tabela própria porque o
+-- contato não é candidato de prospecção:
+--   - nada em claro: só o sal e os dois HMACs. Sem o número na mão, a linha não
+--     diz de quem é;
+--   - só o servidor lê: RLS ligada, nenhuma policy, nenhum grant a anon nem a
+--     authenticated. Sal + HMAC ao alcance do navegador seriam reversíveis por
+--     força bruta (o espaço de celulares é pequeno), por isso a marca NÃO mora
+--     numa coluna de `contacts`;
+--   - nasce num gatilho AFTER UPDATE OF is_anonymized, como os outros
+--     consumidores da anonimização (`trg_reply_redact`,
+--     `trg_anonimizar_aviso_de_remetente`). Todo caminho que anonimiza — a
+--     cascata, o passo 1 legado, o store-redact — vira `is_anonymized` e zera o
+--     telefone no MESMO update, então `old` ainda tem o número. Um gatilho
+--     alcança todos sem copiar a cascata de ~650 linhas.
+--
+-- A COMPARAÇÃO É POR VARIANTE (`fn_telefone_variantes`): grava-se o HMAC dos
+-- dígitos como estavam, e a pergunta testa as duas grafias do nono dígito do
+-- número consultado. O lid entra porque a importação também acha conversas que
+-- só têm lid (sem telefone).
+--
+-- O QUE NÃO COBRE: contato anonimizado ANTES desta migration. O telefone dele
+-- já foi zerado e não há de onde tirar a marca — não há backfill possível.
+
+create table if not exists public.lgpd_marcas_de_apagamento (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  sal bytea not null,
+  marca_telefone bytea,
+  marca_lid bytea,
+  created_at timestamptz not null default now(),
+  constraint lgpd_marcas_de_apagamento_alguma_marca
+    check (marca_telefone is not null or marca_lid is not null)
+);
+create index if not exists lgpd_marcas_de_apagamento_org
+  on public.lgpd_marcas_de_apagamento(organization_id);
+alter table public.lgpd_marcas_de_apagamento enable row level security;
+revoke all on public.lgpd_marcas_de_apagamento from public, anon, authenticated, service_role;
+grant select on public.lgpd_marcas_de_apagamento to service_role;
+
+create or replace function public.fn_lgpd_guardar_marca_de_apagamento()
+returns trigger language plpgsql security definer
+set search_path = public, extensions, pg_temp as $$
+declare
+  v_telefone text := nullif(regexp_replace(coalesce(old.phone_number, ''), '\D', '', 'g'), '');
+  v_lid text := old.wa_lid;
+  v_sal bytea;
+begin
+  if v_telefone is null and v_lid is null then
+    return null;
+  end if;
+  v_sal := gen_random_bytes(32);
+  insert into public.lgpd_marcas_de_apagamento (organization_id, sal, marca_telefone, marca_lid)
+  values (
+    new.organization_id,
+    v_sal,
+    case when v_telefone is null then null else hmac(convert_to(v_telefone, 'UTF8'), v_sal, 'sha256') end,
+    case when v_lid is null then null else hmac(convert_to(v_lid, 'UTF8'), v_sal, 'sha256') end
+  );
+  return null;
+end $$;
+revoke execute on function public.fn_lgpd_guardar_marca_de_apagamento() from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_lgpd_guardar_marca_de_apagamento on public.contacts;
+create trigger trg_lgpd_guardar_marca_de_apagamento after update of is_anonymized on public.contacts
+  for each row when (new.is_anonymized and not old.is_anonymized)
+  execute function public.fn_lgpd_guardar_marca_de_apagamento();
+
+-- A pergunta. Invoker (não definer): quem chama é o servidor, que já tem SELECT.
+create or replace function public.fn_titular_apagado_a_pedido(p_org uuid, p_telefone text, p_lid text)
+returns boolean language sql stable
+set search_path = public, extensions, pg_temp as $$
+  select exists (
+    select 1
+      from public.lgpd_marcas_de_apagamento m
+     where m.organization_id = p_org
+       and (
+         (m.marca_telefone is not null and exists (
+            select 1 from unnest(public.fn_telefone_variantes(p_telefone)) as v(digitos)
+             where m.marca_telefone = hmac(convert_to(v.digitos, 'UTF8'), m.sal, 'sha256')))
+         or (m.marca_lid is not null
+             and nullif(regexp_replace(coalesce(p_lid, ''), '@.*$', ''), '') is not null
+             and m.marca_lid = hmac(convert_to(regexp_replace(p_lid, '@.*$', ''), 'UTF8'), m.sal, 'sha256'))
+       )
+  );
+$$;
+revoke execute on function public.fn_titular_apagado_a_pedido(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.fn_titular_apagado_a_pedido(uuid, text, text) to service_role;
+
+notify pgrst, 'reload schema';
+
 -- ---- user_recovery_codes: lida e gravada só pelo servidor (migration 0755) ----
 --
 -- As três ações que escrevem aqui (confirmar o cadastro da verificação em duas
@@ -59083,6 +59185,67 @@ begin
     using (false);
 end
 $$;
+
+-- ---- poder de plataforma exige a sessão confirmada (migration 0757) ----
+--
+-- O ramo `scope = 'full'` das policies de escrita e das funções que perguntam
+-- `fn_is_platform_admin_full()` passa a exigir `aal2` de quem tem fator `totp`
+-- verificado — a régua da 0747 (anonimização) e de `mfaEmDividaEstrita` no app.
+-- Sem fator cadastrado nada muda: a verificação é opcional. Dispositivo
+-- confiável não conta aqui; na organização onde a pessoa é admin quem autoriza
+-- é o papel, não esta função. `create or replace` é idempotente e preserva os
+-- grants; o revoke/grant abaixo só reafirma o que o apêndice já concede.
+create or replace function public.fn_is_platform_admin_full()
+returns boolean language sql stable security definer set search_path=public as $$
+  select exists (
+    select 1 from public.platform_admins pa
+    where pa.user_id = auth.uid() and pa.revoked_at is null and pa.scope = 'full'
+      and (coalesce(auth.jwt()->>'aal','aal1') = 'aal2' or not exists (
+        select 1 from auth.mfa_factors f
+        where f.user_id = pa.user_id and f.factor_type = 'totp' and f.status = 'verified'))
+  );
+$$;
+revoke execute on function public.fn_is_platform_admin_full() from public, anon;
+grant execute on function public.fn_is_platform_admin_full() to authenticated, service_role;
+
+-- `fn_lgpd_anonymize_contact` perguntava `fn_is_platform_admin_full()` no
+-- portão de QUEM pode, e o código de sessão em seguida, com erro próprio
+-- (`contact_anonymize_mfa_required`, 0747). Com a régua de sessão dentro da
+-- `_full`, o admin da plataforma sem o código cairia no `forbidden` e perderia
+-- a resposta que diz "falta o código". O portão passa a ler o `scope = 'full'`
+-- direto — a mesma pergunta que a `_full` fazia antes desta migration —, e a
+-- régua de sessão continua logo abaixo, como na 0747. Corpo igual ao da 0747
+-- fora essa linha.
+create or replace function public.fn_lgpd_anonymize_contact(p_organization_id uuid,p_contact_id uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare c public.contacts; support jsonb; v_quando timestamptz;
+begin
+ support:=public.fn_support_context();
+ if auth.uid() is null or not public.fn_support_write_allowed(p_organization_id)
+  or not (public.fn_role_at_least(p_organization_id,'admin') or (support is null and exists(
+   select 1 from public.platform_admins pa where pa.user_id=auth.uid() and pa.revoked_at is null and pa.scope='full'))) then
+  raise exception 'contact_anonymize_forbidden' using errcode='42501';
+ end if;
+ if not public.fn_session_mfa_proven() then raise exception 'contact_anonymize_mfa_required' using errcode='42501';end if;
+ if not public.fn_role_at_least(p_organization_id,'admin')
+  and coalesce(auth.jwt()->>'aal','aal1')<>'aal2'
+  and exists(select 1 from auth.mfa_factors where user_id=auth.uid() and factor_type='totp' and status='verified') then
+  raise exception 'contact_anonymize_mfa_required' using errcode='42501';
+ end if;
+ perform public.fn_service_lock(p_organization_id,p_contact_id);
+ select * into c from public.contacts where organization_id=p_organization_id and id=p_contact_id for update;
+ if not found then raise exception 'contact_not_found' using errcode='P0002';end if;
+ if c.is_anonymized then return jsonb_build_object('already_anonymized',true,'anonymized_at',c.anonymized_at);end if;
+ -- issue #1504 — a redação em si é da função ÚNICA. Este caminho (o botão) e o
+ -- pedido formal passam por aqui; o portão acima é quem decide QUEM pode
+ -- anonimizar, e nada é escrito por conta próprio neste corpo.
+ perform public.fn_lgpd_cascade_redact_contact(p_organization_id,p_contact_id,null);
+ select anonymized_at into v_quando
+   from public.contacts where organization_id=p_organization_id and id=p_contact_id;
+ return jsonb_build_object('already_anonymized',false,'anonymized_at',v_quando);
+end;$$;
+revoke all on function public.fn_lgpd_anonymize_contact(uuid,uuid) from public,anon,authenticated,service_role;
+grant execute on function public.fn_lgpd_anonymize_contact(uuid,uuid) to authenticated;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

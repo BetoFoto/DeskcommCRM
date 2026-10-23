@@ -41,6 +41,7 @@ import { auxModelArgs, type AuxModelArgs } from './aux-model-args';
 import type { ChannelAdapter, ChannelSendResult } from '../channel-adapter';
 
 import { withFields, type Logger } from '../obs/logger';
+import { etiquetasParaOMatcher } from './etiquetas-do-matcher';
 import {
   criarColetorDeFerramentas,
   envolverFerramentasComTraco,
@@ -733,6 +734,25 @@ export const RESUMO_DO_HANDOFF_POR_ORCAMENTO =
 
 /** Título do item da Central que este handoff abre — rótulo visível, logo constante. */
 export const TITULO_DO_HANDOFF_POR_ORCAMENTO = 'Teto de gasto com IA atingido — assumir a conversa';
+
+/**
+ * Título do item da Central do handoff por SUSPEITA de opt-out (#1713).
+ *
+ * Ele descreve só a ação que existe HOJE, e é o mesmo nos dois caminhos que
+ * chegam aqui (assistido e automático): assumir a conversa e pedir ao cliente a
+ * palavra que a regra reconhece (STOP/PARAR/SAIR sozinha — `ehPalavraIsolada`).
+ *
+ * O título anterior mandava a equipe CONFIRMAR, NO CRM, O BLOQUEIO DO CONTATO —
+ * o produto NÃO oferece essa ação: o único escritor de `contacts.is_blocked` é o
+ * STOP da ingestão (`lib/channels/pos-entrada.ts`), e a ficha do contato só
+ * oferece Desbloquear. O botão de bloqueio manual é a DEC-013, fora desta fatia;
+ * até ela existir, a Central não pode prometer o botão que não está lá.
+ *
+ * Constante, e não literal repetido: os dois pontos de handoff dizem a MESMA
+ * coisa, e a distância entre eles é de ~780 linhas.
+ */
+export const TITULO_DO_HANDOFF_POR_SUSPEITA_DE_OPT_OUT =
+  'Suspeita de opt-out — assumir a conversa e pedir ao cliente a palavra que a regra reconhece';
 
 /**
  * ORÇAMENTO ESGOTADO NÃO PODE VIRAR SILÊNCIO PARA O LEAD.
@@ -1837,7 +1857,7 @@ export async function deteccoesDeterministicasDoAssistido(
       {
         reason: 'suspected_optout',
         conversationSummary: briefing.body,
-        inboxTitle: 'Suspeita de opt-out — confirmar bloqueio do contato no CRM',
+        inboxTitle: TITULO_DO_HANDOFF_POR_SUSPEITA_DE_OPT_OUT,
         passagem: { origem: 'opt_out_provavel', motivoCodigo: 'suspected_optout', briefing },
         avisoAoLead: desfecho,
         log,
@@ -2900,7 +2920,7 @@ async function executarTurnoDoAgente(
       {
         reason: 'suspected_optout',
         conversationSummary: briefing.body,
-        inboxTitle: 'Suspeita de opt-out — confirmar bloqueio do contato no CRM',
+        inboxTitle: TITULO_DO_HANDOFF_POR_SUSPEITA_DE_OPT_OUT,
         passagem: { origem: 'opt_out_provavel', motivoCodigo: 'suspected_optout', briefing },
         avisoAoLead: aviso,
         log: runLog,
@@ -3401,7 +3421,15 @@ async function executarTurnoDoAgente(
   // seguir marcando todo turno seguinte.
   const skillSignal = latestInboundSignal(effectiveContext.messages);
   const sinalDoMatcher = recentInboundSignal(effectiveContext.messages);
-  const skillMatch = matchSkills(skills, sinalDoMatcher);
+  const etiquetasDoTurno = await etiquetasParaOMatcher(
+    pool,
+    tenantId,
+    input.conversationId,
+    skills,
+    preview,
+    runLog,
+  );
+  const skillMatch = matchSkills(skills, sinalDoMatcher, etiquetasDoTurno);
   // Skills que o roteiro puxa neste passo entram JUNTO do match por palavra
   // (o nó `skill` diz "puxe isto aqui"). O match vence o empate por nome.
   const skillsDoRoteiro = (roteiro?.skills ?? [])
