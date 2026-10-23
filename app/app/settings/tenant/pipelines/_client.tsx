@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "@/hooks/i18n/useT";
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -269,15 +270,21 @@ export function PipelinesClient({
 }) {
   const t = useT();
   if (pipelines.length === 0) {
-    // ⚠️ NÃO PROMETA UM CAMINHO QUE NÃO EXISTE. Criar funil não é feito por
-    // nenhuma tela, rota ou action deste produto — só por script de instalação;
-    // e como o instalador não provisiona funil, ESTE é o estado de toda
-    // instalação nova. O texto anterior mandava "crie um no quadro", e o quadro
-    // vazio manda "Ir para Configurações": pingue-pongue fechado, com o usuário
-    // procurando um botão que não existe em lugar nenhum.
+    // ⚠️ NÃO PROMETA UM CAMINHO QUE NÃO EXISTE — nem NEGUE um que existe. Este
+    // texto dizia que criar funil "é feito por quem instalou o sistema, direto
+    // no banco", e isso ficou falso quando a lista de Funis (`/app/kanban`)
+    // ganhou o botão "Novo funil" (POST /api/v1/pipelines, que já cria as
+    // etapas iniciais). Mandar o dono procurar quem instalou, quando o botão
+    // está a um clique, é o mesmo beco sem saída de antes, no sentido inverso.
+    // O link NÃO cita o rótulo do botão: com zero funil vivo a lista mostra
+    // "Criar meu primeiro funil", não "Novo funil".
     return (
-      <Card className="p-6 text-sm leading-relaxed text-muted-foreground">
-        {t("Você ainda não tem nenhum funil. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover. Criar o funil é feito por quem instalou o sistema, direto no banco; depois ele aparece aqui para você escolher a etapa de cada passo.")}
+      <Card className="p-6 text-sm leading-relaxed text-muted-foreground" data-testid="sem-funil-configuracao">
+        {t("Você ainda não tem nenhum funil. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover.")}{" "}
+        <Link href="/app/kanban" className="font-medium text-foreground underline underline-offset-2" data-testid="link-criar-funil">
+          {t("Crie o primeiro na tela Funis")}
+        </Link>
+        {t(": ele já nasce com etapas, e depois aparece aqui para você escolher a etapa de cada passo.")}
       </Card>
     );
   }

@@ -2335,8 +2335,8 @@ export const DICIONARIO: Traducoes = {
   "funis em que ninguém disse ao assistente o que cada etapa significa — ele vai atender e deixar os negócios parados onde estão.": {
     es: "embudos en los que nadie le ha explicado al asistente qué significa cada etapa. Atenderá y dejará los negocios parados donde están.",
   },
-  " Isso se configura em Configurações › Funis.": {
-    es: " Esto se configura en Configuración › Embudos.",
+  "Isso se configura em": {
+    es: "Esto se configura en",
   },
   "As conversas novas viram negócio em": {
     es: "Las conversaciones nuevas se convierten en negocio en",
@@ -7744,8 +7744,14 @@ export const DICIONARIO: Traducoes = {
     es: "La verificación en dos pasos de tu cuenta, los códigos de recuperación y las sesiones abiertas.",
   },
   // ─── Configurações: Funis (etapas + mapeamento do assistente) ───
-  "Você ainda não tem nenhum funil. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover. Criar o funil é feito por quem instalou o sistema, direto no banco; depois ele aparece aqui para você escolher a etapa de cada passo.": {
-    es: "Todavía no tienes ningún embudo. Mientras tanto, el agente atiende con normalidad, pero no puede mover la tarjeta de nadie porque no hay etapas. El embudo lo crea quien instaló el sistema, directamente en la base de datos. Después aparecerá aquí para que elijas la etapa de cada paso.",
+  "Você ainda não tem nenhum funil. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover.": {
+    es: "Todavía no tienes ningún embudo. Mientras tanto, el agente atiende con normalidad, pero no puede mover la tarjeta de nadie porque no hay etapas.",
+  },
+  "Crie o primeiro na tela Funis": {
+    es: "Crea el primero en la pantalla Embudos",
+  },
+  ": ele já nasce com etapas, e depois aparece aqui para você escolher a etapa de cada passo.": {
+    es: ": ya nace con etapas, y después aparece aquí para que elijas la etapa de cada paso.",
   },
   "Custom fields: JSON inválido. Esperado um array.": {
     es: "Custom fields: JSON inválido. Se esperaba un array.",
