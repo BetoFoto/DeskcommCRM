@@ -9115,6 +9115,7 @@
   "Monte a sequência uma vez; a ação Aplicar um plano de tarefas aplica o plano ao negócio.": "Build the sequence once; the Apply a task plan action applies the plan to the deal.",
   "Novo plano": "New plan",
   "Nenhum plano cadastrado ainda.": "No plans registered yet.",
+  "Não foi possível carregar os planos. Para não apagar os que já existem, criar e salvar ficam desativados até a lista carregar.": "Couldn't load the plans. So existing plans aren't erased, creating and saving stay disabled until the list loads.",
   "Nome do plano": "Plan name",
   "Proposta enviada": "Sent proposal",
   "Descrição (opcional)": "Description (optional)",
