@@ -8,6 +8,7 @@ import { useBulkConversations, type AcaoEmLote } from "@/hooks/inbox/useBulkConv
 import { useSelecaoEmLote } from "@/hooks/inbox/useSelecaoEmLote";
 import { estadoDaJanela } from "@/lib/channels/janela";
 import { motivoDaJanelaFechada, motivoDoContato } from "@/lib/inbox/motivo-do-envio-bloqueado";
+import { composerBloqueadoAteAssumir } from "@/lib/inbox/bloqueio-ate-assumir";
 import { JanelaFechadaAviso } from "@/components/inbox/JanelaFechadaAviso";
 import { NumeroForaDoAr } from "@/components/inbox/NumeroForaDoAr";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
@@ -32,6 +33,8 @@ import type { Message as ConversationMensagem } from "@/lib/types/messaging";
 import { InboxKeyboardShortcuts } from "./InboxKeyboardShortcuts";
 
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
+import { EncaminharDialog } from "./EncaminharDialog";
+import { useEncaminharMensagem } from "@/hooks/inbox/useEncaminharMensagem";
 import { OpenConversationProvider } from "@/hooks/notifications/OpenConversationContext";
 // ADR-05: ícone de feature sai do mapa canônico, nunca do pacote direto.
 import { CaretLeft, ChatCircle, IdentificationCard, MagnifyingGlass, X } from "@/lib/ui/icons";
@@ -368,6 +371,12 @@ export function InboxLayout({
    */
   const [respondendo, setRespondendo] = useState<ConversationMensagem | null>(null);
   /**
+   * A mensagem escolhida para ENCAMINHAR (#2835). Irmã do `respondendo`: mora
+   * aqui porque quem escolhe é o fio e quem mostra o destino é o diálogo — o
+   * estado comum é do pai. `null` = diálogo fechado.
+   */
+  const [encaminhando, setEncaminhando] = useState<ConversationMensagem | null>(null);
+  /**
    * O rascunho sugerido (#1611) vale para a conversa da URL e só enquanto ela
    * está aberta: sair dela — clique, atalho ou voltar do navegador — o descarta
    * de vez. Sem isto o texto escrito para um cliente ficava no campo do próximo,
@@ -383,6 +392,7 @@ export function InboxLayout({
     // O histórico do navegador também troca a conversa, sem carregar a página inteira.
     setSelectedId(idNaUrl);
     setRespondendo(null);
+    setEncaminhando(null);
   }, [idNaUrl]);
 
   /**
@@ -512,6 +522,14 @@ export function InboxLayout({
 
   const claim = useClaimConversation();
   const close = useCloseConversation();
+  // Encaminhar (#2835): o gesto que abre a escolha do destino. A execução vira
+  // um POST que reusa o caminho de envio do Inbox (ver o hook).
+  const encaminhar = useEncaminharMensagem();
+  // As conversas já carregadas são o universo de destinos — sem busca nova.
+  const conversasDaLista = useMemo(
+    () => listQ.data?.pages.flatMap((p) => p.data) ?? [],
+    [listQ.data],
+  );
 
   // LOTE (#2484, F1): a seleção múltipla e a barra de ações da Inbox. A
   // permissão de ESCRITA continua sendo a do `usePermission` — quem tem
@@ -559,6 +577,9 @@ export function InboxLayout({
     // Sem isto, escolher "responder" numa conversa e trocar para outra levaria
     // a citação junto — e a resposta sairia citando mensagem de outro cliente.
     setRespondendo(null);
+    // O mesmo vale para o encaminhamento: o destino não pode sobreviver à
+    // troca de conversa.
+    setEncaminhando(null);
     // ?id= é o formato já usado pelos atalhos do CRM. A History API mantém a
     // seleção instantânea sem pedir um novo Server Component a cada clique.
     const params = new URLSearchParams(searchParams.toString());
@@ -990,6 +1011,7 @@ export function InboxLayout({
                 searchTerm={buscaAberta ? busca.termo : ""}
                 provider={selectedConversation.channel_sessions?.provider ?? null}
                 onResponder={setRespondendo}
+                onEncaminhar={setEncaminhando}
                 // O cartão da passagem escolhe o gesto a partir de quem é o dono
                 // da conversa: sem dono convida a assumir, com outro dono diz
                 // quem atende. Sem estes dois campos ele cairia no estado mais
@@ -1029,6 +1051,17 @@ export function InboxLayout({
               blockedReason={supportReadonly ? "Acompanhamento somente leitura" : blockedReason}
               janelaFechada={motivoDaJanela}
               disabled={selectedConversation.status === "closed"}
+              // A CAIXA TRAVADA ATÉ ASSUMIR (#3012) — a opção é da ORGANIZAÇÃO e
+              // chega pela mesma preferência que o menu (`interface_settings` em
+              // `useAuth`). Desligada (o padrão) ninguém vê diferença: com ela
+              // fora, a expressão é `false` em todo estado. Assumir a conversa
+              // muda `assigned_to_user_id` e o compositor libera sozinho, porque
+              // a decisão é recalculada a cada render sobre a conversa atual.
+              aguardandoAssumir={composerBloqueadoAteAssumir({
+                ligada: activeOrg?.interface_settings?.bloquearAteAssumir === true,
+                donoDaConversa: selectedConversation.assigned_to_user_id,
+                atendenteId: user.id,
+              })}
               contactName={selectedConversation.contacts?.name ?? null}
               contactDisplayName={selectedConversation.contacts?.display_name}
               respondendo={respondendo}
@@ -1133,6 +1166,27 @@ export function InboxLayout({
         onToggleHelp={() => setHelpOpen((v) => !v)}
       />
       <ShortcutsHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      <EncaminharDialog
+        open={encaminhando !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) {
+            setEncaminhando(null);
+            // Diálogo fechado, intenção zerada: reabrir depois — outra mensagem
+            // ou até a mesma — tem de poder encaminhar de novo, com chave nova.
+            encaminhar.limparIntencao();
+          }
+        }}
+        conversas={conversasDaLista}
+        conversationIdAtual={selectedConversation?.id ?? null}
+        enviando={encaminhar.isPending}
+        onEscolher={(destino) => {
+          if (!encaminhando) return;
+          encaminhar.mutate(
+            { id: encaminhando.id, conversationIdDestino: destino },
+            { onSuccess: () => setEncaminhando(null) },
+          );
+        }}
+      />
     </div>
     </OpenConversationProvider>
   );
