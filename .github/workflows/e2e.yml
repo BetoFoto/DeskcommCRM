@@ -1470,6 +1470,7 @@ jobs:
       # passo `seed-e2e-catalogo-openrouter` semeia em toda parte comum.
       # Nenhuma cita WAHA, Graph ou webhook.
       SPECS_PARTE_7: >-
+        celular-toque-nos-controles.spec.ts
         agente-novo-e-uso.spec.ts
         capacidades-do-agente.spec.ts
         extensoes-versao.spec.ts
