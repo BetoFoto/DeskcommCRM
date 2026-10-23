@@ -2240,30 +2240,6 @@ url_do_restore() {
   url_do_schema
 }
 
-# Lê uma chave do `.env` que o install-single-server.sh deixou para o Supabase.
-# Vazio (rc 0) quando o arquivo ou a chave não existe: quem chama decide se o
-# vazio é motivo para cair no caminho de sempre.
-valor_do_env_do_supabase() {  # valor_do_env_do_supabase CHAVE → valor cru
-  local arquivo="" linha=""
-  arquivo="$(dir_do_supabase)/.env"
-  [ -f "$arquivo" ] || return 0
-  linha="$(grep -E "^${1:?valor_do_env_do_supabase sem chave}=" "$arquivo" | tail -1 || true)"
-  linha="${linha#*=}"
-  linha="${linha#\"}"; linha="${linha%\"}"
-  linha="${linha#\'}"; linha="${linha%\'}"
-  printf '%s' "$linha"
-}
-
-# Percent-encode dos caracteres que quebram uma connection string URI. A senha
-# do Postgres local vem de um `.env` e não é garantida sem reservados; sem
-# isto, um `:` ou `@` na senha viraria host errado e o psql falharia com um
-# erro que não aponta para o `.env`.
-uri_escapar() {  # uri_escapar <texto> → texto percent-encoded
-  printf '%s' "${1-}" | sed -e 's/%/%25/g' -e 's/:/%3A/g' -e 's|/|%2F|g' \
-    -e 's/@/%40/g' -e 's/#/%23/g' -e 's/?/%3F/g' -e 's/\[/%5B/g' \
-    -e 's/\]/%5D/g' -e 's/ /%20/g'
-}
-
 # psql efêmero via container (não exige psql no host). Usa a conexão de schema:
 # os chamadores mexem em `auth.mfa_factors` e `private.app_secrets`, fora do
 # alcance de uma role de app com grants só em `public`.
