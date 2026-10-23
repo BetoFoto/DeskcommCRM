@@ -845,7 +845,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   }
 
   /**
-   * ── O CONTATO CASADO JÁ TEM CARD ABERTO NESTE FUNIL: A CAPTAÇÃO O REUSA (#3101) ──
+   * ── O CONTATO CASADO JÁ TEM CARD ABERTO NESTE FUNIL: A CAPTAÇÃO O REUSA (#3101, #3357) ──
    *
    * O defeito medido em v1.86.0: a captação criava card NOVO em todo envio sem
    * `external_id`, mesmo quando o contato casado (por telefone ou e-mail) já
@@ -866,13 +866,25 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
    *    o comportamento de hoje não muda um byte — o envio cria o card como
    *    sempre criou. É o critério de aceite da issue: quem nunca ligar não vê
    *    diferença nenhuma;
-   * 2. **só no caminho SEM `external_id`.** Com ele, quem identifica o card é o
-   *    id do envio (`findLeadByExternalId`, acima) e a régua de #2316 continua
-   *    sendo a única — reusar um card aberto ali trocaria a idempotência por
-   *    envio (um lead por `external_id`) por uma atualização inesperada;
+   * 2. **o `external_id` QUE JÁ EXISTE manda** (#3357). Quando o id do envio já
+   *    aponta para um card, quem responde é o `findLeadByExternalId` lá de cima
+   *    e a régua de #2316 continua sendo a única: nem se chega a procurar card
+   *    aberto. O id identifica o card, e é esse card que a atualização alcança —
+   *    reusar OUTRO card ali trocaria a idempotência por envio (um lead por
+   *    `external_id`) por uma atualização inesperada;
    * 3. **o card é o do contato NESTE funil** — escrever por cima do card aberto
    *    em OUTRO funil seria trocar de quadro sem passar pela transferência
    *    (#992), que encerra a origem com motivo próprio.
+   *
+   * O PRIMEIRO envio de um `external_id` INÉDITO é o caso que o #3357 mediu: o id
+   * ainda não aponta para card nenhum, o contato tem o card da conversa aberto no
+   * funil da fonte, e a captação abria um SEGUNDO card — um contato com dois
+   * negócios abertos, o da conversa parado, e os eventos seguintes do mesmo id
+   * mexendo só no card novo. Agora esse card aberto é adotado como qualquer
+   * outro e o `external_id` é CARIMBADO nele (o bloco abaixo): daí em diante o id
+   * aponta para o card que a equipe já está tocando, os envios seguintes caem no
+   * fast-path do #2316 e a idempotência por id continua valendo. Sem o carimbo o
+   * próximo evento abriria o segundo card de novo, um turno depois.
    *
    * Ligar a opção exige assinatura configurada na fonte — a mesma régua da
    * opção irmã (`lib/webhooks/assinatura-autorizacao.ts`), conferida no PATCH.
@@ -886,73 +898,113 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
    * 0683 já aceita no CHECK —, e a linha de captação sai com o vínculo do lead e
    * do contato: é ela que o gatilho de anonimização alcança.
    */
-  if (!externalId) {
-    const cardAberto = await cardAbertoQueACaptacaoReusa(admin, {
-      opcaoDaFonteLigada: Boolean(source.reuse_open_lead_on_capture),
-      organizationId: source.organization_id as string,
-      contactId: contactId ?? null,
-      pipelineId: source.default_pipeline_id as string,
-    });
-    if (cardAberto) {
-      // Só o que MUDOU vai para o card — a MESMA comparação do reenvio (#2316).
-      // O objeto inteiro desfaria a correção que a equipe fez à mão num campo
-      // que este envio nem trouxe.
-      const campos = camposQueMudaram(cardAberto.custom_fields, mapped.custom_fields);
-      // O título segue a régua da opção irmã: escrito só quando o nome do envio
-      // difere do que o card tem, e nunca no Respondi, que tem formato próprio
-      // de título ("Empresa — Nome", `respondiLeadTitle`) — compará-lo com o nome
-      // reescreveria o título a cada envio.
-      const tituloMudou = !respondiMapped && !!mapped.name && mapped.name !== cardAberto.title;
-      // A etapa é a MESMA em que o card novo nasceria (`default_stage_id`), e só
-      // para a FRENTE: a etapa da fonte é fixa e chega em todo envio, e um card
-      // que a equipe já levou adiante não pode voltar para o começo do funil.
-      const etapaDestino = await etapaAlvoDoEnvio(
-        admin,
-        source.organization_id as string,
-        source.default_pipeline_id as string,
-        cardAberto.stage_id,
-        source.default_stage_id as string | null,
-      );
-      const ctxDoCard: HandlerCtx = {
-        organization_id: source.organization_id,
-        actor: { type: "webhook_source", id: source.id },
-        requestId,
-      };
-      try {
-        if (Object.keys(campos).length > 0 || tituloMudou) {
-          await updateLeadHandler(admin, ctxDoCard, cardAberto.id, {
-            ...(tituloMudou && mapped.name ? { title: mapped.name } : {}),
-            ...(Object.keys(campos).length > 0 ? { custom_fields: campos } : {}),
-          });
-        }
-        if (etapaDestino) {
-          await moveLeadHandler(admin, ctxDoCard, cardAberto.id, { to_stage_id: etapaDestino });
-        }
-      } catch (err) {
-        // O card JÁ existe e o envio veio de uma ferramenta que reenvia: a
-        // recusa do UPDATE (régua de campos, contato de pessoal, etapa que o
-        // funil não deixa) transformaria o card num loop de retry de quem
-        // integra sem que o dado novo chegasse. Mesma régua do reenvio (#2316):
-        // o que não pôde ser aplicado fica no log, e `registrarCaptacao` não
-        // lança — a linha sai de qualquer jeito, com o vínculo.
-        logger.error("[webhooks.in] captação que reusa o card aberto não pôde atualizá-lo", {
+  const cardAberto = await cardAbertoQueACaptacaoReusa(admin, {
+    opcaoDaFonteLigada: Boolean(source.reuse_open_lead_on_capture),
+    organizationId: source.organization_id as string,
+    contactId: contactId ?? null,
+    pipelineId: source.default_pipeline_id as string,
+  });
+  if (cardAberto) {
+    /**
+     * O `external_id` DO ENVIO VAI PARA O CARD ADOTADO (#3357).
+     *
+     * Só se chega aqui com id INÉDITO: o `findLeadByExternalId` da linha de cima
+     * já respondeu `null` para este id, e é este o PRIMEIRO envio que o traz. Sem
+     * o carimbo, o card adotado ficaria sem identidade de integração e o evento
+     * seguinte — o mesmo id — abriria o SEGUNDO card que a issue mediu: o card
+     * da conversa parado ao lado do card do teste, um contato com dois negócios
+     * abertos no mesmo funil.
+     *
+     * Carimbado, o vínculo fica igual ao de um card criado por esta rota: o
+     * próximo envio cai no fast-path do #2316 e ATUALIZA este card em vez de
+     * abrir outro. O desfecho deste envio não muda (`atualizado`).
+     *
+     * Compare-and-set (`.is("external_id", null)`): o card que JÁ responde por
+     * outro id não é reescrito. Dois ids para o mesmo contato são dois cards por
+     * desenho (#2316) — o id é que identifica o card —, e trocar a identidade de
+     * um deles faria o retry DO OUTRO abrir um terceiro card.
+     *
+     * Falha aqui é tolerada, como nas demais bordas desta rota: o card já está
+     * adotado e o dado do envio entra nele logo abaixo. O que se perde, e só no
+     * caso do índice único recusar (outra requisição carimbou primeiro), é a
+     * idempotência DESTE id — o próximo envio casa no card do vencedor. Derrubar
+     * a captação por causa do carimbo seria pior que perdê-lo.
+     */
+    if (externalId) {
+      const { error: erroDoCarimbo } = await admin
+        .from("crm_leads")
+        .update({ external_id: externalId, webhook_source_id: source.id })
+        .eq("organization_id", source.organization_id)
+        .eq("id", cardAberto.id)
+        .is("external_id", null);
+      if (erroDoCarimbo) {
+        logger.error("[webhooks.in] external_id do envio não pôde ser carimbado no card adotado", {
           organizationId: source.organization_id,
           webhookSourceId: source.id,
           leadId: cardAberto.id,
           requestId,
-          error: err instanceof Error ? err.message : String(err),
+          error: erroDoCarimbo.message,
         });
       }
-      await registrarCaptacao(admin, {
-        ...fonteDaCaptacao,
-        ...origemDaCaptacao,
-        ...dadosDaCaptacao,
-        leadId: cardAberto.id,
-        contactId: contactId ?? cardAberto.contact_id,
-        outcome: "atualizado",
-      });
-      return respondWithLead(cardAberto.id);
     }
+    // Só o que MUDOU vai para o card — a MESMA comparação do reenvio (#2316).
+    // O objeto inteiro desfaria a correção que a equipe fez à mão num campo
+    // que este envio nem trouxe.
+    const campos = camposQueMudaram(cardAberto.custom_fields, mapped.custom_fields);
+    // O título segue a régua da opção irmã: escrito só quando o nome do envio
+    // difere do que o card tem, e nunca no Respondi, que tem formato próprio
+    // de título ("Empresa — Nome", `respondiLeadTitle`) — compará-lo com o nome
+    // reescreveria o título a cada envio.
+    const tituloMudou = !respondiMapped && !!mapped.name && mapped.name !== cardAberto.title;
+    // A etapa é a MESMA em que o card novo nasceria (`default_stage_id`), e só
+    // para a FRENTE: a etapa da fonte é fixa e chega em todo envio, e um card
+    // que a equipe já levou adiante não pode voltar para o começo do funil.
+    const etapaDestino = await etapaAlvoDoEnvio(
+      admin,
+      source.organization_id as string,
+      source.default_pipeline_id as string,
+      cardAberto.stage_id,
+      source.default_stage_id as string | null,
+    );
+    const ctxDoCard: HandlerCtx = {
+      organization_id: source.organization_id,
+      actor: { type: "webhook_source", id: source.id },
+      requestId,
+    };
+    try {
+      if (Object.keys(campos).length > 0 || tituloMudou) {
+        await updateLeadHandler(admin, ctxDoCard, cardAberto.id, {
+          ...(tituloMudou && mapped.name ? { title: mapped.name } : {}),
+          ...(Object.keys(campos).length > 0 ? { custom_fields: campos } : {}),
+        });
+      }
+      if (etapaDestino) {
+        await moveLeadHandler(admin, ctxDoCard, cardAberto.id, { to_stage_id: etapaDestino });
+      }
+    } catch (err) {
+      // O card JÁ existe e o envio veio de uma ferramenta que reenvia: a
+      // recusa do UPDATE (régua de campos, contato de pessoal, etapa que o
+      // funil não deixa) transformaria o card num loop de retry de quem
+      // integra sem que o dado novo chegasse. Mesma régua do reenvio (#2316):
+      // o que não pôde ser aplicado fica no log, e `registrarCaptacao` não
+      // lança — a linha sai de qualquer jeito, com o vínculo.
+      logger.error("[webhooks.in] captação que reusa o card aberto não pôde atualizá-lo", {
+        organizationId: source.organization_id,
+        webhookSourceId: source.id,
+        leadId: cardAberto.id,
+        requestId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    await registrarCaptacao(admin, {
+      ...fonteDaCaptacao,
+      ...origemDaCaptacao,
+      ...dadosDaCaptacao,
+      leadId: cardAberto.id,
+      contactId: contactId ?? cardAberto.contact_id,
+      outcome: "atualizado",
+    });
+    return respondWithLead(cardAberto.id);
   }
 
   const leadInput: CreateLeadInput & {
