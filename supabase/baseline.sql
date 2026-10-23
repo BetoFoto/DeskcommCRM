@@ -58053,11 +58053,11 @@ begin
   end;
 end; $$;
 
--- ---- publicar membro de roteador sem número próprio (migration 0741, #3284) ----
+-- ---- publicar membro de roteador sem número próprio (migration 0749, #3284) ----
 -- Substitui o corpo do bloco da 0592 acima (a última definição vence). Mesma
 -- definição da migration, byte a byte.
 -- ============================================================================
--- 2026-10-22 — 0741: PUBLICAR MEMBRO DE ROTEADOR SEM NÚMERO PRÓPRIO
+-- 2026-10-22 — 0749: PUBLICAR MEMBRO DE ROTEADOR SEM NÚMERO PRÓPRIO
 --
 -- O defeito: o editor de um especialista que é membro de um roteador de
 -- intenções avisava que "o campo de número não se aplica", mas o botão

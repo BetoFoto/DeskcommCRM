@@ -1,6 +1,6 @@
 -- manifest: Especialista de roteador publica sem número próprio quando roteador e canal são da mesma organização e o canal está WORKING (#3284, de @lucivan212). Agente comum segue exigindo número.
 -- ============================================================================
--- 2026-10-22 — 0741: PUBLICAR MEMBRO DE ROTEADOR SEM NÚMERO PRÓPRIO
+-- 2026-10-22 — 0749: PUBLICAR MEMBRO DE ROTEADOR SEM NÚMERO PRÓPRIO
 --
 -- O defeito: o editor de um especialista que é membro de um roteador de
 -- intenções avisava que "o campo de número não se aplica", mas o botão
