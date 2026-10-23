@@ -14492,6 +14492,8 @@ export const DICIONARIO: Traducoes = {
   "Remover o destinatário dos avisos?": { es: "¿Eliminar el destinatario de los avisos?" },
   "A configuração de avisos é apagada e este número volta a ser um número comum: o que ele mandar passa a virar atendimento no Inbox. O histórico de entregas desta tela continua aqui.":
     { es: "Se borra la configuración de avisos y este número vuelve a ser un número común: lo que envíe pasará a convertirse en una atención en el Inbox. El historial de envíos de esta pantalla sigue aquí." },
+  "Também param de sair, até você cadastrar um número de novo: os avisos da Agenda que usam o mesmo número dos casos e as automações com a ação \"Mensagem para a equipe\".":
+    { es: "También dejan de enviarse, hasta que registres un número de nuevo: los avisos de la Agenda que usan el mismo número de los casos y las automatizaciones con la acción «Mensaje para el equipo»." },
   "Diferente de desligar os avisos: aqui o número sai da configuração e volta a entrar no Inbox.":
     { es: "A diferencia de desactivar los avisos: aquí el número sale de la configuración y vuelve a entrar en el Inbox." },
   "Removendo…": { es: "Eliminando…" },

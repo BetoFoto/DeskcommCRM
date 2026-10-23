@@ -294,6 +294,10 @@ describe("a remoção do destinatário (issue #3338)", () => {
 
     const bloco = screen.getByTestId("confirmar-remocao");
     expect(bloco.textContent).toContain("volta a ser um número comum");
+    // A configuração apagada também é lida pela Agenda e pela ação "Mensagem
+    // para a equipe": a confirmação tem de dizer que esses envios param junto.
+    expect(bloco.textContent).toContain("Agenda");
+    expect(bloco.textContent).toContain("Mensagem para a equipe");
     expect(screen.getByRole("button", { name: "Manter" })).toBeInTheDocument();
 
     // Desistir fecha a pergunta e não é remoção nenhuma.

@@ -418,6 +418,11 @@ function FormularioDoAviso({ estado }: { estado: EstadoDoAviso }) {
                 "A configuração de avisos é apagada e este número volta a ser um número comum: o que ele mandar passa a virar atendimento no Inbox. O histórico de entregas desta tela continua aqui.",
               )}
             </p>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "Também param de sair, até você cadastrar um número de novo: os avisos da Agenda que usam o mesmo número dos casos e as automações com a ação \"Mensagem para a equipe\".",
+              )}
+            </p>
             <div className="flex gap-2">
               <Button
                 variant="destructive"
