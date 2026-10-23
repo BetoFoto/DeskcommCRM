@@ -17253,6 +17253,14 @@ export const DICIONARIO: Traducoes = {
     es: "No se pudo cargar la evolución de las ganancias.",
   },
   "Série cortada no teto de leitura.": { es: "Serie cortada en el límite de lectura." },
+
+  // Últimas compras do contato (#3179, PR #3242).
+  "Últimas compras": { es: "Últimas compras" },
+  "Não consegui ler as compras.": { es: "No pude leer las compras." },
+  "Ganho em {data}": { es: "Ganado el {data}" },
+  "Escolha até {max} campos do negócio para aparecerem em cada compra do contato. Sem escolha, a seção mostra a data do ganho, o título e o valor.": {
+    es: "Elige hasta {max} campos del negocio para que aparezcan en cada compra del contacto. Sin elección, la sección muestra la fecha en que se ganó, el título y el valor.",
+  },
 };
 
 /**
