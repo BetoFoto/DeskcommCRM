@@ -12584,9 +12584,9 @@ create policy channel_sessions_tenant_select on public.channel_sessions
   );
 
 drop policy if exists channel_sessions_tenant_write on public.channel_sessions;
--- A escrita não é mais criada aqui: a migration 0707 (#3202) a divide em
+-- A escrita não é mais criada aqui: a migration 0752 (#3202) a divide em
 -- insert/update/delete no fim do arquivo. Recriá-la aqui fazia a regra `for all`
--- voltar a valer entre esta linha e o apêndice da 0707 (numa re-aplicação pelo
+-- voltar a valer entre esta linha e o apêndice da 0752 (numa re-aplicação pelo
 -- update.sh, somada às novas).
 
 -- ---- agentes de IA ----
@@ -61097,7 +61097,7 @@ comment on column public.campaigns.provider_template_variables is
 -- O ack pelos carimbos de entrega e leitura (`fn_campanha_sincroniza_ack`) já
 -- vem do bloco da #2937: esta migration não o redefine.
 
--- ---- #3202: channel_sessions — a regra de escrita deixa de valer para a leitura (migration 0707) ----
+-- ---- #3202: channel_sessions — a regra de escrita deixa de valer para a leitura (migration 0752) ----
 -- `for all` também vale para SELECT: fn_role_at_least (~4 ms) rodava por linha em todo embed de channel_sessions.
 drop policy if exists channel_sessions_tenant_write on public.channel_sessions;
 drop policy if exists channel_sessions_tenant_insert on public.channel_sessions;
