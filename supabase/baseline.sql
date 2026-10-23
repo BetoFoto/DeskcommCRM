@@ -59084,6 +59084,28 @@ begin
 end
 $$;
 
+-- ---- poder de plataforma exige a sessão confirmada (migration 0757) ----
+--
+-- O ramo `scope = 'full'` das policies de escrita e das funções que perguntam
+-- `fn_is_platform_admin_full()` passa a exigir `aal2` de quem tem fator `totp`
+-- verificado — a régua da 0747 (anonimização) e de `mfaEmDividaEstrita` no app.
+-- Sem fator cadastrado nada muda: a verificação é opcional. Dispositivo
+-- confiável não conta aqui; na organização onde a pessoa é admin quem autoriza
+-- é o papel, não esta função. `create or replace` é idempotente e preserva os
+-- grants; o revoke/grant abaixo só reafirma o que o apêndice já concede.
+create or replace function public.fn_is_platform_admin_full()
+returns boolean language sql stable security definer set search_path=public as $$
+  select exists (
+    select 1 from public.platform_admins pa
+    where pa.user_id = auth.uid() and pa.revoked_at is null and pa.scope = 'full'
+      and (coalesce(auth.jwt()->>'aal','aal1') = 'aal2' or not exists (
+        select 1 from auth.mfa_factors f
+        where f.user_id = pa.user_id and f.factor_type = 'totp' and f.status = 'verified'))
+  );
+$$;
+revoke execute on function public.fn_is_platform_admin_full() from public, anon;
+grant execute on function public.fn_is_platform_admin_full() to authenticated, service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
