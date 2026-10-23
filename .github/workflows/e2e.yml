@@ -1471,6 +1471,7 @@ jobs:
         celular-toque-nos-controles.spec.ts
         agente-novo-e-uso.spec.ts
         capacidades-do-agente.spec.ts
+        equipe-no-celular.spec.ts
         extensoes-versao.spec.ts
         ia-no-celular.spec.ts
         prova-painel-provedores.spec.ts
