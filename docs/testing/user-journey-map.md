@@ -1600,6 +1600,17 @@ Spec: `tests/e2e/inbox-selecionada-no-escuro.spec.ts`.
 | J47.2 | A classe da selecionada | `bg-accent-soft`, nenhum degrau fixo `bg-accent-50…950`; a não selecionada não ganha o fundo | **PASS (unit)** — `tests/unit/selecionada-legivel-no-escuro.test.tsx` |
 | J47.3 | Tema escuro, conversa aberta E marcada no lote, com o mouse ou o foco de teclado | a linha fica num tom só (o botão não pinta por cima do fundo da linha), o foco aparece como anel, e o nome e a prévia seguem com contraste ≥ 4,5 contra o fundo efetivo | **PASS pela tela** — Evidência: `evidence/inbox-selecionada-no-escuro/02-aberta-e-marcada-com-foco.png` |
 
+## J51 — Ver os contatos no celular `[P1]` (2026-10-21)
+
+ADR-0006, fase F3. Abaixo de `md` a tabela de Contatos vira um cartão por linha,
+só com classes `max-md:` (o DOM é o mesmo do computador). Spec:
+`tests/e2e/contatos-em-cartao-no-celular.spec.ts` (parte 6), 390×844 com toque
+emulado, login `agent`.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J51.1 | Lista a 390px, selecionar e abrir | nem a página nem a caixa da tabela rolam para o lado; cabeçalho `display:none`; cartões entre 15 e 375px; nome, conversa, editar e excluir ≥ 44px; a caixa pega o toque a 20px do centro; «Selecionar todos os contatos visíveis» marca as linhas e abre a barra de lote; o nome abre a ficha; a 1280px volta a tabela sem o botão | a medir (CI) + UNIT `app/app/contacts/_client.test.tsx` |
+
 ## J48 — Instalar o app no celular e ser avisado `[P0]` (2026-10-20)
 
 Contexto: ADR-0006, fase F1 ("Instala e avisa"). O app do atendente no celular é

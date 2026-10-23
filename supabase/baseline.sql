@@ -58053,6 +58053,28 @@ begin
   end;
 end; $$;
 
+-- ---- o endereço do servidor aceita sublinhado (migration 0669, issue #2804) ----
+-- A CHECK `platform_smtp_settings_host` recusava `_`, e o `.env` sempre aceitou:
+-- quem roda um relé na própria VPS em Docker (`meu_relay`,
+-- `supabase_inbucket_…`) apontava o CRM para o contêiner e recebia a mensagem
+-- crua do Postgres na tela. O que não é nome de máquina — espaço, barra,
+-- `http://` — segue recusado.
+--
+-- Drop e add JUNTOS, no mesmo bloco: o `update.sh` roda sem `ON_ERROR_STOP`, e
+-- a versão que soltasse a constraint para recriá-la em seguida deixaria uma
+-- janela sem validação se a atualização morresse no meio. Idempotente: reaplicar
+-- derruba e recria a mesma constraint.
+
+do $constraint$
+begin
+  alter table public.platform_smtp_settings
+    drop constraint if exists platform_smtp_settings_host;
+  alter table public.platform_smtp_settings
+    add constraint platform_smtp_settings_host
+    check (smtp_host is null or smtp_host ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$');
+end
+$constraint$;
+
 -- ---- marca embaralhada de quem foi apagado a pedido; a importação do histórico a consulta (migration 0750, doc 186) ----
 -- Espelho idempotente de supabase/migrations/20261023160005_0750_lgpd_marca_de_apagamento.sql;
 -- o porquê inteiro está no cabeçalho de lá. Fica ACIMA da varredura anon porque cria função.
@@ -61112,6 +61134,11 @@ alter table public.webhook_sources
 
 comment on column public.webhook_sources.reuse_open_lead_on_capture is
   'Opção da fonte (issue #3101), DESLIGADA por padrão: quando um envio NÃO traz external_id e o contato casado já tem card ABERTO no mesmo funil, o card é atualizado (campos e etapa da fonte, só para a frente) em vez de a captação abrir outro. Só liga em fonte com assinatura configurada, como a opção irmã. O desfecho da linha de captação é `atualizado`. Desligada, cada envio continua virando um card novo, como sempre.';
+
+-- ---- teto do adiamento da reconexão (migration 0738) ----
+-- manifest: prospecting_campaigns.channel_down_since — desde quando a campanha espera o canal voltar ao `WORKING`. Sem ele o adiamento da reconexão (#3073) não tem TETO: uma sessão presa fora de `WORKING` deixa a campanha "Ativa" sem enviar e sem aviso (STARTING não gera aviso de saúde). Com a coluna, o tick pausa quando a espera passa de TETO_DO_ADIAMENTO_MS; nulo = a campanha não está esperando.
+alter table public.prospecting_campaigns
+  add column if not exists channel_down_since timestamptz;
 
 notify pgrst, 'reload schema';
 
