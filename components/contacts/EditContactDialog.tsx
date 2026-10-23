@@ -4,7 +4,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
-import { perfilDoPais } from "@/lib/legal/perfil-do-pais";
+import { PAIS_PADRAO, perfilDoPais } from "@/lib/legal/perfil-do-pais";
 import {
   Dialog,
   DialogContent,
@@ -187,7 +187,11 @@ export function EditContactDialog({
             <Input id="ec-email" type="email" {...form.register("email")} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ec-phone">{t("Telefone (E.164)")}</Label>
+            <Label htmlFor="ec-phone">
+              {perfil.codigo === PAIS_PADRAO
+                ? t("Telefone (DDD + número)")
+                : t("Telefone (E.164)")}
+            </Label>
             <Input id="ec-phone" {...form.register("phone_number")} />
           </div>
           <div className="space-y-2">
