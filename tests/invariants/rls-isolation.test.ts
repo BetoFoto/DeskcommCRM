@@ -631,6 +631,18 @@ beforeAll(() => {
           perform public.fn_automation_rodizio_atribuir(v_org, v_regra,
             (select id from public.crm_leads where organization_id = v_org limit 1));
         end if;
+
+        -- migration 0721 (#2869): o traco do turno do agente. Semeado pelo
+        -- harness (service_role) com a chave da PREVIA: a linha de turno real
+        -- exige job_id, e um job de verdade nao cabe numa semente que roda
+        -- duas vezes. A leitura e org-scoped sem gate de papel -- o agent
+        -- semeado e controle positivo legitimo (quem investiga o turno na tela
+        -- e a equipe) --, e a escrita e so do motor: a sessao tem so select.
+        if not exists (select 1 from public.agent_turn_traces where organization_id = v_org) then
+          insert into public.agent_turn_traces
+            (organization_id, preview_run_id, conversation_id, contact_id, is_dry_run, status, messages_sent)
+          values (v_org, 'rls-invariant-' || v_org::text, v_conv, v_contact, true, 'completed', 0);
+        end if;
       end loop;
     end
     $seed$;
@@ -817,6 +829,13 @@ export const TABLES = [
   // só a função `fn_automation_rodizio_atribuir`, com service_role, grava. Esse
   // segundo eixo é medido em rodizio-da-acao-atribuir.test.ts.
   "automation_rodizio_atribuicoes",
+  // migration 0721 (#2869) — o traço do turno do agente: o que aconteceu numa
+  // execução (ferramentas chamadas, skills ativadas, custo, erro). Vazar a linha
+  // entrega ao vizinho o texto do erro e os ids das fontes de conhecimento do
+  // outro. A LEITURA é org-scoped sem gate de papel (o `agent` semeado é
+  // controle positivo legítimo: quem investiga o turno é a equipe); a ESCRITA é
+  // só do motor, e `authenticated` tem só `select` (o molde da 0692).
+  "agent_turn_traces",
   // migration 0730 (#3025, fatia 1) — a meta mensal da empresa por indicador.
   // Vazar a linha entrega ao vizinho o alvo que a outra empresa combinou com o
   // time e o percentual que ela persegue: é o número pelo qual o dono cobra o

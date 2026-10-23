@@ -5,7 +5,7 @@
  *
  * ─── O que esta action resolve ──────────────────────────────────────────────
  * A tela de Desempenho só mostrava o realizado. O alvo existia na cabeça de
- * quem cobra o time: aqui ele passa a ser LINHA (`crm_metas`, migration 0751),
+ * quem cobra o time: aqui ele passa a ser LINHA (`crm_metas`, migration 0756),
  * com mês, indicador e alvo — e a leitura do progresso vira conta, não memória.
  *
  * ─── Quem escreve, e por quê ────────────────────────────────────────────────
