@@ -1283,6 +1283,9 @@ export const AUDIT_ACTIONS = [
   // papel — nunca o texto do papel, que é livre.
   "lead.participant_added",
   "lead.participant_removed",
+  // Anexos de negócios / leads (#2829): upload e remoção de arquivo em campo customizado
+  "lead.attachment_uploaded",
+  "lead.attachment_deleted",
   // A REMOÇÃO do destinatário dos avisos de caso (issue #3338) —
   // `DELETE /api/v1/ai/cases/alerta`. Código próprio, e não
   // `ai.case_alert_settings_changed` com um campo no metadata: a pergunta que

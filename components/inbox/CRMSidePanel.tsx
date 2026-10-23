@@ -638,6 +638,7 @@ function CamposDoFunil({
         value={customFields}
         onChange={setCustomFields}
         mode="lead"
+        leadId={leadId}
         className="gap-3 md:grid-cols-1"
       />
       <Button

@@ -204,6 +204,7 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
               value={customFields}
               onChange={setCustomFields}
               mode="lead"
+              leadId={lead.id}
             />
           </div>
         )}
