@@ -1,8 +1,9 @@
 /**
  * AS TELAS DA INSTALAÇÃO EM `/app` LEVAM AO CÓDIGO ANTES DE ABRIR (#3200).
  *
- * As ações de Extensões e do Servidor MCP externo usam a régua ESTRITA
- * (`regraPlatformAdmin` → `mfaEmDividaEstrita`): só o código provado nesta
+ * As ações de Extensões, do Servidor MCP externo e da Atualização do sistema
+ * usam a régua ESTRITA (`regraPlatformAdmin` / `requirePlatformAdminEscrita` →
+ * `mfaEmDividaEstrita`): só o código provado nesta
  * sessão vale. A casca de `/app` usa a branda, que aceita o dispositivo
  * confiável. Sem uma checagem na própria página, o dono da instalação (admin da
  * própria empresa) que entrou pelo dispositivo confiável abria a tela e recebia
@@ -55,11 +56,15 @@ vi.mock("@supabase/ssr", async (importOriginal) => ({
   }),
 }));
 vi.mock("next/navigation", () => ({
+  notFound: () => {
+    throw new Error("NOT_FOUND");
+  },
   redirect: (d: string) => {
     throw Object.assign(new Error(`REDIRECT:${d}`), { digest: `NEXT_REDIRECT;replace;${d};307;` });
   },
 }));
 vi.mock("@/components/extensions/ExtensionsManager", () => ({ ExtensionsManager: () => null }));
+vi.mock("@/app/app/settings/atualizacao/_components/UpdatePanel", () => ({ UpdatePanel: () => null }));
 
 /**
  * A sessão do dono com fator cadastrado. `aal1` + `confiada` = entrou pelo
@@ -90,6 +95,12 @@ async function servidorMcp() {
   return Pagina();
 }
 
+async function atualizacao() {
+  h.caminho = "/app/settings/atualizacao";
+  const { default: Pagina } = await import("@/app/app/settings/atualizacao/page");
+  return Pagina();
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   h.plataforma = true;
@@ -107,6 +118,13 @@ describe("dono da instalação que entrou pelo dispositivo confiável", () => {
       "REDIRECT:/login/mfa?next=%2Fapp%2Fsettings%2Fservidor-mcp-externo",
     );
   });
+
+  it("Atualização do sistema leva ao código, de volta para a própria tela", async () => {
+    sessao("aal1");
+    await expect(atualizacao()).rejects.toThrow(
+      "REDIRECT:/login/mfa?next=%2Fapp%2Fsettings%2Fatualizacao",
+    );
+  });
 });
 
 describe("controles: quem não deve ir ao código abre a tela", () => {
@@ -114,11 +132,14 @@ describe("controles: quem não deve ir ao código abre a tela", () => {
     sessao("aal2");
     await expect(extensoes()).resolves.toBeTruthy();
     await expect(servidorMcp()).resolves.toBeTruthy();
+    await expect(atualizacao()).resolves.toBeTruthy();
   });
 
   it("quem não é dono da instalação, no dispositivo confiável (as ações dele não usam a régua estrita)", async () => {
     h.plataforma = false;
     sessao("aal1");
     await expect(extensoes()).resolves.toBeTruthy();
+    // A Atualização não existe para ele: some (404), em vez de pedir um código.
+    await expect(atualizacao()).rejects.toThrow("NOT_FOUND");
   });
 });
