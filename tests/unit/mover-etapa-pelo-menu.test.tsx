@@ -35,6 +35,8 @@ vi.mock("@hello-pangea/dnd", () => ({
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (texto: string) => texto }));
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   usePermission: (chave: string) => chave === "pipeline.move_card" && papel.podeMover,
+  // A janela de campos obrigatórios lê a moeda da organização (sem org: a moeda padrão).
+  useMoedaDaOrgAtiva: () => null,
 }));
 vi.mock("@/hooks/inbox/useAssignableMembers", () => ({ useAssignableMembers: () => ({ data: [] }) }));
 vi.mock("@/hooks/kanban/useAssignableAgents", () => ({ useAssignableAgents: () => ({ data: [] }) }));
