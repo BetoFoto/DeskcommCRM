@@ -305,35 +305,6 @@ export function KanbanBoard({
     [data, grouped, moverPara, qc, pipelineId],
   );
 
-  // Mudar a etapa pelo dossiê: o MESMO `moveCard` do arrasto (campos
-  // obrigatórios, trava de `updated_at`, atividade e evento iguais). O card vai
-  // para o TOPO da etapa de destino — quem acabou de mover quer achá-lo ali. O
-  // "primeiro" sai do funil INTEIRO em cache, não da lista filtrada (mesmo
-  // motivo do arrasto, #2545).
-  const moverPeloDossie = useCallback(
-    (lead: Lead, stageId: string) => {
-      const etapaInteira =
-        qc
-          .getQueryData<BoardData>(chaveDoQuadro(pipelineId))
-          ?.leads.filter((l) => l.stage_id === stageId && l.id !== lead.id) ??
-        data?.leads.filter((l) => l.stage_id === stageId && l.id !== lead.id) ??
-        [];
-      const primeiro = etapaInteira.reduce<Lead | null>(
-        (menor, l) => (menor === null || l.position_in_stage < menor.position_in_stage ? l : menor),
-        null,
-      );
-      const posicao = midpoint(null, primeiro?.position_in_stage ?? null);
-      if (Number.isNaN(posicao)) return;
-      moveCard.mutate({
-        leadId: lead.id,
-        stageId,
-        positionInStage: posicao,
-        expectedUpdatedAt: lead.updated_at,
-      });
-    },
-    [data, moveCard, qc, pipelineId],
-  );
-
   if (isLoading) {
     return <BoardSkeleton />;
   }
@@ -428,7 +399,7 @@ export function KanbanBoard({
           }
           ownerNames={ownerNames}
           etapas={data.stages}
-          onMudarEtapa={(stageId) => moverPeloDossie(leadDoDossie, stageId)}
+          onMudarEtapa={(stageId) => aoMoverPelaLista(leadDoDossie, stageId)}
         />
       )}
 

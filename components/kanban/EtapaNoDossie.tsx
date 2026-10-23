@@ -1,11 +1,8 @@
 "use client";
 
-import { useState } from "react";
-
 import { useT } from "@/hooks/i18n/useT";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Stage } from "@/lib/kanban/types";
-import { LoseLeadDialog } from "./LoseLeadDialog";
 
 /**
  * Mudar a etapa SEM sair do dossiê.
@@ -17,33 +14,28 @@ import { LoseLeadDialog } from "./LoseLeadDialog";
  * negócio sem como dá-lo.
  *
  * Quem move é QUEM CHAMA (`onMudar`), não este componente: no quadro é o mesmo
- * `useMoveCard` do arrasto, então a recusa por campos obrigatórios abre o MESMO
- * diálogo (#1536), a trava de `updated_at` é a mesma e a etapa que avisa na
- * Central avisa igual. A etapa de PERDA não move direto — pede o motivo pelo
- * mesmo `LoseLeadDialog` do card e da conversa, senão o funil ganharia uma
- * perda sem motivo por um caminho que nenhuma outra tela permite.
+ * caminho do "Mover para…" do card (`aoMoverPelaLista` → `moverPara`), então o
+ * card vai para o FIM da etapa, a recusa por campos obrigatórios abre o MESMO
+ * diálogo (#1536), a trava de `updated_at` é a mesma, e a etapa de PERDA pede o
+ * motivo pela MESMA janela do quadro antes do move. Decidir a perda aqui seria
+ * uma segunda cópia dessa regra.
  *
  * Sem permissão de mover (ou sem a lista de etapas — ex.: o calendário, que
  * ainda não a passa), fica o texto de antes: um seletor que recusa no clique
  * seria pior que nenhum.
  */
 export function EtapaNoDossie({
-  leadId,
-  pipelineId,
   etapaAtual,
   etapas,
   podeMover,
   onMudar,
 }: {
-  leadId: string;
-  pipelineId: string;
   etapaAtual: string;
-  etapas: Pick<Stage, "id" | "name" | "is_lost">[];
+  etapas: Pick<Stage, "id" | "name">[];
   podeMover: boolean;
   onMudar: (stageId: string) => void;
 }) {
   const t = useT();
-  const [perdendo, setPerdendo] = useState(false);
   const nomeAtual = etapas.find((e) => e.id === etapaAtual)?.name ?? "—";
 
   if (!podeMover || etapas.length === 0) {
@@ -52,10 +44,6 @@ export function EtapaNoDossie({
 
   function escolher(stageId: string) {
     if (stageId === etapaAtual) return;
-    if (etapas.find((e) => e.id === stageId)?.is_lost) {
-      setPerdendo(true);
-      return;
-    }
     onMudar(stageId);
   }
 
@@ -73,7 +61,6 @@ export function EtapaNoDossie({
           ))}
         </SelectContent>
       </Select>
-      <LoseLeadDialog open={perdendo} onOpenChange={setPerdendo} leadId={leadId} pipelineId={pipelineId} />
     </span>
   );
 }

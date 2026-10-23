@@ -37,7 +37,7 @@ interface Props {
    * troca o nome da etapa por um seletor — ver `EtapaNoDossie`. Ausentes (o
    * calendário, por enquanto), fica o texto de antes.
    */
-  etapas?: Pick<Stage, "id" | "name" | "is_lost">[];
+  etapas?: Pick<Stage, "id" | "name">[];
   onMudarEtapa?: (stageId: string) => void;
 }
 
@@ -125,10 +125,10 @@ export function LeadDossier({
   const activeOrg = useActiveOrg();
   const podeCriarProposta =
     user.is_platform_admin || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager) || false;
-  // Tarefas são `agent`+, a mesma régua da tela de Tarefas e da rota — e o
-  // suporte temporário só lê, como lá (`requireSupportWrite`).
   // A MESMA régua do arrasto e do "Mover para…" do card (`KanbanCardActions`).
   const podeMoverCard = usePermission("pipeline.move_card");
+  // Tarefas são `agent`+, a mesma régua da tela de Tarefas e da rota — e o
+  // suporte temporário só lê, como lá (`requireSupportWrite`).
   const podeEditarTarefas =
     (user.is_platform_admin && !user.support) ||
     (activeOrg ? ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent : false);
@@ -176,8 +176,6 @@ export function LeadDossier({
           </span>
           {etapas && onMudarEtapa ? (
             <EtapaNoDossie
-              leadId={lead.id}
-              pipelineId={pipelineId}
               etapaAtual={lead.stage_id}
               etapas={etapas}
               podeMover={podeMoverCard}
