@@ -4089,7 +4089,9 @@ async function executarTurnoDoAgente(
               // `insertInboxItem` à mão neste ponto é o que deixava o `dedupe`
               // sem guarda.
               await abreAvisoDoEspelhoRecusado(pool, tenantId, {
-                leadId,
+                // O NEGÓCIO resolvido pelo espelho, não `leadId` (que aqui é o
+                // contact_id): a Central abre o aviso por `crm_leads.id`.
+                ...(mirror.negocioId !== undefined ? { negocioId: mirror.negocioId } : {}),
                 motivo: mirror.reason,
                 detalhe: mirror.detail,
                 etapaDeDestino: update.transition.to,
