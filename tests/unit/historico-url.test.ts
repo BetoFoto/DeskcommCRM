@@ -64,6 +64,7 @@ const fetchFalso = async (entrada: RequestInfo | URL, init?: RequestInit): Promi
     return resposta([{ id: "imp-1" }], init);
   }
   if (pathname.endsWith("/channel_sessions")) return resposta([{ waha_session_name: "nome" }], init);
+  if (pathname.endsWith("/rpc/fn_titular_apagado_a_pedido")) return resposta(false, init);
   if (pathname.endsWith("/rpc/fn_upsert_wa_contact")) return resposta("ct-1", init);
   if (pathname.endsWith("/rpc/fn_upsert_wa_conversation_importada")) return resposta("cv-1", init);
   if (pathname.endsWith("/messages")) return metodo === "GET" ? resposta([], init) : resposta(null, init, 201);

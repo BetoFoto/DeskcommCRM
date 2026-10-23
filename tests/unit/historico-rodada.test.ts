@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as IngestModule from "@/lib/waha/ingest";
+
 // ingest.ts importa @/lib/audit (→ supabase/server → validação de env).
 const auditEspiao = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/audit", () => ({ audit: auditEspiao }));
@@ -12,7 +14,7 @@ const espioes = vi.hoisted(() => ({
   marcar: vi.fn(),
 }));
 vi.mock("@/lib/waha/ingest", async (orig) => ({
-  ...(await orig<typeof import("@/lib/waha/ingest")>()),
+  ...(await orig<typeof IngestModule>()),
   dispatchWahaEvent: espioes.dispatch,
 }));
 vi.mock("@/lib/channels/pos-entrada", () => ({ aplicarEfeitosPosEntrada: espioes.posEntrada }));
@@ -72,6 +74,9 @@ function bancoDeMentira() {
   const contatos = new Map<string, string>();
   const rpcs: Array<{ fn: string; args: Record<string, unknown> }> = [];
   const tabelasTocadas: string[] = [];
+  /** Telefones (canônicos) e lids marcados como apagados a pedido; `falhaNaMarca` simula erro na pergunta. */
+  const apagados = new Set<string>();
+  let falhaNaMarca: string | null = null;
   let antesDoInsert: (() => void) | null = null;
   /** Força a resposta de um insert (lote ou linha); `null` deixa seguir. */
   let forcarInsert: ((linhas: Linha | Linha[]) => Linha | null) | null = null;
@@ -82,6 +87,10 @@ function bancoDeMentira() {
   const admin = {
     rpc(fn: string, args: Record<string, unknown>) {
       rpcs.push({ fn, args });
+      if (fn === "fn_titular_apagado_a_pedido") {
+        if (falhaNaMarca) return Promise.resolve({ data: null, error: { message: falhaNaMarca } });
+        return Promise.resolve({ data: apagados.has(args.p_telefone as string) || apagados.has(args.p_lid as string), error: null });
+      }
       if (fn === "fn_upsert_wa_contact") {
         const chave = `${args.p_kind}:${args.p_kind === "lid" ? args.p_lid : args.p_phone}`;
         if (!contatos.has(chave)) contatos.set(chave, `ct-${contatos.size + 1}`);
@@ -187,6 +196,10 @@ function bancoDeMentira() {
     conversations,
     rpcs,
     tabelasTocadas,
+    apagados,
+    falharNaMarca(msg: string) {
+      falhaNaMarca = msg;
+    },
     webhookAntesDoInsert(l: Linha) {
       antesDoInsert = () => messages.push(l);
     },
@@ -442,8 +455,51 @@ describe("rodarUmaRodada", () => {
     expect(espioes.marcar).not.toHaveBeenCalled();
     expect(auditEspiao).not.toHaveBeenCalled();
     const fns = new Set(db.rpcs.map((x) => x.fn));
-    expect([...fns].sort()).toEqual(["fn_upsert_wa_contact", "fn_upsert_wa_conversation_importada"]);
+    expect([...fns].sort()).toEqual([
+      "fn_titular_apagado_a_pedido",
+      "fn_upsert_wa_contact",
+      "fn_upsert_wa_conversation_importada",
+    ]);
     expect(new Set(db.tabelasTocadas)).toEqual(new Set(["importacoes_de_historico", "channel_sessions", "messages"]));
+  });
+
+  it("LGPD (doc 186, B): quem foi apagado a pedido não volta — nem contato, nem conversa, nem mensagem", async () => {
+    const db = bancoDeMentira();
+    db.apagados.add("+5511900000001");
+    novaImportacao(db);
+    const r = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+
+    expect(r.status).toBe("concluida");
+    // a pergunta vem ANTES do upsert, com o telefone canônico
+    const perguntas = db.rpcs.filter((x) => x.fn === "fn_titular_apagado_a_pedido").map((x) => x.args);
+    expect(perguntas).toContainEqual({ p_org: ORG, p_telefone: "+5511900000001", p_lid: null });
+    const contatos = db.rpcs.filter((x) => x.fn === "fn_upsert_wa_contact").map((x) => x.args.p_chat_id);
+    expect(contatos).not.toContain(TEL);
+    expect(contatos).toContain(LID);
+    expect(db.messages.map((m) => m.external_id).sort()).toEqual([`false_${LID}_B1`, "B2"].sort());
+    expect([...db.conversations.values()]).toHaveLength(1);
+    // as 2 válidas do chat apagado contam como ignoradas, junto da reação e da sem id
+    expect(db.importacoes.get(IMP)).toMatchObject({ mensagens_gravadas: 2, mensagens_ignoradas: 4 });
+  });
+
+  it("LGPD: a marca também vale pelo lid do chat", async () => {
+    const db = bancoDeMentira();
+    db.apagados.add("111111111111111");
+    novaImportacao(db);
+    await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(db.rpcs.filter((x) => x.fn === "fn_upsert_wa_contact").map((x) => x.args.p_chat_id)).toEqual([TEL]);
+    expect(db.messages.every((m) => !String(m.external_id).includes("B"))).toBe(true);
+  });
+
+  it("LGPD: erro na pergunta da marca para a rodada sem criar contato (falha fechada)", async () => {
+    const db = bancoDeMentira();
+    db.falharNaMarca("permission denied");
+    novaImportacao(db);
+    const r = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(r.status).toBe("erro");
+    expect(db.rpcs.some((x) => x.fn === "fn_upsert_wa_contact")).toBe(false);
+    expect(db.messages).toHaveLength(0);
+    expect(String(db.importacoes.get(IMP)?.erro)).toContain("fn_titular_apagado_a_pedido");
   });
 
   it("canal que devolve MENOS que o pedido, com mais itens depois: nenhuma mensagem pulada", async () => {

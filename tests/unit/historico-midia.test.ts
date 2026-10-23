@@ -56,6 +56,7 @@ function bancoDeMentira() {
   const admin = {
     rpc(fn: string, args: Record<string, unknown>) {
       rpcs.push({ fn, args });
+      if (fn === "fn_titular_apagado_a_pedido") return Promise.resolve({ data: false, error: null });
       if (fn === "fn_upsert_wa_contact") return Promise.resolve({ data: "ct-1", error: null });
       if (fn === "fn_upsert_wa_conversation_importada") return Promise.resolve({ data: "cv-1", error: null });
       if (fn === "emit_event") return Promise.resolve({ data: null, error: null });
@@ -496,7 +497,7 @@ describe("mídia do histórico", () => {
     novaImportacao(db);
     await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
     expect(new Set(db.rpcs.map((r) => r.fn))).toEqual(
-      new Set(["fn_upsert_wa_contact", "fn_upsert_wa_conversation_importada", "emit_event"]),
+      new Set(["fn_titular_apagado_a_pedido", "fn_upsert_wa_contact", "fn_upsert_wa_conversation_importada", "emit_event"]),
     );
     expect(emits(db).map((e) => e.args.p_event_type)).toEqual(["media.persist_requested"]);
     expect(auditEspiao).not.toHaveBeenCalled();

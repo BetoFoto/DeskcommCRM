@@ -311,7 +311,8 @@ export async function rodarUmaRodada(
           if (validas.length > 0) {
             alvo ??= await garantirContatoEConversa(admin, imp, conversa.chatId, conversa.ultimaEm, validas);
             if (!alvo) {
-              // Chat que não é endereçável (nem telefone nem @lid): nada a gravar nele.
+              // Chat que não é endereçável (nem telefone nem @lid), ou de quem foi
+              // apagado a pedido: nada a gravar nele.
               desta.ignoradas += validas.length;
             } else {
               // Soma direto em `desta`: um erro no meio do linha a linha não perde
@@ -384,6 +385,21 @@ async function garantirContatoEConversa(
     .filter((p) => p.fromMe !== true)
     .map((p) => notifyNameOf(p)?.trim().slice(0, 200) || null)
     .find((n) => n) ?? null;
+  const telefone = identidades.find((x) => x.phone)?.phone ?? null;
+
+  // QUEM FOI APAGADO A PEDIDO NÃO VOLTA PELO HISTÓRICO (LGPD; doc 186, B). O
+  // celular ainda guarda as conversas de quem pediu para ser apagado; sem esta
+  // pergunta, a importação recriaria o contato e as mensagens. A marca é por
+  // telefone OU lid, e qualquer identidade do chat basta. Antes do upsert do
+  // contato: perguntar depois já teria recriado a ficha. Erro na pergunta para
+  // a rodada (falha fechada): importar na dúvida desfaria o apagamento.
+  const { data: apagado, error: erroDaMarca } = await admin.rpc("fn_titular_apagado_a_pedido" as never, {
+    p_org: imp.organization_id,
+    p_telefone: telefone ? canonicalPhoneBR(telefone) : null,
+    p_lid: identidades.find((x) => x.lid)?.lid ?? null,
+  } as never);
+  if (erroDaMarca) throw new Error(`fn_titular_apagado_a_pedido: ${mensagemDeErro(erroDaMarca)}`);
+  if (apagado === true) return null;
 
   const { data: contactId, error: erroDoContato } = await admin.rpc("fn_upsert_wa_contact" as never, {
     p_org: imp.organization_id,
