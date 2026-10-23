@@ -91,3 +91,25 @@ describe("recusaDoEnvioDeModelo: o prefixo que o envio de modelo grava", () => {
       .toBe("(#100) Parameter name is missing or empty");
   });
 });
+
+// O desfecho de status do parceiro (`zernio/webhook.ts`) grava `zernio_error` e
+// `<código> — <título> — <explicação>`. A main mostrava esse texto na dica do selo.
+describe("a tela da conversa: desfecho do parceiro com código sem frase nossa", () => {
+  const t = (s: string) => s;
+  it.each([
+    "131000 — Something went wrong — Message failed to send due to an unknown error.",
+    "131053 — Media upload error — Unable to download the media.",
+  ])("%s: o texto gravado, não 'Confira a conexão'", (texto) => {
+    expect(motivoDaFalhaDaMensagem({ error_code: "zernio_error", error_message: texto }, t)).toBe(texto);
+  });
+
+  it("código com frase nossa: a frase (controle)", () => {
+    expect(motivoDaFalhaDaMensagem({ error_code: "zernio_error", error_message: "131026 — Message undeliverable — x" }, t))
+      .toMatch(/^Não foi possível entregar/);
+  });
+
+  it("sem o formato do desfecho, a frase do canal segue (500 do serviço)", () => {
+    expect(motivoDaFalhaDaMensagem({ error_code: "zernio_error", error_message: "500 Internal Server Error" }, t))
+      .toBe("O canal recusou o envio. Confira a conexão em Conexões.");
+  });
+});

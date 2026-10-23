@@ -109,7 +109,11 @@ describe("motivoDaFalhaDaMensagem: o prefixo do envio de modelo", () => {
   it("o texto do provedor sai com no máximo 300 caracteres", () => {
     const m = motivo("meta_error", `meta_131009: ${"x ".repeat(400)}`);
     expect(m.startsWith("(#131009) x x")).toBe(true);
-    expect(m.length).toBeLessThanOrEqual("(#131009) ".length + 300);
+    expect(m.length).toBeLessThanOrEqual(300);
+  });
+
+  it("o título da plataforma para código sem frase também sai com no máximo 300 caracteres", () => {
+    expect(motivo("131999", "Long title ".repeat(60)).length).toBeLessThanOrEqual(300);
   });
 
   it("recusa com código e texto do provedor barrado pelo filtro: a genérica", () => {

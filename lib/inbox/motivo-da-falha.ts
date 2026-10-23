@@ -48,10 +48,13 @@ const SINAL_DE_TEXTO_CRU =
  *    conexão que funciona;
  * 2b. recusa do envio cujo código não tem frase nossa (`<canal>_100: …` — o
  *    envio de modelo E o de texto livre gravam este prefixo): o texto do provedor,
- *    sem o nosso prefixo e com no máximo 300 caracteres — foi a pista do #2659.
- *    Barrado pelo filtro de texto cru, a genérica; nunca a frase do canal. A
+ *    sem o nosso prefixo — foi a pista do #2659.
+ *    Barrado pelo filtro de texto cru, a genérica; nunca a frase do canal. Todo
+ *    texto do provedor que a tela mostra (2b, 2c e 4) sai com até 300 caracteres. A
  *    recusa sem código (`<canal>_erro: …`) é defeito NOSSO ao montar os parâmetros
  *    do modelo: frase própria, sem mostrar o texto interno;
+ * 2c. o desfecho do canal parceiro (`<código> — <título> — <explicação>`) com
+ *    código sem frase nossa: o texto gravado, se não tiver sinal de texto cru;
  * 3. a frase do código em `FRASES_DE_FALHA`;
  * 4. o `error_message` sem sinal de texto cru — o título que a plataforma
  *    grava para um código que nenhum dos mapas conhece é a única pista. Vai
@@ -69,20 +72,28 @@ export function motivoDaFalhaDaMensagem(
   if (daPlataforma !== null && Object.hasOwn(FRASES_DA_PLATAFORMA, daPlataforma)) {
     return t(FRASES_DA_PLATAFORMA[daPlataforma] as string);
   }
+  const gravado = mensagem.error_message?.trim() ?? "";
+  // O desfecho do canal parceiro grava `<código> — <título> — <explicação>`: para
+  // código sem frase nossa, a explicação é a pista — a frase do canal (passo 3)
+  // mandaria conferir uma conexão que funciona.
+  if (daPlataforma !== null && gravado.startsWith(`${daPlataforma} — `) && !SINAL_DE_TEXTO_CRU.test(gravado)) {
+    return gravado.slice(0, 300);
+  }
   if (recusa) {
     const { codigo: codigoDaRecusa, textoDoProvedor } = recusa;
     if (codigoDaRecusa === "erro") return t("Não conseguimos montar os valores do modelo para este envio. Nada foi enviado.");
     if (!textoDoProvedor || SINAL_DE_TEXTO_CRU.test(textoDoProvedor)) return t("Não foi possível enviar esta mensagem.");
     // O código fica à vista: o `details` da plataforma às vezes vem sem ele.
-    return /^\d+$/.test(codigoDaRecusa) && !textoDoProvedor.includes(`#${codigoDaRecusa}`)
-      ? `(#${codigoDaRecusa}) ${textoDoProvedor}`
-      : textoDoProvedor;
+    return (
+      /^\d+$/.test(codigoDaRecusa) && !textoDoProvedor.includes(`#${codigoDaRecusa}`)
+        ? `(#${codigoDaRecusa}) ${textoDoProvedor}`
+        : textoDoProvedor
+    ).slice(0, 300);
   }
   if (fraseDaFalhaDeCanal(codigo)) {
     // `as string`, e não `!`: é a forma que a cerca de i18n desembrulha para cobrar o espanhol de cada frase.
     return t(FRASES_DE_FALHA[codigo] as string);
   }
-  const gravado = mensagem.error_message?.trim() ?? "";
-  if (gravado && !SINAL_DE_TEXTO_CRU.test(gravado)) return gravado;
+  if (gravado && !SINAL_DE_TEXTO_CRU.test(gravado)) return gravado.slice(0, 300);
   return t("Não foi possível enviar esta mensagem.");
 }
