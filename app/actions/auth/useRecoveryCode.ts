@@ -10,6 +10,7 @@ import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit, isServiceRoleConfigured } from "@/lib/audit";
 import { hashRecoveryCode } from "@/lib/auth/recovery-codes";
+import { esquecerDispositivosConfiaveis } from "@/lib/auth/dispositivo-confiavel";
 
 export type UseRecoveryCodeResult =
   | { ok: false; error: "invalid_or_used" }
@@ -106,6 +107,9 @@ export async function useRecoveryCode(
     for (const f of factors?.factors ?? []) {
       await admin.auth.admin.mfa.deleteFactor({ userId: targetUser.id, id: f.id });
     }
+    // O banco já não aceita confiança de fator removido; apagar as linhas é
+    // para a lista de Segurança não mostrar dispositivo morto quando o fator voltar.
+    await esquecerDispositivosConfiaveis(targetUser.id);
   } catch (err) {
     console.error("[useRecoveryCode] failed to delete factors", err);
     // Non-fatal: user still gets a recovery_used redirect; on next login the

@@ -2054,7 +2054,7 @@
   "Erro ao gravar o logo.": "保存 Logo 出错。",
   "O caminho do logo não pertence a esta empresa.": "Logo 路径不属于此企业。",
   "O logo não foi gravado.": "Logo 未保存。",
-  "Esta sessão precisa da verificação em duas etapas. Entre novamente com o código do aplicativo.": "此会话需要两步验证。请使用应用中的验证码重新登录。",
+  "Confirme o código do aplicativo de verificação para continuar.": "请输入验证器应用中的验证码以继续。",
   "Muitas trocas seguidas. Tente de novo em alguns minutos.": "更换过于频繁。请几分钟后重试。",
   "Não consegui trocar o logo agora.": "现在无法更换 Logo。",
   "Cor": "颜色",
