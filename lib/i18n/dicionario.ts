@@ -72,6 +72,15 @@ export const DICIONARIO: Traducoes = {
   "O plano escolhido e seus limites passam a valer na próxima renovação. A fatura atual mantém o valor e o vencimento.": { es: "El plan elegido y sus límites entrarán en vigor en la próxima renovación. La factura actual mantiene el importe y la fecha de vencimiento." },
   "Pague o ajuste proporcional para aplicar o novo plano. Seus limites atuais permanecem até a confirmação.": { es: "Paga el ajuste proporcional para aplicar el nuevo plan. Tus límites actuales se mantienen hasta la confirmación." },
   "Aguardando o primeiro pagamento. O acesso será liberado após a confirmação.": { es: "Esperando el primer pago. El acceso se habilitará después de la confirmación." },
+  "Buscar etiquetas": { es: "Buscar etiquetas" },
+  "etiquetas": { es: "etiquetas" },
+  "Nenhuma etiqueta encontrada.": { es: "No se encontró ninguna etiqueta." },
+  "Digite o nome exato da etiqueta de destino": { es: "Escriba el nombre exacto de la etiqueta de destino" },
+  "Não foi possível carregar as tags.": { es: "No se pudieron cargar las etiquetas." },
+  "Essa etiqueta não existe. Juntar só leva para uma etiqueta que já existe; para dar um nome novo, use Renomear.": {
+    es: "Esa etiqueta no existe. Unir solo lleva a una etiqueta que ya existe; para darle un nombre nuevo, usa Renombrar.",
+  },
+
   "Canal para enviar os lembretes": { es: "Canal para enviar los recordatorios" },
   "Automático — conversa da reserva ou único canal disponível": { es: "Automático — conversación de la reserva o único canal disponible" },
   "Canal configurado indisponível — escolha outro": { es: "Canal configurado no disponible — elige otro" },
@@ -2129,8 +2138,8 @@ export const DICIONARIO: Traducoes = {
   ". Publish bloqueado até validar.": { es: ". Publicación bloqueada hasta validar." },
   "Por qual número ele atende": { es: "Con qué número atiende" },
   "Este agente é acionado pelo roteador": { es: "Este agente se activa mediante el enrutador" },
-  "— o campo de número abaixo não se aplica.": {
-    es: "— el campo de número de abajo no aplica.",
+  "— a publicação usa o canal do roteador, sem número próprio neste especialista.": {
+    es: "— la publicación usa el canal del enrutador, sin número propio en este especialista.",
   },
   "Número conectado": { es: "Número conectado" },
   "Selecione um número": { es: "Selecciona un número" },
@@ -16859,6 +16868,20 @@ export const DICIONARIO: Traducoes = {
   "opções importadas.": { es: "opciones importadas." },
   "já existiam.": { es: "ya existían." },
   "Nenhuma opção nova para importar.": { es: "Ninguna opción nueva para importar." },
+  // ─── Configurações › Funis com listas longas: as opções RECOLHIDAS (#3176) ───
+  //    A lista de um campo de lista deixou de ser montada inteira na abertura da
+  //    tela; o resumo fala a contagem e a lista abre sob demanda.
+  "opções": { es: "opciones" },
+  "apelidos": { es: "alias" },
+  "Ver opções": { es: "Ver opciones" },
+  "Ver e editar a lista do campo": { es: "Ver y editar la lista del campo" },
+  "Recolher a lista do campo": { es: "Contraer la lista del campo" },
+  // (`Importar CSV` já tem entrada acima — não duplicar aqui: o dicionário é um
+  //  objeto literal, e chave repetida é erro de typecheck.)
+  "Buscar opções": { es: "Buscar opciones" },
+  "Nenhuma opção casa com a busca.": { es: "Ninguna opción coincide con la búsqueda." },
+  "Mostrar mais opções": { es: "Mostrar más opciones" },
+  "Editar vocabulário e campos deste funil": { es: "Editar vocabulario y campos de este embudo" },
   "Esse valor não está na lista. Escolha uma das opções.": {
     es: "Ese valor no está en la lista. Elija una de las opciones.",
   },

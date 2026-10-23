@@ -526,7 +526,7 @@
   ". Publish bloqueado até validar.": "。验证前无法发布。",
   "Por qual número ele atende": "它通过哪个号码接待",
   "Este agente é acionado pelo roteador": "此 AI 智能体由分配规则触发",
-  "— o campo de número abaixo não se aplica.": "——下方的号码字段不适用。",
+  "— a publicação usa o canal do roteador, sem número próprio neste especialista.": "——发布使用路由器的渠道，此专员没有自己的号码。",
   "Número conectado": "已连接号码",
   "Selecione um número": "选择号码",
   "Nenhum número conectado": "未连接任何号码",

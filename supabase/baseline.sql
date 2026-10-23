@@ -58069,6 +58069,480 @@ begin
 end
 $constraint$;
 
+-- ---- vocabulário de etiquetas paginado e pesquisável (migration 0748, #2855) ----
+-- Antes da varredura de anon, como todo apêndice que cria função
+-- (tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts).
+create or replace function public.fn_vocabulario_de_tags_pagina(
+  p_org uuid, p_busca text default '', p_offset integer default 0, p_limit integer default 100
+) returns jsonb language sql stable security invoker set search_path = public as $$
+
+  with vocabulario as (
+    -- A organização pode guardar o vocabulário de dois jeitos, e os dois contam:
+    -- `tags` (a lista com cor e descrição, vinda da tela) e
+    -- `canonical_conversation_tags` (as sementes, que a 0244 já usava).
+    select
+      nullif(btrim(coalesce(entrada.valor ->> 'tag', entrada.valor #>> '{}')), '') as tag,
+      nullif(btrim(coalesce(entrada.valor ->> 'cor', '')), '') as cor,
+      nullif(btrim(coalesce(entrada.valor ->> 'descricao', '')), '') as descricao
+    from public.organizations o
+    cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(o.settings -> 'tags') = 'array'
+           then o.settings -> 'tags' else '[]'::jsonb end
+    ) as entrada(valor)
+    where o.id = p_org
+    union all
+    select nullif(btrim(coalesce(semente #>> '{}', '')), ''), null, null
+    from public.organizations o
+    cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(o.settings -> 'canonical_conversation_tags') = 'array'
+           then o.settings -> 'canonical_conversation_tags' else '[]'::jsonb end
+    ) as semente(valor)
+    where o.id = p_org
+  ),
+  vocabulario_limpo as (
+    -- Uma linha por nome canônico. Se a lista curada tem cor/descrição, ela vence
+    -- a semente crua.
+    select distinct on (lower(v.tag))
+           v.tag, v.cor, v.descricao
+    from vocabulario v
+    where v.tag is not null
+    order by lower(v.tag), (v.cor is not null or v.descricao is not null) desc
+  ),
+  uso as (
+    select nullif(btrim(t.valor), '') as tag, 'contatos' as origem
+    from public.contacts c, unnest(coalesce(c.tags, '{}'::text[])) as t(valor)
+    where c.organization_id = p_org
+    union all
+    select nullif(btrim(t.valor), ''), 'leads'
+    from public.crm_leads l, unnest(coalesce(l.tags, '{}'::text[])) as t(valor)
+    where l.organization_id = p_org
+    union all
+    select nullif(btrim(t.valor), ''), 'conversas'
+    from public.conversations v, unnest(coalesce(v.tags, '{}'::text[])) as t(valor)
+    where v.organization_id = p_org
+  ),
+  uso_limpo as (
+    select u.tag, u.origem from uso u where u.tag is not null and u.tag <> ''
+  ),
+  regras as (
+    -- As ações `add_tag` dos agentes. É o que o operador NÃO via: a etiqueta
+    -- podia ter zero conversas e ainda estar sendo escrita amanhã pela regra.
+    -- `r.id` junto: a coluna "Regras de agente" da tela conta REGRAS, e a
+    -- exclusão (mais abaixo) conta `distinct r.id`. Sem o id aqui, uma regra com
+    -- duas ações `add_tag` da mesma etiqueta aparecia como "2" na lista e como
+    -- "1" no resultado da operação — o mesmo rótulo contando coisas diferentes.
+    select r.id as regra_id, nullif(btrim(etiqueta.valor #>> '{}'), '') as tag
+    from public.automation_rules r
+    cross join lateral jsonb_array_elements(coalesce(r.actions, '[]'::jsonb)) as acao(valor)
+    cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(acao.valor -> 'config' -> 'tags') = 'array'
+           then acao.valor -> 'config' -> 'tags' else '[]'::jsonb end
+    ) as etiqueta(valor)
+    where r.organization_id = p_org
+      and acao.valor ->> 'type' = 'add_tag'
+  ),
+  regras_limpo as (
+    select r.regra_id, r.tag from regras r where r.tag is not null and r.tag <> ''
+  ),
+  bruto as (
+    select tag from vocabulario_limpo
+    union all select tag from uso_limpo
+    union all select tag from regras_limpo
+  ),
+  todas as (
+    select min(b.tag) as tag, lower(b.tag) as chave
+    from bruto b
+    where b.tag is not null
+    group by lower(b.tag)
+  ),
+  filtradas as (
+    select t.* from todas t
+    where strpos(t.chave, lower(coalesce(p_busca, ''))) > 0
+  ),
+  pagina as (
+    select * from filtradas order by chave
+    offset greatest(coalesce(p_offset, 0), 0)
+    limit least(greatest(coalesce(p_limit, 100), 1), 200)
+  ),
+  linhas as (
+  select
+    coalesce(v.tag, t.tag) as tag,
+    (select count(*) from uso_limpo u
+      where lower(u.tag) = t.chave and u.origem = 'contatos') as uso_em_contatos,
+    (select count(*) from uso_limpo u
+      where lower(u.tag) = t.chave and u.origem = 'leads')    as uso_em_leads,
+    (select count(*) from uso_limpo u
+      where lower(u.tag) = t.chave and u.origem = 'conversas') as uso_em_conversas,
+    (select count(distinct r.regra_id) from regras_limpo r
+      where lower(r.tag) = t.chave)                           as em_regras,
+    v.cor,
+    v.descricao,
+    (v.tag is not null)                                       as no_vocabulario
+  from pagina t
+  left join vocabulario_limpo v on lower(v.tag) = t.chave
+  order by t.chave
+  )
+  select jsonb_build_object(
+    'items', coalesce((select jsonb_agg(to_jsonb(l) order by lower(l.tag)) from linhas l), '[]'::jsonb),
+    'total', (select count(*) from filtradas)
+  );
+$$;
+revoke all on function public.fn_vocabulario_de_tags_pagina(uuid,text,integer,integer) from public, anon;
+grant execute on function public.fn_vocabulario_de_tags_pagina(uuid,text,integer,integer) to authenticated, service_role;
+
+-- ---- #3286: o gatilho de data do funil alcança a origem (migration 0743) ----
+-- O gatilho de data do funil (`lead.date_field_due`, entidade `crm_lead`) e a ação de WhatsApp
+-- terminavam em `service_boundary_stale`: o par não estava na tabela de pares `(tipo, entidade) →
+-- contato` que as duas pontas leem. O par novo entra na lista `crm_lead` que a função já mantinha;
+-- nenhum par existente é afrouxado. Cabeçalho da 0743 para o racional inteiro.
+-- A função parte da ÚLTIMA definição dela (0670, #2812), que mantém `contact.phone_added`.
+create or replace function public.fn_service_event_contact(p_org uuid,p_event_type text,p_entity_kind text,p_entity_id uuid)
+returns table(contact_id uuid,suportado boolean) language plpgsql stable security definer set search_path=public as $$
+begin
+ if p_event_type in ('lead.created','lead.stage_changed','lead.tag_added','lead.date_field_due') and p_entity_kind='crm_lead' then
+   return query select (select l.contact_id from public.crm_leads l where l.organization_id=p_org and l.id=p_entity_id),true;
+ elsif p_event_type in ('contact.tag_added','contact.birthday','contact.phone_added') and p_entity_kind='contact' then
+   return query select (select c.id from public.contacts c where c.organization_id=p_org and c.id=p_entity_id),true;
+ elsif p_event_type in ('appointment.created','appointment.confirmed','appointment.rescheduled','appointment.cancelled','appointment.completed','appointment.no_show') and p_entity_kind='calendar_appointment' then
+   return query select (select a.contact_id from public.calendar_appointments a where a.organization_id=p_org and a.id=p_entity_id),true;
+ else
+   return query select null::uuid,false;
+ end if;
+end $$;
+revoke all on function public.fn_service_event_contact(uuid,text,text,uuid) from public,anon,authenticated;
+grant execute on function public.fn_service_event_contact(uuid,text,text,uuid) to service_role;
+
+CREATE OR REPLACE FUNCTION public.emit_event(p_event_type text, p_entity_kind text, p_entity_id uuid, p_payload jsonb DEFAULT '{}'::jsonb, p_metadata jsonb DEFAULT '{}'::jsonb, p_organization_id uuid DEFAULT NULL::uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_org_id uuid;
+  v_event_id uuid;
+  v_contact uuid;
+  v_origin jsonb;
+begin
+  -- message.received nasce somente do INSERT inbound interno. Um chamador
+  -- público não pode reapresentar uma mensagem existente como evento novo.
+  -- `ai.case_opened`/`ai.case_closed` entram pela mesma razão (0279): o caso é
+  -- do motor, e um evento de caso forjado por login move o funil e acorda o
+  -- agente em nome de uma decisão que ninguém tomou.
+  -- `contact.birthday` entra pela 0551: só o cron (`contact-birthdays`, sem
+  -- sessão) o emite, e a partir desta migration ele alcança a origem e manda
+  -- WhatsApp de verdade — forjado por login, seria envio em nome de um
+  -- aniversário que ninguém fez.
+  -- `contact.phone_added` entra pela 0670, pela mesma razão do aniversário:
+  -- quem o emite é o servidor (o PATCH de contatos, com a chave de serviço,
+  -- depois de gravar o número), e ele alcança a origem e manda WhatsApp.
+  -- `lead.date_field_due` entra pela 0743, como o aniversário: quem o emite é
+  -- só o cron `lead-date-field-due` (sem sessão), e a partir dela ele alcança a
+  -- origem e manda WhatsApp.
+  -- Revogação do turno é fato da tomada nativa, nunca um pedido do login.
+  if auth.uid() is not null and p_event_type in (
+    'message.received','appointment.outcome_confirmed',
+    'ai.case_opened','ai.case_closed','contact.birthday','contact.phone_added',
+    'lead.date_field_due','conversation.autonomous_turn_revoked'
+  ) then
+    raise exception 'reserved_message_received' using errcode='42501';
+  end if;
+  -- Desfecho e responsável do negócio só nascem do gatilho de `crm_leads`
+  -- (`fn_emit_event_on_lead_change`), quando a linha muda de fato. Nenhum
+  -- emissor do app os pede por RPC; os consumidores produzem efeito real
+  -- (push, webhook de saída, conversão de anúncio).
+  if auth.uid() is not null
+     and p_event_type in ('lead.won','lead.lost','lead.reopened','lead.assigned')
+     and coalesce(current_setting('deskcomm.desfecho_pelo_negocio', true), '') <> 'on' then
+    raise exception 'reserved_message_received' using errcode='42501';
+  end if;
+  -- Estes campos autorizam efeitos operacionais; não são payload público.
+  if auth.uid() is not null and (
+    coalesce(p_payload,'{}'::jsonb) ?| array['service_origin','service_boundary']
+    or coalesce(p_metadata,'{}'::jsonb) ?| array['service_origin','service_boundary']
+  ) then raise exception 'reserved_service_origin' using errcode='42501'; end if;
+  v_org_id := coalesce(p_organization_id, (public.fn_support_context()->>'organization_id')::uuid);
+  if v_org_id is null then
+    select organization_id into v_org_id
+      from public.user_organizations
+      where user_id = auth.uid() and revoked_at is null
+      limit 1;
+  end if;
+  if v_org_id is null then
+    raise exception 'emit_event: organization_id obrigatorio';
+  end if;
+
+  if auth.uid() is not null
+     and not public.fn_role_at_least(v_org_id, 'viewer') then
+    raise exception 'caller_not_authorized_for_org'
+      using hint = 'emit_event: caller must be an active member of the organization';
+  end if;
+
+  if not public.fn_support_write_allowed(v_org_id) then raise exception 'support_readonly' using errcode='42501'; end if;
+
+  -- A ORIGEM E RESERVADA AO SERVIDOR — ENTAO O SERVIDOR TEM DE ESCREVE-LA.
+  --
+  -- O bloco acima recusa `service_origin` vindo de chamador autenticado (42501,
+  -- e com razao: e o campo que AUTORIZA efeito operacional, nao payload
+  -- publico). So que ninguem o escrevia no lugar dele. Efeito medido: quem move
+  -- o negocio pela IA carimba a origem no servidor (`agent-stage-sync`,
+  -- `appointment-stage-move`, `handoff-stage-move`) e o follow-up nasce; quem
+  -- move PELO QUADRO — o operador, pela rota HTTP autenticada — emitia um
+  -- evento SEM origem, `fn_service_event_origin` caia no `service_stale` final
+  -- (40001), `serviceForEvent` engolia como `stale_origin` e o follow-up nunca
+  -- nascia. Sem erro em lugar nenhum: o gatilho de etapa era inalcancavel pelo
+  -- caminho que o produto oferece na tela.
+  --
+  -- O retrato e tirado AQUI, no instante da emissao, que e exatamente a
+  -- semantica de procedencia que a 0223 quer: "quando este evento nasceu, o
+  -- atendimento estava assim". A resolucao do contato vem da mesma tabela de
+  -- `fn_service_event_contact` — se ela nao souber resolver o tipo, nao ha o que
+  -- carimbar e o evento segue sem origem, como antes.
+  if not (coalesce(p_payload,'{}'::jsonb) ? 'service_origin')
+     and not (coalesce(p_metadata,'{}'::jsonb) ? 'service_origin') then
+    select f.contact_id into v_contact
+      from public.fn_service_event_contact(v_org_id, p_event_type, p_entity_kind, p_entity_id) f;
+    if v_contact is not null
+       and exists(select 1 from public.contacts
+                   where organization_id=v_org_id and id=v_contact
+                     and not is_anonymized and is_merged_into is null) then
+      v_origin := jsonb_build_object('kind','command',
+        'observed', public.fn_service_observe_command(v_org_id, v_contact));
+    end if;
+  end if;
+
+  insert into public.event_log
+    (organization_id, event_type, entity_kind, entity_id, payload, metadata)
+  values
+    (v_org_id, p_event_type, p_entity_kind, p_entity_id,
+     coalesce(p_payload, '{}'::jsonb)
+       || case when v_origin is null then '{}'::jsonb else jsonb_build_object('service_origin', v_origin) end,
+     coalesce(p_metadata, '{}'::jsonb)
+       || jsonb_build_object('emitted_at', extract(epoch from now())))
+  returning id into v_event_id;
+
+  return v_event_id;
+end $function$;
+revoke execute on function public.emit_event(text, text, uuid, jsonb, jsonb, uuid) from public, anon;
+grant  execute on function public.emit_event(text, text, uuid, jsonb, jsonb, uuid) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+
+-- ---- publicar membro de roteador sem número próprio (migration 0749, #3284) ----
+-- Substitui o corpo do bloco da 0592 acima (a última definição vence). Mesma
+-- definição da migration, byte a byte.
+-- ============================================================================
+-- 2026-10-22 — 0749: PUBLICAR MEMBRO DE ROTEADOR SEM NÚMERO PRÓPRIO
+--
+-- O defeito: o editor de um especialista que é membro de um roteador de
+-- intenções avisava que "o campo de número não se aplica", mas o botão
+-- Publicar e esta função seguiam exigindo `channel_session_id` na versão. Sem
+-- número, `fn_publish_ai_agent_version` levantava `channel_session_not_found`
+-- e o especialista nunca saía do rascunho. Escolher um número para contornar
+-- era pior: a versão passaria a disputar aquele número com o agente que já
+-- atende nele.
+--
+-- O conserto, um ramo só sobre o corpo da 0592 (mesma assinatura, mesmos
+-- grants, mesma conferência de credencial e de modelo, mesma troca atômica):
+-- quando a versão não tem número, o canal conferido é o do ROTEADOR do qual o
+-- agente é membro. Publica se:
+--   - existe linha em `ai_router_members` do agente nesta organização;
+--   - o roteador é da MESMA organização (`r.organization_id = p_org_id` no
+--     join — `ai_router_members.router_id` é FK simples, então só este filtro
+--     impede um membro de apontar para roteador de outra empresa);
+--   - o canal do roteador é da mesma organização e está WORKING.
+-- O roteador NÃO precisa estar ativo: os membros são publicados antes de
+-- ligá-lo. Enquanto ele está inativo, o especialista não atende pelo número,
+-- porque a seleção por número exige `channel_session_id` igual ao do canal
+-- (`loadPublishedAgentConfig`) e o roteador só entra no turno quando ativo
+-- (`loadActiveRouter` filtra `is_active`). A exceção é deliberada: campanha
+-- que declare o especialista o carrega pelo id, como qualquer agente de
+-- campanha.
+--
+-- Agente que não é membro de roteador e não tem número continua recusado com
+-- `channel_session_not_found`. Com mais de um roteador, prefere o que tem
+-- canal WORKING e, entre eles, o mais antigo.
+--
+-- `create or replace` da versão de 5 argumentos; as de 3 e 4 argumentos só
+-- delegam e não mudam. O comentário da coluna `channel_session_id` (0241)
+-- dizia que publicar com NULL é sempre recusado: reescrito no fim. Idempotente.
+-- Gates: `tests/invariants/rascunho-de-agente-sem-numero.test.ts`,
+-- `tests/invariants/membro-de-roteador-sem-numero-nao-atende.test.ts`.
+-- ============================================================================
+
+create or replace function public.fn_publish_ai_agent_version(
+  p_org_id uuid,
+  p_agent_id uuid,
+  p_version_id uuid,
+  p_platform_credential_verified boolean,
+  p_expected_provenance text
+)
+returns table (
+  agent_id uuid,
+  version_id uuid,
+  previous_version_id uuid,
+  published_at timestamptz
+)
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_agent record;
+  v_version record;
+  v_credential record;
+  v_session record;
+  v_model_count integer;
+  v_previous_version_id uuid;
+  v_published_at timestamptz := now();
+begin
+  select a.id, a.organization_id, a.published_version_id, a.archived_at
+    into v_agent
+  from public.ai_agents a
+  where a.id = p_agent_id
+  for update;
+
+  if not found then
+    raise exception 'agent_not_found' using errcode = 'P0001';
+  end if;
+  if v_agent.organization_id <> p_org_id then
+    raise exception 'agent_not_found' using errcode = 'P0001';
+  end if;
+  if v_agent.archived_at is not null then
+    raise exception 'agent_archived' using errcode = 'P0001';
+  end if;
+
+  select v.id, v.organization_id, v.agent_id, v.status, v.provider, v.model,
+         v.credential_id, v.channel_session_id, v.provisioning_origin
+    into v_version
+  from public.ai_agent_versions v
+  where v.id = p_version_id
+  for update;
+
+  if not found then
+    raise exception 'version_not_found' using errcode = 'P0001';
+  end if;
+  if v_version.agent_id <> p_agent_id or v_version.organization_id <> p_org_id then
+    raise exception 'version_not_found' using errcode = 'P0001';
+  end if;
+  if p_expected_provenance is not null and (
+    p_expected_provenance not in('onboarding','legacy_reconciliation') or
+    v_version.provisioning_origin is distinct from p_expected_provenance or
+    (select count(*) from public.ai_agent_versions own_version where own_version.organization_id=p_org_id and own_version.agent_id=p_agent_id)<>1
+  ) then raise exception 'existing_version_requires_review' using errcode='P0001';end if;
+  if v_version.status not in ('draft', 'superseded') then
+    raise exception 'version_invalid_state' using errcode = 'P0001';
+  end if;
+
+  if v_version.credential_id is null and p_platform_credential_verified is not true then
+    raise exception 'credential_missing' using errcode = 'P0001';
+  end if;
+
+  if v_version.credential_id is not null then
+  select c.id, c.organization_id, c.provider, c.is_active, c.validated_at,
+         c.models_available
+    into v_credential
+  from public.ai_provider_credentials c
+  where c.id = v_version.credential_id;
+
+  if not found or v_credential.organization_id <> p_org_id then
+    raise exception 'credential_not_found' using errcode = 'P0001';
+  end if;
+  if not v_credential.is_active then
+    raise exception 'credential_inactive' using errcode = 'P0001';
+  end if;
+  if v_credential.validated_at is null then
+    raise exception 'credential_not_validated' using errcode = 'P0001';
+  end if;
+  if v_credential.provider <> v_version.provider then
+    raise exception 'credential_provider_mismatch' using errcode = 'P0001';
+  end if;
+
+  end if;
+
+  -- Especialistas de roteador não têm channel_session_id na própria versão:
+  -- o roteador é dono do canal, e o runtime os carrega SOMENTE por agent_id.
+  -- Não requerer roteador ATIVO: os membros precisam ser publicados ANTES de
+  -- ativá-lo, sem competir com o agente publicado diretamente no canal.
+  if v_version.channel_session_id is null then
+    select s.id, s.organization_id, s.status
+      into v_session
+    from public.ai_router_members rm
+    join public.ai_routers r
+      on r.id = rm.router_id and r.organization_id = p_org_id
+    join public.channel_sessions s
+      on s.id = r.channel_session_id and s.organization_id = p_org_id
+    where rm.agent_id = p_agent_id and rm.organization_id = p_org_id
+    order by (s.status = 'WORKING') desc, r.created_at asc, r.id asc
+    limit 1;
+  else
+    select s.id, s.organization_id, s.status
+      into v_session
+    from public.channel_sessions s
+    where s.id = v_version.channel_session_id;
+  end if;
+
+  if not found or v_session.organization_id <> p_org_id then
+    raise exception 'channel_session_not_found' using errcode = 'P0001';
+  end if;
+  if v_session.status <> 'WORKING' then
+    raise exception 'channel_session_offline' using errcode = 'P0001';
+  end if;
+
+  -- `custom` e o login por assinatura consultam um catálogo autenticado ou
+  -- específico da empresa; quem confirma que o modelo existe é a lista
+  -- gravada na credencial já conferida acima. Não usar `ai_models`, que é
+  -- global entre organizações.
+  if v_version.provider in ('custom', 'openai-assinatura') then
+    if v_version.credential_id is null then
+      raise exception 'model_not_found' using errcode = 'P0001';
+    end if;
+    if not (v_version.model = any(coalesce(v_credential.models_available, '{}'::text[]))) then
+      raise exception 'model_not_found' using errcode = 'P0001';
+    end if;
+  else
+    select count(*)
+      into v_model_count
+    from public.ai_models m
+    where m.provider = v_version.provider
+      and m.model_id = v_version.model
+      and m.deprecated_at is null;
+
+    if v_model_count = 0 then
+      raise exception 'model_not_found' using errcode = 'P0001';
+    end if;
+  end if;
+
+  v_previous_version_id := v_agent.published_version_id;
+
+  if v_previous_version_id is not null and v_previous_version_id <> p_version_id then
+    update public.ai_agent_versions
+       set status = 'superseded', superseded_at = v_published_at
+     where id = v_previous_version_id;
+  end if;
+
+  update public.ai_agent_versions
+     set status = 'published',
+         published_at = v_published_at,
+         superseded_at = null
+   where id = p_version_id;
+
+  update public.ai_agents
+     set published_version_id = p_version_id,
+         updated_at = v_published_at
+   where id = p_agent_id;
+
+  return query
+    select p_agent_id, p_version_id, v_previous_version_id, v_published_at;
+end;
+$$;
+
+revoke execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) from public,anon,authenticated;
+grant execute on function public.fn_publish_ai_agent_version(uuid,uuid,uuid,boolean,text) to service_role;
+
+comment on column public.ai_agent_versions.channel_session_id is
+  'Por qual número este agente atende. NULL = ainda não escolhido (rascunho), ou especialista de roteador, que atende pelo canal do roteador. Publicar com NULL só é aceito para membro de roteador da mesma organização com canal WORKING (fn_publish_ai_agent_version); fora disso, channel_session_not_found.';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria
@@ -61096,6 +61570,124 @@ comment on column public.campaigns.provider_template_variables is
 
 -- O ack pelos carimbos de entrega e leitura (`fn_campanha_sincroniza_ack`) já
 -- vem do bloco da #2937: esta migration não o redefine.
+
+-- ---- traço do turno do agente (migration 0721) ----
+-- manifest: traço do turno do agente — uma linha por execução, chave `job_id` (issue #2869).
+
+-- ═══ O que esta tabela responde, e por que ela existe ═════════════════════════
+--
+-- O turno real do agente é auditável hoje em pedaços que moram longe um do
+-- outro: `llm_calls` guarda cada chamada de modelo, `skill_activations` guarda
+-- quais skills entraram, `event_log` guarda a cadeia de eventos. Nenhuma linha
+-- responde "o que aconteceu NESTE turno": quais ferramentas o modelo chamou (e
+-- qual falhou), qual janela de histórico foi carregada, quais fontes de
+-- conhecimento estavam ligadas e como o turno terminou. Um turno que respondeu
+-- errado só se explica lendo o código.
+--
+-- ═══ Por que tabela nova, e não `ai_agent_runs` ═══════════════════════════════
+--
+-- `ai_agent_runs` nasceu com a forma disso (0023) e o motor vivo NUNCA escreveu
+-- nela: o único escritor é a prévia (`is_dry_run = true`), e por isso a aba
+-- Execuções passou a ler `llm_calls` (medido: 0 linhas em produção com 130
+-- chamadas `agent_turn`). Reaproveitá-la significaria decidir, de passagem, que
+-- ela volta a ser a fonte do turno real — decisão do mantenedor, não nossa.
+-- Esta tabela é ADITIVA: a tela de Execuções continua lendo o que já lê.
+--
+-- ═══ Por que SEM trigger de auditoria ════════════════════════════════════════
+--
+-- Toda outra tabela do módulo de IA audita cada linha. Aqui não, de propósito:
+-- é uma escrita por TURNO, e o conteúdo do traço já é o registro do que
+-- aconteceu. Auditar a auditoria dobraria o volume de `audit_log` sem responder
+-- nenhuma pergunta nova. Se a política mudar, é um `create trigger` de uma linha.
+--
+-- ═══ O que esta fatia ainda NÃO grava ════════════════════════════════════════
+--
+-- O snapshot/hash da composição do prompt, os trechos de conhecimento
+-- efetivamente recuperados, a janela de histórico REALMENTE carregada (a coluna
+-- `historico_mensagens` existe para a fatia que medir isso, e nasce `null` em
+-- vez de receber a janela PEDIDA, que é outra coisa) e a comparação entre a
+-- resposta crua do modelo e o texto enviado ficam para as fatias seguintes. O
+-- que esta já separa é prévia de turno real (`is_dry_run`).
+
+create table if not exists public.agent_turn_traces (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations (id) on delete cascade,
+  -- Turno real: `job_id` (o job da fila É o run). Prévia: `preview_run_id`.
+  -- Exatamente um dos dois — o CHECK abaixo é o que impede a linha órfã.
+  job_id uuid,
+  preview_run_id text,
+  conversation_id uuid,
+  contact_id uuid,
+  agent_id uuid,
+  agent_version_id uuid,
+  is_dry_run boolean not null default false,
+  status text not null check (status in ('completed', 'failed', 'aborted')),
+  abort_reason text,
+  error_code text,
+  error_message text,
+  provider text,
+  model text,
+  messages_sent integer not null default 0 check (messages_sent >= 0),
+  historico_mensagens integer check (historico_mensagens is null or historico_mensagens >= 0),
+  -- Agregados do job, somados na hora de gravar (não há segunda escrita).
+  tokens_in integer not null default 0 check (tokens_in >= 0),
+  tokens_out integer not null default 0 check (tokens_out >= 0),
+  cost_cents numeric not null default 0,
+  latency_ms integer not null default 0 check (latency_ms >= 0),
+  -- Skills ativadas no turno (`skill_activations` do mesmo job).
+  skills jsonb not null default '[]'::jsonb,
+  -- Ferramentas chamadas: nome, estado (ok|falhou|bloqueada), erro e duração.
+  ferramentas jsonb not null default '[]'::jsonb,
+  ferramentas_truncadas boolean not null default false,
+  -- Fontes de conhecimento ligadas ao agente, com versão e hash.
+  kb_sources jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint agent_turn_traces_chave check (
+    (job_id is not null and preview_run_id is null)
+    or (job_id is null and preview_run_id is not null)
+  )
+);
+
+comment on table public.agent_turn_traces is
+  'Uma linha por execução do agente (issue #2869): chave `job_id` no turno real, `preview_run_id` na prévia. Agrega tokens/custo/latência de `llm_calls` e as skills de `skill_activations` do mesmo job, e guarda o que só existe no turno: as ferramentas chamadas (nome, estado, erro, duração), a janela de histórico e as fontes de conhecimento ligadas. Escrita melhor-esforço pelo motor — falhar aqui nunca derruba o atendimento.';
+
+-- A chave do turno real. Parcial de propósito: a prévia não tem job, e uma
+-- coluna nula não colide no Postgres — sem o `where`, o upsert do turno real
+-- não teria em que se apoiar (e o `on conflict` da gravação é o que torna a
+-- repetição de um turno idempotente em vez de duplicar a linha).
+create unique index if not exists agent_turn_traces_job_idx
+  on public.agent_turn_traces (job_id) where job_id is not null;
+
+create index if not exists agent_turn_traces_org_created_idx
+  on public.agent_turn_traces (organization_id, created_at desc);
+
+create index if not exists agent_turn_traces_preview_idx
+  on public.agent_turn_traces (preview_run_id) where preview_run_id is not null;
+
+-- O agregado do traço lê `skill_activations` pelo `job_id` a cada turno, e a
+-- tabela só tinha índice por organização e por skill (0078). Sem isto, cada
+-- turno paga uma varredura da tabela inteira para descobrir o que ele mesmo
+-- acabou de gravar.
+create index if not exists idx_skill_activations_job
+  on public.skill_activations (job_id) where job_id is not null;
+
+-- RLS: o traço é da organização e ninguém mais o lê. A leitura é do painel
+-- (sessão do usuário, `authenticated`), por uma policy só de `select`. A
+-- escrita é só do worker, que passa por fora do RLS: por isso `authenticated`
+-- perde o grant de escrita (o molde de `automation_rodizio_atribuicoes`, 0692),
+-- e `anon` não recebe nada em hipótese alguma: um traço carrega o texto do erro
+-- e os ids das fontes de conhecimento.
+alter table public.agent_turn_traces enable row level security;
+
+drop policy if exists tenant_isolation_agent_turn_traces_all on public.agent_turn_traces;
+drop policy if exists tenant_isolation_agent_turn_traces_select on public.agent_turn_traces;
+create policy tenant_isolation_agent_turn_traces_select on public.agent_turn_traces
+  for select using (organization_id in (select public.fn_user_org_ids()));
+
+revoke all on public.agent_turn_traces from anon, authenticated;
+grant select on public.agent_turn_traces to authenticated;
+grant all on public.agent_turn_traces to service_role;
 
 -- ---- #3202: channel_sessions — a regra de escrita deixa de valer para a leitura (migration 0752) ----
 -- `for all` também vale para SELECT: fn_role_at_least (~4 ms) rodava por linha em todo embed de channel_sessions.
