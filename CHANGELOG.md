@@ -22,7 +22,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **O negócio ganha adicionar, remover e dar papel às pessoas relacionadas** O dossiê passa a adicionar participantes com papel em texto livre, remover cada um e trocar o papel sem sair da tela. O contato principal não vira participante de si mesmo, e contato de outra empresa é recusado.
 
-- **Mensagem apagada fica cinza e diz quem apagou; o apagamento pelo aplicativo entra na auditoria** A auditoria passa a registrar também quem apaga pelo aplicativo do WhatsApp, guardando o evento, nunca o texto, com a retenção de 5 anos, e sobrevive ao apagamento da organização. Quem vê o texto apagado continua como antes. Contribuição de @webtecnica (#3279).
+- **Mensagem apagada fica cinza e diz quem apagou; o apagamento pelo aplicativo entra na auditoria** A auditoria passa a registrar também quem apaga pelo aplicativo do WhatsApp, guardando o evento, nunca o texto, com a retenção de 5 anos, e sobrevive ao apagamento da organização. Se o aviso do WhatsApp chegar antes de o CRM marcar a mensagem, pode sair um registro a mais, atribuído ao celular da empresa (raro, ainda não medido). Quem vê o texto apagado continua como antes. Contribuição de @webtecnica (#3279).
 
 - **A assinatura da IA pode usar o nome de cada agente** Em Configurações › Atendimento, o interruptor "Assinar com o nome de cada agente", desligado por padrão. Desligado, nada muda. Contribuição de @webtecnica (#3318).
 
@@ -30,7 +30,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **Aviso de agendamento no WhatsApp do dono, com resumo do dia às 7h** Em Configurações › Sua empresa › Aviso de agendamento, desligado por padrão: cada horário marcado, remarcado ou cancelado avisa o número escolhido, que não pode ser uma conexão da própria empresa; das 22h às 7h, só o resumo. "Enviar teste" manda mensagem de verdade, e o envio respeita o espaçamento e o limite diário do número. Remarcações e cancelamentos feitos pelo Google Agenda em compromisso criado no CRM passam a gerar `appointment.rescheduled` e `appointment.cancelled`, e automações e webhooks que escutam esses eventos passam a disparar também nesse caso.
 
-- **O agente consulta o conteúdo de um site WordPress pelo banco externo** Em Integração de dados, a conexão MySQL ganha a receita "Conteúdo do WordPress (qualquer tipo de post)", para ACF ou JetEngine, com campos e categorias mapeados pelo administrador ou partindo do modelo "Imóveis". A busca do cliente vira filtro, e filtro inexistente devolve erro em vez da lista inteira. Só entra em quem adicionar a receita.
+- **O agente consulta o conteúdo de um site WordPress pelo banco externo** Em Integração de dados, a conexão MySQL ganha a receita "Conteúdo do WordPress (qualquer tipo de post)", para ACF ou JetEngine, com campos e categorias mapeados pelo administrador ou partindo do modelo "Imóveis". A busca do cliente vira filtro, e filtro inexistente devolve erro em vez da lista inteira. Só entra em quem adicionar a receita. Contribuição de @paulolimajr77 (#3213).
 
 - **Caixa de mensagem bloqueada até assumir a conversa** Opção em Configurações › Empresa, desligada por padrão: ligada, só se escreve na conversa sem responsável depois de clicar em Assumir, e a conversa de outra pessoa só libera para o dono atual.
 
@@ -44,7 +44,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **Os ícones de anexo e de emoji mostram a dica ao passar o mouse** Contribuição de @webtecnica, a partir da issue #3268.
 
-- **Uma mensagem pode ser encaminhada para outra conversa** O menu da bolha ganha Encaminhar, com texto e mídia; a recusa vem com o motivo. Crédito: @webtecnica.
+- **Uma mensagem pode ser encaminhada para outra conversa** O menu da bolha ganha Encaminhar, com texto e mídia; a recusa vem com o motivo. Se a empresa ligou "a conversa fica com quem atendeu", quem encaminha passa a atender a conversa de destino. Crédito: @webtecnica.
 
 - **O material do acervo abre na própria tela** A Base de conhecimento mostra o conteúdo guardado de cada material. Contribuição de @webtecnica (#3260), a partir da issue #3059.
 
@@ -54,7 +54,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **"Confiar neste dispositivo" na verificação em duas etapas** Marcado, o navegador entra só com a senha (ou o Google) por 30 dias. Configurações › Segurança lista os dispositivos e tem "Esquecer todos os dispositivos"; sair de todos ou desligar a verificação também apaga a lista. Desligar a verificação, a área da plataforma, Extensões, o Servidor MCP externo e a Atualização do sistema continuam pedindo o código.
 
-- **Mensagem que falhou mostra o motivo e pode ser enviada de novo pela conversa** O "Tentar de novo" reusa a mesma mensagem, então dois toques nunca mandam duas vezes, e cada reenvio entra na auditoria. Mensagem da IA ou de automação parada sem conexão diz "Aguardando conexão" e sai sozinha quando o número volta.
+- **Mensagem que falhou mostra o motivo, e a do atendente pode ser enviada de novo pela conversa** Se ela pode ter chegado ao cliente, a tela pede confirmação; o "Tentar de novo" reusa a mesma mensagem, então dois toques nunca mandam duas vezes, e cada reenvio entra na auditoria. Mensagem da IA ou de automação parada sem conexão diz "Aguardando conexão" e sai sozinha quando o número volta.
 
 - **O e-mail das automações sai com o nome e o "responder para" da sua empresa** Configurações › Marca ganha "Como seus e-mails saem"; em branco, nada muda. O endereço de envio segue o da instalação, e convite, recuperação de senha e LGPD seguem iguais. Contribuição de @webtecnica (#3312).
 
@@ -66,33 +66,33 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **Últimas compras do contato no Inbox e na ficha** Os negócios ganhos em todos os funis, com até três campos escolhidos em Configurações › Empresa. Crédito: @webtecnica.
 
-- **Voltar para a versão anterior em um clique, e o sistema volta sozinho quando o app cai depois de uma atualização** Com o painel de pé, a tela de Atualização mostra "Voltar para a versão anterior" (a de onde a tentativa saiu): cerca de 2 minutos fora do ar, backup preservado, e o comando segue como plano B. Com o painel fora, o agente do host volta sozinho se o site não responder duas vezes seguidas (conexão recusada, tempo esgotado, 502/504 do proxy) nas duas horas seguintes à atualização, uma única vez. Serviço interno fora do ar (WhatsApp, cache, banco) não dispara a volta. A tela de Atualização conta para qual versão voltou, quando e por quê. Você não precisa fazer nada. Contribuição de @webtecnica, a partir da issue #2757.
+- **Voltar para a versão anterior em um clique, e o sistema volta sozinho quando o app cai depois de uma atualização** Com o painel de pé, a tela de Atualização mostra "Voltar para a versão anterior" (a de onde a tentativa saiu): cerca de 2 minutos fora do ar, backup preservado, e o comando segue como plano B. Com o painel fora, o agente do host volta sozinho se o site não responder duas vezes seguidas (conexão recusada, tempo esgotado, ou o proxy respondendo 502, 504 ou a página de rota perdida, o 404) nas duas horas seguintes à atualização, uma única vez. Serviço interno fora do ar (WhatsApp, cache, banco) não dispara a volta. A tela de Atualização conta para qual versão voltou, quando e por quê. Você não precisa fazer nada. Contribuição de @webtecnica, a partir da issue #2757.
 
 ### Alterado
 
-- **No celular: contatos em cartões, conversa em tela inteira, Casos em pé e um compositor de toque** A lista de Contatos vira cartões; a conversa aberta ocupa a tela, e o voltar não a reabre; os detalhes de um Caso usam a largura em pé (crédito: @vitorlacerdadigital); a tecla de retorno quebra linha (Ctrl/Cmd + Enter envia) e os campos não ampliam a tela no iPhone. A nota de voz do iPhone chega como nota de voz também nos canais oficiais, e o áudio que o aparelho não toca é convertido na hora pelo servidor, sem ficar guardado: o conversor já vem na imagem. A faixa vazia embaixo do conteúdo some ao alargar a janela. No computador nada muda.
+- **No celular: contatos em cartões, conversa em tela inteira, Casos em pé e um compositor de toque** A lista de Contatos vira cartões; a conversa aberta ocupa a tela, e o voltar não a reabre; os detalhes de um Caso usam a largura em pé (crédito: @vitorlacerdadigital); a tecla de retorno quebra linha (Ctrl/Cmd + Enter envia) e os campos não ampliam a tela no iPhone. A nota de voz do iPhone chega como nota de voz também nos canais oficiais, e o áudio que o aparelho não toca é convertido na hora pelo servidor, sem ficar guardado: o conversor já vem na imagem. A faixa vazia embaixo do conteúdo some ao alargar a janela sem recarregar (contribuição de @webtecnica, #3223). No computador, a tabela de Contatos e as duas colunas dos Casos ficam como eram.
 
 - **Dossiê do negócio com os campos antes da linha do tempo e seções recolhíveis** Contato, Dados do negócio e Linha do tempo, nessa ordem.
 
-- **Etiquetas paginadas além das 500, e as sugestões filtram pelo que se digita** O gerenciador mostra 100 por página com o total real; Juntar aceita só etiqueta que já existe (para nome novo, Renomear), e a função anterior segue para o contrato legado. As sugestões ignoram caixa e acento, e com o campo vazio vêm as mais usadas. Contribuição de @webtecnica, a partir da issue #3180.
+- **Etiquetas paginadas além das 500, e as sugestões filtram pelo que se digita** O gerenciador mostra 100 por página com o total real; Juntar aceita só etiqueta que já existe (para nome novo, Renomear), e a função anterior segue para o contrato legado. As sugestões ignoram caixa e acento, e com o campo vazio vêm as mais usadas. Paginação e busca: contribuição de @andersontomazi-ctrl (#2855). Sugestões: contribuição de @webtecnica, a partir da issue #3180.
 
 ### Corrigido
 
-- **Funis: o nome não some sob os selos, listas longas abrem rápido, e a cota de 50 campos é só do negócio** Os botões do cartão quebram linha em vez de vazar. Configurações › Funis recolhe listas longas, com busca, e ganha Exportar CSV (`value,label,apelidos`); relatado por @aerosuiteapp (#3176). Os campos do contato saem da cota de 50 campos do negócio; contribuição de @webtecnica, a partir da issue #3111. No quadro, a coluna vazia acompanha a rolagem; crédito: @webtecnica.
+- **Funis: o nome não some sob os selos, listas longas abrem rápido, e a cota de 50 campos é só do negócio** Os botões do cartão quebram linha em vez de vazar (contribuição de @webtecnica, #3154). Configurações › Funis recolhe listas longas, com busca, e ganha Exportar CSV (`value,label,apelidos`); relatado por @aerosuiteapp (#3176). Os campos do contato saem da cota de 50 campos do negócio; contribuição de @webtecnica, a partir da issue #3111. No quadro, a coluna vazia acompanha a rolagem; crédito: @webtecnica.
 
 - **A interface simplificada mostra Notificações e App no celular em Configurações** São portas pessoais e passam a valer para todo vínculo. Contribuição de @webtecnica, a partir da issue #3295.
 
-- **Textos que diziam o código em vez do nome** Agentes de IA diz "agente", não "agent" (crédito: @webtecnica, #3018); membro sem nome aparece como "Atendente sem nome", não como código; o convite diz o papel pelo nome; o campo de moeda segue a moeda da empresa, com o valor gravado intacto e o formulário público da captação ainda em real; os exemplos de telefone são do país da empresa; os avisos de funil apontam para o lugar certo; as telas de acesso não mostram mais mensagem técnica, e a aba segue o idioma da tela.
+- **Textos que diziam o código em vez do nome** Agentes de IA diz "agente", não "agent" (crédito: @webtecnica, #3018); membro sem nome aparece como "Atendente sem nome", não como código (contribuição de @webtecnica, #3298); o convite diz o papel pelo nome; o campo de moeda segue a moeda da empresa, com o valor gravado intacto e o formulário público da captação ainda em real; os exemplos de telefone são do país da empresa (papel, moeda e telefone: contribuição de @FabioMundoDigital, #3251); os avisos de funil apontam para o lugar certo; as telas de acesso não mostram mais mensagem técnica, e a aba segue o idioma da tela (contribuição de @FabioMundoDigital, #3156).
 
 - **A assistência do agente só ocupa faixa com sugestão, e a sugestão diz por que não veio** O aviso de sugestão que falhou sai quando a conversa anda (crédito: @paulolimajr77), e Sugerir resposta separa a decisão de não responder da geração que parou.
 
-- **Na instalação com o Supabase na mesma VPS, os e-mails de acesso chegam com assunto em português** No `install-single-server.sh`, confirmar conta e redefinir senha tinham assunto em inglês. Quem já instalou recebe na próxima atualização; um assunto que você já escreveu no `.env` do Supabase continua valendo.
+- **Na instalação com o Supabase na mesma VPS, os e-mails de acesso chegam com assunto em português** No `install-single-server.sh`, confirmar conta e redefinir senha tinham assunto em inglês. Quem já instalou recebe na próxima atualização; um assunto que você já escreveu no `.env` do Supabase continua valendo. Contribuição de @FabioMundoDigital (#3175).
 
 - **Remetente e servidor de e-mail** Nome de remetente com vírgula, dois-pontos, parênteses ou ponto vai entre aspas, e nome longo é cortado em 78 caracteres, no SMTP e no Resend. /admin/email aceita endereço com "_" (relé em contêiner) e não mostra mais o erro cru do Postgres: contribuição de @Tong-bit-art (#2816), a partir da issue #2804; guarda de divergência do #3227, de @webtecnica.
 
 - **Automações: etapas de todos os funis, data do funil no WhatsApp e o designer visível** A condição "Etapa de destino" lista as etapas de todos os funis (código de @LuigiMDev). O gatilho "data do funil" volta a enviar a mensagem no WhatsApp, e o quadro do designer não depende mais da altura da página (crédito: @webtecnica).
 
-- **"Contato ganhou telefone" dispara em todo caminho que preenche o número** Também quando o número entra sozinho pela conversa, na ingestão do canal, no cron de telefones e no cadastro do WhatsApp, uma vez só e só para ficha sem número. A junção de cadastros segue sem disparar.
+- **"Contato ganhou telefone" dispara em todo caminho que preenche o número** Também quando o número entra sozinho pela conversa, na ingestão do canal, no cron de telefones e no cadastro do WhatsApp, uma vez só e só para ficha sem número. A junção de cadastros segue sem disparar. Contribuição de @webtecnica (#3307, #3317).
 
 - **Menos recálculos de permissões em operações administrativas** Regras e limites iguais. Crédito: @vagnerrm122.
 
@@ -100,9 +100,9 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **O aviso "o assistente quis marcar um negócio como perdido" passa a abrir o negócio** Avisos abertos antes desta versão continuam sem abrir o card; resolva-os na Central. Crédito: @paulolimajr77.
 
-- **Campanha pelo número oficial pausa quando a Meta recusa o modelo, e o modelo pelo parceiro leva tudo** Recusa de modelo (132000, 132001, 132012, 132015/132016) pausa a campanha com o motivo; corrigido o modelo, é só retomar. Na primeira rodada após atualizar, campanha com recusas antigas pode pausar sozinha: se o modelo já foi corrigido, retome. Quem recusou marketing na hora do envio sai das próximas campanhas. O envio de modelo pelo provedor parceiro passa a levar imagem e variável do cabeçalho, link do botão e variáveis nomeadas (crédito: @jmpo).
+- **Campanha pelo número oficial pausa quando a Meta recusa o modelo, e o modelo pelo parceiro leva imagem, cabeçalho e botão** Recusa de modelo (132000, 132001, 132012, 132015/132016) pausa a campanha com o motivo; corrigido o modelo, é só retomar. Na primeira rodada após atualizar, campanha com recusas antigas pode pausar sozinha: se o modelo já foi corrigido, retome. Quem recusou marketing na hora do envio sai das próximas campanhas. O envio de modelo pelo provedor parceiro passa a levar imagem e variável do cabeçalho, link do botão e variáveis nomeadas, no inbox, nos follow-ups e nas campanhas (crédito: @jmpo).
 
-- **As telas pedem a verificação em duas etapas a quem já a tem cadastrada** Ao abrir o CRM, o assistente inicial ou o painel da plataforma, com a exigência ligada ou não. Em `/api/v1/admin/*`, a leitura (GET) passa a exigir a confirmação como a escrita; a resposta é `403` com `mfa_required`, também quando a exigência da plataforma está ligada (antes `forbidden`). Quem não é administrador da plataforma segue com `forbidden`. A falha ao ativar a verificação passa a deixar o motivo no log do servidor, sem o código nem o segredo.
+- **As telas pedem a verificação em duas etapas a quem já a tem cadastrada** Ao abrir o CRM, o assistente inicial ou o painel da plataforma, com a exigência ligada ou não. Em `/api/v1/admin/*`, quem tem a verificação cadastrada e não a confirmou na sessão recebe `403` com `mfa_required`, também quando a exigência da plataforma está ligada (antes `forbidden`). Quem não é administrador da plataforma segue com `forbidden`. A falha ao ativar a verificação passa a deixar o motivo no log do servidor, sem o código nem o segredo (contribuição de @webtecnica, #3207).
 
 - **O catálogo da Nuvemshop chega à base de conhecimento do agente** Conectar dispara a carga inteira, e cada alteração de produto atualiza o catálogo. Loja com mais de 2 mil produtos recebe erro claro. Lojas já conectadas recebem na próxima alteração de produto ou ao reconectar. Crédito: @Agenciatektus (#3243).
 
@@ -110,13 +110,13 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **Os links de Conversões e do Radar de risco abrem o negócio no funil certo** Crédito: @webtecnica.
 
-- **CPF ou e-mail já usado por outro contato responde 409, não "erro interno"** CPF, e-mail e telefone respondem `409 contact_exists` com o `contact_id` existente, ao criar ou editar.
+- **CPF ou e-mail já usado por outro contato responde 409, não "erro interno"** CPF, e-mail e telefone respondem `409 contact_exists` com o `contact_id` existente, ao criar ou editar. Contribuição de @webtecnica (#3197).
 
 - **A assinatura do ChatGPT em IA › Credenciais não pede mais chave** Contribuição de @webtecnica (#2957).
 
 - **Desambiguação de relacionamento no PostgREST (#3219)** Remove a chave estrangeira redundante `calendar_service_professionals_organization_id_fkey`, que causava o erro PGRST201; a integridade segue pela chave composta `calendar_service_professional_member_fk`. Crédito: @patronotech.
 
-- **O prazo do desligamento do worker começa no sinal e cabe no prazo do kit** O prazo total conta do SIGTERM/SIGINT. O `docker-compose.prod.yml` e o `.env` gerado pelo hostgator-setup-kit passam a declarar `stop_grace_period` de 40 s, acima do prazo interno de 30 s: sem ele o Docker mandava SIGKILL aos 10 s, no meio do drain.
+- **O prazo do desligamento do worker começa no sinal e cabe no prazo do kit** O prazo total conta do SIGTERM/SIGINT. O `docker-compose.prod.yml` passa a declarar `stop_grace_period`, e o `.env` gerado pelo hostgator-setup-kit grava `WORKER_STOP_GRACE_PERIOD=40s`, acima de `SHUTDOWN_GRACE_MS=30000`; se mudar um, mude o outro. Sem isso o Docker mandava SIGKILL aos 10 s, no meio do drain. Contribuição de @webtecnica (#3237).
 
 - **O divisor da lista aproveita o painel do contato recolhido** Contribuição de @webtecnica (#3152).
 
@@ -134,15 +134,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **O formulário de novo lead mostra os campos que a etapa exige** Corrigido por @webtecnica (#3187), a partir do relato de @amexgestao (#3038).
 
-- **PARAR depois da assinatura da atendente bloqueia o contato, e encerra a demanda aberta** A assinatura em negrito terminada em dois pontos é ignorada antes de procurar o pedido; limite conhecido: rótulo em negrito assim (`*Pedido 123:*`) também é lido como assinatura. Corrigido por @webtecnica (#3158). O pedido de parar passa a encerrar as demandas abertas do contato como `encerrada_pelo_cliente`.
+- **PARAR depois da assinatura da atendente bloqueia o contato, e encerra a demanda aberta** A assinatura em negrito terminada em dois pontos é ignorada antes de procurar o pedido; limite conhecido: rótulo em negrito assim (`*Pedido 123:*`) também é lido como assinatura. Corrigido por @webtecnica (#3158). O pedido de parar passa a encerrar as demandas abertas do contato como `encerrada_pelo_cliente` (contribuição de @webtecnica, #3309).
 
 - **A passagem para humano deixa de ser anunciada como opt-out** A pausa tem código próprio (`atendimento_com_humano`) e frase que aponta "Devolver ao automático". `pediu_humano` aparece só quando o cliente pediu; a escalação do agente vira `low_confidence`, com abertura genérica ao cliente. Agente externo pelo MCP: envie `reason: "requested_human"` para o cartão dizer que o cliente pediu uma pessoa. Nenhuma decisão de bloqueio mudou. Crédito: @webtecnica.
 
-- **A IA é instruída a não dizer que a equipe foi acionada quando ninguém foi avisado** Vale para pedido novo em conversa com caso aberto.
+- **A IA é instruída a não dizer que a equipe foi acionada quando ninguém foi avisado** Vale para pedido novo em conversa com caso aberto. Contribuição de @webtecnica (#3173).
 
-- **Prospecção: telefone estrangeiro com código do país e quedas curtas de conexão** O telefone com `+` vindo do Google é aceito como veio; número brasileiro segue igual. A reconexão adia o envio sem pausar a campanha, por até 30 minutos; depois ela pausa como "desconectada" e volta por "Retomar fila". Contribuição de @webtecnica (#3167).
+- **Prospecção: telefone estrangeiro com código do país e quedas curtas de conexão** O telefone com `+` vindo do Google é aceito como veio; número brasileiro segue igual. A reconexão adia o envio sem pausar a campanha, por até 30 minutos; depois ela pausa como "desconectada" e volta por "Retomar fila". Contribuição de @webtecnica (telefone, #3171; reconexão, #3167).
 
-- **Regras de "negócio criado" passam a rodar também para o negócio aberto pela Prospecção** Veja Requer atenção. Obrigado a @webtecnica pelo conserto e a @eduardosuruagy pelo relato (#3072).
+- **Regras de "negócio criado" passam a rodar também para o negócio aberto pela Prospecção** Veja Requer atenção. Etiqueta, roteamento e exclusão de follow-up, que nunca aconteciam para ele, passam a acontecer. Obrigado a @webtecnica pelo conserto e a @eduardosuruagy pelo relato (#3072).
 
 - **As execuções de IA mostram o provedor configurado no painel** Antes, modelo com barra no nome era registrado como OpenRouter; gasto e teto não mudam. Medido por @eduardosuruagy (#3098) e corrigido por @webtecnica (#3185).
 
@@ -156,11 +156,11 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 - **Transferir a conversa leva o negócio aberto do contato, e assumir dá dono ao negócio sem responsável** Com mais de um negócio aberto visível, nada muda; vale a visibilidade de quem transfere (na padrão, de atendente para atendente o negócio não vai junto; vai quando transfere gerente ou administrador, ou com "todos veem tudo"), e assumir nunca tira o card de um colega nem de um agente de IA. A troca gera `lead.assigned` e o aviso "Lead atribuído a você": se a sua integração escuta `lead.assigned`, ela passa a recebê-lo também nas transferências do Inbox. Refs #3177.
 
-- **O turno adiado pelo horário do agente não conta roteamento duas vezes**
+- **O turno adiado pelo horário do agente não conta roteamento duas vezes** Contribuição de @webtecnica (#3215).
 
-- **A segunda trava das receitas prontas confere de novo as tabelas** Ela não reconhecia nome de tabela entre crases; a primeira trava seguia funcionando. Nada muda para quem usa.
+- **A segunda trava das receitas prontas volta a conferir as tabelas** A primeira trava não mudou. Nada muda para quem usa. Contribuição de @paulolimajr77 (#3203).
 
-- **Um PDF recebido no WhatsApp não derruba mais o worker** Desde a 1.83.0 a leitura de PDF saiu do processo separado e podia reiniciar o worker, interrompendo respostas e acendendo o alerta "fila de eventos parada"; ela volta a rodar à parte.
+- **Um PDF recebido no WhatsApp não derruba mais o worker** Desde a 1.83.0 a leitura de PDF saiu do processo separado e podia reiniciar o worker, interrompendo respostas e acendendo o alerta "fila de eventos parada"; ela volta a rodar à parte. Contribuição de @Gervanno (#3186).
 
 ## [1.87.0] — 2026-10-21
 
