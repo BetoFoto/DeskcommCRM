@@ -81,6 +81,10 @@ vi.mock('@/lib/agent-engine/edge/crm/get-lead-context', async (importOriginal) =
   ...(await importOriginal<Record<string, unknown>>()),
   getLeadContext: mocks.leadContext,
 }));
+// A restrição comercial (#2877) fica fora do que este arquivo mede: desligada.
+vi.mock('@/lib/escalacao/assunto-comercial', async importOriginal => ({
+  ...await importOriginal<Record<string, unknown>>(), comercialExigeHumano: vi.fn(async () => false),
+}));
 vi.mock('@/lib/agent-engine/guardrails/camadas-da-org', () => ({
   lerCamadasDaOrg: vi.fn(async () => ({})),
   camadaLigada: vi.fn(() => false),
