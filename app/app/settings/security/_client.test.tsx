@@ -33,17 +33,19 @@ vi.mock("@/components/auth/MfaEnrollModal", () => ({ MfaEnrollModal: () => null 
 vi.mock("@/components/voice/PainelDeChamadaDeVoz", () => ({ PainelDeChamadaDeVoz: () => null }));
 
 const semReload = vi.fn();
+const navegar = vi.fn();
 
 beforeEach(() => {
   regenerar.mockReset().mockResolvedValue({ ok: true, recovery_codes: ["a", "b"] });
   sair.mockReset().mockResolvedValue(undefined);
   desligarMfa.mockReset().mockResolvedValue({ ok: true });
   semReload.mockReset();
+  navegar.mockReset();
   // `desativarMfaDaConta` recarrega a página no sucesso — jsdom não navega de
   // verdade, então só trocamos a implementação por um espião inofensivo.
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { ...window.location, reload: semReload },
+    value: { ...window.location, reload: semReload, assign: navegar },
   });
 });
 
@@ -106,5 +108,19 @@ describe("Configurações › Segurança — confirmação por AlertDialog", () 
 
     await user.click(within(dialogo).getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(sair).toHaveBeenCalledTimes(1));
+  });
+
+  it("regenerar sem o código provado na sessão leva ao desafio e volta para a tela", async () => {
+    regenerar.mockResolvedValue({ ok: false, error: "mfa_required" });
+    const user = userEvent.setup();
+    renderTela();
+
+    await user.click(screen.getByRole("button", { name: "Regenerar códigos de recuperação" }));
+    const dialogo = await screen.findByRole("alertdialog");
+    await user.click(within(dialogo).getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() =>
+      expect(navegar).toHaveBeenCalledWith("/login/mfa?next=%2Fapp%2Fsettings%2Fsecurity"),
+    );
   });
 });

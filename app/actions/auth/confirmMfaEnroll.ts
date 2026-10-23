@@ -9,10 +9,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit, isServiceRoleConfigured } from "@/lib/audit";
 import { generateRecoveryCodes, hashRecoveryCode } from "@/lib/auth/recovery-codes";
+import { sessionAal } from "@/lib/auth/server";
 
 export type ConfirmMfaEnrollResult =
   | { ok: true; recovery_codes: string[] }
-  | { ok: false; error: "invalid_code" | "challenge_failed" | "verify_failed"; message?: string };
+  | { ok: false; error: "invalid_code" | "challenge_failed" | "verify_failed"; message?: string }
+  | { ok: false; error: "mfa_required" };
 
 /**
  * Confirms a TOTP enrollment by issuing a challenge + verifying the code, then
@@ -39,6 +41,16 @@ export async function confirmMfaEnroll(
 
   if (!/^\d{6}$/.test(code)) {
     return { ok: false, error: "invalid_code" };
+  }
+
+  // A mesma régua de `enrollMfa`: com um fator verificado, confirmar outro (e
+  // receber códigos de recuperação) exige o atual provado nesta sessão.
+  const { data: fatores } = await supabase.auth.mfa.listFactors();
+  const temFatorVerificado = fatores?.all?.some(
+    (f) => f.factor_type === "totp" && f.status === "verified",
+  );
+  if (temFatorVerificado && (await sessionAal()) !== "aal2") {
+    return { ok: false, error: "mfa_required" };
   }
 
   const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({

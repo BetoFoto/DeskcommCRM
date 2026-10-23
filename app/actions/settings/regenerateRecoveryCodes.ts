@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit, isServiceRoleConfigured } from "@/lib/audit";
 import { generateRecoveryCodes, hashRecoveryCode } from "@/lib/auth/recovery-codes";
+import { sessionAal } from "@/lib/auth/server";
 
 export type RegenerateRecoveryCodesResult =
   | { ok: true; recovery_codes: string[] }
@@ -32,6 +33,13 @@ export async function regenerateRecoveryCodes(): Promise<RegenerateRecoveryCodes
   const { data: factors } = await supabase.auth.mfa.listFactors();
   const hasFactor = factors?.totp?.some((f) => f.status === "verified");
   if (!hasFactor) return { ok: false, error: "mfa_not_enrolled" };
+
+  // Os códigos novos SUBSTITUEM o fator: quem os tem entra sem o celular. Então
+  // gerá-los exige o fator provado NESTA sessão — `aal2` exato, a mesma régua de
+  // desligar a verificação (`desativarMfaDaConta`). Não use `mfaEmDivida()`:
+  // essa pergunta pode ganhar exceções (dispositivo lembrado, por exemplo) que
+  // valem para o dia a dia e não para emitir uma credencial que dispensa o fator.
+  if ((await sessionAal()) !== "aal2") return { ok: false, error: "mfa_required" };
 
   const codes = generateRecoveryCodes();
   const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(c) }));

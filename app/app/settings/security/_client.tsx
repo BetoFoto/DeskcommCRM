@@ -80,6 +80,10 @@ export function SecurityClient({
       if (r.ok) {
         setCodes(r.recovery_codes);
         toast.success(t("Novos códigos gerados."));
+      } else if (r.error === "mfa_required") {
+        // A sessão ainda não provou o código do aplicativo: leva ao desafio e
+        // volta para esta tela, em vez de falhar calado.
+        window.location.assign(`/login/mfa?next=${encodeURIComponent("/app/settings/security")}`);
       } else {
         // O `error` é código (`mfa_not_enrolled`) ou a mensagem crua do banco, em inglês — a tela
         // mostrava « Erro: mfa_not_enrolled » em todo idioma.
