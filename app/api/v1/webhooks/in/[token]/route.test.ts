@@ -36,18 +36,25 @@ import {
  * 1. ⭐ com a opção LIGADA, o primeiro envio com id inédito ATUALIZA o card
  *    aberto do contato no funil da fonte e CARIMBA nele o `external_id` e o
  *    `webhook_source_id` — nenhum segundo card é criado;
- * 2. ⭐ o SEGUNDO envio do mesmo id casa por id (o fast-path do #2316): o
- *    carimbo não se repete e o card adotado é que é atualizado;
- * 3. as regressões: id JÁ existente continua mandando (nem se procura card
+ * 2. ⭐ o SEGUNDO envio do mesmo id casa por id (o fast-path do #2316), ACHANDO
+ *    o card adotado pela leitura do carimbo — o card da conversa é
+ *    `source: "whatsapp"` e a leitura de sempre (`source = "webhook"`) erra
+ *    ele (#3366). O `stage` reservado é obedecido neste caminho;
+ * 3. ⭐ um segundo `external_id` DISTINTO do mesmo contato cria o card do
+ *    segundo id: dois ids, dois cards (#2316) — o card de um id não é adotado
+ *    pelo outro, nem quando o carimbo veio de OUTRA fonte (#3366, portão 3);
+ * 4. as regressões: id JÁ existente continua mandando (nem se procura card
  *    aberto), a opção (ou a coluna) desligada cria o card como hoje, e contato
  *    sem card aberto no funil da fonte cria o card como hoje;
- * 4. o carimbo é um compare-and-set: o card que JÁ responde por outro id não tem
- *    a identidade trocada — o retry do outro id abriria um terceiro card.
+ * 5. o carimbo é um compare-and-set: na corrida de dois primeiros envios
+ *    simultâneos, o perdedor não reescreve a identidade do vencedor.
  *
  * O duplê é o `bancoFalso` das rotas vizinhas: ele grava cada cadeia do
  * PostgREST (tabela, método, argumentos), e é o que deixa o teste afirmar O QUE
  * a rota mandou ao banco — o payload do carimbo e os filtros dele —, e não só o
- * status HTTP.
+ * status HTTP. Neste arquivo ele filtra de verdade (#3366): um banco de mentira
+ * que devolvia o card para qualquer filtro escondeu que o card adotado nunca é
+ * achado pela leitura `source = "webhook"`.
  */
 
 const h = vi.hoisted(() => ({
@@ -116,6 +123,15 @@ const CARD_ABERTO = {
   custom_fields: { evento: "conversa_iniciada" },
   pipeline_id: "pipe-1",
   stage_id: "stage-1",
+  /**
+   * É como o card da conversa NASCE de verdade (`ORIGEM_DO_WHATSAPP`, em
+   * `lib/channels/origem-do-negocio.ts`), e é isto que o review do #3366
+   * cobrou medir: um card `source: "whatsapp"` não é achado pela leitura
+   * `source = "webhook"` do `findLeadByExternalId` — só pelo carimbo.
+   */
+  source: "whatsapp",
+  /** Card sem identidade de integração: é ele o adotável (#3366, portão 3). */
+  external_id: null as string | null,
 };
 
 const CONTATO = { id: "contato-1", phone_number: "+5532984793302", name: "Joana" };
@@ -131,6 +147,27 @@ interface Mundo {
 
 let m: Mundo;
 
+/**
+ * As colunas que o banco de mentira SABE comparar nas buscas de card por id.
+ *
+ * #3366: o banco de mentira anterior devolvia o card para QUALQUER filtro de
+ * `external_id` e ignorava os outros — foi isso que escondeu que o card da
+ * conversa (`source: "whatsapp"`) nunca é achado pela leitura
+ * `source = "webhook"`. Ele agora filtra como o PostgREST filtra.
+ */
+const COLUNAS_FALSAS = new Set(["source", "webhook_source_id", "external_id"]);
+
+/** A linha fake passa quando TODOS os filtros da cadeia batem. */
+function casaNosFiltros(c: Cadeia, linha: Record<string, unknown> | null): boolean {
+  if (!linha) return false;
+  return filtros(c).every(([metodo, coluna, valor]) => {
+    if (!COLUNAS_FALSAS.has(String(coluna))) return true;
+    if (metodo === "eq") return linha[String(coluna)] === valor;
+    if (metodo === "is") return (linha[String(coluna)] ?? null) === valor;
+    return true;
+  });
+}
+
 function responder(c: Cadeia): Resposta {
   if (c.tabela === "webhook_sources") return { data: m.fonte };
   if (c.tabela === "contacts") {
@@ -145,8 +182,10 @@ function responder(c: Cadeia): Resposta {
   if (c.tabela === "crm_leads") {
     if (operacao(c) === "update") return { data: null };
     if (operacao(c) === "insert") return { data: { id: "lead-novo" } };
-    // A leitura por id (fast-path do #2316) é a única que filtra `external_id`.
-    if (valorDoFiltro(c, "eq", "external_id") !== undefined) return { data: m.porExternalId };
+    // As buscas por id (o fast-path do #2316 e a leitura 2 do carimbo) filtram
+    // `external_id` — e agora também respeitam o que veio junto.
+    if (valorDoFiltro(c, "eq", "external_id") !== undefined)
+      return { data: casaNosFiltros(c, m.porExternalId) ? m.porExternalId : null };
     return { data: m.cardAberto };
   }
   return { data: null };
@@ -237,12 +276,18 @@ describe("primeiro envio com external_id inédito adota o card aberto (#3357)", 
     expect(desfecho()).toBe("atualizado");
   });
 
-  it("⭐ o SEGUNDO envio do mesmo id casa por id: atualiza o card adotado e não carimba de novo", async () => {
-    // O card que o primeiro envio adotou e carimbou é o que o fast-path acha.
-    m.porExternalId = { ...CARD_ABERTO, webhook_source_id: "fonte-1" };
+  it("⭐ o SEGUNDO envio do mesmo id acha o card ADOPTADO pelo carimbo e casa por id (#3366)", async () => {
+    // O card que o primeiro envio adotou É o da conversa: `source: "whatsapp"`
+    // (como ele nasce) com o id e a fonte gravados pelo carimbo. A leitura de
+    // sempre (`source = "webhook"`) erra este card — é o achado do review.
+    m.porExternalId = {
+      ...CARD_ABERTO,
+      external_id: "conta-3357",
+      webhook_source_id: "fonte-1",
+    };
     m.fonte = { ...FONTE, update_existing_lead_on_capture: true };
 
-    const res = await enviar({ ...ENVIO_DO_TRIAL, evento: "trial_ativado" });
+    const res = await enviar({ ...ENVIO_DO_TRIAL, evento: "trial_ativado", stage: "Teste iniciado" });
 
     expect(h.criarLead).not.toHaveBeenCalled();
     expect(carimbos()).toHaveLength(0);
@@ -250,10 +295,27 @@ describe("primeiro envio com external_id inédito adota o card aberto (#3357)", 
       leiturasDoCardAberto(),
       "o envio de um id já existente foi procurar card aberto: o id é quem manda",
     ).toHaveLength(0);
+
+    // Duas leituras por id, nesta ordem: a de sempre (`source = "webhook"`,
+    // que ERRA este card) e a do carimbo (`webhook_source_id` desta fonte,
+    // que ACHA). Sem a segunda, o envio voltava para a procura de card aberto.
+    const buscas = h.banco.cadeias.filter(
+      (c) =>
+        c.tabela === "crm_leads" &&
+        operacao(c) === "select" &&
+        valorDoFiltro(c, "eq", "external_id") !== undefined,
+    );
+    expect(buscas).toHaveLength(2);
+    expect(valorDoFiltro(buscas[0]!, "eq", "source")).toBe("webhook");
+    expect(valorDoFiltro(buscas[1]!, "eq", "webhook_source_id")).toBe("fonte-1");
+
     expect(h.atualizarLead.mock.calls[0]?.[2]).toBe(CARD_DA_CONVERSA);
     expect(h.atualizarLead.mock.calls[0]?.[3]).toEqual({
       custom_fields: { evento: "trial_ativado" },
     });
+    // O `stage` reservado (#2316) é obedecido neste caminho — o segundo caso
+    // vermelho do review, que morria ignorado quando o card não era achado.
+    expect(h.moverLead.mock.calls[0]?.[3]).toEqual({ to_stage_id: "stage-2" });
     expect(desfecho()).toBe("atualizado");
     expect(res.status).toBe(200);
   });
@@ -262,9 +324,13 @@ describe("primeiro envio com external_id inédito adota o card aberto (#3357)", 
 describe("regressões do caminho com external_id (#3357)", () => {
   it("⭐ id JÁ existente continua mandando: atualiza o card DO ID, e o card aberto do contato não é tocado", async () => {
     m.fonte = { ...FONTE, update_existing_lead_on_capture: true };
+    // O card que ESTA rota criou: `source: "webhook"` com o id do envio — a
+    // leitura de sempre acha ele na primeira tentativa (#3366).
     m.porExternalId = {
       ...CARD_ABERTO,
       id: "lead-do-id",
+      source: "webhook",
+      external_id: "conta-3357",
       webhook_source_id: "fonte-1",
     };
     // O contato TEM outro card aberto no funil — e ele não pode virar o alvo.
@@ -275,6 +341,15 @@ describe("regressões do caminho com external_id (#3357)", () => {
     expect(h.criarLead).not.toHaveBeenCalled();
     expect(leiturasDoCardAberto()).toHaveLength(0);
     expect(carimbos()).toHaveLength(0);
+    expect(
+      h.banco.cadeias.filter(
+        (c) =>
+          c.tabela === "crm_leads" &&
+          operacao(c) === "select" &&
+          valorDoFiltro(c, "eq", "external_id") !== undefined,
+      ),
+      "o card `source: \"webhook\"` foi achado na leitura de sempre: a do carimbo não roda",
+    ).toHaveLength(1);
     expect(h.atualizarLead.mock.calls[0]?.[2]).toBe("lead-do-id");
     expect(desfecho()).toBe("atualizado");
     expect(res.status).toBe(200);
@@ -295,6 +370,47 @@ describe("regressões do caminho com external_id (#3357)", () => {
     expect(leadInput.stage_id).toBe("stage-1");
     expect(desfecho()).toBe("criado");
     expect(await res.json()).toEqual({ data: { lead_id: "lead-novo" } });
+  });
+
+  it("⭐ segundo id DISTINTO do mesmo contato cria o card do segundo id — dois ids, dois cards (#3366)", async () => {
+    // O estado que o primeiro envio deixou: o card do contato está ABERTO e já
+    // responde pelo id A. O envio do id B chega em seguida.
+    m.cardAberto = {
+      ...CARD_ABERTO,
+      external_id: "conta-3357",
+      webhook_source_id: "fonte-1",
+    };
+
+    const res = await enviar({ ...ENVIO_DO_TRIAL, external_id: "conta-9999" });
+
+    // O card do id A não é adotado pelo id B: cada id tem o seu card e a sua
+    // idempotência (#2316). Sem este portão o envio de B atualizava o card de A
+    // sem ser gravado nele, e o evento seguinte do id B ia atrás do card
+    // aberto mais novo do contato.
+    expect(h.criarLead).toHaveBeenCalledTimes(1);
+    expect((h.criarLead.mock.calls[0]?.[2] as Record<string, unknown>).external_id).toBe("conta-9999");
+    expect(
+      carimbos(),
+      "o carimbo tentou trocar a identidade do card que já respondia por outro id",
+    ).toHaveLength(0);
+    expect(desfecho()).toBe("criado");
+    expect(res.status).toBe(200);
+  });
+
+  it("card aberto carimbado por OUTRA fonte também não é adotado (#3366)", async () => {
+    m.cardAberto = {
+      ...CARD_ABERTO,
+      external_id: "conta-de-outra-fonte",
+      webhook_source_id: "fonte-outra",
+    };
+
+    await enviar(ENVIO_DO_TRIAL);
+
+    // Escrever por cima do card de outra fonte seria a fonte A reescrever o
+    // card que a B identifica — a mesma pergunta do portão 2 do reenvio.
+    expect(h.criarLead).toHaveBeenCalledTimes(1);
+    expect(carimbos()).toHaveLength(0);
+    expect(desfecho()).toBe("criado");
   });
 
   it("⭐ coluna AUSENTE (instalação sem a migration): também cria o card como hoje", async () => {
@@ -322,14 +438,14 @@ describe("regressões do caminho com external_id (#3357)", () => {
     expect(res.status).toBe(200);
   });
 
-  it("o carimbo é compare-and-set: o card que já responde por outro id não tem a identidade trocada", async () => {
+  it("o carimbo é compare-and-set: dois primeiros envios simultâneos não reescrevem o id do vencedor", async () => {
     await enviar(ENVIO_DO_TRIAL);
 
     const feitos = carimbos();
     expect(feitos).toHaveLength(1);
     expect(
       filtros(feitos[0]!),
-      "o carimbo sobrescreveu o id de outro envio: o retry DAQUELE id abriria um terceiro card",
+      "sem o compare-and-set o segundo envio simultâneo sobrescreveria o id do vencedor — o retry do outro abriria um terceiro card",
     ).toContainEqual(["is", "external_id", null]);
   });
 });

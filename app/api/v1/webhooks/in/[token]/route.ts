@@ -368,25 +368,61 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     stageId: string | null;
   };
 
+  const COLUNAS_DO_CARD_POR_ID =
+    "id, contact_id, webhook_source_id, title, custom_fields, pipeline_id, stage_id";
+  const montarCardPorId = (data: Record<string, unknown>): LeadExistente => ({
+    id: data.id as string,
+    contactId: (data.contact_id as string | null) ?? null,
+    webhookSourceId: (data.webhook_source_id as string | null) ?? null,
+    title: (data.title as string | null) ?? null,
+    customFields: (data.custom_fields as Record<string, unknown> | null) ?? {},
+    pipelineId: (data.pipeline_id as string) ?? "",
+    stageId: (data.stage_id as string | null) ?? null,
+  });
+  /**
+   * O card que este `external_id` JÁ IDENTIFICA (#2316) — a régua que manda no
+   * reenvio e no `stage` reservado.
+   *
+   * Duas leituras, nesta ordem (review do #3366):
+   *
+   * 1. `source = "webhook"`: o card que ESTA rota criou, com o índice único
+   *    `uniq_crm_leads_org_source_external` por trás. É a busca de sempre e ela
+   *    não muda;
+   * 2. `webhook_source_id = <ESTA fonte>`: o card de OUTRA origem que ESTA
+   *    fonte ADOPTOU e carimbou (#3357). O card da conversa nasce com
+   *    `source = "whatsapp"` (`ORIGEM_DO_WHATSAPP`, em
+   *    `lib/channels/origem-do-negocio.ts`), e o carimbo grava nele o `id` e a
+   *    fonte — então o id gravado NUNCA é achado pela leitura 1. Sem esta
+   *    segunda leitura o segundo envio do mesmo id não acha o card adotado, o
+   *    envio cai na procura de card aberto de novo e, se o contato tiver outro
+   *    card aberto mais novo, atualiza o card errado; o `stage` reservado
+   *    (#2316) também morria ignorado neste caminho.
+   *
+   * A leitura 2 só roda quando a 1 devolve `null`, e é restrita à ESTA fonte:
+   * `webhook_source_id` é justamente o que diz de quem é o carimbo, então um
+   * card `source = "webhook"` de OUTRA fonte com o mesmo id não ganha da
+   * ordenação.
+   */
   const findLeadByExternalId = async (): Promise<LeadExistente | null> => {
     if (!externalId) return null;
     const { data } = await admin
       .from("crm_leads")
-      .select("id, contact_id, webhook_source_id, title, custom_fields, pipeline_id, stage_id")
+      .select(COLUNAS_DO_CARD_POR_ID)
       .eq("organization_id", source.organization_id)
       .eq("source", "webhook")
       .eq("external_id", externalId)
       .maybeSingle();
-    if (!data) return null;
-    return {
-      id: data.id as string,
-      contactId: (data.contact_id as string | null) ?? null,
-      webhookSourceId: (data.webhook_source_id as string | null) ?? null,
-      title: (data.title as string | null) ?? null,
-      customFields: (data.custom_fields as Record<string, unknown> | null) ?? {},
-      pipelineId: (data.pipeline_id as string) ?? "",
-      stageId: (data.stage_id as string | null) ?? null,
-    };
+    if (data) return montarCardPorId(data);
+    const { data: carimbado } = await admin
+      .from("crm_leads")
+      .select(COLUNAS_DO_CARD_POR_ID)
+      .eq("organization_id", source.organization_id)
+      .eq("webhook_source_id", source.id)
+      .eq("external_id", externalId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return carimbado ? montarCardPorId(carimbado) : null;
   };
 
   const fieldMap = (source.field_map ?? {}) as FieldMap;
@@ -872,7 +908,15 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
    *    aberto. O id identifica o card, e é esse card que a atualização alcança —
    *    reusar OUTRO card ali trocaria a idempotência por envio (um lead por
    *    `external_id`) por uma atualização inesperada;
-   * 3. **o card é o do contato NESTE funil** — escrever por cima do card aberto
+   * 3. **o card aberto não pode já responder por OUTRO id** (#3366). Dois ids
+   *    para o mesmo contato são DOIS cards por desenho (#2316): cada id tem a
+   *    sua idempotência e o seu card. Um card carimbado com o id A não é
+   *    adotado pelo envio do id B — o envio de B cria o card de B, como criava
+   *    antes deste PR. Sem este portão o envio de B atualizava o card de A sem
+   *    nunca ser gravado nele (o carimbo é compare-and-set) e o evento
+   *    seguinte do id B ia atrás do card aberto MAIS NOVO do contato: o mesmo
+   *    id podia trocar de alvo a cada card novo;
+   * 4. **o card é o do contato NESTE funil** — escrever por cima do card aberto
    *    em OUTRO funil seria trocar de quadro sem passar pela transferência
    *    (#992), que encerra a origem com motivo próprio.
    *
@@ -904,7 +948,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     contactId: contactId ?? null,
     pipelineId: source.default_pipeline_id as string,
   });
-  if (cardAberto) {
+  // O portão 3 do comentário acima: só o card AINDA SEM identidade de
+  // integração é adotável. `external_id` vem do `negocioAbertoDoContato`.
+  if (cardAberto && !cardAberto.external_id) {
     /**
      * O `external_id` DO ENVIO VAI PARA O CARD ADOTADO (#3357).
      *
@@ -919,10 +965,11 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
      * próximo envio cai no fast-path do #2316 e ATUALIZA este card em vez de
      * abrir outro. O desfecho deste envio não muda (`atualizado`).
      *
-     * Compare-and-set (`.is("external_id", null)`): o card que JÁ responde por
-     * outro id não é reescrito. Dois ids para o mesmo contato são dois cards por
-     * desenho (#2316) — o id é que identifica o card —, e trocar a identidade de
-     * um deles faria o retry DO OUTRO abrir um terceiro card.
+     * Compare-and-set (`.is("external_id", null)`): com o portão 3 lá de cima o
+     * card já SEMPRE nasce aqui sem id — o que sobra é a CORRIDA de dois
+     * primeiros envios simultâneos, que acham o mesmo card aberto ainda sem
+     * identidade. O perdedor não reescreve o id do vencedor: trocar a
+     * identidade faria o retry DO OUTRO abrir um terceiro card.
      *
      * Falha aqui é tolerada, como nas demais bordas desta rota: o card já está
      * adotado e o dado do envio entra nele logo abaixo. O que se perde, e só no
