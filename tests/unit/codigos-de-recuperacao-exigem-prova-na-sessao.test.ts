@@ -15,13 +15,19 @@ const estado = vi.hoisted(() => ({
   fatores: [] as Array<{ id: string; factor_type: string; status: string }>,
   escritas: [] as string[],
   provedor: [] as string[],
+  servico: true,
 }));
 
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => ({ get: () => null })) }));
 vi.mock("@/lib/branding/saida", () => ({ marcaDaSaida: vi.fn(async () => ({ nome: "Marca" })) }));
-vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined), isServiceRoleConfigured: () => false }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined), isServiceRoleConfigured: () => estado.servico }));
+// O client de serviço anota com prefixo: a tabela de códigos só aceita escrita dele (0755).
+const tabela = (quem: string) => () => ({
+  delete: () => ({ eq: async () => { estado.escritas.push(`${quem}:delete`); return { error: null }; } }),
+  insert: async () => { estado.escritas.push(`${quem}:insert`); return { error: null }; },
+});
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: tabela("servico") }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/auth/server", () => ({ sessionAal: async () => estado.nivel }));
 vi.mock("qrcode", () => ({ default: { toDataURL: vi.fn(async () => "data:image/png;base64,QR") } }));
@@ -38,6 +44,7 @@ beforeEach(() => {
   estado.fatores = [];
   estado.escritas = [];
   estado.provedor = [];
+  estado.servico = true;
   const anota = (nome: string) => async () => {
     estado.provedor.push(nome);
     return nome === "enroll"
@@ -58,10 +65,7 @@ beforeEach(() => {
         verify: anota("verify"),
       },
     },
-    from: () => ({
-      delete: () => ({ eq: async () => { estado.escritas.push("delete"); return { error: null }; } }),
-      insert: async () => { estado.escritas.push("insert"); return { error: null }; },
-    }),
+    from: tabela("usuario"),
   } as never);
 });
 
@@ -85,7 +89,15 @@ describe("regenerar códigos de recuperação", () => {
     const r = await regenerateRecoveryCodes();
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.recovery_codes).toHaveLength(10);
-    expect(estado.escritas).toEqual(["delete", "insert"]);
+    expect(estado.escritas).toEqual(["servico:delete", "servico:insert"]);
+  });
+
+  it("sem o client de serviço, recusa com service_unavailable e não grava pelo client do usuário", async () => {
+    estado.fatores = [VERIFICADO];
+    estado.nivel = "aal2";
+    estado.servico = false;
+    expect(await regenerateRecoveryCodes()).toEqual({ ok: false, error: "service_unavailable" });
+    expect(estado.escritas).toEqual([]);
   });
 
   it("sem fator verificado segue mfa_not_enrolled", async () => {
@@ -128,7 +140,15 @@ describe("confirmar um fator novo", () => {
     estado.nivel = "aal2";
     const r = await confirmMfaEnroll("123456", "f2");
     expect(r.ok).toBe(true);
-    expect(estado.escritas).toEqual(["insert"]);
+    expect(estado.escritas).toEqual(["servico:delete", "servico:insert"]);
+  });
+
+  it("sem o client de serviço, recusa antes do desafio e não grava pelo client do usuário", async () => {
+    estado.fatores = [NAO_CONFIRMADO];
+    estado.servico = false;
+    expect(await confirmMfaEnroll("123456", "f2")).toEqual({ ok: false, error: "service_unavailable" });
+    expect(estado.provedor).toEqual([]);
+    expect(estado.escritas).toEqual([]);
   });
 
   it("primeiro cadastro confirma em aal1", async () => {

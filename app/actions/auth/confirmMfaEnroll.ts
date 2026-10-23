@@ -14,7 +14,7 @@ import { sessionAal } from "@/lib/auth/server";
 export type ConfirmMfaEnrollResult =
   | { ok: true; recovery_codes: string[] }
   | { ok: false; error: "invalid_code" | "challenge_failed" | "verify_failed"; message?: string }
-  | { ok: false; error: "mfa_required" };
+  | { ok: false; error: "mfa_required" | "service_unavailable" | "recovery_codes_failed" };
 
 /**
  * Confirms a TOTP enrollment by issuing a challenge + verifying the code, then
@@ -52,6 +52,10 @@ export async function confirmMfaEnroll(
   if (temFatorVerificado && (await sessionAal()) !== "aal2") {
     return { ok: false, error: "mfa_required" };
   }
+
+  // Os códigos só são gravados pelo client de serviço (migration 0755). Sem ele,
+  // recusa ANTES de verificar o fator: depois, o fator ficaria ativo sem códigos.
+  if (!isServiceRoleConfigured()) return { ok: false, error: "service_unavailable" };
 
   const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({
     factorId,
@@ -91,17 +95,20 @@ export async function confirmMfaEnroll(
     code_hash: hashRecoveryCode(c),
   }));
 
-  // Try user-scoped first (RLS policy `recovery_codes_self` permits insert
-  // where user_id = auth.uid()). Fall back to admin if RLS rejects (e.g. AAL
-  // policy mismatch).
-  let { error: insertErr } = await supabase.from("user_recovery_codes").insert(rows);
-  if (insertErr && isServiceRoleConfigured()) {
-    const admin = createAdminClient();
-    const r = await admin.from("user_recovery_codes").insert(rows);
-    insertErr = r.error;
-  }
+  // Substitui o conjunto anterior: os códigos mostrados agora são os únicos que valem.
+  const admin = createAdminClient();
+  const { error: delErr } = await admin.from("user_recovery_codes").delete().eq("user_id", user.id);
+  const { error: insertErr } = delErr
+    ? { error: delErr }
+    : await admin.from("user_recovery_codes").insert(rows);
   if (insertErr) {
-    console.error("[confirmMfaEnroll] failed to insert recovery codes:", insertErr.message);
+    // O fator já foi verificado. Repetir a confirmação grava os códigos (a sessão
+    // está em aal2 agora); mostrar códigos que não foram gravados seria pior.
+    logger.error("[mfa-confirmacao] não gravou os códigos de recuperação", {
+      factor_id: factorId,
+      error: insertErr.message,
+    });
+    return { ok: false, error: "recovery_codes_failed" };
   }
 
   await audit({
