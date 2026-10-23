@@ -75,6 +75,13 @@ export type MirrorResult =
        * vazar o rótulo interno.
        */
       stageName?: string;
+      /**
+       * O NEGÓCIO (`crm_leads.id`) que o sync resolveu para o contato, quando
+       * chegou a resolver. É ele — e não o contato — que o aviso da Central
+       * referencia: a Central procura `ref_kind = 'lead'` em `crm_leads`, e com o
+       * id do contato o aviso abria "Este contexto não está disponível".
+       */
+      negocioId?: string;
     };
 
 /**
@@ -271,7 +278,13 @@ export async function abreAvisoDoEspelhoRecusado(
   db: Parameters<typeof insertInboxItem>[0],
   tenantId: string,
   input: {
-    leadId: string;
+    /**
+     * O NEGÓCIO que o espelho resolveu (`MirrorResult.negocioId`). Ausente quando
+     * o sync não chegou a resolver um (banco fora, exceção): aí o aviso sai SEM
+     * referência — o id do contato com o rótulo `lead` apontava para uma linha
+     * que não existe em `crm_leads`, e referência errada é pior que nenhuma.
+     */
+    negocioId?: string;
     motivo: MirrorReason;
     detalhe: string;
     /**
@@ -286,10 +299,11 @@ export async function abreAvisoDoEspelhoRecusado(
   const aviso = avisoDoEspelhoRecusado(input);
   // `null` é warn-only: estado legítimo do produto não vira item na Central.
   if (aviso === null) return;
+  const ref = input.negocioId !== undefined ? { refKind: 'lead', refId: input.negocioId } : {};
   await insertInboxItem(
     db,
     tenantId,
-    { kind: 'other', title: aviso.title, body: aviso.body, refKind: 'lead', refId: input.leadId },
+    { kind: 'other', title: aviso.title, body: aviso.body, ...ref },
     aviso.dedupe,
   );
 }
@@ -375,14 +389,15 @@ export async function mirrorLeadStageToCrm(
     // (issue #3148) — é ele que o aviso da Central mostra. Sem isto, o caller só
     // teria o passo interno (`toStage`) à mão e o difundiria ao dono.
     const comNome = r.stageName !== undefined ? { stageName: r.stageName } : {};
+    const negocio = r.leadId !== undefined ? { negocioId: r.leadId } : {};
     // O `detalhe` do sync VENCE o texto genérico da tabela quando existe: ele
     // sabe QUAL dos dois casos de escopo aconteceu, e o dono precisa dessa
     // diferença para saber se marca um funil ou não faz nada.
-    if (t && r.detalhe) return { ok: false, reason: t.reason, detail: r.detalhe, ...comNome };
+    if (t && r.detalhe) return { ok: false, reason: t.reason, detail: r.detalhe, ...negocio, ...comNome };
     // Motivo desconhecido NÃO pode virar warn-only silencioso: rótulo novo sem
     // tradução aqui é bug de programação, e o inbox é onde ele aparece.
-    if (!t) return { ok: false, reason: 'crm_error', detail: `motivo não traduzido: ${r.motivo}` };
-    return { ok: false, ...t, ...comNome };
+    if (!t) return { ok: false, reason: 'crm_error', detail: `motivo não traduzido: ${r.motivo}`, ...negocio };
+    return { ok: false, ...t, ...negocio, ...comNome };
   } catch (err) {
     return {
       ok: false,

@@ -125,7 +125,7 @@ async function avisoQueChegaNaCentral(
     },
   };
   await abreAvisoDoEspelhoRecusado(db as never, ORG, {
-    leadId: "lead-1",
+    ...(mirror.negocioId !== undefined ? { negocioId: mirror.negocioId } : {}),
     motivo: mirror.reason,
     detalhe: mirror.detail,
     etapaDeDestino: toStage,
