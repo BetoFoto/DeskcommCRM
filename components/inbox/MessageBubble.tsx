@@ -444,12 +444,16 @@ export function MessageBubble({
               onChange={(event) => setTexto(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  // No toque, a tecla de retorno quebra linha e quem salva é o
+                  // botão — a mesma lei do composer (F2). Ctrl/Cmd+Enter salva.
+                  const forca = event.ctrlKey || event.metaKey;
+                  if (!forca && window.matchMedia?.("(pointer: coarse)").matches) return;
                   event.preventDefault();
                   void salvarEdicao();
                 }
               }}
               maxLength={4096}
-              className="min-h-20 w-full rounded-md border border-border bg-background p-2 text-foreground"
+              className="min-h-20 w-full rounded-md border border-border bg-background p-2 text-base text-foreground md:text-sm"
             />
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="ghost" disabled={ocupado} onClick={() => setEditando(false)}>{t("Cancelar")}</Button>
