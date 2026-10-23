@@ -4229,11 +4229,6 @@ END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'recovery_codes_self' AND polrelid = '"public"."user_recovery_codes"'::regclass) THEN
-CREATE POLICY "recovery_codes_self" ON "public"."user_recovery_codes" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
-END IF; END $baseline_guard$;
 
 
 
@@ -4754,8 +4749,6 @@ GRANT ALL ON TABLE "public"."user_organizations" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."user_recovery_codes" TO "anon";
-GRANT ALL ON TABLE "public"."user_recovery_codes" TO "authenticated";
 GRANT ALL ON TABLE "public"."user_recovery_codes" TO "service_role";
 
 
@@ -58990,6 +58983,28 @@ comment on table public.config_aviso_de_agendamento is
   'Aviso de agendamento no WhatsApp do dono (0753). Uma linha por organização. Escrita só por fn_definir_aviso_de_agendamento.';
 comment on table public.entregas_de_aviso_de_agendamento is
   'Uma linha por evento de agenda avisado (unique organization_id+event_id) e uma por resumo diário (unique organization_id+dia). O texto nunca é guardado, só corpo_hash.';
+
+-- ---- user_recovery_codes: lida e gravada só pelo servidor (migration 0755) ----
+--
+-- As três ações que escrevem aqui (confirmar o cadastro da verificação em duas
+-- etapas, gerar códigos novos, usar um código na entrada) usam o client de
+-- serviço, depois das checagens de sessão de cada uma; nenhuma tela lê pelo
+-- client do usuário. O corpo deste arquivo já não concede nada a anon nem a
+-- authenticated, nem cria a policy antiga; a revogação abaixo cura quem instalou
+-- antes. Negação escrita no molde de calendar_oauth_nonces (0192). Bloco DO: sem
+-- ON_ERROR_STOP, drop + create soltos podem deixar a tabela sem a policy nova.
+do $$
+begin
+  revoke all on table public.user_recovery_codes from anon, authenticated;
+
+  drop policy if exists recovery_codes_self on public.user_recovery_codes;
+  drop policy if exists user_recovery_codes_ninguem_le on public.user_recovery_codes;
+  create policy user_recovery_codes_ninguem_le
+    on public.user_recovery_codes
+    for select
+    using (false);
+end
+$$;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
