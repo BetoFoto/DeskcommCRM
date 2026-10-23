@@ -47,6 +47,8 @@ vi.mock("@/hooks/inbox/useAssignableMembers", () => ({
 // deixa o teste afirmar que os dois pontos mostram o MESMO rótulo.
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   useAuth: () => ({ user: { id: "eu-mesmo-0000" } }),
+  // A escolha de contato do Composer lê o país da organização (o exemplo do telefone); sem organização, o Brasil.
+  usePaisDaOrgAtiva: () => null,
 }));
 vi.mock("@/hooks/inbox/useTransferConversation", () => ({
   useTransferConversation: () => ({ mutate: vi.fn(), isPending: false }),
