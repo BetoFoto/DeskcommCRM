@@ -320,7 +320,7 @@ function ConfiguracoesDoRoteiro({
         <p className="text-sm font-medium text-text">{t("Começar quando o card entrar na etapa")}</p>
         <p className="text-xs text-text-muted">
           {t(
-            "Marque as etapas do funil em que este roteiro deve começar sozinho. Vale do próximo turno da conversa daquele cliente em diante — não é instantâneo.",
+            "Marque as etapas do funil em que este roteiro deve começar sozinho. Vale do próximo turno da conversa daquele cliente em diante — não é instantâneo. Os cards que já estão na etapa quando você a marca também começam, na próxima mensagem do cliente.",
           )}
         </p>
         {etapasCarregando && <p className="text-xs text-text-muted">{t("Carregando etapas…")}</p>}
