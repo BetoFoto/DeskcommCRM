@@ -604,13 +604,13 @@ describe("roteiro já concluído: recomeça só se o roteiro permitir", () => {
     linhas: Array<{ id: string; nome: string; graph: FlowGraph; ja_concluiu: boolean }>,
     opts: {
       /** `crm_leads.stage_changed_at` — o carimbo da 0071. `null` = sem carimbo. */
-      stageChangedAt?: string | null;
+      stageChangedAt?: string | Date | null;
       /** `crm_leads.created_at` — a reserva do card criado direto na etapa. */
-      createdAt?: string | null;
+      createdAt?: string | Date | null;
       /** `crm_leads.status` — o card FECHADO (ganho/perdido) pode ficar na etapa. */
       status?: string;
       /** Enrollments já nascidos: (roteiro, quando nasceu). */
-      enrollments?: Array<{ pointer_id: string; started_at: string }>;
+      enrollments?: Array<{ pointer_id: string; started_at: string | Date }>;
     } = {},
   ) {
     const stageChangedAt = opts.stageChangedAt === undefined ? ENTRADA : opts.stageChangedAt;
@@ -640,7 +640,7 @@ describe("roteiro já concluído: recomeça só se o roteiro permitir", () => {
             const doRoteiro = enrollments
               .filter((e) => e.pointer_id === l.id)
               .map((e) => e.started_at)
-              .sort();
+              .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
             return {
               ...l,
               ultimo_nascimento: pedeNascimento ? (doRoteiro.at(-1) ?? null) : null,
@@ -793,6 +793,44 @@ describe("roteiro já concluído: recomeça só se o roteiro permitir", () => {
       },
     );
     expect((await escolherFluxoPelaEtapa(pool, { organizationId: ORG, contactId: "ct-1" }))?.id).toBe("proposta");
+  });
+
+  it("⭐ o pg devolve `timestamptz` como Date: nascimento 500 ms depois da entrada, no MESMO segundo, já gasta a entrada", async () => {
+    // A forma real do node-pg (sem parser customizado): Date, e não string ISO.
+    // `Date.parse(Date)` passa pelo toString() e corta o ms — os dois instantes
+    // empatavam, a entrada contava como não gasta e o roteiro reabria.
+    const { pool } = bancoDaEtapa(
+      ETAPA_X,
+      [
+        {
+          id: "agenda",
+          nome: "Agenda",
+          graph: { ...grafoCom(), settings: { ...porEtapa(ETAPA_X), pode_recomecar: true } } as FlowGraph,
+          ja_concluiu: true,
+        },
+      ],
+      {
+        stageChangedAt: new Date("2026-10-22T12:00:00.300Z"),
+        enrollments: [{ pointer_id: "agenda", started_at: new Date("2026-10-22T12:00:00.800Z") }],
+      },
+    );
+    expect(await escolherFluxoDoTurno(pool, { organizationId: ORG, contactId: "ct-1", texto: "oi, tudo bem?" })).toBeNull();
+  });
+
+  it("ACEITO e declarado: o card que JÁ ESTAVA na etapa quando a caixa foi marcada liga na mensagem seguinte", async () => {
+    // Entrada antiga e nenhum enrollment depois dela: não há como distinguir
+    // "entrou agora" de "estava lá quando o roteiro foi armado". A tela e o
+    // changelog dizem isso ao operador (revisão do #3253, caso 3).
+    const { pool } = bancoDaEtapa(
+      ETAPA_X,
+      [{ id: "proposta", nome: "Proposta", graph: { ...grafoCom(), settings: porEtapa(ETAPA_X) } as FlowGraph, ja_concluiu: false }],
+      { stageChangedAt: new Date("2026-01-01T00:00:00Z") },
+    );
+    expect(await escolherFluxoDoTurno(pool, { organizationId: ORG, contactId: "ct-1", texto: "oi" })).toEqual({
+      id: "proposta",
+      nome: "Proposta",
+      origem: "etapa",
+    });
   });
 
   it("etapa: card sem data de entrada legível — nada liga, e nenhum roteiro é consultado", async () => {

@@ -984,7 +984,7 @@ interface RoteiroAtivo {
   /** O contato JÁ concluiu este roteiro (quem decide se ele volta é `pode_recomecar`). */
   jaConcluiu: boolean;
   /** `started_at` do enrollment mais recente deste roteiro para o contato, ou `null`. */
-  ultimoNascimento: string | null;
+  ultimoNascimento: string | Date | null;
 }
 
 /**
@@ -994,8 +994,13 @@ interface RoteiroAtivo {
  * 'coletando' segue pelo turno, e o concluído/cancelado/expirado já cumpriu o
  * que a entrada pedia (#2630, revisão do #3253).
  */
-function entradaJaGasta(ativo: RoteiroAtivo, entrada: string): boolean {
-  return ativo.ultimoNascimento !== null && Date.parse(ativo.ultimoNascimento) > Date.parse(entrada);
+function entradaJaGasta(ativo: RoteiroAtivo, entrada: string | Date): boolean {
+  // ponytail: o node-pg devolve `timestamptz` como Date; `Date.parse(Date)` passa
+  // pelo toString() e perde o milissegundo (entrada e nascimento no mesmo segundo
+  // empatavam). `getTime()` preserva o ms para Date e para ISO; abaixo do ms (o µs
+  // do Postgres) a régua não enxerga.
+  const ms = (v: string | Date) => new Date(v).getTime();
+  return ativo.ultimoNascimento !== null && ms(ativo.ultimoNascimento) > ms(entrada);
 }
 
 /**
@@ -1017,7 +1022,7 @@ async function roteirosAtivosDeAtendimento(
     nome: string;
     graph: unknown;
     ja_concluiu: boolean;
-    ultimo_nascimento: string | null;
+    ultimo_nascimento: string | Date | null;
   }>(
     `select p.id, p.name as nome, v.graph,
        ${jaConcluiuSql("$2")},
@@ -1070,7 +1075,7 @@ function melhorPeloGatilho(ativos: readonly RoteiroAtivo[], texto: string | null
 function melhorPelaEtapa(
   ativos: readonly RoteiroAtivo[],
   etapa: string,
-  entrada: string,
+  entrada: string | Date,
 ): RoteiroAtivo | null {
   const candidatos = ativos
     .filter((ativo) => (ativo.graph.settings?.etapas_do_funil ?? []).includes(etapa))
@@ -1089,11 +1094,11 @@ function melhorPelaEtapa(
 async function lerEtapaDoCard(
   db: BancoDoRoteiro,
   args: { organizationId: string; contactId: string },
-): Promise<{ etapa: string | null; entrada: string | null }> {
+): Promise<{ etapa: string | null; entrada: string | Date | null }> {
   const { rows } = await db.query<{
     stage_id: string | null;
-    stage_changed_at: string | null;
-    created_at: string | null;
+    stage_changed_at: string | Date | null;
+    created_at: string | Date | null;
   }>(
     `select stage_id, stage_changed_at, created_at
        from crm_leads
@@ -1150,10 +1155,17 @@ export async function escolherFluxoPeloGatilho(
  *
  * A entrada é um EVENTO, com data: `crm_leads.stage_changed_at`, carimbada pelo
  * trigger da 0071 (a MESMA âncora de "tempo na etapa" do card, do relatório e do
- * gatilho de etapa parada), com o `created_at` de reserva — o card criado direto
- * na etapa não grava movimento nenhum, e nesse caso a data honesta é a criação
- * dele. A etapa só liga se o roteiro NÃO tiver enrollment nascido depois dessa
- * entrada (`entradaJaGasta`): quem nasceu depois já é a resposta daquela entrada.
+ * gatilho de etapa parada), com o `created_at` só de reserva para a linha sem
+ * carimbo — o trigger da 0071 já carimba `stage_changed_at` no INSERT, então o
+ * card criado direto na etapa tem a criação como entrada. A etapa só liga se o
+ * roteiro NÃO tiver enrollment nascido depois dessa entrada (`entradaJaGasta`):
+ * quem nasceu depois já é a resposta daquela entrada.
+ *
+ * ⚠️ ACEITO, e declarado na tela e no changelog: o card que JÁ ESTÁ na etapa
+ * quando alguém marca a caixa também liga, na mensagem seguinte do cliente — a
+ * entrada dele é antiga e nenhum enrollment nasceu depois dela. Ancorar na
+ * publicação da versão trocaria esse falso positivo por um falso negativo a
+ * cada republicação (o card que entrou antes da edição nunca ligaria).
  *
  * E o CARD FECHADO não conta: ganho ou perdido, ele pode ficar parado na etapa, e
  * a porta da etapa não pode ligar um roteiro por um negócio que já terminou.
