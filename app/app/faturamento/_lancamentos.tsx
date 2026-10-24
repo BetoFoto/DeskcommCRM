@@ -51,9 +51,10 @@ export function ListaDeLancamentos({
   lancamentos: Lancamento[];
   contas: Conta[];
   /**
-   * A moeda em que o valor é digitado (#3367) — a da organização, que é onde
-   * um lançamento manual nasce. As linhas JÁ GRAVADAS seguem a `currency` da
-   * própria linha (#1531); esta é só a régua de quem está escrevendo agora.
+   * A moeda em que o valor é digitado (#3367): a da organização, que é a régua
+   * do valor digitado. A `currency` gravada no lançamento manual ainda nasce no
+   * padrão do banco, BRL (ver #3379). As linhas JÁ GRAVADAS seguem a `currency`
+   * da própria linha (#1531); esta é só a régua de quem está escrevendo agora.
    */
   moeda: string;
   podeLancar: boolean;

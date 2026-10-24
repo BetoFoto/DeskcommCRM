@@ -182,8 +182,9 @@ function FormularioDeParcela({
   const [vencimento, setVencimento] = useState("");
   const [valor, setValor] = useState("");
 
-  // A parcela nasce na moeda da organização, e esta é a régua do valor digitado
-  // (#3367): em dólar `1,300` é mil e trezentos. O leitor de sessão é a mesma
+  // A moeda da organização é a régua do valor digitado (#3367): em dólar `1,300`
+  // é mil e trezentos. A parcela não tem coluna de moeda, e a tabela de parcelas
+  // ainda a exibe em BRL (ver #3379). O leitor de sessão é a mesma
   // coluna (`organizations.currency`) que `moedaDaOrganizacao` lê no servidor —
   // a mesma do preço sugerido que vem da agenda.
   const moeda = useMoedaDaOrgAtiva() ?? MOEDA_PADRAO;
