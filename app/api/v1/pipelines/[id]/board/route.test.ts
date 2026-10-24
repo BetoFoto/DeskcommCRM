@@ -84,10 +84,10 @@ function dbDoFunil(settings: Record<string, unknown>, leads = QUADRO) {
   });
 }
 
-async function quadroDoBoard(): Promise<{ status: number; ids: string[] }> {
+async function quadroDoBoard(qs = ""): Promise<{ status: number; ids: string[] }> {
   const { GET } = await import("./route");
   const res = await GET(
-    new NextRequest(`http://localhost/api/v1/pipelines/${PIPE}/board`),
+    new NextRequest(`http://localhost/api/v1/pipelines/${PIPE}/board${qs}`),
     { params: Promise.resolve({ id: PIPE }) },
   );
   const body = (await res.json()) as { data?: { leads: Array<{ id: string }> } };
@@ -106,6 +106,16 @@ describe("GET /board — recorte de encerrados antigos (#2995)", () => {
     // hoje (sem o recorte) estes dois vêm no quadro.
     expect(ids).not.toContain("ganho-40");
     expect(ids).not.toContain("perdido-90");
+  });
+
+  it("⭐ o negócio pedido em `?lead=` fica no quadro mesmo escondido pelo recorte — o dossiê abre", async () => {
+    dbDoFunil({ ocultar_encerrados_dias: 30 });
+
+    const { status, ids } = await quadroDoBoard("?lead=perdido-90");
+
+    expect(status).toBe(200);
+    expect(ids).toEqual([...COM_RECORTE, "perdido-90"].sort());
+    expect(ids).not.toContain("ganho-40");
   });
 
   it("⭐ sem a opção, o quadro traz exatamente o que trazia — a leitura de hoje", async () => {

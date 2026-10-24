@@ -81,6 +81,12 @@ describe("recortaEncerradosAntigos — as três réguas", () => {
     expect(ids(DIAS_MINIMO_DO_RECORTE)).not.toContain("ganho-2");
   });
 
+  it("o negócio pedido pelo link (`manter`) fica mesmo encerrado há muito tempo", () => {
+    const ficam = recortaEncerradosAntigos(quadro, 30, AGORA, "perdido-90").map((l) => l.id);
+    expect(ficam).toContain("perdido-90");
+    expect(ficam).not.toContain("ganho-40");
+  });
+
   it("devolve CÓPIA quando não recorta — quem chama não vê a lista mutar", () => {
     const devolvida = recortaEncerradosAntigos(quadro, null, AGORA);
     expect(devolvida).not.toBe(quadro);

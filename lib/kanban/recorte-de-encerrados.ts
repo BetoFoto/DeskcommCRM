@@ -72,17 +72,26 @@ export function diasDeRecorte(
  * `dias` nulo (ou fora da faixa) devolve a MESMA lista, cópia à parte: é o
  * "desligado", e é o que mantém o funil de quem não ligou a opção idêntico ao
  * de antes.
+ *
+ * `manter` é o negócio que alguém PEDIU pelo link (`?lead=`, e `/app/leads/<id>`,
+ * que redireciona para ele): ele fica mesmo encerrado há muito tempo. Sem isso
+ * o dossiê procura o negócio na lista do quadro, não o acha e não abre — e com
+ * a opção ligada um encerrado antigo deixava de ter caminho pela tela.
  */
-export function recortaEncerradosAntigos<T extends Pick<Lead, "status" | "closed_at">>(
+export function recortaEncerradosAntigos<
+  T extends Pick<Lead, "id" | "status" | "closed_at">,
+>(
   leads: readonly T[],
   dias: number | null | undefined,
   agora: Date = new Date(),
+  manter: string | null = null,
 ): T[] {
   if (!ehDiasValidos(dias)) return [...leads];
   const corte = agora.getTime() - dias * MILISSEGUNDOS_POR_DIA;
 
   return leads.filter((lead) => {
     if (lead.status === "open") return true;
+    if (manter !== null && lead.id === manter) return true;
     if (!lead.closed_at) return true;
     const encerradoEm = Date.parse(lead.closed_at);
     // Data que o `Date.parse` não entende é ausência de data: fica.

@@ -476,7 +476,7 @@ async function withTarefas(
   };
 }
 
-export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
+export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const requestId = randomUUID();
   const { id: pipelineId } = await ctx.params;
 
@@ -543,9 +543,15 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   // de buscar. É pergunta de EXIBIÇÃO: a linha continua no banco com o
   // histórico intacto, e desligar a opção a traz de volta inteira. Nada aqui
   // apaga, arquiva ou mexe em `status`.
+  //
+  // O `?lead=` é o negócio que o link pediu (o dossiê abre por ele): fica mesmo
+  // antigo. Ele só é comparado com a lista JÁ filtrada acima, então não traz de
+  // volta nada que o filtro de contato pessoal tirou.
   const leadsDoQuadro = recortaEncerradosAntigos(
     leadsVisiveis,
     diasDeRecorte((pipeline as Pipeline).settings),
+    new Date(),
+    req.nextUrl.searchParams.get("lead"),
   );
 
   const leadsWithOwner = await withOwnerAgents(
