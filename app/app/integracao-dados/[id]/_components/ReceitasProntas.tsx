@@ -932,7 +932,9 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
     <Card className="border border-border">
       <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle className="text-sm font-semibold">{t("Receitas prontas")}</CardTitle>
-        {canWrite && opcoes.length > 0 && (
+        {/* Só depois que a lista chegou: salvar troca a lista INTEIRA, e uma
+            receita adicionada antes disso apagaria as que já estavam salvas. */}
+        {canWrite && query.data && opcoes.length > 0 && (
           <Button size="sm" onClick={() => setEscolhendo(true)}>
             {t("Adicionar receita")}
           </Button>

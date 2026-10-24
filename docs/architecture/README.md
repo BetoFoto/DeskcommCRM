@@ -15,6 +15,7 @@ ser fonte sem ninguém decidir isso.
 ## Mapas
 
 | arquivo | escopo |
+| `etiquetas-paginadas.architecture.json` | vocabulário paginado, busca e sugestões nos editores do Inbox |
 |---|---|
 | `nomes-internos-das-conexoes.architecture.json` | renomeação interna dos canais — cartões de WhatsApp, parceiro e redes sociais → rota tenant-aware → `channel_sessions.display_name` → cartões e seletores, com auditoria e sem alterar o nome público no provedor |
 | `conversoes-de-anuncios.architecture.json` | venda, entrega, protocolo assíncrono, pendências e reprocessamento |
@@ -108,3 +109,4 @@ As três vezes o custo foi o mesmo: descobrir a aresta **durante** a
 implementação, com a peça já meio pronta.
 
 - `carteiras-transferencia.architecture.json`: atribuição respeita o escopo da carteira sob lock.
+- `atendimento-comercial.architecture.json`: entrada, veto, briefing e configuração de atendimento comercial exclusivamente humano.
