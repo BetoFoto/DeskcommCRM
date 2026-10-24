@@ -2014,6 +2014,19 @@ export const DICIONARIO: Traducoes = {
   "Menu do usuário": { es: "Menú del usuario" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
+  // Lembrete de caso parado na Central (migration 0766; ideia de @Atlasads no #2584).
+  "Lembrete de caso parado": { es: "Recordatorio de caso detenido" },
+  "Quando um caso espera uma decisão da equipe, esta Central volta a avisar. O relógio começa quando o caso chega à equipe e recomeça quando o cliente responde.": {
+    es: "Cuando un caso espera una decisión del equipo, esta Central vuelve a avisar. El reloj empieza cuando el caso llega al equipo y se reinicia cuando el cliente responde.",
+  },
+  "Lembrar a equipe dos casos parados": { es: "Recordar al equipo los casos detenidos" },
+  "Lembrar a cada": { es: "Recordar cada" },
+  "Avisos por espera": { es: "Avisos por espera" },
+  "Salvar lembrete": { es: "Guardar recordatorio" },
+  "Lembrete de caso parado salvo.": { es: "Recordatorio de caso detenido guardado." },
+  "Não foi possível salvar o lembrete de caso parado.": { es: "No se pudo guardar el recordatorio de caso detenido." },
+  "{n} dias": { es: "{n} días" },
+  "{n} horas": { es: "{n} horas" },
   // O que a tela diz a quem NÃO alcança a Central (#3147): a frase verdadeira
   // no lugar do estado vazio, que era falso para quem não pode ver aviso nenhum.
   "A Central de avisos é para quem atende": { es: "La Central de avisos es para quienes atienden" },
