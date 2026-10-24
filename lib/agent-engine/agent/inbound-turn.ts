@@ -2982,8 +2982,9 @@ async function executarTurnoDoAgente(
   // engaja o agente de vendas que o roteador acabou de escolher (ponto 2).
   //
   // A leitura só acontece quando há filtro configurado — quem não usa o campo
-  // não paga a consulta — e falha ABERTA (erro de leitura ⇒ `false` ⇒ o filtro
-  // vale, como antes deste conserto; nunca inventa engajamento).
+  // não paga a consulta. Erro de leitura sobe e o turno é re-tentado pela fila
+  // (`failJob` → `max_attempts` → `job_dead`): `false` ali calaria um cliente
+  // já engajado. Só a linha ausente vira `false`; nunca inventa engajamento.
   const agenteJaEngajado =
     !preview && liveJob().kind === 'inbound_turn' && agentConfig?.filtroDePalavraChave != null
       ? await agenteJaRespondeuNoAtendimento(pool, {

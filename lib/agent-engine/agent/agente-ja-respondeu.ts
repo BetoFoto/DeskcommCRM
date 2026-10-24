@@ -75,10 +75,11 @@ export interface AlvoDoEngajamento {
 
 /**
  * `true` quando ESTE agente já enviou algo neste atendimento — a âncora do
- * portão do filtro de palavra-chave (#3142). Falha ABERTA: erro de leitura não
- * pode calar o cliente, então `false` (o filtro segue valendo, como antes deste
- * conserto) e o chamador decide o log; leitura quebrada tampouco inventa
- * engajamento.
+ * portão do filtro de palavra-chave (#3142). Erro de leitura NÃO é capturado:
+ * ele sobe e o turno é re-tentado pela fila (`failJob` → `max_attempts` →
+ * `job_dead`). Devolver `false` ali deixaria o filtro calar um cliente que já
+ * está conversando com o agente. Só a linha ausente vira `false`; leitura
+ * quebrada nunca inventa engajamento.
  */
 export async function agenteJaRespondeuNoAtendimento(
   db: Queryable,

@@ -345,7 +345,6 @@ describe('resolveTurnAgent', () => {
     expect(out.outcome).toBe('no_match');
     expect(warn).toHaveBeenCalled();
   });
-
 });
 
 describe('resolveConversationTurn — contexto curto do classificador', () => {

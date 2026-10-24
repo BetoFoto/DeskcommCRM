@@ -243,13 +243,7 @@ export async function resolveTurnAgent(
     if (idDaCampanha !== null) {
       const config = await _loadAgentById(db, input.tenantId, idDaCampanha);
       if (config !== null) {
-        return {
-          config,
-          routerId: null,
-          intentName: null,
-          confidence: null,
-          outcome: 'campanha',
-        };
+        return { config, routerId: null, intentName: null, confidence: null, outcome: 'campanha' };
       }
       deps.log.warn('agente da campanha sem versão publicada; seguindo pela régua do número', {
         tenantId: input.tenantId,
@@ -284,13 +278,7 @@ export async function resolveTurnAgent(
             outcome,
           });
         }
-        return {
-          config: daSessao,
-          routerId: router.id,
-          intentName: null,
-          confidence,
-          outcome,
-        };
+        return { config: daSessao, routerId: router.id, intentName: null, confidence, outcome };
       }
       const config = await _loadAgentById(db, input.tenantId, router.fallbackAgentId);
       if (config === null) {
