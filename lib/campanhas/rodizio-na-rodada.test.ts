@@ -449,6 +449,16 @@ describe("rodada: campanha de texto em balões (#3329)", () => {
     expect(r.enviadas).toBe(1);
   });
 
+  it("⭐ cada balão entra no ledger no instante em que saiu: o throttle do próximo envio conta do último", async () => {
+    mundo.knobs = { ...PACING_DEFAULTS, throttleMs: 30, jitterMaxMs: 0 };
+    await rodarUmaRodadaDeCampanha(cenario(true, null), AGORA);
+    const ledger = (mundo.ledger.get("principal") ?? []).map((d) => d.getTime() - AGORA.getTime());
+    expect(ledger).toHaveLength(3);
+    expect(ledger[0]).toBe(0);
+    expect(ledger[1]).toBeGreaterThanOrEqual(30);
+    expect(ledger[2]! - ledger[1]!).toBeGreaterThanOrEqual(30);
+  });
+
   it("desligada: um balão só, com o texto inteiro", async () => {
     await rodarUmaRodadaDeCampanha(cenario(false, null), AGORA);
     expect(mundo.corpos).toEqual(["A\n\nB\n\nC"]);

@@ -628,6 +628,7 @@ async function rodarUmaCampanha(
     // Os seguintes ganham o índice nas chaves, para uma repetição não os fundir.
     // `maxBaloes = baloesPrevistos`: o teto foi conferido para esse número.
     const baloes = comModelo ? [corpo] : baloesDaCampanha(corpo, dividir, baloesPrevistos);
+    const relogioDosBaloes = Date.now();
     const { primeira, desfecho: mensagem, indiceDoDesfecho } = await enviarEmBaloes(baloes, {
       enviar: (texto, i) =>
         sendMessageHandler(
@@ -653,7 +654,18 @@ async function rodarUmaCampanha(
             },
           } as Parameters<typeof sendMessageHandler>[2],
         ),
-      registrar: () => recordSend(pool, campanha.organization_id, sessionEscolhida, agora),
+      // Cada balão entra no ledger no instante em que SAIU: o throttle do próximo
+      // envio do número conta a partir do último registro, e gravar todos com o
+      // `agora` da rodada deixava o destinatário seguinte sair a menos de
+      // `throttleMs` do último balão (medido na prova de tela: 941 ms). O 1º
+      // balão segue com `agora`, como o envio único de antes.
+      registrar: (i) =>
+        recordSend(
+          pool,
+          campanha.organization_id,
+          sessionEscolhida,
+          i === 0 ? agora : new Date(agora.getTime() + (Date.now() - relogioDosBaloes)),
+        ),
       // Pausa curta e fixa no ritmo anti-ban do número, nunca o intervalo da
       // campanha: este laço é dividido por todas as campanhas da instalação.
       esperar: () => new Promise((ok) => setTimeout(ok, pausaEntreBaloes(knobs))),

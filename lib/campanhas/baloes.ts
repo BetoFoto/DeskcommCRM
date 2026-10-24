@@ -41,16 +41,16 @@ export function pausaEntreBaloes(
 }
 
 /**
- * Envia os balões em ordem. Cada balão enviado passa por `registrar` (o
- * `recordSend` da rodada: cada balão é uma mensagem física e conta no teto do
- * número). Para no primeiro balão `failed` e o devolve como desfecho: mandar o
+ * Envia os balões em ordem. Cada balão enviado passa por `registrar`, com o
+ * índice (o `recordSend` da rodada: cada balão é uma mensagem física, conta no
+ * teto do número e é a base do throttle do próximo envio). Para no primeiro balão `failed` e o devolve como desfecho: mandar o
  * resto depois de uma falha entregaria a mensagem pela metade e fora de ordem.
  */
 export async function enviarEmBaloes<T extends { status?: string }>(
   baloes: readonly string[],
   passos: {
     enviar: (corpo: string, indice: number) => Promise<T>;
-    registrar?: () => Promise<void>;
+    registrar?: (indice: number) => Promise<void>;
     esperar: () => Promise<void>;
   },
 ): Promise<{ primeira: T; desfecho: T; indiceDoDesfecho: number }> {
@@ -61,7 +61,7 @@ export async function enviarEmBaloes<T extends { status?: string }>(
     if (indice > 0) await passos.esperar();
     desfecho = await passos.enviar(baloes[indice]!, indice);
     primeira ??= desfecho;
-    await passos.registrar?.();
+    await passos.registrar?.(indice);
     if (desfecho.status === "failed") break;
   }
   return { primeira: primeira!, desfecho: desfecho!, indiceDoDesfecho: Math.min(indice, baloes.length - 1) };
