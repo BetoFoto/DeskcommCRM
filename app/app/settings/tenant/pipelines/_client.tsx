@@ -39,6 +39,7 @@ import {
   OPERADORES_DE_MOSTRA,
   type OperadorDeMostra,
 } from "@/lib/schemas/mostrar-quando";
+import { irAoDesafioDeMfa } from "@/lib/auth/ir-ao-desafio-de-mfa";
 import { CaretDown, Plus, Trash } from "@/lib/ui/icons";
 import { AgentMappingSection, ancoraDoMapeamento } from "./_mapping";
 import { StagesSection, ancoraDasEtapas } from "./_stages";
@@ -761,6 +762,7 @@ function PipelineEditor({
     startTransition(async () => {
       const r = await updatePipelineConfig(pipeline.id, patch);
       if (r.ok) toast.success(`${pipeline.name} ${t("atualizado.")}`);
+      else if (r.error === "mfa_required") irAoDesafioDeMfa();
       else toast.error(`${t("Erro:")} ${r.error}`);
     });
   }
@@ -989,6 +991,32 @@ function PipelineEditor({
                     }}
                   />
                   {t("Permitir valor novo (fora da lista)")}
+                </label>
+                {/* ── MÚLTIPLA ESCOLHA (#3182) ────────────────────────────────
+                    O modo múltiplo da lista pesquisável: o campo grava uma
+                    LISTA de valores canônicos e a ficha mostra os escolhidos
+                    como chips. Sem esta tela a chave nasceria no schema e
+                    ninguém conseguiria ligá-la (#1536 foi o mesmo defeito, com
+                    o `obrigatorio_em`). Desmarcar APAGA a chave: o funil que
+                    ninguém tocou continua idêntico ao de antes. */}
+                <label className="flex items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    aria-label={`${t("Permitir várias escolhas")} ${i + 1}`}
+                    checked={f.multiple === true}
+                    onChange={(ev) => {
+                      const next = [...fields];
+                      // `false` some da definição: desmarcar não deixa uma
+                      // chave morta no settings — vale para o valor único
+                      // gravado por TODO funil que existe hoje.
+                      const { multiple: _apagado, ...semMultiplo } = f;
+                      next[i] = ev.target.checked
+                        ? { ...f, multiple: true }
+                        : (semMultiplo as CustomFieldDef);
+                      setFields(next);
+                    }}
+                  />
+                  {t("Permitir várias escolhas")}
                 </label>
               </div>
             )}
