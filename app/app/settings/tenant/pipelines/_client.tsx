@@ -53,6 +53,8 @@ export interface PipelineRow {
   settings: Record<string, unknown> | null;
   /** Opcional só para os testes; a página sempre manda (ver `ehFunilPadrao`). */
   is_default?: boolean;
+  /** O funil de clientes (#0262): o servidor também lê `entrada_do_inbox` nele. */
+  is_client_pipeline?: boolean;
 }
 
 /**
@@ -973,7 +975,16 @@ function PipelineEditor({
 
           A escolha sai daqui no patch de `updatePipelineConfig` — a MESMA porta
           de escrita do resto do settings. A gravação no banco não é reescrita
-          aqui: a tela só passa a mandar `entrada_do_inbox`. */}
+          aqui: a tela só passa a mandar `entrada_do_inbox`.
+
+          SÓ NO FUNIL QUE O SERVIDOR LÊ: `funilDeEntrada`
+          (`lib/leads/nascimento-do-lead.ts`) consulta a chave apenas no funil
+          `is_default` e no `is_client_pipeline`. Num funil secundário a escolha
+          seria salva e nunca usada, e o aviso diria que as conversas caem numa
+          etapa dele, onde elas não entram. Não é `ehFunilPadrao`: ele cai em
+          `pipelines[0]` sem padrão, e o servidor ali devolve
+          `sem_funil_de_entrada`. */}
+      {(pipeline.is_default === true || pipeline.is_client_pipeline === true) && (
       <div className="space-y-1">
         <Label className="text-xs">{t("Novas conversas do Inbox entram em…")}</Label>
         <Select
@@ -1034,6 +1045,7 @@ function PipelineEditor({
           </p>
         )}
       </div>
+      )}
 
       {/* ─── A COMANDA DO GANHO (#1477) ───────────────────────────────
           Porta do consumidor de `lead.won`. Desligada por padrão, pela régua

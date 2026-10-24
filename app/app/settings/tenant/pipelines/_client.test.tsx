@@ -956,8 +956,11 @@ describe("etapa de entrada das conversas do Inbox na tela (#3011)", () => {
   });
 
   // O editor do funil só monta expandido (#3176): o seletor mora dentro dele.
+  // E o seletor só existe no funil de entrada: por padrão, `p` é o padrão.
   const montar = (p: PipelineRow) => {
-    const r = render(<PipelinesClient pipelines={[p]} etapas={ETAPAS_DE_ENTRADA} podeEditarConfig />);
+    const r = render(
+      <PipelinesClient pipelines={[{ is_default: true, ...p }]} etapas={ETAPAS_DE_ENTRADA} podeEditarConfig />,
+    );
     abrirEditores();
     return r;
   };
@@ -967,6 +970,45 @@ describe("etapa de entrada das conversas do Inbox na tela (#3011)", () => {
   const seletor = () => screen.getByLabelText("Etapa de entrada das conversas do Inbox");
 
   beforeEach(() => vi.mocked(updatePipelineConfig).mockClear());
+
+  it("o seletor só aparece no funil que o servidor lê: o padrão e o de clientes, nunca um secundário", () => {
+    // `funilDeEntrada` consulta `entrada_do_inbox` só no `is_default` e no
+    // `is_client_pipeline`. Num secundário a escolha seria salva e nunca usada.
+    const SECUNDARIO: PipelineRow = {
+      ...FUNIL,
+      id: "44444444-4444-4444-8444-444444444444",
+      name: "Pós-venda",
+      slug: "pos-venda",
+      is_default: false,
+    };
+    const etapas = { ...ETAPAS_DE_ENTRADA, [SECUNDARIO.id]: ETAPAS_DE_ENTRADA[FUNIL.id]! };
+    const rotulo = "Etapa de entrada das conversas do Inbox";
+
+    const { unmount } = render(
+      <PipelinesClient pipelines={[{ ...FUNIL, is_default: true }, SECUNDARIO]} etapas={etapas} podeEditarConfig />,
+    );
+    abrirEditores();
+    expect(screen.getAllByRole("button", { name: /Salvar vocabulário e campos/i })).toHaveLength(2);
+    expect(screen.queryAllByLabelText(rotulo)).toHaveLength(1);
+    unmount();
+
+    const { unmount: desmontar } = render(
+      <PipelinesClient pipelines={[SECUNDARIO]} etapas={etapas} podeEditarConfig />,
+    );
+    abrirEditores();
+    expect(screen.queryAllByLabelText(rotulo)).toHaveLength(0);
+    desmontar();
+
+    render(
+      <PipelinesClient
+        pipelines={[{ ...SECUNDARIO, is_client_pipeline: true }]}
+        etapas={etapas}
+        podeEditarConfig
+      />,
+    );
+    abrirEditores();
+    expect(screen.queryAllByLabelText(rotulo)).toHaveLength(1);
+  });
 
   it("abre na primeira etapa quando o funil não declara nada, e sem aviso", () => {
     montar(FUNIL);
