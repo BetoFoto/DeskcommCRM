@@ -258,6 +258,16 @@ export const contactListQuerySchema = z.object({
     .union([z.boolean(), z.enum(["true", "false"])])
     .optional()
     .transform((v) => v === true || v === "true"),
+  /**
+   * A LISTA DE QUEM PEDIU PARA NÃO SER INCOMODADO.
+   *
+   * Sem isto o bloqueio existia só como etiqueta na linha: para saber quem
+   * pediu era preciso percorrer a lista inteira a olho. Responde só pelo
+   * opt-out do titular: a lista de exclusão de campanha e os anonimizados
+   * são outras perguntas, fora deste filtro. Ausente = todos (o padrão de
+   * sempre); `z.enum` recusa o valor inventado com 422, como o `modo`.
+   */
+  blocked: z.enum(["yes", "no"]).optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   order_by: z.enum(CONTACT_ORDER_BY).default("last_activity_at"),
