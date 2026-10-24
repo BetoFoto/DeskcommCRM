@@ -614,7 +614,7 @@ export async function createContactHandler(
     phone_number: input.phone_number ? canonicalPhoneBR(input.phone_number) : null,
     birthdate: input.birthdate ?? null,
     // Só quando INFORMADO: sem a chave, quem grava o default é o banco
-    // ('cliente', migration 0746) — e é isso que o invariante de coluna prova
+    // ('cliente', migration 0763) — e é isso que o invariante de coluna prova
     // ("contato novo nasce cliente sem ninguém informar").
     ...(input.contact_type !== undefined ? { contact_type: input.contact_type } : {}),
     tags: input.tags ?? [],

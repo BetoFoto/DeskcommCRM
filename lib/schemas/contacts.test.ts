@@ -211,7 +211,7 @@ describe("contactPatchSchema", () => {
   });
 
   it("não materializa contact_type quando o PATCH omite o tipo", () => {
-    // O default 'cliente' é do BANCO (migration 0746): um PATCH que só troca o
+    // O default 'cliente' é do BANCO (migration 0763): um PATCH que só troca o
     // nome não pode mandar `contact_type: 'cliente'` e rebaixar um fornecedor
     // em silêncio. O campo ausente fica AUSENTE.
     const parsed = contactPatchSchema.parse({ name: "Ana" });

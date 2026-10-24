@@ -8,7 +8,7 @@
  * mostrava o mesmo cartão para os dois. A fatia 1 desta issue é o TIPO: o
  * seletor na ficha (`EditContactDialog`) e o selo no painel da conversa
  * (`CRMSidePanel`), os dois lendo a coluna `contacts.contact_type` (migration
- * 0746, espelhada no fim do `baseline.sql`).
+ * 0763, espelhada no fim do `baseline.sql`).
  *
  * ─── Por que este arquivo roda as TELAS de verdade ─────────────────────────
  *
