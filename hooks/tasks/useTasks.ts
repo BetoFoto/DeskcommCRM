@@ -30,7 +30,7 @@ export interface FiltrosDeTarefa {
   demanda_id?: string;
   /** `true` = só o que ainda pede ação (pendente ou em andamento). */
   aberto?: boolean;
-  /** De quem é: o id de um membro, ou `ninguem` (sem responsável). Ausente = de todos. */
+  /** De quem é: `me` (a rota resolve quem é), `ninguem` (sem responsável) ou o id de um membro. Ausente = de todos. */
   assigned_to?: string;
 }
 

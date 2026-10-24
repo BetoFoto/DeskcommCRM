@@ -71,12 +71,14 @@ const listaSchema = z.object({
   /** "abertas" = o que ainda pede ação. É o default da tela. */
   aberto: z.enum(["true", "false"]).optional(),
   /**
-   * De QUEM é a tarefa: o id de um membro, ou `ninguem` para as sem responsável.
-   * Sem isto a tela de Tarefas misturava a equipe inteira numa lista só, e quem
-   * atende não tinha como ver "as minhas" (a lista corta em 500 — filtrar na tela
-   * esconderia as que ficaram fora do corte).
+   * De QUEM é a tarefa: `me` (o usuário da sessão, resolvido aqui), `ninguem`
+   * (sem responsável) ou o id de um membro. Sem isto a tela de Tarefas misturava
+   * a equipe inteira numa lista só (a lista corta em 500 — filtrar na tela
+   * esconderia as que ficaram fora do corte). Um id de terceiro vindo do
+   * navegador só ESTREITA uma lista que viewer+ já vê inteira; a organização sai
+   * da sessão e a RLS segura o resto.
    */
-  assigned_to: z.union([z.string().uuid(), z.literal("ninguem")]).optional(),
+  assigned_to: z.union([z.literal("me"), z.literal("ninguem"), z.string().uuid()]).optional(),
 });
 
 export async function GET(req: NextRequest): Promise<Response> {
@@ -115,7 +117,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (filtros.due_from) query = query.gte("due_date", filtros.due_from);
   if (filtros.due_to) query = query.lte("due_date", filtros.due_to);
   if (filtros.aberto === "true") query = query.in("status", ["pending", "in_progress"]);
-  if (filtros.assigned_to === "ninguem") query = query.is("assigned_to", null);
+  if (filtros.assigned_to === "me") query = query.eq("assigned_to", authz.user.id);
+  else if (filtros.assigned_to === "ninguem") query = query.is("assigned_to", null);
   else if (filtros.assigned_to) query = query.eq("assigned_to", filtros.assigned_to);
 
   const { data, error } = await query;

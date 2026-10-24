@@ -89,6 +89,14 @@ describe("GET /api/v1/tasks?assigned_to=", () => {
     expect(filtros).toContainEqual(["eq", "organization_id", ORG]);
   });
 
+  it("`me` é resolvido pelo usuário da SESSÃO, não por um id do navegador", async () => {
+    sessao();
+    const filtros = fazerSupabase();
+    const res = await listar("?assigned_to=me");
+    expect(res.status).toBe(200);
+    expect(filtros).toContainEqual(["eq", "assigned_to", ANA]);
+  });
+
   it("valor que não é id nem `ninguem` é recusado (422), não vira 'todos' em silêncio", async () => {
     sessao();
     fazerSupabase();
@@ -98,16 +106,16 @@ describe("GET /api/v1/tasks?assigned_to=", () => {
 });
 
 describe("o filtro da tela → o parâmetro da rota", () => {
-  it("todos = sem parâmetro; minhas = o meu id; ninguem e id passam como estão", () => {
-    expect(responsavelDoFiltro("todos", ANA)).toBeUndefined();
-    expect(responsavelDoFiltro("eu", ANA)).toBe(ANA);
-    expect(responsavelDoFiltro("ninguem", ANA)).toBe("ninguem");
-    expect(responsavelDoFiltro(BETO, ANA)).toBe(BETO);
+  it("todos = sem parâmetro; minhas = `me` (a rota resolve pela sessão); ninguem e id passam como estão", () => {
+    expect(responsavelDoFiltro("todos")).toBeUndefined();
+    expect(responsavelDoFiltro("eu")).toBe("me");
+    expect(responsavelDoFiltro("ninguem")).toBe("ninguem");
+    expect(responsavelDoFiltro(BETO)).toBe(BETO);
   });
 
   it("a tela usa o filtro e manda para a rota (o fio que some sem barulho)", () => {
     const tela = readFileSync("app/app/tasks/_components/TarefasClient.tsx", "utf8");
-    expect(tela).toMatch(/assigned_to: responsavelDoFiltro\(responsavel, usuario\.id\)/);
+    expect(tela).toMatch(/assigned_to: responsavelDoFiltro\(responsavel\)/);
     expect(tela).toMatch(/aria-label=\{t\("Responsável"\)\}/);
     const hook = readFileSync("hooks/tasks/useTasks.ts", "utf8");
     expect(hook).toMatch(/params\.set\("assigned_to", filtros\.assigned_to\)/);
