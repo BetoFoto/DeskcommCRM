@@ -1,3 +1,58 @@
+-- manifest: carimba a recebida de GRUPO com a revisão de serviço e abre o episódio com service_started_at, para o histórico do grupo entrar no turno da IA (#2729)
+--
+-- #2729 — o histórico do grupo entra no atendimento.
+--
+-- O turno da IA monta o histórico em `getLeadContext`, e a régua dele é o
+-- ATENDIMENTO CORRENTE: recebida só entra com `messages.service_revision =
+-- c.service_revision`; enviada só entra com `messages.sent_at >=
+-- c.service_started_at`. A conversa de grupo nascia fora dos dois:
+--
+--   (a) `fn_service_inbound` saía cedo quando a conversa era de grupo, ANTES de
+--       carimbar a mensagem — toda recebida de grupo ficava com
+--       `service_revision` nulo e sumia do histórico. Medido com a mesma função
+--       que o turno usa (`getLeadContext`): grupo vinha vazio, o controle 1:1
+--       vinha com as três mensagens.
+--   (b) `criarConversaDoGrupo` (lib/grupos/ingest.ts) criava a conversa sem
+--       `service_started_at`; `messages.sent_at >= NULL` é NULL, nunca verdade,
+--       então TODA enviada ficava de fora.
+--
+-- A função abaixo é a MESMA de sempre (faixa do episódio, dono que fica,
+-- boundary); muda só o ramo de grupo: ele não cria demanda — grupo continua sem
+-- funil, como no desenho aprovado — mas carimba o episódio.
+--
+-- Idempotente: `create or replace` + `update ... where service_started_at is
+-- null`. O backfill só preenche NULL com o instante da primeira mensagem (ou da
+-- criação); não inventa revisão para mensagem antiga, porque revisão é
+-- afirmação sobre o episódio e essas mensagens são de antes dele.
+
+-- ---- histórico do grupo no atendimento (migration 0764) ----
+
+-- Conversa de grupo que já existe nasce com o episódio datado na primeira
+-- mensagem dela: sem isto o conserto só valeria para grupo NOVO.
+update public.conversations c
+   set service_started_at = coalesce(
+         (select min(m.sent_at) from public.messages m
+           where m.organization_id = c.organization_id and m.conversation_id = c.id),
+         c.created_at)
+ where c.service_started_at is null
+   and (c.is_group or coalesce(c.group_chat_id,'') like '%@g.us');
+
+-- Carimbo retroativo das recebidas de grupo em conversa ABERTA: sem isto o
+-- histórico do grupo só passaria a existir para mensagem NOVA. Grupo não tem
+-- funil, então não há episódio anterior a distinguir — o que está aberto é o
+-- episódio corrente. Conversa encerrada fica de fora de propósito: ela pertence
+-- a um episódio fechado, e quando reabrir começa outro (o carimbo vem na
+-- reabertura, em `reabrirSeFechada`).
+update public.messages m
+   set service_revision = c.service_revision
+  from public.conversations c
+ where c.organization_id = m.organization_id
+   and c.id = m.conversation_id
+   and (c.is_group or coalesce(c.group_chat_id,'') like '%@g.us')
+   and c.status not in ('closed','resolved','archived')
+   and m.direction = 'inbound'
+   and m.service_revision is null;
+
 create or replace function public.fn_service_inbound(p_message uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -15,28 +70,22 @@ begin
     or c.channel_session_id is distinct from m.channel_session_id
     or not exists(select 1 from public.channel_sessions where id=m.channel_session_id and organization_id=m.organization_id)
  then raise exception 'service_scope_mismatch' using errcode='23503'; end if;
- -- #2729 — GRUPO: sem demanda (nada de funil aqui), mas COM o carimbo do
- -- episódio, que faltava por dois motivos medidos:
- --   · a recebida sem `service_revision` some do histórico do turno, porque
- --     `getLeadContext` exige `messages.service_revision = c.service_revision`;
- --   · a conversa de grupo reaberta precisa do mesmo tratamento da 1:1
- --     (revisão nova + `service_started_at` novo), senão a mensagem que reabriu
- --     fica no episódio VELHO e o turno não a vê.
- -- O lock é o mesmo (org, contato): dois webhooks do mesmo grupo serializam.
+ -- #2729 — GRUPO: sem demanda (grupo não tem funil, como no desenho aprovado),
+ -- mas COM o carimbo do episódio, que faltava e esvaziava o histórico do turno:
+ -- `getLeadContext` só inclui recebida com `messages.service_revision =
+ -- c.service_revision`, e a saída cedo daqui deixava TODA recebida de grupo com
+ -- revisão nula.
+ --
+ -- A conversa ENCERRADA continua saindo cedo: quem reabre grupo é o ingest
+ -- (`reabrirSeFechada`, em lib/grupos/ingest.ts), DEPOIS do insert, e carimbar
+ -- aqui poria a mensagem no episódio VELHO — a revisão sobe na reabertura.
  if c.is_group or coalesce(c.group_chat_id,'') like '%@g.us' then
-   perform public.fn_service_lock(c.organization_id, c.contact_id);
-   select * into c from public.conversations
-    where id = m.conversation_id and organization_id = m.organization_id for no key update;
-   if m.sent_at <= c.service_closed_at then return; end if;
-   if c.status in ('closed','resolved','archived') then
-     update public.conversations set
-       status='open', status_changed_at=clock_timestamp(),
-       service_revision=service_revision+1, service_started_at=m.sent_at,
-       assigned_to_user_id=null, assigned_at=null, assignee_kind=null,
-       active_ai_agent_id=null
-      where id=c.id and organization_id=c.organization_id returning * into c;
-   else
-     update public.conversations set service_started_at=coalesce(service_started_at,m.sent_at)
+   if c.status in ('closed','resolved','archived') then return; end if;
+   -- Conversa de grupo anterior a este carimbo nasce sem `service_started_at`, e
+   -- `messages.sent_at >= NULL` nunca é verdade: toda enviada sairia do
+   -- histórico. O campo passa a valer a partir da primeira mensagem que chega.
+   if c.service_started_at is null then
+     update public.conversations set service_started_at=m.sent_at
       where id=c.id and organization_id=c.organization_id returning * into c;
    end if;
    update public.messages set service_revision=c.service_revision
@@ -104,3 +153,5 @@ begin
  update public.messages set service_revision=c.service_revision,demanda_id=d.id,demanda_revision=d.revision
   where id=m.id and organization_id=c.organization_id;
 end; $$;
+revoke execute on function public.fn_service_inbound(uuid) from public,anon,authenticated;
+grant execute on function public.fn_service_inbound(uuid) to service_role;

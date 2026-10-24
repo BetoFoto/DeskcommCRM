@@ -54507,7 +54507,7 @@ create trigger trg_messages_sincroniza_campanha
   when (new.direction = 'outbound')
   execute function public.fn_campanha_sincroniza_ack();
 
--- ---- histórico do grupo no atendimento (migration 0706) ----
+-- ---- histórico do grupo no atendimento (migration 0764) ----
 
 -- Conversa de grupo que já existe nasce com o episódio datado na primeira
 -- mensagem dela: sem isto o conserto só valeria para grupo NOVO.

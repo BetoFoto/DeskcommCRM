@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+import { aiResponseHandler } from "@/workers/ai-response-worker.handler";
+
 /**
  * Regra dura nº 12: a IA não responde em grupo.
  *
@@ -20,6 +22,10 @@ import { describe, expect, it } from "vitest";
  */
 describe("a IA não responde em grupo (a não ser que o grupo libere)", () => {
   it("o worker de resposta não escuta o evento de grupo", () => {
+    // A lista que o worker ASSINA é a autoridade; a leitura do texto abaixo
+    // só pega a menção literal e não vê um evento montado por constante.
+    expect(aiResponseHandler.events).not.toContain("message.group_received");
+    expect(aiResponseHandler.events).toEqual(["message.received"]);
     const worker = readFileSync("workers/ai-response-worker.ts", "utf8");
     const handler = readFileSync("workers/ai-response-worker.handler.ts", "utf8");
     expect(worker).not.toContain("message.group_received");
