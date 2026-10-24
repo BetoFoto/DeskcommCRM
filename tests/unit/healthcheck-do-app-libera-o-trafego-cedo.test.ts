@@ -2,9 +2,13 @@
  * A checagem de saúde do app libera o tráfego CEDO depois de uma atualização,
  * sem perder a tolerância a falha e sem subir a versão mínima do Compose.
  *
- * O proxy só manda tráfego a contêiner `healthy`. Com `interval: 30s`, o app
- * ficava pronto em ~5 s e o domínio seguia em "404 page not found" por 30–45 s
- * a cada atualização (medido numa instalação real em 24/09/2026).
+ * Atrás do Traefik da hospedagem (`docker-compose.traefik.yml`), o tráfego só
+ * vai a contêiner `healthy`. Com Docker 24 ou mais antigo e `interval: 30s`, o
+ * app ficava pronto em ~5 s e o domínio seguia em "404 page not found" por
+ * 30–45 s a cada atualização (medido numa instalação real em 24/09/2026).
+ * Com Docker 25 ou mais novo a janela já era de ~5 s; o Caddy padrão do kit
+ * não consulta a saúde.
+ * Conserto de @jmpo (PR #3393).
  *
  * Três réguas, cada uma com o seu motivo:
  *  1. `interval` de no máximo 10 s — é a janela de 404 depois do `up -d`;

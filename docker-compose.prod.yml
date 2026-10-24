@@ -74,10 +74,15 @@ services:
       # ele dá 503 se WAHA/Redis caem, o que deixaria o app "unhealthy" e derrubaria
       # o Caddy junto (blackout total por uma dependência secundária).
       test: ["CMD", "node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
-      # A cada 10 s, e não a cada 30. O proxy só manda tráfego a contêiner
-      # `healthy`, e o app fica pronto em ~5 s: com 30 s, TODA atualização
-      # deixava o domínio em "404 page not found" por 30–45 s sem motivo
-      # (medido numa instalação real em 24/09/2026, quatro deploys no dia).
+      # A cada 10 s, e não a cada 30 (conserto de @jmpo, PR #3393). Atrás do
+      # Traefik da hospedagem (Hostinger, Coolify, Dokploy — o
+      # docker-compose.traefik.yml), o tráfego só vai a contêiner `healthy`; o
+      # app fica pronto em ~5 s, mas com Docker 24 ou mais antigo a primeira
+      # checagem só rodava aos 30 s, e a atualização deixava o domínio em
+      # "404 page not found" por 30–45 s (medido numa instalação real em
+      # 24/09/2026, quatro deploys no dia).
+      # Com Docker 25 ou mais novo a janela já era de ~5 s e não muda. O Caddy
+      # padrão do kit não consulta a saúde para rotear.
       # `retries` sobe na mesma proporção: 10 s × 15 = os mesmos 150 s de
       # tolerância de antes (30 s × 5) para declarar o app doente.
       #
