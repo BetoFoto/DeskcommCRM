@@ -64,6 +64,8 @@
  */
 import { createHash, createHmac } from "node:crypto";
 
+import { tagDeIdioma } from "@/lib/i18n/datas";
+import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { PAIS_PADRAO } from "@/lib/legal/perfil-do-pais";
 
 /** Versão do FORMATO. Entra na linha canônica: mudar o layout muda o código. */
@@ -101,10 +103,13 @@ export function dataHoraNoFuso(iso: string, fuso: string): string {
     hourCycle: "h23",
   };
   const instante = new Date(iso);
+  // O documento é gerado no worker, sem leitor de interface: o idioma é o
+  // padrão do produto, resolvido pela camada de data (nunca escrito à mão).
+  const etiqueta = tagDeIdioma(IDIOMA_PADRAO);
   try {
-    return `${new Intl.DateTimeFormat("pt-BR", { ...opcoes, timeZone: fuso }).format(instante)} (${fuso})`;
+    return `${new Intl.DateTimeFormat(etiqueta, { ...opcoes, timeZone: fuso }).format(instante)} (${fuso})`;
   } catch {
-    return `${new Intl.DateTimeFormat("pt-BR", { ...opcoes, timeZone: "UTC" }).format(instante)} (UTC)`;
+    return `${new Intl.DateTimeFormat(etiqueta, { ...opcoes, timeZone: "UTC" }).format(instante)} (UTC)`;
   }
 }
 
