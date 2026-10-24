@@ -39,6 +39,8 @@ import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Mensagens da conversa": { es: "Mensajes de la conversación" },
+  "Novas mensagens · Ir para o fim": { es: "Mensajes nuevos · Ir al final" },
   // Encaminhar mensagem (#2835) — botão na bolha do chat e o diálogo de destino.
   "Encaminhar": { es: "Reenviar" },
   "Encaminhar mensagem": { es: "Reenviar mensaje" },
@@ -2028,6 +2030,19 @@ export const DICIONARIO: Traducoes = {
   "Menu do usuário": { es: "Menú del usuario" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
+  // Lembrete de caso parado na Central (migration 0766; ideia de @Atlasads no #2584).
+  "Lembrete de caso parado": { es: "Recordatorio de caso detenido" },
+  "Quando um caso espera uma decisão da equipe, esta Central volta a avisar. O relógio começa quando o caso chega à equipe e recomeça quando o cliente responde.": {
+    es: "Cuando un caso espera una decisión del equipo, esta Central vuelve a avisar. El reloj empieza cuando el caso llega al equipo y se reinicia cuando el cliente responde.",
+  },
+  "Lembrar a equipe dos casos parados": { es: "Recordar al equipo los casos detenidos" },
+  "Lembrar a cada": { es: "Recordar cada" },
+  "Avisos por espera": { es: "Avisos por espera" },
+  "Salvar lembrete": { es: "Guardar recordatorio" },
+  "Lembrete de caso parado salvo.": { es: "Recordatorio de caso detenido guardado." },
+  "Não foi possível salvar o lembrete de caso parado.": { es: "No se pudo guardar el recordatorio de caso detenido." },
+  "{n} dias": { es: "{n} días" },
+  "{n} horas": { es: "{n} horas" },
   // O que a tela diz a quem NÃO alcança a Central (#3147): a frase verdadeira
   // no lugar do estado vazio, que era falso para quem não pode ver aviso nenhum.
   "A Central de avisos é para quem atende": { es: "La Central de avisos es para quienes atienden" },
@@ -10056,6 +10071,13 @@ export const DICIONARIO: Traducoes = {
   "Senha": { es: "Contraseña" },
   "Confirmar senha": { es: "Confirmar contraseña" },
   "Código inválido. Tente novamente.": { es: "Código inválido. Intenta de nuevo." },
+  // O aviso das telas de autenticação quando a resposta não chega no teto de
+  // espera (components/auth/teto-da-espera.tsx). Não afirma que falhou: a
+  // ação pode ter acontecido do outro lado.
+  "Não recebemos a resposta do servidor. Recarregue a página para tentar de novo.": {
+    es: "No recibimos la respuesta del servidor. Recarga la página para intentarlo de nuevo.",
+  },
+  "Recarregar a página": { es: "Recargar la página" },
   "Verificando...": { es: "Verificando..." },
   "Verificar": { es: "Verificar" },
   "Dados inválidos. Confira os campos.": { es: "Datos inválidos. Revisa los campos." },
@@ -15687,6 +15709,10 @@ export const DICIONARIO: Traducoes = {
   "Já está em outra campanha ainda não concluída": { es: "Ya está en otra campaña que todavía no termina" },
   "Está na lista de exclusão de campanhas": { es: "Está en la lista de exclusión de campañas" },
   "Parar de enviar às (hora)": { es: "Dejar de enviar a las (hora)" },
+  "Dividir a mensagem em balões, um por parágrafo": { es: "Dividir el mensaje en burbujas, una por párrafo" },
+  "Até 3 balões por pessoa; o que passar disso vai junto no último. Cada balão conta no limite diário do número.": {
+    es: "Hasta 3 burbujas por persona; lo que pase de eso va junto en la última. Cada burbuja cuenta en el límite diario del número.",
+  },
   "pediram para parar": { es: "pidieron parar" },
   "pessoas? O envio segue o ritmo do número e pode levar horas.": {
     es: "personas? El envío sigue el ritmo del número y puede llevar horas.",
