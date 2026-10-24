@@ -449,3 +449,48 @@ describe("regressões do caminho com external_id (#3357)", () => {
     ).toContainEqual(["is", "external_id", null]);
   });
 });
+
+describe("as bordas do portão 3 (#3366)", () => {
+  it("⭐ envio SEM external_id continua reusando o card aberto que já tem id — o portão é só do envio COM id (#3101)", async () => {
+    // O card do contato nasceu de uma integração (tem id), e um formulário sem
+    // id chega pela fonte com o reuso ligado. Antes do #3366 ele era reusado;
+    // o portão de "um id não adota o card de outro" não tem id a comparar aqui.
+    m.cardAberto = { ...CARD_ABERTO, external_id: "conta-3357", webhook_source_id: "fonte-1" };
+    const { external_id: _semId, ...semId } = ENVIO_DO_TRIAL;
+
+    const res = await enviar(semId);
+
+    expect(h.criarLead, "o envio sem id abriu um segundo card ao lado do card com id").not.toHaveBeenCalled();
+    expect(carimbos()).toHaveLength(0);
+    expect(h.atualizarLead.mock.calls[0]?.[2]).toBe(CARD_DA_CONVERSA);
+    expect(desfecho()).toBe("atualizado");
+    expect(res.status).toBe(200);
+  });
+
+  it("⭐ card aberto que já tem ESTE id (o vencedor da corrida carimbou entre as duas leituras) é adotado, não duplicado", async () => {
+    // Dois primeiros envios simultâneos do mesmo id: o perdedor leu o id como
+    // inédito, e quando foi ler o card aberto o vencedor já o tinha carimbado.
+    m.cardAberto = { ...CARD_ABERTO, external_id: "conta-3357", webhook_source_id: "fonte-1" };
+
+    const res = await enviar(ENVIO_DO_TRIAL);
+
+    expect(h.criarLead, "a corrida de dois primeiros envios abriu um segundo card").not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ data: { lead_id: CARD_DA_CONVERSA } });
+  });
+
+  it("⭐ segundo envio do mesmo id com \"Atualizar o card existente\" DESLIGADA: sucesso e card intocado (o que o fragmento afirma)", async () => {
+    m.porExternalId = { ...CARD_ABERTO, external_id: "conta-3357", webhook_source_id: "fonte-1" };
+    // Só "Reaproveitar" ligada — `update_existing_lead_on_capture: false` é o default da FONTE.
+
+    const res = await enviar({ ...ENVIO_DO_TRIAL, evento: "trial_ativado" });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: { lead_id: CARD_DA_CONVERSA } });
+    expect(h.criarLead).not.toHaveBeenCalled();
+    expect(h.atualizarLead).not.toHaveBeenCalled();
+    expect(h.moverLead).not.toHaveBeenCalled();
+    expect(carimbos()).toHaveLength(0);
+    expect(leiturasDoCardAberto()).toHaveLength(0);
+    expect(desfecho()).toBe("duplicado");
+  });
+});
