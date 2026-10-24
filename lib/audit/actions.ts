@@ -1321,6 +1321,7 @@ export const AUDIT_ACTIONS = [
   // mesma razão do `ai.case_alert_settings_changed`: `api_audit_log` é
   // append-only e a cascata de LGPD não o alcança.
   "ai.case_alert_settings_removed",
+  "lgpd.atestado_emitido",
   // A cadência do lembrete de caso parado (migration 0766): ligado, intervalo e
   // teto, escolhidos na Central por quem administra. Audita porque desligar
   // cala a cobrança da organização inteira, e "quem desligou, e quando" só tem
