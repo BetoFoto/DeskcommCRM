@@ -63404,3 +63404,10 @@ alter table public.message_templates
 
 comment on column public.message_templates.mostrar_na_barra is
   'Se a resposta rápida aparece na barra do Inbox (#3282). Default true: a ausência da marcação e a marcação ligada mantêm o comportamento de sempre. O atalho / lista TODAS, independente deste campo.';
+
+-- ---- campanha de texto em vários balões (migration 0765) ----
+alter table public.campaigns
+  add column if not exists split_messages boolean not null default false;
+
+comment on column public.campaigns.split_messages is
+  'Campanha de texto sai em balões, um por parágrafo, até 3 por destinatário (PR #3329). Default false. Modelo aprovado nunca se divide.';
