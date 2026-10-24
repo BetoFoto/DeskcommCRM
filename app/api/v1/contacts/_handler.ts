@@ -276,6 +276,9 @@ export async function listContactsHandler(
     query = query.contains("tags", q.tag);
   }
   if (q.source) query = query.eq("source", q.source);
+  // `yes` responde "quem pediu para não ser incomodado"; `no` é a lista de quem
+  // ainda dá para contactar — que é a pergunta de quem vai montar campanha.
+  if (q.blocked) query = query.eq("is_blocked", q.blocked === "yes");
   if (soContato) query = query.eq("id", soContato);
   // Pessoal fora da lista por padrão; `?pessoais=true` lista SÓ pessoais
   // (spec 21, etapa 13 — a tela do filtro e o desmarcar). Sem esta linha a
