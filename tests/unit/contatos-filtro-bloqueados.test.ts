@@ -150,4 +150,9 @@ describe("o schema e a rota", () => {
     const src = semComentarios(fonte("app", "api", "v1", "contacts", "route.ts"));
     expect(src).toMatch(/blocked: url\.searchParams\.get\("blocked"\)/);
   });
+
+  it("a exportação também: exportar é exportar o que a lista mostra", () => {
+    const src = semComentarios(fonte("app", "api", "v1", "contacts", "export", "route.ts"));
+    expect(src).toMatch(/blocked: url\.searchParams\.get\("blocked"\)/);
+  });
 });
