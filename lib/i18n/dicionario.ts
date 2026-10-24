@@ -7958,6 +7958,12 @@ export const DICIONARIO: Traducoes = {
   Descartar: { es: "Descartar" },
   Você: { es: "Tú" },
   Cliente: { es: "Cliente" },
+  // Tipo de contato (issue 3005, fatia 1): o seletor da ficha e os selos.
+  Fornecedor: { es: "Proveedor" },
+  "Tipo de contato": { es: "Tipo de contacto" },
+  "Fornecedor conversa normalmente — o tipo muda o painel, não o envio.": {
+    es: "El proveedor conversa con normalidad — el tipo cambia el panel, no el envío.",
+  },
   "(sem texto)": { es: "(sin texto)" },
   "Cancelar resposta": { es: "Cancelar respuesta" },
   // ─── Saúde do canal (bolinha da sidebar + estado do canal) ───

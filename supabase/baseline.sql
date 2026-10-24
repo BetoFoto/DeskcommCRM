@@ -63090,6 +63090,37 @@ comment on column public.webhook_sources.reuse_open_lead_on_capture is
 alter table public.prospecting_campaigns
   add column if not exists channel_down_since timestamptz;
 
+-- ---- 0763: tipo de contato — cliente ou fornecedor (issue 3005, fatia 1) ----
+-- Espelho idempotente da migration 0763. É este apêndice que chega a todo
+-- self-host: o install.sh aplica o baseline num banco novo e o update.sh o
+-- re-aplica num banco existente; nenhum dos dois roda as migrations.
+--
+-- `contact_type` nasce 'cliente': contato novo é cliente até alguém dizer o
+-- contrário. Coluna nova, e não `is_personal`: aquela VETA todo envio
+-- (`readStopFlags` em `lib/agent-engine/guardrails/before-send.ts`), e o
+-- fornecedor da issue 3005 conversa normalmente.
+alter table public.contacts
+  add column if not exists contact_type text default 'cliente' not null;
+
+comment on column public.contacts.contact_type is
+  'Tipo do contato (issue 3005): cliente (padrão) ou fornecedor. Fornecedor conversa normalmente — ao contrário de is_personal, NÃO veta envio; o que muda é o painel/lista de campos (fatias seguintes). Quem mudou/quando fica em auditoria + timeline, nunca aqui.';
+
+-- drop + add num bloco DO só: o update.sh roda sem ON_ERROR_STOP, e soltos
+-- um add que falhasse deixaria a coluna sem CHECK nenhum.
+do $$
+begin
+  alter table public.contacts
+    drop constraint if exists contacts_contact_type_check;
+  alter table public.contacts
+    add constraint contacts_contact_type_check
+      check (contact_type in ('cliente', 'fornecedor'));
+end
+$$;
+
+create index if not exists idx_contacts_org_fornecedor
+  on public.contacts (organization_id)
+  where (contact_type = 'fornecedor');
+
 notify pgrst, 'reload schema';
 
 -- ---- campanha com modelo aprovado (migration 0710) ----

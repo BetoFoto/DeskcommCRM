@@ -4448,6 +4448,7 @@ isOneToOne: false
           client_recognized_at: string | null
           client_tag_by_system: string | null
           consent: Json
+          contact_type: string
           cpf_encrypted: string | null
           custom_fields: Json
           cpf_hash: string | null
@@ -4494,6 +4495,7 @@ isOneToOne: false
           client_recognized_at?: string | null
           client_tag_by_system?: string | null
           consent?: Json
+          contact_type?: string
           cpf_encrypted?: string | null
           custom_fields?: Json
           cpf_hash?: string | null
@@ -4540,6 +4542,7 @@ isOneToOne: false
           client_recognized_at?: string | null
           client_tag_by_system?: string | null
           consent?: Json
+          contact_type?: string
           cpf_encrypted?: string | null
           custom_fields?: Json
           cpf_hash?: string | null
