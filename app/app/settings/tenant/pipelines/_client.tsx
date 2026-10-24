@@ -722,6 +722,16 @@ function PipelineEditor({
   const [retomaComoNovo, setRetomaComoNovo] = useState(
     modoDeReabertura(pipeline.settings) === "novo_negocio",
   );
+  // O recorte de encerrados antigos do quadro (#2995): opção POR FUNIL em
+  // `settings.ocultar_encerrados_dias`, desligada por padrão. O número relido é
+  // o que está gravado (`null` = desligado) e é ele que preenche o campo de
+  // dias, para ligar/desligar não exigir digitação; o campo já nasce com a
+  // sugestão de 30 dias, que NÃO é gravada enquanto ninguém ligar a opção.
+  const diasRelidos = diasDeRecorte(pipeline.settings);
+  const [ocultarEncerrados, setOcultarEncerrados] = useState(diasRelidos !== null);
+  const [diasDosEncerrados, setDiasDosEncerrados] = useState(
+    diasRelidos !== null ? String(diasRelidos) : String(DIAS_PADRAO_DO_RECORTE),
+  );
   /**
    * A ENTRADA DAS CONVERSAS DO INBOX (#3011) — quantas fatias da tela o ajuste
    * tem.
@@ -737,16 +747,6 @@ function PipelineEditor({
   const entradaInicial = entradaDoInboxDeclarada(pipeline.settings);
   const [entradaAtiva, setEntradaAtiva] = useState(entradaInicial.ativa);
   const [entradaEtapaId, setEntradaEtapaId] = useState<string | null>(entradaInicial.stage_id);
-  // O recorte de encerrados antigos do quadro (#2995): opção POR FUNIL em
-  // `settings.ocultar_encerrados_dias`, desligada por padrão. O número relido é
-  // o que está gravado (`null` = desligado) e é ele que preenche o campo de
-  // dias, para ligar/desligar não exigir digitação; o campo já nasce com a
-  // sugestão de 30 dias, que NÃO é gravada enquanto ninguém ligar a opção.
-  const diasRelidos = diasDeRecorte(pipeline.settings);
-  const [ocultarEncerrados, setOcultarEncerrados] = useState(diasRelidos !== null);
-  const [diasDosEncerrados, setDiasDosEncerrados] = useState(
-    diasRelidos !== null ? String(diasRelidos) : String(DIAS_PADRAO_DO_RECORTE),
-  );
   // O texto CSV de importação de opções (#2521), por chave de campo — vive só
   // enquanto a pessoa cola; "Importar" o transforma em opções e o limpa.
   const [csvDeOpcoes, setCsvDeOpcoes] = useState<Record<string, string>>({});
