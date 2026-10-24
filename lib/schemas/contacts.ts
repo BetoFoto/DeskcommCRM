@@ -262,9 +262,9 @@ export const contactListQuerySchema = z.object({
    * A LISTA DE QUEM PEDIU PARA NÃO SER INCOMODADO.
    *
    * Sem isto o bloqueio existia só como etiqueta na linha: para saber quem
-   * pediu era preciso percorrer a lista inteira a olho. Quem precisa dessa
-   * resposta é justamente quem vai montar uma campanha — e errar ali é
-   * escrever para quem disse que não queria. Ausente = todos (o padrão de
+   * pediu era preciso percorrer a lista inteira a olho. Responde só pelo
+   * opt-out do titular: a lista de exclusão de campanha e os anonimizados
+   * são outras perguntas, fora deste filtro. Ausente = todos (o padrão de
    * sempre); `z.enum` recusa o valor inventado com 422, como o `modo`.
    */
   blocked: z.enum(["yes", "no"]).optional(),

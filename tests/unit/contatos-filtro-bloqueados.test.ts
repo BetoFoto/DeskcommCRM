@@ -8,11 +8,11 @@ import { contactListQuerySchema } from "@/lib/schemas/contacts";
 
 /**
  * `GET /api/v1/contacts?blocked=yes|no` — A LISTA DE QUEM PEDIU PARA NÃO SER
- * INCOMODADO, e a de quem ainda dá para contactar.
+ * INCOMODADO, e a de quem não pediu opt-out.
  *
  * Sem o filtro, o bloqueio (opt-out) existia só como etiqueta na linha: para
- * saber quem pediu era preciso percorrer a lista inteira a olho, e quem monta
- * campanha não tinha como perguntar "para quem ainda posso escrever?".
+ * saber quem pediu era preciso percorrer a lista inteira a olho. O filtro
+ * responde só pelo opt-out, não pela exclusão de campanha nem por anonimizados.
  *
  * ─── SABOTAGEM ─────────────────────────────────────────────────────────────
  * - Tirar o `.eq("is_blocked", …)` do handler: `yes` e `no` devolvem os dois
@@ -129,7 +129,7 @@ describe("?blocked filtra pelo opt-out", () => {
     expect(ids(r)).toEqual(["ct-bloqueado"]);
   });
 
-  it("blocked=no: SÓ quem ainda dá para contactar", async () => {
+  it("blocked=no: SÓ quem não pediu opt-out", async () => {
     const r = await listContactsHandler(banco(), ctx(), { blocked: "no" });
     expect(ids(r)).toEqual(["ct-livre"]);
   });

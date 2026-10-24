@@ -4,4 +4,4 @@ secao: adicionado
 titulo: A API de contatos filtra quem pediu para não ser incomodado
 ---
 
-`GET /api/v1/contacts` aceita `?blocked=yes` (só os contatos bloqueados — quem pediu para sair) e `?blocked=no` (só quem ainda pode receber mensagem). Até aqui o bloqueio aparecia só como marca em cada contato, e para montar a lista de quem pediu, ou a de quem ainda dá para contactar antes de uma campanha, era preciso percorrer todos. Sem o parâmetro, a lista segue igual; um valor diferente de `yes`/`no` responde 422.
+`GET /api/v1/contacts` e a exportação (`/api/v1/contacts/export`) aceitam `?blocked=yes` (só quem pediu para sair — o opt-out do titular) e `?blocked=no` (só quem não pediu). Até aqui o bloqueio aparecia só como marca em cada contato, e para listar quem pediu para sair era preciso percorrer todos. O filtro responde só pelo opt-out: a lista de exclusão de campanha, os contatos anonimizados e quem recusou só o atendimento da IA não entram nele. Sem o parâmetro, a lista segue igual; um valor diferente de `yes`/`no` responde 422.

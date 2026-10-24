@@ -276,8 +276,8 @@ export async function listContactsHandler(
     query = query.contains("tags", q.tag);
   }
   if (q.source) query = query.eq("source", q.source);
-  // `yes` responde "quem pediu para não ser incomodado"; `no` é a lista de quem
-  // ainda dá para contactar — que é a pergunta de quem vai montar campanha.
+  // `yes` responde "quem pediu para não ser incomodado"; `no`, quem não pediu
+  // opt-out. Só o opt-out: exclusão de campanha e anonimizados não entram aqui.
   if (q.blocked) query = query.eq("is_blocked", q.blocked === "yes");
   if (soContato) query = query.eq("id", soContato);
   // Pessoal fora da lista por padrão; `?pessoais=true` lista SÓ pessoais
