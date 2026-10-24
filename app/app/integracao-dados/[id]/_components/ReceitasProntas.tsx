@@ -1216,11 +1216,10 @@ export default function ReceitasProntas({ connectionId, motor, canWrite }: Props
                                   className="mt-1 block w-full rounded-md border bg-background p-2 text-sm"
                                 >
                                   <option value="nenhum">{t("Nenhum")}</option>
+                                  {/* Sem "Igual": o schema da receita WordPress só aceita
+                                      "contem" em campo de texto; "Igual" é da tabela direta. */}
                                   {campo.tipo === "texto" && (
-                                    <>
-                                      <option value="contem">{t("Contém")}</option>
-                                      <option value="igual">{t("Igual")}</option>
-                                    </>
+                                    <option value="contem">{t("Contém")}</option>
                                   )}
                                   {campo.tipo !== "texto" && (
                                     <>
