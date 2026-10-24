@@ -15,8 +15,13 @@ import type { BoardData } from "@/lib/kanban/types";
  * and PostgREST returns PGRST116. Routing through /api/v1/pipelines/[id]/board
  * uses the server-side cookie reader, identical to every other authed query.
  */
-async function fetchBoard(pipelineId: string): Promise<BoardData> {
-  const res = await apiClient.get<{ data: BoardData }>(`/api/v1/pipelines/${pipelineId}/board`);
+async function fetchBoard(pipelineId: string, leadPedido: string | null): Promise<BoardData> {
+  // `?lead=` faz o recorte de encerrados antigos (#2995) manter o negócio que o
+  // link pediu, para o dossiê dele abrir mesmo com a opção ligada.
+  const qs = leadPedido ? `?lead=${encodeURIComponent(leadPedido)}` : "";
+  const res = await apiClient.get<{ data: BoardData }>(
+    `/api/v1/pipelines/${pipelineId}/board${qs}`,
+  );
   // apiClient unwraps { data, meta } envelope already in some helpers;
   // ours returns the parsed JSON literally. Handle both shapes safely.
   if (res && typeof res === "object" && "data" in res) {
@@ -73,7 +78,11 @@ export function chaveDoQuadro(pipelineId: string | null) {
  * (`KanbanBoard`, com este hook para o quadro embutido), e nenhum deles quer
  * "não ler" por omissão.
  */
-export function useBoard(pipelineId: string | null, opcoes?: { enabled?: boolean }) {
+export function useBoard(
+  pipelineId: string | null,
+  leadPedido: string | null = null,
+  opcoes?: { enabled?: boolean },
+) {
   const qc = useQueryClient();
   const queryKey = chaveDoQuadro(pipelineId);
   const ativo = !!pipelineId && (opcoes?.enabled ?? true);
@@ -91,8 +100,13 @@ export function useBoard(pipelineId: string | null, opcoes?: { enabled?: boolean
 
   const query = useQuery({
     queryKey,
-    queryFn: () => fetchBoard(pipelineId as string),
+    queryFn: () => fetchBoard(pipelineId as string, leadPedido),
     enabled: ativo,
+    // Com o staleTime global de 30 s (lib/query/client.ts), um quadro fresco no
+    // cache seria entregue sem buscar, e o `?lead=` não chegaria à rota. A chave
+    // NÃO leva o lead: useMoveCard, KanbanBoard e useMotivosDePerdaDoFunil
+    // leem e escrevem a chave exata.
+    refetchOnMount: leadPedido ? "always" : true,
   });
 
   const onChange = useCallback(

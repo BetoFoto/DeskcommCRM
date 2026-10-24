@@ -133,9 +133,11 @@ export function PipelinePageClient({
    * Quadro e Calendário continuam exatamente como hoje: as duas olham o mesmo
    * funil, e uma delas (o quadro) é quem alimenta o calendário.
    */
-  const { data, isLoading, error, pulses, realtimeStatus, seguranca } = useBoard(pipelineId, {
-    enabled: visao !== "lista",
-  });
+  const { data, isLoading, error, pulses, realtimeStatus, seguranca } = useBoard(
+    pipelineId,
+    searchParams.get("lead"),
+    { enabled: visao !== "lista" },
+  );
   const router = useRouter();
   const pathname = usePathname();
   const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
