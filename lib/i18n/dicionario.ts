@@ -15693,6 +15693,10 @@ export const DICIONARIO: Traducoes = {
   "Já está em outra campanha ainda não concluída": { es: "Ya está en otra campaña que todavía no termina" },
   "Está na lista de exclusão de campanhas": { es: "Está en la lista de exclusión de campañas" },
   "Parar de enviar às (hora)": { es: "Dejar de enviar a las (hora)" },
+  "Dividir a mensagem em balões, um por parágrafo": { es: "Dividir el mensaje en burbujas, una por párrafo" },
+  "Até 3 balões por pessoa; o que passar disso vai junto no último. Cada balão conta no limite diário do número.": {
+    es: "Hasta 3 burbujas por persona; lo que pase de eso va junto en la última. Cada burbuja cuenta en el límite diario del número.",
+  },
   "pediram para parar": { es: "pidieron parar" },
   "pessoas? O envio segue o ritmo do número e pode levar horas.": {
     es: "personas? El envío sigue el ritmo del número y puede llevar horas.",
