@@ -19,6 +19,7 @@ import {
   JANELA_MAXIMA_HORAS,
   TEXTO_MAXIMO,
 } from "@/lib/inbox/rascunho-sugerido";
+import { VALIDADE_DO_LINK_DE_MIDIA_S } from "@/lib/messaging/media/link-temporario";
 import { getQueuePositions } from "@/lib/routing/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserNames } from "./_users";
@@ -260,45 +261,58 @@ const historyInputShape = {
   cursor: z.string().optional(),
 };
 
-/** Validade do link temporário da mídia (mesma da rota /api/v1/messages/[id]/media). */
-export const MEDIA_SIGNED_URL_TTL_S = 3600;
 const MEDIA_BUCKET = "whatsapp-media";
 
 export type MediaDoHistorico = {
   /**
-   * `ready`: arquivo guardado e com link; `pending`: a mensagem tem mídia mas o
-   * worker ainda não a guardou (ou o link falhou) — quem consome tenta de novo
-   * depois; ausente no mapa = mensagem sem mídia.
+   * `ready`: arquivo guardado; `pending`: a mensagem tem mídia mas o worker
+   * ainda não a guardou (ou o link falhou) — quem consome tenta de novo depois;
+   * `expired`: apagada pela retenção (o mesmo marcador que faz a rota de mídia
+   * responder 410); ausente no mapa = mensagem sem mídia.
    */
-  status: "ready" | "pending";
+  status: "ready" | "pending" | "expired";
   signedUrl: string | null;
 };
 
+type MensagemComMidia = {
+  id: string;
+  media_url?: string | null;
+  media_storage_path?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+/** A mesma régua da rota de mídia: sem arquivo, sem endereço e com o marcador da retenção. */
+const expirou = (m: MensagemComMidia) =>
+  !m.media_storage_path && !m.media_url && m.metadata?.media_status === "expired";
+
 /**
- * Para cada mensagem do histórico que carrega mídia, gera o link temporário do
- * arquivo guardado. Nunca lança: falha ao assinar vira `pending` (a conversa
- * continua legível). Só toca no storage se houver mídia a assinar.
+ * Para cada mensagem do histórico que carrega mídia, diz o estado e, com
+ * `comLink`, gera o link temporário do arquivo guardado. Nunca lança: falha ao
+ * assinar vira `pending` (a conversa continua legível). Só toca no storage se
+ * houver link a assinar.
  */
 export async function resolverMidiasDoHistorico(
-  messages: ReadonlyArray<{
-    id: string;
-    media_url?: string | null;
-    media_storage_path?: string | null;
-  }>,
+  messages: ReadonlyArray<MensagemComMidia>,
+  { comLink = true }: { comLink?: boolean } = {},
 ): Promise<Map<string, MediaDoHistorico>> {
   const out = new Map<string, MediaDoHistorico>();
-  const comMidia = messages.filter((m) => m.media_storage_path || m.media_url);
+  const comMidia = messages.filter((m) => m.media_storage_path || m.media_url || expirou(m));
   if (comMidia.length === 0) return out;
+
+  const aAssinar: Array<{ id: string; caminho: string }> = [];
+  for (const m of comMidia) {
+    if (expirou(m)) out.set(m.id, { status: "expired", signedUrl: null });
+    else if (!m.media_storage_path) out.set(m.id, { status: "pending", signedUrl: null });
+    else if (!comLink) out.set(m.id, { status: "ready", signedUrl: null });
+    else aAssinar.push({ id: m.id, caminho: m.media_storage_path });
+  }
+  if (aAssinar.length === 0) return out;
 
   const storage = createAdminClient().storage.from(MEDIA_BUCKET);
   await Promise.all(
-    comMidia.map(async (m) => {
-      if (!m.media_storage_path) {
-        out.set(m.id, { status: "pending", signedUrl: null });
-        return;
-      }
+    aAssinar.map(async (m) => {
       try {
-        const { data, error } = await storage.createSignedUrl(m.media_storage_path, MEDIA_SIGNED_URL_TTL_S);
+        const { data, error } = await storage.createSignedUrl(m.caminho, VALIDADE_DO_LINK_DE_MIDIA_S);
         out.set(
           m.id,
           error || !data?.signedUrl
@@ -393,7 +407,11 @@ export const crmGetConversationHistory: McpToolDefinition<typeof historyInputSha
     } catch (e: unknown) {
       throw e;
     }
-    const media = await resolverMidiasDoHistorico(result.messages);
+    // No turno do agente de atendimento o link NÃO sai: ele vale como portador
+    // por 1h para foto ou áudio de cliente, iria para o provedor de IA e para os
+    // registros da rodada, e o agente não tem como abri-lo. Tipo e estado ficam.
+    // Pela API (sem contato do turno) o link sai normalmente.
+    const media = await resolverMidiasDoHistorico(result.messages, { comLink: !ctx.contatoDoTurno });
     return {
       messages: result.messages.map((m) => ({
         id: m.id,
