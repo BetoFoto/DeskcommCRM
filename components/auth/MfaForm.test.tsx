@@ -65,11 +65,12 @@ describe("MfaForm — a espera tem teto", () => {
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Não consegui verificar o código agora. Tente novamente.",
+      "Não recebemos a resposta do servidor. Recarregue a página para tentar de novo.",
     );
-    // E, o que mais importa: o botão VOLTOU. Com ele preso em "Verificando…" o
-    // campo fica `disabled` e não há segunda tentativa.
+    // E, o que mais importa: o botão VOLTOU e o campo do código deixou de
+    // estar `disabled`. Preso em "Verificando…", não havia o que fazer.
     expect(screen.getByRole("button", { name: "Verificar" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Dígito 1")).toBeEnabled();
   });
 
   it("o código inválido continua dizendo que é inválido, e não o texto do teto", async () => {
@@ -89,11 +90,8 @@ describe("MfaForm — a espera tem teto", () => {
 });
 
 /**
- * A guarda do redirecionamento é testada AQUI, na função pura, e não dirigindo
- * o formulário: relançar de dentro de `startTransition` vira rejeição não
- * tratada no ambiente de teste, porque não existe o runtime do Next para
- * capturá-la — o vermelho seria do harness, não do produto. A regra que importa
- * é a decisão, e ela é pura.
+ * A guarda do redirecionamento, na função pura. O caminho dela dirigindo um
+ * formulário está em `LoginForm.test.tsx`.
  */
 describe("a guarda do redirecionamento do servidor", () => {
   it("reconhece o sinal de redirect e ignora erro comum", () => {
