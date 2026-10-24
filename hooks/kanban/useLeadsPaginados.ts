@@ -27,6 +27,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 
+import { chaveDoQuadro } from "@/hooks/kanban/useBoard";
 import { apiClient } from "@/lib/api/client";
 import type { Lead } from "@/lib/types/leads";
 
@@ -55,11 +56,25 @@ type RespostaDaRota = {
  *
  * A página faz parte da chave de propósito: com a chave pelo funil apenas,
  * voltar para a página 1 mostraria a 2 do cache, e avançar pediria refetch de
- * uma página que já estava na mão. Escrita como literal nos dois lados, mudar a
- * daqui faria quem observa devolver cache frio em silêncio.
+ * uma página que já estava na mão.
+ *
+ * ⚠️ ELA MORA DEBAIXO DA CHAVE DO QUADRO (`["board", pipelineId, "lista", n]`).
+ * Toda escrita no funil — Novo Lead, editar pela ficha, ganhar, perder, mover,
+ * etiqueta, proposta, tarefa — invalida `["board", pipelineId]` ou `["board"]`,
+ * e o `invalidateQueries` casa por PREFIXO: com a página debaixo do quadro, a
+ * Lista se atualiza em toda escrita que já atualiza o quadro, sem cada uma
+ * precisar lembrar de uma segunda chave. Com a chave solta
+ * (`["leads-paginados", …]`) ninguém a invalidava: o lead criado não aparecia
+ * na Lista e a ficha aberta por ela mostrava o valor antigo até o F5.
+ *
+ * O preço: quem filtra `["board"]` por prefixo alcança também as páginas. Os
+ * `setQueryData` do quadro usam a chave EXATA, e nenhum código faz
+ * `setQueriesData`/`getQueriesData` sobre `["board"]` — quem passar a fazer
+ * tem de excluir o `"lista"`. A Lista se atualizar na escrita é vigiado em
+ * `tests/unit/lista-se-atualiza-na-escrita.test.tsx`.
  */
 export function chaveDosLeadsPaginados(pipelineId: string | null, pagina: number) {
-  return ["leads-paginados", pipelineId, pagina] as const;
+  return [...chaveDoQuadro(pipelineId), "lista", pagina] as const;
 }
 
 export function useLeadsPaginados(

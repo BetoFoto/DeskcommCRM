@@ -2,7 +2,8 @@
  * GET /api/v1/pipelines/[id]/leads?page=&per_page=
  *
  * A página da LISTA do funil (#3172, fatia 1): uma fatia dos negócios do funil,
- * lida do banco com `range`, mais o `meta` que diz de quantos ela é.
+ * lida do banco com `range`, mais o `meta` que diz qual página é e se há
+ * próxima (`page`, `per_page`, `has_more` — sem total).
  *
  * ─── Por que uma rota nova, e não a do quadro ───────────────────────────────
  *
