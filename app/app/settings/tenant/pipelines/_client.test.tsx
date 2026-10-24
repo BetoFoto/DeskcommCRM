@@ -222,8 +222,22 @@ describe("a coluna do tipo não corta o rótulo (#3099)", () => {
     abrirEditores();
 
     const linha = screen.getByLabelText(/Tipo do campo 1/i).closest("div");
-    expect(linha?.className).toContain("md:grid-cols-[1fr_1fr_13rem_auto]");
+    expect(linha?.className).toContain("lg:grid-cols-[1fr_1fr_13rem_auto]");
     expect(linha?.className).not.toContain("8rem");
+  });
+
+  it("só divide a linha em colunas a partir de lg — em md, Chave e Rótulo ficavam com 46 px", () => {
+    // Medido pela tela a 768 px com a barra lateral aberta: com `md:`, a coluna de
+    // 13rem sobrava ~46 px para cada input. Abaixo de 1024 px os campos empilham.
+    render(<PipelinesClient pipelines={[FUNIL]} podeEditarConfig />);
+    abrirEditores();
+
+    const linha = screen.getByLabelText(/Tipo do campo 1/i).closest("div");
+    expect(linha?.className).not.toMatch(/(^|\s)md:grid-cols-/);
+    // Um bloco com `md:col-span-4` cria 4 colunas implícitas em md e espreme a linha
+    // do mesmo jeito — medido: 43 px a 768 só com o template trocado.
+    expect(linha?.querySelector('[class*="md:col-span"]')).toBeNull();
+    expect(linha?.querySelector('[class*="lg:col-span-4"]')).not.toBeNull();
   });
 
   it("o gatilho carrega o rótulo INTEIRO no title", () => {
