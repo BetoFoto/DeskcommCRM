@@ -669,6 +669,33 @@ export function InboxLayout({
     setLarguras(proximas);
   }, []);
 
+  /**
+   * A FICHA OCUPA ESPAÇO AGORA? (issue #3046)
+   *
+   * A GRADE já distingue os dois estados — recolhida, a terceira trilha vira o
+   * TRILHO de 44px (`LARGURA_DO_TRILHO_DO_PAINEL`), não a largura da ficha. A
+   * regra de larguras, porém, não sabia disso: `resolverLarguras` recebia
+   * `temFicha: faixa.temFicha` e continuava apertando o teto da lista como se a
+   * ficha estivesse ABERTA. Com o painel recolhido a conversa ganhava largura,
+   * mas o arrasto da lista não aproveitava NADA do espaço liberado.
+   *
+   * Aqui a ficha só "ocupa" quando existe coluna de ficha E ela não está
+   * recolhida. É a escolha (a) do caminho medido: o divisor passa a consultar o
+   * estado REAL do painel. Com o painel ABERTO o valor é exatamente o de hoje
+   * (`faixa.temFicha`), então nada muda; recolhido, o teto da lista sobe — e
+   * quem continua limitando é o piso da conversa (`CONVERSA_MINIMA`), nunca a
+   * invasão da conversa.
+   *
+   * Medição que sustenta não contabilizar o trilho: na faixa `xl`/`2xl` (onde a
+   * ficha existe) o container tem no mínimo ~992px (1280 da viewport menos a
+   * navegação e o padding). Sem ficha o teto da lista vira
+   * `min(520, container - 420)` = 520, e a conversa real fica
+   * `992 - 520 - 44 (trilho) = 428px`, acima do piso de 420. Ou seja, nos dois
+   * extremos possíveis da faixa o trilho NÃO chega a apertar a conversa abaixo
+   * do piso — o teto próprio da lista (520) morde antes.
+   */
+  const fichaOcupaEspaco = faixa?.temFicha === true && !painelRecolhido;
+
   useEffect(() => {
     const medir = () => setFaixa(faixaDaLargura(window.innerWidth));
     medir();
@@ -680,6 +707,12 @@ export function InboxLayout({
   // resolve contra a largura real da grade: a mesma chave `xl` cobre 1280–1535
   // e o piso da conversa tem de caber nos dois extremos. Sem nada salvo,
   // `null` = padrão do CSS, e a grade nem fica sabendo disto.
+  //
+  // `fichaOcupaEspaco` entra nas deps porque recolher/abrir o painel (#3046)
+  // muda o teto da lista: a largura salva pode ter sido esticada com o painel
+  // RECOLHIDO e, ao reabrir, o teto volta a valer — quem limita é o
+  // `resolverLarguras`, nunca a chave de storage. Sem re-resolver aqui, o valor
+  // grande salvo seria aplicado cru ao reabrir e roubaria a conversa.
   useEffect(() => {
     if (!faixa) {
       aplicarLarguras(null);
@@ -690,10 +723,10 @@ export function InboxLayout({
     const salvas = lerLarguras(armazenamentoDoNavegador(), faixa.id);
     aplicarLarguras(
       salvas
-        ? resolverLarguras({ ...salvas, larguraContainer: largura, temFicha: faixa.temFicha })
+        ? resolverLarguras({ ...salvas, larguraContainer: largura, temFicha: fichaOcupaEspaco })
         : null,
     );
-  }, [faixa, aplicarLarguras]);
+  }, [faixa, fichaOcupaEspaco, aplicarLarguras]);
 
   /** O que vale AGORA na tela: o ajuste salvo, ou o padrão da faixa. */
   const efetivas: LargurasDoInbox | null = larguras ?? (faixa ? largurasPadrao(faixa) : null);
@@ -729,7 +762,9 @@ export function InboxLayout({
     evento.stopPropagation();
     evento.currentTarget.setPointerCapture?.(evento.pointerId);
     const base = largurasRef.current ?? efetivas;
-    const temFicha = faixa.temFicha;
+    // O recolhido do painel entra AQUI também (#3046): é o mesmo teto da lista
+    // que a resolução inicial usa, e o arrasto não pode discordar da tela.
+    const temFicha = fichaOcupaEspaco;
     const faixaAtual = faixa;
 
     const aoMover = (movimento: PointerEvent) => {
@@ -760,7 +795,7 @@ export function InboxLayout({
     evento.preventDefault();
     const base = { ...(largurasRef.current ?? efetivas), [coluna]: proximo };
     aplicarLarguras(
-      resolverLarguras({ ...base, larguraContainer: larguraDaGrade(), temFicha: faixa.temFicha }),
+      resolverLarguras({ ...base, larguraContainer: larguraDaGrade(), temFicha: fichaOcupaEspaco }),
     );
     gravarLarguras(armazenamentoDoNavegador(), faixa.id, largurasRef.current);
   };
@@ -1067,6 +1102,9 @@ export function InboxLayout({
               respondendo={respondendo}
               onCancelarResposta={() => setRespondendo(null)}
               currentContactId={selectedConversation.contact_id}
+              // A barra de recursos lembra o recolhimento POR usuário (#3282);
+              // o id vem do `AuthProvider` daqui, não de dentro do compositor.
+              usuarioId={user.id}
               // O aviso é DA conversa da URL: trocar de conversa dentro da inbox
               // não pode deixar um texto sugerido no campo de outra pessoa.
               rascunho={rascunhoVivo}
