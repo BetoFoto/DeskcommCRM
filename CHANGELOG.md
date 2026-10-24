@@ -12,267 +12,107 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ### Adicionado
 
-- **Dá para remover o destinatário dos avisos e devolver o número ao Inbox** Depois de cadastrar um número para receber os avisos dos casos, não havia como REMOVER esse destinatário. Apagar o campo desabilitava o botão Salvar, a API recusava um telefone vazio mesmo com os avisos desligados, e pausar os avisos não devolvia o número: as mensagens dele continuavam sendo cortadas na entrada, sem virar atendimento no Inbox. A saída era cadastrar um número inexistente no lugar, e o número antigo ficava preso.
+- **Dá para remover o destinatário dos avisos e devolver o número ao Inbox** Não havia como remover o número cadastrado para receber os avisos dos casos: apagar o campo desabilitava o Salvar, a API recusava telefone vazio mesmo com os avisos desligados, e pausar os avisos não devolvia o número — o que ele mandava continuava cortado na entrada, sem virar atendimento no Inbox.
 
-  A tela Aviso no WhatsApp passa a ter a ação Remover destinatário, com a consequência escrita antes do clique. Ela apaga a configuração de avisos e devolve o número à entrada normal: o que ele mandar volta a virar contato e atendimento, como qualquer outro número. O histórico de entregas da tela continua onde está, e a remoção fica registrada na auditoria com o número mascarado. Os avisos da Agenda configurados para usar o mesmo número dos casos e as automações com a ação Mensagem para a equipe também param até um número novo ser cadastrado.
-
-  Pausar segue sendo outra coisa, exatamente como era: com os avisos desligados e um número ainda cadastrado, o que chega dele continua sem virar atendimento. Quem quer o número de volta usa Remover destinatário.
+  A tela Aviso no WhatsApp ganha a ação Remover destinatário, com a consequência escrita antes do clique: ela apaga a configuração de avisos e o número volta à entrada normal, virando contato e atendimento como qualquer outro. O histórico de entregas continua na tela, e a remoção fica na auditoria com o número mascarado. Os avisos da Agenda configurados para usar o mesmo número dos casos e as automações com a ação Mensagem para a equipe também param até um número novo ser cadastrado. Pausar segue como era: com os avisos desligados e o número ainda cadastrado, o que chega dele continua sem virar atendimento.
 
   Contribuição de @webtecnica (#3361).
 
-- **Campo personalizado de arquivo com anexo de documentos, pré-visualização e travas de etapa** Adiciona o tipo de campo customizado `file` para negócios, permitindo anexar documentos, PDFs, vouchers e comprovantes com área de soltura (arrastar e soltar) e visualização direta em modal.
-
-  Os arquivos são armazenados com isolamento multi-tenant na tabela `crm_lead_attachments`, com URLs assinadas geradas sob demanda no bucket privado do Supabase Storage, auditoria por `audit()`, conformidade com LGPD e proteção por travas obrigatórias no avanço de etapas do funil.
+- **Campo personalizado de arquivo com anexo de documentos, pré-visualização e travas de etapa** Novo tipo de campo customizado `file` para negócios: anexar documentos, PDFs, vouchers e comprovantes arrastando e soltando, com visualização direta em janela. Os arquivos ficam isolados por organização no bucket privado do Storage, com links assinados gerados sob demanda, auditoria e travas obrigatórias no avanço de etapas do funil.
 
   Contribuição de @kaiow2018-cmd (#3229), a partir da issue #2829.
 
-- **A carteira do cliente passa a aparecer e a ser definida no painel do Inbox** Quem atende deixa de sair da conversa para saber de quem é o cliente. O painel do contato no Inbox ganhou o bloco Carteira: ele mostra o vendedor responsável — ou que o cliente está sem dono — e, para gerentes e administradores, permite pôr o cliente na própria carteira ou trocá-lo de responsável ali mesmo, sem abrir a ficha do contato. É o mesmo cartão e a mesma regra da ficha; nada muda nos contatos que estão sem carteira.
+- **A carteira do cliente passa a aparecer e a ser definida no painel do Inbox** O painel do contato no Inbox ganhou o bloco Carteira: mostra o vendedor responsável — ou que o cliente está sem dono — e, para gerentes e administradores, permite pôr o cliente na própria carteira ou trocar o responsável ali mesmo, sem abrir a ficha. Mesmo cartão e mesma regra da ficha; nada muda nos contatos sem carteira. Crédito: @webtecnica.
 
-  Crédito: @webtecnica.
+- **Mudar a etapa do negócio direto no painel do card** O cabeçalho do painel do negócio ganha o seletor "Etapa do funil", para mover sem fechar o painel nem arrastar o card. O movimento é o mesmo do arrasto e do "Mover para…" — etapa que exige campos abre a mesma janela, a de perda pede o motivo antes de mover — e o card vai para o fim da etapa escolhida. Quem não pode mover cards continua vendo só o nome da etapa. Crédito: @flaviosiq.
 
-- **Mudar a etapa do negócio direto no painel do card** Ao abrir um negócio no quadro do funil, o cabeçalho do painel passa a ter o seletor "Etapa do funil": dá para mover o negócio para outra etapa sem fechar o painel e arrastar o card. O movimento é o mesmo do arrasto e do "Mover para…" do card — se a etapa de destino exige campos, a mesma janela pede os campos; a etapa de perda pede o motivo antes de mover — e o card vai para o fim da etapa escolhida, como no "Mover para…". Quem não tem permissão de mover cards continua vendo só o nome da etapa. Crédito: @flaviosiq.
+- **O menu do card do funil ganha "Mover para…", para mudar de etapa sem arrastar** No celular, arrastar um card disputa com a rolagem do quadro. Agora o menu "⋯" do card lista as outras etapas, e tocar numa leva o negócio para o fim dela. Se o funil exige campos ou motivo de ganho, abre a mesma janela do arrasto; a etapa de perda pede o motivo antes de mover, também para o negócio reaberto, que não herda o motivo da perda anterior. Arrastar para a etapa de perda também passa a pedir o motivo na hora, em vez de mostrar um aviso. O "⋯" ganhou área de toque maior em telas pequenas.
 
-- **O agente passa a consultar a análise do site da empresa prospectada durante a conversa** Até aqui, a análise que o sistema faz do site de cada empresa prospectada (se tem site próprio, se está fora do ar, os problemas encontrados, a nota no Google e a estratégia de abordagem) só chegava ao agente na primeira mensagem. Agora, na configuração do agente, dá para marcar a capacidade "Consultar a análise do site da empresa", e ele pode consultar essa análise a qualquer momento da conversa, inclusive na última mensagem. Agentes que já existem não ganham a capacidade sozinhos: ela entra só quando você a marca. O texto que vem de fora, do próprio site da empresa, chega ao agente como informação, nunca como instrução. — Crédito: @paulolimajr77
+- **O agente passa a consultar a análise do site da empresa prospectada durante a conversa** A análise do site de cada empresa prospectada (site próprio, fora do ar, problemas, nota no Google, estratégia de abordagem) só chegava ao agente na primeira mensagem. Com a capacidade "Consultar a análise do site da empresa", marcada na configuração do agente, ele a consulta a qualquer momento da conversa. Agentes que já existem não a ganham sozinhos. O texto que vem do site da empresa chega ao agente como informação, nunca como instrução. Crédito: @paulolimajr77.
 
-- **Traga as conversas antigas do WhatsApp para o atendimento, sem a IA responder a nenhuma delas** Na conexão do WhatsApp, quem administra a empresa pode importar o histórico de conversas que o número já tinha. A tela mostra uma prévia (quantas conversas e mensagens vêm) antes de você confirmar, e a importação roda em segundo plano. As conversas chegam com a data original das mensagens, para a equipe consultar o contexto de cada contato, e a IA não responde nenhuma delas: a mensagem importada, por chegar, não abre demanda, não cria lead e não dispara automação nem aviso. A exceção é a regra de "N dias sem mensagem" que conta mensagem nos dois sentidos: ela passa a contar o silêncio a partir da última mensagem importada, então um contato com negócio aberto que ainda não tinha conversa com data pode entrar nessa regra logo depois da importação. Dos arquivos, só áudios e imagens são baixados: vídeos, documentos e figurinhas aparecem na conversa sem o arquivo, e os áudios e imagens antigos que o WhatsApp não guarda mais aparecem como indisponíveis. A importação só funciona se "Guardar o histórico" estiver ligado antes de conectar o número, porque é nesse momento que o WhatsApp entrega o histórico. Conversas de grupo ficam de fora. Quem foi apagado a pedido (LGPD) não volta: a importação consulta a marca embaralhada que o CRM guarda ao anonimizar alguém e pula o número dessa pessoa, sem trazer contato, conversa nem mensagem. A marca só existe para quem foi anonimizado a partir da versão que a trouxe; quem foi anonimizado antes dela não tem marca e volta ao CRM, com as mensagens antigas, se o número for importado. Na atualização: quem roda o `update.sh` não precisa fazer nada, porque a importação anda por uma batida nova do agendador, que vem dentro da imagem do agendador, e o `update.sh` troca essa imagem e recria o contêiner. Quem atualiza à mão precisa trazer a imagem nova do agendador e recriá-lo também (`docker compose pull scheduler && docker compose up -d scheduler`, com os mesmos `-f` da instalação); sem isso a importação fica em "Importando" e não anda.
-  ---
+- **Traga as conversas antigas do WhatsApp para o atendimento, sem a IA responder a nenhuma delas** Na conexão do WhatsApp, quem administra a empresa pode importar o histórico de conversas que o número já tinha: a tela mostra uma prévia (quantas conversas e mensagens vêm) antes de confirmar, e a importação roda em segundo plano. As conversas chegam com a data original. A mensagem importada não recebe resposta da IA, não abre demanda, não cria lead e não dispara automação nem aviso. A exceção é a regra de "N dias sem mensagem" que conta os dois sentidos: ela passa a contar o silêncio a partir da última mensagem importada, então um contato com negócio aberto que ainda não tinha conversa com data pode entrar nela logo depois da importação.
 
-- **Lista pesquisável com múltipla escolha** Lista pesquisável com múltipla escolha: no editor do funil, a caixa 'Permitir várias escolhas' deixa um campo de lista pesquisável guardar vários valores (vários fornecedores, vários hotéis no mesmo negócio), mostrados como etiquetas na ficha. Contribuição de @webtecnica (#3249).
+  Dos arquivos, só áudios e imagens são baixados; vídeos, documentos e figurinhas aparecem sem o arquivo, e áudios e imagens que o WhatsApp não guarda mais aparecem como indisponíveis. A importação só funciona se "Guardar o histórico" estiver ligado antes de conectar o número, porque é nesse momento que o WhatsApp entrega o histórico. Conversas de grupo ficam de fora.
 
-- **Quem foi apagado a pedido fica marcado, para a importação do histórico do WhatsApp não trazê-lo de volta** Ao anonimizar um contato, o CRM passa a guardar só uma marca embaralhada do telefone e do identificador do WhatsApp dessa pessoa — nunca o número em si, e só o servidor consegue lê-la. É a mesma técnica que a prospecção já usa para não recadastrar quem pediu para sair. A importação das conversas antigas do WhatsApp (#999) vai consultar essa marca e pular esse número. Vale para quem for anonimizado a partir desta versão: de quem já foi anonimizado antes, o telefone já tinha sido apagado e não há de onde tirar a marca. Nada a fazer na atualização.
+  Quem foi apagado a pedido (LGPD) não volta: ao anonimizar um contato, o CRM passa a guardar só uma marca embaralhada do telefone e do identificador do WhatsApp — nunca o número, e só o servidor a lê; é a técnica que a prospecção já usa para não recadastrar quem pediu para sair —, e a importação pula esse número. Vale para quem for anonimizado a partir desta versão: quem foi anonimizado antes não tem marca e volta ao CRM, com as mensagens antigas, se o número for importado.
 
-- **A empresa define a meta do mês e o Desempenho mostra o quanto falta para ela** A tela Desempenho mostrava só quanto já tinha sido vendido, e um número sem alvo não diz se o mês vai bem ou mal. Agora existe Configurações › Meta de vendas, onde quem administra a empresa informa quantas vendas ganhas ela espera fechar no mês. No topo do Desempenho, o painel Meta do mês compara esse alvo com o que foi fechado como ganho dentro do mês: quanto já foi feito, o percentual e quanto falta. Mês sem meta cadastrada continua mostrando o resto da tela e explica que a meta ainda não foi definida, em vez de exibir um zero que diria "não vendemos nada".
+  Na atualização: quem roda o `update.sh` não precisa fazer nada, porque a importação anda por uma batida nova do agendador, que vem dentro da imagem do agendador, e o `update.sh` troca essa imagem e recria o contêiner. Quem atualiza à mão precisa trazer a imagem nova do agendador e recriá-lo também (`docker compose pull scheduler && docker compose up -d scheduler`, com os mesmos `-f` da instalação); sem isso a importação fica em "Importando" e não anda.
 
-  Crédito: @webtecnica.
+  Contribuição de @sergiobragah (#3194).
 
-- **Automações e follow-ups também enviam áudio, vídeo e documentos** O passo de mensagem das automações e do follow-up aceitava só imagem e PDF no campo de mídia; agora aceita também áudio, vídeo e documentos em geral. O áudio sai como mensagem de voz — o texto do passo não vai junto, porque nota de voz não tem legenda no WhatsApp. Vídeo e documento saem com o texto como legenda, como já acontecia com imagem e PDF. O envio continua pelo mesmo caminho do resto do CRM, então a mídia aparece na conversa e na Atividade da automação. Em número oficial, fora da janela de 24 horas a mídia continua não saindo, e um endereço sem tipo de arquivo conhecido continua sendo recusado com o motivo na tela. Nada a fazer na atualização. Crédito: @webtecnica (código) e @Joqlei (#2972).
+- **Lista pesquisável com múltipla escolha** No editor do funil, a caixa "Permitir várias escolhas" deixa um campo de lista pesquisável guardar vários valores (vários fornecedores, vários hotéis no mesmo negócio), mostrados como etiquetas na ficha. Contribuição de @webtecnica (#3249).
 
-- **Tarefas ganha o filtro "Minhas", e o lembrete abre direto nas suas tarefas** A tela de Tarefas ganha o seletor "Minhas | Todas". O lembrete de prazo e o aviso de tarefa nova, ao serem tocados no celular, abrem a tela já em "Minhas", com as tarefas de quem recebeu o aviso. No celular, os botões e a caixa de concluir ficam do tamanho do dedo, editar e apagar aparecem sem precisar passar o mouse, e o calendário de tarefas não é oferecido (as sete colunas não cabem na tela; a lista segue igual), nem quando ele foi escolhido no tablet deitado e o aparelho é girado. Uma tarefa criada com "Minhas" ligado já nasce com você como responsável, para não sumir da lista logo depois de salva. No computador, a única mudança é o seletor. Nada a fazer na atualização.
+- **A empresa define a meta do mês e o Desempenho mostra o quanto falta para ela** Em Configurações › Meta de vendas, quem administra a empresa informa quantas vendas ganhas espera fechar no mês. No topo do Desempenho, o painel Meta do mês compara esse alvo com o que foi fechado como ganho no mês: quanto já foi feito, o percentual e quanto falta. Mês sem meta mostra o resto da tela e explica que a meta ainda não foi definida, em vez de um zero que diria "não vendemos nada". Crédito: @webtecnica.
 
-- **O menu do card do funil ganha "Mover para…", para mudar de etapa sem arrastar** No celular, arrastar um card exige segurar o dedo e disputa com a rolagem do quadro. Agora o menu "⋯" do card lista as outras etapas do funil: tocar numa delas leva o negócio para o fim daquela etapa. Se o funil exige campos ou motivo de ganho, abre a mesma janela que já aparecia ao arrastar; se a etapa é a de perda, abre a janela do motivo antes de mover — também para o negócio reaberto, que não herda o motivo da perda anterior. Arrastar um card para a etapa de perda também passa a pedir o motivo na hora, em vez de mostrar um aviso. O botão "⋯" ganhou área de toque maior em telas pequenas, sem mudar o tamanho do card. Nada a fazer na atualização.
+- **Automações e follow-ups também enviam áudio, vídeo e documentos** O campo de mídia do passo de mensagem aceitava só imagem e PDF; agora aceita também áudio, vídeo e documentos em geral. O áudio sai como mensagem de voz, sem o texto do passo (nota de voz não tem legenda no WhatsApp); vídeo e documento levam o texto como legenda. A mídia aparece na conversa e na Atividade da automação. Em número oficial, fora da janela de 24 horas, a mídia continua não saindo, e um endereço sem tipo de arquivo conhecido continua recusado com o motivo na tela. Crédito: @webtecnica (código) e @Joqlei (#2972).
 
-- **Painel da conversa mostra e controla o follow-up do contato** O painel lateral da conversa ganha a seção "Follow-up": mostra o fluxo que está rodando com aquele contato e o estado dele (ativo, aguardando resposta, pausado ou aguardando a data do retorno). Quem é gerente ou administrador inicia um fluxo publicado e para o que está de pé sem sair da conversa; atendentes veem o fluxo, sem os botões. Sem fluxo publicado e sem nada rodando, a seção não aparece. Nada a fazer na atualização. Crédito: @webtecnica (#3247).
+- **Tarefas ganha o filtro "Minhas", e o lembrete abre direto nas suas tarefas** A tela de Tarefas ganha o seletor "Minhas | Todas", e o lembrete de prazo e o aviso de tarefa nova, tocados no celular, abrem a tela já em "Minhas". Tarefa criada com "Minhas" ligado já nasce com você como responsável. No celular, botões e caixa de concluir ficam do tamanho do dedo, editar e apagar aparecem sem passar o mouse, e o calendário de tarefas não é oferecido (as sete colunas não cabem; a lista segue igual), nem ao girar um tablet em que ele foi escolhido deitado. No computador, a única mudança é o seletor.
 
-- **Uma skill também entra pela etiqueta da conversa ou do contato** Uma skill pode entrar pela etiqueta da conversa ou do contato, além da palavra-chave. Serve para a prospecção, onde o cliente quase nunca escreve o nome do ramo: a skill do ramo passa a valer quando o agente já marcou a conversa com a etiqueta do ramo. Nada muda para as skills que não tiverem etiquetas de ativação.
+- **Painel da conversa mostra e controla o follow-up do contato** O painel lateral da conversa ganha a seção "Follow-up", com o fluxo que roda com o contato e o estado dele (ativo, aguardando resposta, pausado ou aguardando a data do retorno). Gerente ou administrador inicia um fluxo publicado e para o que está de pé sem sair da conversa; atendentes veem o fluxo, sem os botões. Sem fluxo publicado e sem nada rodando, a seção não aparece. Crédito: @webtecnica (#3247).
+
+- **Uma skill também entra pela etiqueta da conversa ou do contato** Além da palavra-chave, uma skill pode entrar pela etiqueta da conversa ou do contato. Serve para a prospecção, onde o cliente quase nunca escreve o nome do ramo: a skill do ramo passa a valer quando o agente já marcou a conversa com a etiqueta dele. Nada muda para as skills sem etiquetas de ativação. Contribuição de @paulolimajr77 (#3230).
 
 ### Alterado
 
-- **Valores e negociação podem exigir atendimento humano** Organizações podem deixar valores e negociação só com a equipe. A opção fica na tela do agente, aba Segurança, e vale para a organização inteira. Ligada, ela passa para a equipe, avisando o cliente, os pedidos de preço, desconto, parcelamento e pagamento antes de a IA responder, e barra as mensagens que o agente de IA envia na conversa — resposta, modelo, roteiro e follow-up — em que reconhecer esses assuntos; o reconhecimento é por termos e não pega toda paráfrase. Os demais passos de automação que mandam texto pronto, campanhas, prospecção e mensagens enviadas por integração externa (MCP) ainda não seguem a opção. Pedido para parar de receber mensagens e pedido de falar com uma pessoa continuam valendo primeiro, mesmo quando a mensagem também fala de preço. Vem desligada: quem não ligar não vê mudança. Crédito: @andersontomazi-ctrl (#2877).
+- **Valores e negociação podem exigir atendimento humano** Organizações podem deixar valores e negociação só com a equipe. A opção fica na tela do agente, aba Segurança, e vale para a organização inteira. Ligada, ela passa para a equipe, avisando o cliente, os pedidos de preço, desconto, parcelamento e pagamento antes de a IA responder, e barra as mensagens que o agente de IA envia na conversa — resposta, modelo, roteiro e follow-up — em que reconhecer esses assuntos; o reconhecimento é por termos e não pega toda paráfrase. Pedido para parar de receber mensagens e pedido de falar com uma pessoa continuam valendo primeiro, mesmo quando a mensagem também fala de preço. Vem desligada: quem não ligar não vê mudança. Crédito: @andersontomazi-ctrl (#2877).
 
-- **Os códigos de recuperação antigos saem, e a tela de Segurança pede para gerar novos** Os códigos de recuperação da verificação em duas etapas gerados antes desta versão já não eram aceitos no login. Agora a atualização os apaga, e quem tem a verificação ligada e ficou sem nenhum código válido vê, em Configurações › Segurança, um aviso com o botão "Gere novos códigos de recuperação". O mesmo aviso aparece para quem já usou todos os códigos.
+  A ação "Mensagem escrita pela IA" das automações também passa por essa triagem: com a opção ligada e um texto que fala de preço, desconto, parcela ou pagamento, a mensagem não sai e a conversa passa para a equipe, com um aviso na Central; o cliente recebe o aviso de passagem quando a IA já vinha conversando com ele, e num primeiro contato nada sai para ele. Se a leitura da opção falhar, ela vale como ligada, como nas outras portas. Os outros passos de automação que mandam texto pronto, as campanhas, a prospecção e as mensagens por integração externa (MCP) ainda não seguem a opção. Contribuição de @webtecnica (#3274).
 
-  O operador não precisa fazer nada antes de atualizar. Quem usa a verificação em duas etapas continua entrando com o aplicativo do celular normalmente; só precisa gerar códigos novos para ter a saída de reserva caso perca o celular.
+- **Os códigos de recuperação antigos saem, e a tela de Segurança pede para gerar novos** Os códigos de recuperação da verificação em duas etapas gerados antes desta versão já não eram aceitos no login, e a atualização os apaga. Quem tem a verificação ligada e ficou sem código válido — ou já usou todos — vê em Configurações › Segurança um aviso com o botão "Gere novos códigos de recuperação". O operador não precisa fazer nada antes de atualizar: quem usa a verificação continua entrando com o aplicativo do celular e só precisa gerar códigos novos para ter a saída de reserva caso perca o celular.
 
-- **Etiquetas da ficha do contato saem com a cor da organização** Na ficha do contato (Contatos → abrir um contato → Editar), as sugestões de etiqueta agora aparecem pintadas com a cor do vocabulário da organização, como já acontecia no Inbox. Ao criar uma etiqueta nova dali — ou ao escolher uma sugestão —, a paleta de tons abre antes de gravar, e cada etiqueta que já está no contato ganhou o gatilho de repintar. Quem não pode alterar o vocabulário da organização continua com o campo exatamente como era.
+- **Etiquetas da ficha do contato saem com a cor da organização** Na ficha do contato (Contatos → abrir um contato → Editar), as sugestões de etiqueta saem pintadas com a cor do vocabulário da organização, como no Inbox; ao criar uma etiqueta ali ou escolher uma sugestão, a paleta de tons abre antes de gravar, e cada etiqueta já no contato ganhou o gatilho de repintar. Quem não pode alterar o vocabulário da organização continua com o campo como era. O diálogo de novo contato troca o texto livre "separadas por vírgula" pelo mesmo seletor. Contribuição de @webtecnica (#3235).
 
-  O diálogo de **novo contato** deixou o campo de texto livre "separadas por vírgula" e passou a usar o mesmo seletor: as sugestões saem nas cores da organização e a cor escolhida é gravada antes de a etiqueta entrar na lista.
-
-  Contribuição de @webtecnica (#3235).
-
-- **A "Mensagem escrita pela IA" também respeita valores e negociação só com a equipe** Com a opção "valores e negociação só com a equipe" ligada, a ação "Mensagem escrita pela IA" das automações entregava ao cliente o preço que a IA tinha acabado de escrever: a régua que barra o assunto comercial nas respostas do agente não chegava até essa ação. Agora o texto que ela gera passa pela mesma triagem: quando a organização ligou a opção e o texto fala de preço, desconto, parcela ou pagamento, a mensagem não sai e a conversa passa para a equipe — com um aviso na Central — e o cliente recebe o aviso de passagem quando a IA já vinha conversando com ele; num primeiro contato, nada sai para ele. Se a leitura da opção falhar, ela vale como ligada, como nas outras portas. Com a opção desligada, nada muda: a mensagem sai como sempre saiu. As demais portas seguem como a opção declara hoje — os outros passos de automação que mandam texto pronto, as campanhas, a prospecção e as integrações externas (MCP) continuam fora desta régua.
-
-  Contribuição de @webtecnica (#3274).
-
-- **Administrar outra empresa pela administração da plataforma pede o código do aplicativo em toda parte** Quem administra a instalação e usa a verificação em duas etapas precisa ter
-  confirmado o código de 6 dígitos do aplicativo autenticador na sessão para
-  alterar dados de uma empresa onde não é administrador. A regra, que já valia
-  nas telas da administração da plataforma, passa a valer também nas demais
-  alterações de empresa: dados cadastrais, menu da empresa, bloqueio da caixa de
-  mensagem, funis, conexão com a Nuvemshop e conexão da assinatura do Codex.
-  Quando a sessão ainda não confirmou o código, a tela leva a pessoa para
-  digitá-lo e depois volta para onde ela estava.
-
-  Nada muda para quem não usa a verificação em duas etapas, que vem desligada
-  por padrão, nem para quem altera a própria empresa como administrador dela.
+- **Administrar outra empresa pela administração da plataforma pede o código do aplicativo em toda parte** Quem administra a instalação e usa a verificação em duas etapas precisa ter confirmado na sessão o código de 6 dígitos do aplicativo autenticador para alterar uma empresa onde não é administrador. A regra, que já valia nas telas da administração da plataforma, passa a valer também em dados cadastrais, menu da empresa, bloqueio da caixa de mensagem, funis, conexão com a Nuvemshop e conexão da assinatura do Codex; sem a confirmação, a tela leva para digitar o código e depois volta. Nada muda para quem não usa a verificação, que vem desligada por padrão, nem para quem altera a própria empresa como administrador dela.
 
 ### Corrigido
 
-- **O ChatGPT por assinatura que estoura a janela de uso com HTTP 400 passa a cair na chave de reserva** O ChatGPT por assinatura avisa que a janela de uso acabou com um HTTP 400 ("Subscription Sharing usage limit"), e esse 400 era lido como erro do nosso pedido: a chave de reserva nem era tentada.
+- **O ChatGPT por assinatura que estoura a janela de uso com HTTP 400 passa a cair na chave de reserva** Esse 400 ("Subscription Sharing usage limit") era lido como erro do nosso pedido, e a chave de reserva nem era tentada. Agora, com a chave openai da organização cadastrada como reserva, a chamada é refeita nela e o agente segue respondendo. Sem chave de reserva, o turno ainda falha como antes; a passagem automática para um humano nesse caso segue pendente na #3371. Contribuição de @webtecnica (#3374).
 
-  Agora, com a chave openai da organização cadastrada como reserva, a chamada é refeita nela e o agente segue respondendo.
+- **Áudio por URL num número Zernio chega como bolha de voz sem a legenda virar texto** A legenda ia colada ao anexo de voz e era ignorada pela API ou aparecia solta na conversa. Agora a bolha de voz sai sem legenda, como nos outros canais; imagem, vídeo e documento seguem levando a legenda. Corrigido por @webtecnica (#3266).
 
-  Sem chave de reserva, o turno ainda falha como antes; a passagem automática para um humano nesse caso continua pendente na #3371.
+- **O aviso de suspeita de opt-out na Central para de mandar a equipe bloquear o contato à mão** Quando o cliente pedia para parar com uma frase ambígua ("me deixa em paz", "para de me mandar isso"), o turno silenciava a IA e abria na Central um item mandando confirmar, no CRM, o bloqueio do contato — ação que não existe: só o STOP do próprio cliente bloqueia, e a ficha do contato só oferece Desbloquear. Nos modos assistido e automático, o aviso passa a descrever o que a equipe consegue fazer: assumir a conversa e pedir ao cliente a palavra que a regra reconhece (PARAR, STOP ou SAIR, sozinha na mensagem). O motivo gravado e a passagem do atendimento não mudaram; o botão de bloqueio manual é a decisão DEC-013 e fica fora deste ajuste. Contribuição de @webtecnica (#3300).
 
-  Contribuição de @webtecnica (#3374).
+- **O aviso do espelho do funil nomeia a etapa do quadro, não o passo interno do assistente** Quando o espelho recusava no CRM o movimento do funil do assistente, o aviso na Central usava o rótulo interno do assistente, igual para todos, fosse a etapa "Perdido" ou "Cancelado pelo paciente". Agora ele nomeia a etapa como está cadastrada no funil, e o dono reconhece o card que ficou parado. Nada mudou no comportamento do funil; no aviso de incidente (banco sem resposta ou escrita que falha), o rótulo interno continua, porque ali ajuda a depurar. Contribuição de @webtecnica (#3155).
 
-- **Áudio por URL num número Zernio chega como bolha de voz sem a legenda virar texto** Num número Zernio, um áudio enviado por URL com legenda chegava com a legenda colada ao anexo, como `message` da própria mensagem de voz — e num anexo de voz esse texto ou é ignorado pela API ou aparece solto na conversa. Agora a bolha de voz sai sem legenda, igual aos outros canais, mantendo `attachmentType: audio` com `voiceNote: true`. Imagem, vídeo e documento seguem levando a legenda normalmente. Nada a fazer na atualização.
+- **No celular, várias telas passam a caber na largura e a responder ao dedo** No celular:
 
-  Corrigido por @webtecnica (#3266).
+  - **Conexões, Webhooks, Radar, propostas, Faturamento e Meta Ads:** "Conectar novo WhatsApp" e "Agendar pausa" ficam ao alcance, as quatro abas de Webhooks aparecem sem rolar, e Radar e propostas não têm botão cortado na borda. Propostas e lançamentos do Faturamento viram um cartão por linha, com "Pagar" e o "×" de remover separados e do tamanho do dedo. No Meta Ads, a página não passa da largura e o nome da campanha não cobre a tabela.
+  - **Equipe, Atendimento, LGPD e Tags:** as listas viram cartões; editar horário, copiar o link do convite e abrir um pedido ficam do tamanho do dedo, e os campos de hora cabem na linha sem empurrar o botão de remover. Renomear, Juntar e Excluir das Tags deixam de ser cortados. Campos e caixas de Segurança e da Interface de um membro também ficam do tamanho do dedo.
+  - **Agentes e IA:** o ⋯ de cada agente fica do tamanho do dedo e o seletor «Operação do agente» não empurra mais a tela para o lado. As abas «Execuções» do agente e «Fila» de Follow-ups viram cartões, com «Detalhes» e «Cancelar» à vista. Os links da Central de avisos e «Ver conversa» ganham área de toque, os botões de «O que o agente sabe» quebram linha, e o painel de um passo do fluxo de follow-up abre acima da barra de abas. Com o dedo, os botões de zoom ficam maiores nos editores de Follow-ups e de Automações.
+  - **Desempenho e Atividades:** cabem na largura; a Previsão rola dentro do quadro; "Performance por atendente", "Por canal" e a aba "Por etiqueta" mostram um cartão por linha; o "Salvar" de "Contar como perdida no silêncio após" fica do tamanho do dedo; e o quadro "Quando" escreve embaixo de cada dia quantos acontecimentos houve.
+  - **Controles em geral:** interruptores, itens de menu e de listas de escolha, abas e links da gaveta "Mais" ganham área de toque do tamanho do dedo, e os interruptores mais espaço entre si. Também em janelas estreitas: o aviso de proposta pronta deixa de cobrir a barra de abas, o botão do aviso de WhatsApp desconectado fica mais fácil de tocar e a lupa da busca é anunciada pelo leitor de tela. Na busca, "Limpar" apaga o texto em vez de fechar a busca.
 
-- **O aviso de suspeita de opt-out na Central para de mandar a equipe bloquear o contato à mão** Quando o cliente pedia para parar de receber mensagens com uma frase ambígua ("me deixa em paz", "para de me mandar isso"), o turno silenciava a IA e abria um item na Central que mandava CONFIRMAR, NO CRM, O BLOQUEIO DO CONTATO. Essa ação não existe no produto: o único caminho que bloqueia um contato é o STOP do próprio cliente na entrada da mensagem (`lib/channels/pos-entrada.ts`), e a ficha do contato só oferece Desbloquear. Quem seguisse o aviso procuraria um botão que não está na tela, com a IA calada e o cliente esperando.
+  No computador também muda: o nome da campanha no Meta Ads é cortado com reticências acima de 22rem (cerca de 350px); em qualquer largura, a tabela de Tags rola para o lado em vez de cortar e os campos de hora podem encolher; o "Limpar" da busca sai de baixo do X; a janela de confirmação rola por dentro quando não cabe; abaixo de 1024 px a fila de abas fica um pouco mais alta, mesmo com mouse; e o número de cada dia em Atividades fica disponível só para o leitor de tela. Com mouse em tela larga, o resto continua igual.
 
-  O título dos dois caminhos que abrem esse aviso — o modo assistido e o automático — passa a descrever só o que a equipe consegue fazer hoje: assumir a conversa e pedir ao cliente a palavra que a regra reconhece (PARAR, STOP ou SAIR, sozinha na mensagem). O motivo gravado e a passagem do atendimento não mudaram. O botão de bloqueio manual é a decisão DEC-013 e fica fora deste ajuste.
+- **Códigos de recuperação passam a funcionar no login, e gerar novos pede o código do aplicativo** Os códigos de recuperação funcionam no login quando o celular com o autenticador não está à mão ("Perdi acesso ao autenticador"), digitados em minúsculas, com espaço ou com hífen. Códigos gerados antes desta versão não são aceitos: é preciso gerar novos em Configurações › Segurança. Trocar o `INTERNAL_SECRET` da instalação também invalida os códigos já emitidos.
 
-  Nada a fazer na atualização.
+  Gerar novos códigos — e cadastrar um novo autenticador numa conta que já tem um — passa a exigir que a sessão tenha confirmado o código de 6 dígitos, a mesma regra que já valia para desligar a verificação; sem isso, a tela leva para digitar o código e volta para Segurança. O primeiro cadastro não muda. Os códigos passam a ser lidos e gravados só pelo servidor da instalação, e cadastrar um autenticador troca o conjunto anterior. Sem a chave de serviço configurada, cadastrar a verificação e gerar códigos avisam que não foi possível, em vez de seguir sem guardar os códigos.
 
-  Contribuição de @webtecnica (#3300).
+- **O diálogo de anexos não pede mais legenda para áudio** O WhatsApp não entrega texto junto de áudio, então a "Legenda" pedida no envio de áudio nunca chegava ao cliente. O campo só aparece quando a fila tem um anexo que leva legenda (imagem, vídeo ou documento); numa fila com imagem e áudio, ele continua e a legenda viaja com a imagem. Texto que o recurso de áudio trazia no corpo volta para o campo de mensagem, e o operador decide quando mandá-lo. Na nota interna nada muda. Corrigido por @webtecnica (#3151).
 
-- **O aviso do espelho do funil nomeia a etapa do quadro, não o passo interno do assistente** Quando o assistente avançava o funil dele e o espelho recusava o movimento no CRM, o aviso que
-  abria na Central dizia para onde o negócio iria com o rótulo interno do assistente — o mesmo texto
-  aparecia para todos, fosse a etapa chamada "Perdido", "Cancelado pelo paciente" ou "Perdido por
-  precio" no quadro do cliente. Agora o aviso nomeia a etapa como ela está cadastrada no funil, e o
-  dono reconhece no aviso exatamente o card que ficou parado. Os avisos de perda sem motivo, de funil
-  que o assistente não cuida e de campos obrigatórios seguem iguais no resto: nada mudou no
-  comportamento do funil, só o texto que pedia a ação de quem lê. No aviso de incidente — quando o
-  banco não responde ou a escrita falha — o rótulo interno continua, porque ali ele é o que ajuda a
-  depurar.
+- **A importação do catálogo recusa estoque inválido em vez de mudar a quantidade** Estoque negativo, fracionado ou com texto passa a gerar erro na linha da planilha, sem sobrescrever o produto já cadastrado. Antes, `-5` virava 5 unidades e `2,5` virava 25, sem aviso. As outras linhas continuam sendo importadas; estoque vazio continua zero, e milhares bem formados continuam aceitos. Quantidades importadas antes desta correção precisam ser conferidas na planilha de origem. Crédito: @samirhvbr.
 
-  Contribuição de @webtecnica (#3155).
+- **Cancelar um acompanhamento que espera a vez do contato encerra de verdade, em vez de dizer que já acabou** Na fila de follow-ups, cancelar um acompanhamento na espera longa que evita dois fluxos disputarem o mesmo contato respondia "Enrollment já está encerrado" (409), e a inscrição continuava de pé. Agora ela vira cancelada, com motivo manual e sem próxima avaliação, e essa espera não volta a acordar. O que já tinha acabado (concluído, cancelado, morto) segue recusando com o mesmo 409. Contribuição de @webtecnica (#3292).
 
-- **No celular, conexões, radar, propostas, faturamento e Meta Ads deixam de esconder botões fora da tela** No celular, o gestor passa a alcançar "Conectar novo WhatsApp" e "Agendar pausa" em Conexões,
-  vê as quatro abas de Webhooks sem precisar rolá-las, assume itens do Radar e decide propostas
-  enviadas sem botão cortado na borda. A lista de propostas e os lançamentos do Faturamento viram
-  um cartão por linha, e "Pagar" e o "×" de remover deixam de ficar colados: cada um é um alvo do
-  tamanho do dedo, então quem mira em pagar não apaga o lançamento. No Meta Ads, a página não
-  passa mais da largura da tela, e o nome da campanha não cobre os números da tabela.
+- **Lembrete de tarefa com destino por telefone para de sair pelo Instagram/Facebook** Em organização que conectou Instagram ou Facebook antes do WhatsApp, o lembrete que a pessoa escolheu receber no WhatsApp saía pela conversa social do contato, e o canal recusava ("O canal recusou o envio. Confira a conexão em Conexões.") com a janela de 24h fechada: o lembrete não chegava. Agora, quando o destino é um telefone, o sistema escolhe um número de WhatsApp. Sem nenhum WhatsApp conectado, a escolha continua a de antes, e o aviso na Central e o push seguem iguais. Contribuição de @webtecnica (#3364).
 
-  No computador, uma coisa muda: o nome da campanha no Meta Ads passa a ser cortado com
-  reticências quando passa de 22rem (cerca de 350px). Antes, acima dessa largura, ele não era
-  cortado.
+- **O monitoramento de saúde não confunde mais a tela de login com o banco de dados** Numa instalação em que o endereço configurado para o banco caía numa página de login (um proxy na frente, por exemplo), o `/health` — que o instalador e o atualizador consultam — seguia o redirecionamento, lia a página de login como se fosse o banco e respondia "tudo certo", com o banco podendo estar fora do ar sem ninguém ser avisado.
 
-  Nada a fazer na atualização.
+  Agora a checagem não segue redirecionamento: ele é reportado como banco fora do ar, com o endereço de destino no detalhe do erro para quem consulta com o segredo interno, e um "tudo certo" que não veio do banco deixa de contar. Uma resposta legítima do banco continua "tudo certo", inclusive quando ele recusa a credencial. Quem opera não precisa fazer nada; o que muda é que uma instalação mal configurada passa a aparecer como fora do ar em vez de saudável. Contribuição de @webtecnica (#3294).
 
-- **No celular, Equipe, Atendimento, LGPD e Tags cabem na tela, e as ações das Tags ficam à vista** No celular, as listas de Equipe (Membros e Convites), Atendimento e LGPD passam a
-  aparecer como cartões que cabem na tela, sem rolar para o lado. Os botões de editar
-  horário, copiar o link do convite e abrir um pedido ficam do tamanho do dedo, e no
-  horário de cada atendente os campos de hora ganham mais espaço e cabem na linha sem
-  empurrar o botão de remover para fora. Na tela de Tags, Renomear, Juntar e Excluir
-  eram cortados pela borda e agora ficam à vista. Em Segurança e na Interface de um
-  membro, os campos e as caixas de marcar também ficam do tamanho do dedo.
+- **O plano de tarefa mostra o limite e diz qual campo passou** Em Tarefas › Planos, descrição acima de 300 caracteres não salvava e a tela mostrava só "Dados inválidos.". Agora a descrição tem contador ("245/300") e para no limite, o nome e o título dos passos também, o prazo do passo é conferido antes de salvar, e a recusa nomeia o campo e o passo ("O título do passo 2 pode ter até 200 caracteres."). Nenhum caractere é proibido. Crédito: @LuigiMDev.
 
-  Duas mudanças valem em qualquer largura: a tabela de Tags rola para o lado quando
-  não cabe, em vez de cortar, e os campos de hora podem encolher para caber na linha.
+- **Salvar um plano de tarefa com a lista ainda carregando não apaga mais os outros planos** Criar ou salvar um plano com a lista ainda carregando, ou depois de ela falhar ao carregar, gravava só o plano da tela e apagava os demais. Agora criar e salvar ficam desativados até a lista carregar, e uma falha de leitura mostra um aviso com a opção de tentar de novo, em vez de dizer que não há planos. A descrição longa sem espaços deixou de ultrapassar a largura do cartão.
 
-  Nada a fazer na atualização.
+- **Numa organização em outra moeda, digitar 1,300 deixa de virar 1,30** Em organização cuja moeda não é o real, o valor do negócio no funil, o campo personalizado de moeda (e o eco embaixo dele), o preço de item de comanda, o lançamento avulso do faturamento, a parcela de honorários, o preço padrão de um tipo de agendamento e o lançamento de todo mês liam o número pela régua do real: `1,300` virava 1,30, cem vezes menos — no funil, indo assim para os relatórios. Agora todos leem pela convenção da moeda da organização: no dólar, `1,300` é mil e trezentos e `1.300` é um e trinta.
 
-- **No celular, dá para pausar agente, abrir a Central de avisos e acompanhar a IA com o dedo** No celular, o botão ⋯ de cada agente era pequeno demais para o dedo, e o seletor «Operação do
-  agente» empurrava a tela do agente para o lado. A aba «Execuções» do agente e a aba «Fila» de
-  Follow-ups eram tabelas que fugiam para a direita e escondiam os botões «Detalhes» e «Cancelar»:
-  agora cada linha vira um cartão que cabe na tela. O link de cada aviso da Central de avisos e o
-  link «Ver conversa» de um caso ganharam área de toque de verdade, os botões de «O que o agente
-  sabe» quebram linha em vez de sair da tela, e o painel de um passo do fluxo de follow-up abre
-  acima da barra de abas, e não por trás dela.
+  Em real nada muda, com uma exceção que vale em qualquer moeda: um sinal que aparece mais de uma vez (`1.234.567`, `1,234,567`) é sempre separador de milhar — `1,234,567` deixa de valer 1.234,57 e passa a valer 1.234.567. Não se resolve: vírgula com dois dígitos depois (`1,30`) continua 1,30 em qualquer moeda; para 130 dólares, digite `130` ou `1.30`. Nas parcelas de honorários, o valor JÁ GRAVADO continua apresentado em real na tabela; o conserto é na leitura do que se digita agora.
 
-  Com o dedo, os botões de zoom ficaram maiores em todo editor visual de fluxo: no de Follow-ups e
-  também no de Automações. Com mouse e janela larga, as telas ficam como antes.
+  Contribuição de @webtecnica (#3365, #3367).
 
-  Nada a fazer na atualização.
+- **A tela de atualização para de dizer que a versão anterior está no ar quando a volta automática não terminou, nas atualizações feitas a partir desta versão** A volta automática — o socorro que o servidor faz sozinho quando o site não responde logo depois de uma atualização — passa a contar à tela se TERMINOU. Antes, o painel tratava igual a volta que deu certo e a que falhou: dizia "que é a que está no ar agora" nas duas e, quando a volta tinha terminado, ainda oferecia "Voltar para a versão anterior" apontando para a versão que já rodava. Agora, quando a volta não termina bem, a tela diz que não sabe em que versão o sistema ficou e mantém o botão de voltar; quando termina, afirma o que aconteceu e esconde o botão.
 
-- **No celular, Desempenho e Atividades cabem na tela, e Performance por atendente vira cartão** No celular, as telas Desempenho e Atividades cabem na largura do aparelho. O
-  quadro Previsão, que passava da borda da tela, agora rola dentro dele mesmo. Os
-  quadros "Performance por atendente" e "Por canal" e a aba "Por etiqueta" mostram
-  um cartão por linha, com o nome da coluna ao lado de cada número. Ninguém precisa
-  mais arrastar a tabela para o lado.
-
-  O botão "Salvar" ao lado de "Contar como perdida no silêncio após" ficou do
-  tamanho do dedo. Em Atividades, o quadro "Quando" escreve embaixo de cada dia
-  quantos acontecimentos houve. Antes esse número só aparecia passando o mouse
-  sobre a barra.
-
-  Numa tela de computador com mouse, os quadros têm a mesma cara de antes. O
-  formato de cartão só vale em tela estreita, e o número de cada dia, no
-  computador, fica disponível só para o leitor de tela. Nada a fazer na
-  atualização.
-
-- **No celular, interruptores, menus, abas e a gaveta de navegação respondem ao dedo sem erro de toque** No celular, os interruptores (como os de Configurações › Notificações), os itens
-  de menu e de listas de escolha, as abas e os links da gaveta "Mais" passam a ter
-  área de toque do tamanho de um dedo. Antes, um toque um pouco fora do desenho não
-  acionava nada, e a borda das abas não respondia. Os interruptores também ganham
-  um pouco mais de espaço entre si, para o toque num deles não acionar o vizinho.
-
-  Também no celular (e em janelas estreitas): o aviso de proposta pronta deixa de
-  cobrir a barra de abas do rodapé, o botão do aviso de WhatsApp desconectado fica
-  mais fácil de tocar, e a lupa da busca passa a ser anunciada pelo leitor de tela.
-
-  Na busca (a lupa do topo, ou Ctrl/⌘+K), tocar em "Limpar" no celular fechava a
-  busca em vez de apagar o texto, porque o botão ficava embaixo do X de fechar. No
-  computador o X cobria a ponta direita do "Limpar"; agora ele fica um pouco mais à
-  esquerda e não encosta mais no X.
-
-  No computador também muda: a janela de confirmação rola por dentro quando não cabe
-  na tela, e abaixo de 1024 px de largura a fila de abas fica um pouco mais alta,
-  mesmo com mouse. Com mouse, em telas largas, o resto continua igual.
-
-  Nada a fazer na atualização.
-
-- **Códigos de recuperação passam a funcionar no login, e gerar novos pede o código do aplicativo** Os códigos de recuperação passam a funcionar no login quando o celular com o
-  aplicativo autenticador não está à mão ("Perdi acesso ao autenticador"). O
-  código pode ser digitado em minúsculas, com espaço ou com hífen. Códigos
-  gerados antes desta versão não são aceitos: para ter essa saída, quem usa a
-  verificação em duas etapas precisa gerar códigos novos em Configurações ›
-  Segurança. Trocar o `INTERNAL_SECRET` da instalação também invalida os códigos
-  já emitidos.
-
-  Em Configurações › Segurança, gerar novos códigos de recuperação agora exige
-  que a sessão já tenha confirmado o código de 6 dígitos do aplicativo
-  autenticador — a mesma regra que já valia para desligar a verificação em duas
-  etapas. Se a sessão ainda não confirmou, a tela leva a pessoa para digitar o
-  código e depois volta para Segurança.
-
-  A mesma regra passa a valer para cadastrar um novo aplicativo autenticador em
-  uma conta que já tem um. O primeiro cadastro não muda.
-
-  Os códigos de recuperação passam a ser lidos e gravados só pelo servidor da
-  instalação, e o cadastro de um aplicativo autenticador troca o conjunto
-  anterior de códigos, como já fazia a geração em Segurança. Sem a chave de
-  serviço configurada, cadastrar a verificação e gerar códigos avisam que não foi
-  possível, em vez de seguir sem guardar os códigos.
-
-- **O diálogo de anexos não pede mais legenda para áudio** Ao enviar um anexo de áudio, o diálogo de prévia pedia uma "Legenda" — e o WhatsApp não entrega texto junto de áudio, então o texto era escrito e nunca chegava ao cliente. Agora o campo só aparece quando a fila tem um anexo que leva legenda (imagem, vídeo ou documento); com áudio, o envio sai sem pedir o texto. Numa fila com imagem e áudio juntos o campo continua, e a legenda viaja com a imagem. Se o recurso de áudio trazia um texto no corpo, ele volta para o campo de mensagem — em vez de viajar como legenda de um áudio que a descartaria — e o operador decide quando mandá-lo. Na nota interna nada muda: lá o texto é o corpo da nota e aparece junto do áudio, então o campo continua. Nada a fazer na atualização.
-
-  Corrigido por @webtecnica (#3151).
-
-- **A importação do catálogo recusa estoque inválido em vez de mudar a quantidade** Estoque negativo, fracionado ou com texto passa a gerar um erro na linha da planilha, sem sobrescrever o produto já cadastrado. Antes, por exemplo, `-5` virava 5 unidades e `2,5` virava 25, sem aviso. As outras linhas continuam sendo importadas; estoque vazio continua zero, e milhares bem formados continuam aceitos. Quantidades importadas antes desta correção precisam ser conferidas na planilha de origem. Crédito: @samirhvbr.
-
-- **Cancelar um acompanhamento que espera a vez do contato encerra de verdade, em vez de dizer que já acabou** Na fila de follow-ups, um acompanhamento que estava esperando a vez do contato (a espera longa que evita dois fluxos disputarem o mesmo contato) aparecia com o botão de cancelar, mas o clique respondia "Enrollment já está encerrado" (409) e a inscrição continuava de pé. Agora o cancelamento encerra de verdade: a inscrição vira cancelada, com motivo manual e sem próxima avaliação, e essa espera não volta a acordar. O que já tinha acabado por conta própria (concluído, cancelado, morto) segue recusando o cancelamento com o mesmo 409. Nada a fazer na atualização.
-
-- **Lembrete de tarefa com destino por telefone para de sair pelo Instagram/Facebook** Numa organização que conectou o Instagram ou o Facebook antes do WhatsApp, o lembrete de tarefa que a pessoa escolheu receber no WhatsApp saía pela conversa social do contato — e o canal recusava o envio com "O canal recusou o envio. Confira a conexão em Conexões.", porque a janela de 24h do Instagram estava fechada. O lembrete simplesmente não chegava ao responsável. Agora o sistema escolhe um número de WhatsApp quando o destino é um telefone: o número que a pessoa informou no aviso é um telefone, e a rede social não alcança telefone nenhum, só quem já escreveu para ela. Sem nenhum WhatsApp conectado na organização, a escolha continua a de antes, e o aviso na Central e o push seguem iguais — por isso não há nada a fazer na atualização.
-
-  Nada a fazer na atualização.
-
-  Contribuição de @webtecnica (#3364).
-
-- **O monitoramento de saúde não confunde mais a tela de login com o banco de dados** Numa instalação em que o endereço configurado para o banco de dados caía numa página de login (um proxy na frente, por exemplo), o monitor de saúde do sistema — o endereçamento `/health` que o instalador e o atualizador consultam — respondia "tudo certo". O endereço respondia, mas quem respondia era a tela de login, e o banco de dados podia estar fora do ar sem que ninguém fosse avisado: a checagem seguia o redirecionamento, recebia a página de login e a lia como se fosse o banco.
-
-  Agora a checagem não segue redirecionamento: um redirecionamento é reportado como o banco fora do ar, com o endereço de destino no detalhe do erro para quem consulta com o segredo interno. E um "tudo certo" que não tenha vindo do banco — a página de login servida no lugar dele — deixa de contar como banco de pé. Uma resposta legítima do banco continua "tudo certo" como sempre: inclusive as em que ele recusa a credencial, que é o banco funcionando e barrando quem não tem permissão.
-
-  Quem opera não precisa fazer nada na instalação. O que muda é que uma instalação mal configurada passa a aparecer como fora do ar em vez de aparecer como saudável.
-
-  Contribuição de @webtecnica (#3294).
-
-- **O plano de tarefa mostra o limite e diz qual campo passou** Em Tarefas › Planos, uma descrição de plano com mais de 300 caracteres não salvava e a tela mostrava só "Dados inválidos.", sem dizer o que corrigir — parecia que alguns caracteres eram proibidos. Agora a descrição tem contador ("245/300") e para no limite, o nome e o título dos passos também param no limite, o prazo do passo é conferido antes de salvar, e quando algo é recusado a mensagem nomeia o campo e o passo ("O título do passo 2 pode ter até 200 caracteres."). Nenhum caractere é proibido. Crédito: @LuigiMDev.
-
-- **Salvar um plano de tarefa com a lista ainda carregando não apaga mais os outros planos** Em Tarefas › Planos, criar ou salvar um plano enquanto a lista ainda carregava, ou depois de ela falhar ao carregar, gravava só o plano da tela e apagava os demais. Agora criar e salvar ficam desativados até a lista carregar, e uma falha de leitura mostra um aviso com a opção de tentar de novo, em vez de dizer que não há planos. A descrição longa sem espaços também deixou de ultrapassar a largura do cartão.
-
-- **Comandas, faturamento, honorários, agenda e recorrências leem o valor digitado pela moeda da organização** Numa organização cuja moeda não é o real, digitar `1,300` no preço de um item de comanda, num lançamento avulso do faturamento, numa parcela de honorários, no preço padrão de um tipo de agendamento ou num lançamento de todo mês gravava **1,30** — cem vezes menos. Essas cinco telas liam o número pela régua do real; agora cada uma lê pela moeda da organização, a mesma do valor do negócio e do catálogo (#3331, #3365).
-
-  Em real nada muda: `1,30` continua um e trinta e `1.300` continua mil e trezentos.
-
-  Fica declarado o que NÃO se resolve: a vírgula com dois dígitos depois (`1,30`) continua sendo lida como 1,30 em qualquer moeda — dois dígitos não são grupo de milhar em convenção nenhuma. Quer dizer 130 dólares, digite `130` ou `1.30`. E nas parcelas de honorários o valor JÁ GRAVADO continua apresentado em real na tabela, como antes; o conserto é na leitura do que se digita agora.
-
-  Nada a fazer na atualização.
-
-  Contribuição de @webtecnica (#3367).
-
-- **Numa organização em dólar, digitar 1,300 no valor do negócio deixa de virar 1,30** Em organização cuja moeda não é o real, o campo de valor do funil passa a ler o número digitado na convenção DESSA moeda. No dólar, `1,300` é mil e trezentos — antes virava 1,30, cem vezes menos, e ia assim para o funil e os relatórios —, e `1.300` é um e trinta. O mesmo vale para o campo personalizado de moeda e para o eco que aparece embaixo do campo, que continua mostrando o valor entendido antes de salvar.
-
-  Em real nada muda, com uma exceção, que vale também para honorários, comandas, faturamento, preço padrão da agenda e recorrências: um sinal que aparece mais de uma vez (`1.234.567`, `1,234,567`) é sempre separador de milhar, em qualquer moeda. `1,234,567` deixava de valer 1.234,57 e passa a valer 1.234.567. Nesta atualização, além do campo de valor do funil, essas cinco telas também passam a ler pela moeda da organização (#3367).
-
-  Fica declarado o que NÃO se resolve: vírgula com dois dígitos depois (`1,30`) continua sendo lida como 1,30 em qualquer moeda, porque dois dígitos não são grupo de milhar em convenção nenhuma. Quem quiser dizer 130 dólares digita `130` ou `1.30`.
-
-  Nada a fazer na atualização.
-
-  Contribuição de @webtecnica (#3365).
-
-- **A tela de atualização para de dizer que a versão anterior está no ar quando a volta automática não terminou, nas atualizações feitas a partir desta versão** A volta automática — o socorro que o servidor faz sozinho quando o site não responde logo depois de uma atualização — passa a contar à tela se ela TERMINOU. Antes o aviso chegava sempre do mesmo jeito, e o painel tratava como igual a volta que deu certo e a que falhou: dizia "que é a que está no ar agora" nas duas, e, quando a volta tinha terminado, ainda oferecia o botão "Voltar para a versão anterior" apontando para a versão que já estava rodando.
-
-  Agora são dois desfechos distintos na tela. Quando a volta não termina bem, a tela diz que não sabe em que versão o sistema ficou e mantém o botão de voltar, que é a saída de um clique. Quando ela termina, a tela afirma o que de fato aconteceu e esconde o botão que não teria mais o que fazer.
-
-  Vale a partir da atualização SEGUINTE a esta. Se a atualização para esta versão falhar, a volta reinstala a versão anterior, cuja tela ainda não conhece o aviso novo e mostra o que mostrava antes. Quando o servidor já está nesta versão, uma atualização que falhe volta para ela, e aí a tela já distingue os dois desfechos.
-
-  Nada a fazer na atualização.
-
-  Contribuição de @webtecnica (#3360).
+  Vale a partir da atualização SEGUINTE a esta: se a atualização para esta versão falhar, a volta reinstala a anterior, cuja tela ainda não conhece o aviso novo e mostra o que mostrava antes. Contribuição de @webtecnica (#3360).
 
 ## [1.88.0] — 2026-10-23
 
