@@ -122,6 +122,33 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    # ═══ O PRAZO QUE FALTAVA (#2823) ═══
+    #
+    # No `docker stop` o Docker manda SIGTERM e espera ESTE prazo; passado ele,
+    # manda SIGKILL. Sem a chave, o prazo é o PADRÃO DE 10 s — e o worker se dá
+    # 30 s (`SHUTDOWN_GRACE_MS`) para fechar laços + drain + pool. O SIGKILL
+    # chegava, portanto, na METADE do prazo que o próprio worker pediu, e o job
+    # em voo voltava `running` até o reaper (10 min de invisibilidade a cada
+    # `docker stop` — o defeito da issue, medido em 19,6 s de parada ociosa com
+    # o laço do `event_log` preso numa chamada de rede).
+    #
+    # ═══ POR QUE O NÚMERO NÃO RESOLVE A ISSUE SOZINHO ═══
+    #
+    # Aumentar o prazo do supervisor é o remédio que a issue #2823 PROÍBE como
+    # conserto único (o comentário do `Dockerfile.worker` registra isso): com o
+    # prazo armado depois de esperar os laços, o `stop_grace_period` que faltava
+    # cobriria uma janela que começava tarde — os 19,6 s do laço preso ficavam
+    # por fora de qualquer prazo, interno ou externo. O par só funciona junto:
+    # o worker conta o prazo DO SINAL (`workers/agent-worker/desligamento-no-prazo.ts`)
+    # e este número é o teto de fora.
+    #
+    # ═══ A REGRA DO PAR ═══
+    #
+    # `stop_grace_period` > `SHUTDOWN_GRACE_MS`/1000, com folga para o fecho do
+    # pool e do healthz. O default de 40 s para os 30 s internos dá 10 s de
+    # folga. Os dois são gravados juntos pelo `install.sh` (kit) e o par que não
+    # fecha é reprovado por `workers/agent-worker/prazo-do-shutdown-comeca-no-sinal.test.ts`.
+    stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-40s}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -179,7 +206,11 @@ services:
       # de mensagem dos dois eventos em 22.815 mensagens reais, os que chegaram
       # SÓ por `message` foram ZERO, e 1.642 chegaram só por `message.any` (os
       # que saíram de nós, que `message` não cobre). Superconjunto estrito.
-      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,session.status,state.change"
+      # `message.reaction` entra: é por onde chega o 👍/😐 do cliente (#2797).
+      # O WAHA trata reação como evento PRÓPRIO — sem assiná-lo, um gesto que o
+      # CRM recebe pela API oficial nunca chegaria pelo canal por QR. `message.any`
+      # NÃO o cobre (a reação não vem como mensagem).
+      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,message.reaction,session.status,state.change"
       # Nome EXATO da doc do WAHA (events#hmac-authentication): WHATSAPP_HOOK_HMAC
       # não existe nele — sem o _KEY ele ignora e nunca assina.
       WHATSAPP_HOOK_HMAC_KEY: ${WAHA_HMAC_SECRET}

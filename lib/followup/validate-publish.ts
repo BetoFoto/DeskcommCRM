@@ -1,9 +1,10 @@
 import type { FlowGraph, FlowEdge, FlowNode, NodeType } from './graph-schema';
-import type { FollowupFlowSurface } from './api-schemas';
+import type { FollowupFlowSurface, TriggerConfig } from './api-schemas';
 import { branchIdForCondition, nodeBranches } from './graph-schema';
 import { rotuloDoRamo } from './rotulo-do-ramo';
 import type { NomesDeValor } from './vocabulario';
 import type { EtapaCitada } from './etapas-citadas';
+import type { ModelosDaConta } from './modelos-citados';
 import { recusaDeMotivoForaDoVocabulario } from '../leads/motivo-da-perda';
 import { capabilitiesOf, transportaMensagem, type ChannelProvider } from '../channels/capabilities';
 import { CUSTO_NO_MOTOR, TETO_DE_PASSOS_DO_MOTOR } from './custo-no-motor';
@@ -47,6 +48,12 @@ export const PUBLISH_ERROR_CODES = [
   'motivo_da_perda_ausente',
   'motivo_da_perda_invalido',
   'tag_ausente',
+  // Seguimento do #3056 — o modelo de mensagem do passo não existe nesta conta
+  // (importado de outra, ou apagado): o motor lançaria a cada envio.
+  'modelo_inexistente',
+  // Regra de data (item 14): sem o campo do negócio ela não tem o que comparar
+  // e responderia `false` para sempre, sem dizer por quê.
+  'campo_de_data_ausente',
 ] as const;
 export type PublishErrorCode = (typeof PUBLISH_ERROR_CODES)[number];
 
@@ -58,9 +65,40 @@ export type PublishValidationError = {
   branch_id?: string;
 };
 
+/**
+ * AVISOS DE SEGURANÇA DA PUBLICAÇÃO — o que não reprova, mas quem publica
+ * precisa ler antes de clicar.
+ *
+ * Por que aviso e não erro: estes três são decisões legítimas em algum fluxo
+ * (um toque único de "10 minutos depois" não quer teto de silêncio), e virar
+ * erro duro REPROVARIA o re-publish de fluxos de silêncio que já existem em
+ * outras instalações. Reprovar o que já está publicado e funcionando é quebrar
+ * dado alheio para dar uma lição.
+ */
+export const PUBLISH_WARNING_CODES = [
+  /** Fluxo de silêncio sem teto: alcança todo contato calado além do mínimo, de uma vez, ao ser ligado. */
+  'silencio_sem_teto',
+  /** Fluxo de silêncio sem teto de repetições: a pausa só espaça, e quem nunca responde recomeça para sempre. */
+  'silencio_sem_limite_de_repeticoes',
+  /** Fluxo de silêncio que alcança quem a EQUIPE não respondeu. */
+  'silencio_alcanca_nao_atendido',
+] as const;
+export type PublishWarningCode = (typeof PUBLISH_WARNING_CODES)[number];
+
+export type PublishValidationWarning = {
+  code: PublishWarningCode;
+  message: string;
+};
+
+/**
+ * `warnings` é OPCIONAL nos dois braços de propósito: todo consumidor atual lê
+ * `ok` e, no `false`, `errors`. Acrescentar campo opcional não quebra nenhum —
+ * e o braço `ok: true` passa a poder carregar recado, que antes não tinha onde
+ * caber.
+ */
 export type PublishValidationResult =
-  | { ok: true }
-  | { ok: false; errors: PublishValidationError[] };
+  | { ok: true; warnings?: PublishValidationWarning[] }
+  | { ok: false; errors: PublishValidationError[]; warnings?: PublishValidationWarning[] };
 
 /**
  * O que só o banco sabe, lido por quem chama (a rota de publish). Ausente, a
@@ -79,25 +117,99 @@ export interface ContextoDoPublish {
    */
   roteiro?: RoteiroDoPublish;
   /**
-   * Alguma conexão da organização só aceita modelo APROVADO com a janela de 24 h
-   * fechada? Só aí o plano B (`fallback_template_id`) de uma mensagem por IA
-   * depois de 24 h de espera tem o que fazer — em runtime ele só sai com a janela
-   * fechada (`janelaFechada` em followup-turn.ts). Num canal sem janela, exigi-lo
-   * travaria o publish: o seletor do plano B só oferece modelos aprovados, e esse
-   * canal não os tem. Ausente = exige (o comportamento de antes).
+   * Alguma conexão da organização EXIGE modelo aprovado com a janela de 24 h
+   * fechada — canal que tem a regra da janela E tem catálogo de definições
+   * aprovadas a oferecer (`algumCanalExigeModeloForaDaJanela`, #3109)? Só aí o
+   * plano B (`fallback_template_id`) de uma mensagem por IA depois de 24 h de
+   * espera tem o que fazer — em runtime ele só sai com a janela fechada
+   * (`janelaFechada` em followup-turn.ts). Num canal sem janela, ou num canal
+   * que fecha a janela mas não tem modelo aprovado nenhum (o canal social de
+   * Instagram/Facebook), exigi-lo travaria o publish sem oferecer saída: o
+   * seletor do plano B só oferece modelos aprovados. Ausente = exige (o
+   * comportamento de antes).
    */
   exigeModeloForaDaJanela?: boolean;
+  /**
+   * O gatilho que vai armar este fluxo. Só os AVISOS o leem — nenhuma recusa
+   * depende dele —, e ausente significa "não há o que avisar sobre o gatilho".
+   */
+  trigger?: TriggerConfig;
+  /**
+   * Dos modelos que o grafo cita (`template_id`/`fallback_template_id`), os que
+   * existem na organização (`carregaModelosCitados`). Ausente = não confere.
+   */
+  modelos?: ModelosDaConta;
+}
+
+/** Chave do dicionário (a rota traduz): a frase não cita id, que a pessoa não lê. */
+export const MENSAGEM_MODELO_INEXISTENTE =
+  'Escolha um modelo de mensagem: o que estava aqui não existe nesta conta.';
+
+/**
+ * Os avisos que o gatilho de silêncio rende. Nenhum reprova; todos são coisas
+ * medidas em instalação real que quem publica não tinha como ver na tela.
+ */
+export function avisosDoGatilho(trigger: TriggerConfig | undefined): PublishValidationWarning[] {
+  if (!trigger || trigger.kind !== 'silence') return [];
+  const avisos: PublishValidationWarning[] = [];
+  const p = trigger.params;
+
+  if (!p.max_silence_minutes) {
+    avisos.push({
+      code: 'silencio_sem_teto',
+      message:
+        'Sem “silêncio máximo”, o fluxo alcança TODO contato calado há mais que o mínimo — inclusive quem sumiu há meses — e começa para todos eles na primeira varredura, um minuto depois de publicar.',
+    });
+  }
+  if (!p.max_enrollments_por_contato) {
+    avisos.push({
+      code: 'silencio_sem_limite_de_repeticoes',
+      message:
+        'Sem limite de repetições, a pausa só ESPAÇA os reinícios: quem nunca responde volta a receber o fluxo a cada pausa, indefinidamente.',
+    });
+  }
+  if (!p.exige_resposta_da_equipe) {
+    avisos.push({
+      code: 'silencio_alcanca_nao_atendido',
+      message:
+        'O silêncio conta da última mensagem do CLIENTE, e mensagem da equipe não zera essa conta: quem escreveu e não foi atendido também entra no fluxo. Ligue “Só começar se a equipe já respondeu a última mensagem do cliente” se o fluxo é para quem sumiu, não para quem está esperando.',
+    });
+  }
+  return avisos;
 }
 
 /**
- * `true` quando algum dos providers das conexões da organização recusa texto
- * livre fora da janela. Provider que esta imagem não conhece (ou que não manda
- * mensagem) não conta: por ele não sai follow-up nenhum.
+ * `true` quando alguma conexão da organização EXIGE modelo aprovado fora da
+ * janela de 24 h — a única situação em que o plano B (`fallback_template_id`) de
+ * uma mensagem por IA depois de 24 h tem o que fazer.
+ *
+ * ─── Não basta o canal ter janela (#3109) ─────────────────────────────────
+ *
+ * A versão anterior perguntava só `!freeformOutsideWindow`. O canal social de
+ * Instagram/Facebook fecha a janela (`freeformOutsideWindow: false`, MEDIDO: a
+ * Meta recusa a ENTREGA com 131047) e mesmo assim NÃO tem catálogo de definições
+ * aprovadas (`requiresTemplates: false` — não há WABA por trás dele). Nessa conta
+ * o seletor do plano B nasce vazio: não existe modelo aprovado a escolher, e a
+ * exigência fica impossível de cumprir. Como a conta era da ORGANIZAÇÃO INTEIRA,
+ * uma conexão social reprovava o publish de um fluxo que só roda no WhatsApp por
+ * QR (canal sem janela) — e nem com plano B nem sem ele havia configuração
+ * válida para publicar.
+ *
+ * Então as duas perguntas entram juntas, e a segunda é a que faltava: o canal tem
+ * a REGRA da janela E tem DEFINIÇÕES aprovadas para oferecer? Sem catálogo, o
+ * plano B não é exigência — é impossibilidade, e recusar a publicação não
+ * destrava nenhuma configuração: quem trata o que acontece com a mensagem livre
+ * fora da janela num contato de canal social é o envio, não o publish.
+ *
+ * Provider que esta imagem não conhece (ou que não manda mensagem) não conta: por
+ * ele não sai follow-up nenhum.
  */
 export function algumCanalExigeModeloForaDaJanela(providers: readonly (string | null)[]): boolean {
-  return providers.some(
-    (p) => transportaMensagem(p) && !capabilitiesOf(p as ChannelProvider).freeformOutsideWindow
-  );
+  return providers.some((p) => {
+    if (!transportaMensagem(p)) return false;
+    const caps = capabilitiesOf(p as ChannelProvider);
+    return !caps.freeformOutsideWindow && caps.requiresTemplates;
+  });
 }
 
 export interface RoteiroDoPublish {
@@ -819,6 +931,32 @@ function conferirRegras(
     };
     const valor = String(check.value).trim();
 
+    // A regra de DATA é conferida antes: o "valor" dela é um prazo em dias, e
+    // `0` — o caso mais comum, "hoje ou já passou" — não pode cair no
+    // `empty_check_value` nem no `check_value_not_number`.
+    if (check.field === 'lead_date') {
+      const chave = (check.key ?? '').trim();
+      if (chave === '') {
+        errors.push({
+          ...ancora,
+          code: 'campo_de_data_ausente',
+          message: `${regra}: escolha o campo do negócio que guarda a data.`,
+        });
+        return;
+      }
+      // `valor` vazio NAO pode virar 0: `Number("")` e 0, e um prazo em branco
+      // publicaria como "inclui hoje" sem ninguem ver. Achado pela prova de tela.
+      const dias = valor === "" ? Number.NaN : Number(valor);
+      if (!Number.isInteger(dias) || dias < 0) {
+        errors.push({
+          ...ancora,
+          code: 'check_value_not_number',
+          message: `${regra}: o prazo em dias é um número de 0 para cima (0 inclui hoje).`,
+        });
+      }
+      return;
+    }
+
     if (valor === '') {
       errors.push({ ...ancora, code: 'empty_check_value', message: `${regra} sem valor: preencha ou remova a regra.` });
       return;
@@ -1019,6 +1157,17 @@ export function validateFlowForPublish(
   for (const node of [...nodes].sort(byId)) {
     if (node.type === 'move_lead') conferirEtapaDestino(node, contexto, errors);
     if (node.type === 'edit_lead_tag') conferirTags(node, errors);
+    if (node.type === 'action' && contexto.modelos !== undefined) {
+      const { prontos, doCanal } = contexto.modelos;
+      const cfg = node.config;
+      const faltando =
+        cfg.mode === 'template'
+          ? !!cfg.template_id && !prontos.has(cfg.template_id) && !doCanal.has(cfg.template_id)
+          : cfg.mode === 'ai_message' && !!cfg.fallback_template_id && !doCanal.has(cfg.fallback_template_id);
+      if (faltando) {
+        errors.push({ node_id: node.id, code: 'modelo_inexistente', message: MENSAGEM_MODELO_INEXISTENTE });
+      }
+    }
   }
 
   for (const node of [...nodes].sort(byId)) {
@@ -1103,7 +1252,11 @@ export function validateFlowForPublish(
     });
   }
 
-  if (errors.length === 0) return { ok: true };
+  const warnings = avisosDoGatilho(contexto.trigger);
+
+  if (errors.length === 0) {
+    return warnings.length > 0 ? { ok: true, warnings } : { ok: true };
+  }
 
   errors.sort((a, b) => {
     const rankDiff = PUBLISH_ERROR_CODES.indexOf(a.code) - PUBLISH_ERROR_CODES.indexOf(b.code);
@@ -1111,5 +1264,5 @@ export function validateFlowForPublish(
     return (a.node_id ?? '').localeCompare(b.node_id ?? '');
   });
 
-  return { ok: false, errors };
+  return warnings.length > 0 ? { ok: false, errors, warnings } : { ok: false, errors };
 }

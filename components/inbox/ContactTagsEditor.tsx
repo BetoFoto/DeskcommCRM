@@ -10,29 +10,98 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Plus } from "@/lib/ui/icons";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
+import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import { useDefinirCorDaEtiqueta } from "@/hooks/tags/useDefinirCorDaEtiqueta";
 import { chaveDaEtiqueta } from "@/lib/tags/cor-da-etiqueta";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { ROLE_RANK } from "@/lib/auth/types";
-import { normalizarTag, TAMANHO_MAXIMO_DA_TAG } from "@/lib/contacts/tag-normalizada";
+import { sugestoesDeEtiqueta } from "@/lib/contacts/etiquetas";
+import {
+  normalizarTag,
+  normalizarTags,
+  TAMANHO_MAXIMO_DA_TAG,
+} from "@/lib/contacts/tag-normalizada";
 
-interface Props {
-  contactId: string;
+/**
+ * O alvo do editor — e ele é a ÚNICA coisa que decide para onde a etiqueta vai.
+ * A etiqueta do NEGÓCIO (`crm_leads.tags`) e a do CONTATO (`contacts.tags`) são
+ * colunas diferentes, em rotas diferentes, em contextos diferentes: ver o
+ * cabeçalho deste arquivo.
+ */
+type AlvoDoEditor =
+  | {
+      /** Padrão: a PESSOA (Inbox, ficha, campanha). Grava em `contacts.tags`. */
+      entityType?: "contact";
+    }
+  | {
+      /** O NEGÓCIO do funil. Grava em `crm_leads.tags`, nunca no contato. */
+      entityType: "lead";
+      /**
+       * O funil do negócio. `useEditLead` o exige para acertar o cache do quadro
+       * (`["board", pipelineId]`) — sem ele a etiqueta gravaria no servidor e o
+       * card continuaria mostrando a lista antiga.
+       */
+      pipelineId: string;
+    };
+
+type Props = {
+  /** Id do alvo: contato (`/contacts/{id}`) ou negócio (`/leads/{id}`). */
+  entityId: string;
+  /** Organização ativa — vocabulário de sugestões e régua de papel para a cor. */
   orgId: string;
+  /** As etiquetas do alvo, como o servidor as devolveu. */
   tags: string[];
-}
+} & AlvoDoEditor;
 
-/** Edita as tags do CONTATO (distinto de ConversationTagsEditor, que edita as
- * tags da conversa) — aberto pelo botão "Tag" do painel do Inbox. */
-export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
+/**
+ * O editor de etiquetas do Inbox, agora também do FUNIL (issue #2979).
+ *
+ * ─── Duas caixas, um editor ─────────────────────────────────────────────────
+ *
+ * `crm_leads.tags` (a etiqueta do NEGÓCIO) e `contacts.tags` (a da PESSOA) são
+ * colunas distintas, gravadas por rotas distintas — `PATCH /api/v1/leads/{id}`
+ * e `PATCH /api/v1/contacts/{id}`. O Inbox e a ficha marcam pessoas; o funil
+ * marca negócios (`lib/types/leads.ts` documenta as duas, e
+ * `tests/unit/funil-filtro-de-tag-le-as-duas-caixas.test.ts` é o que lê as
+ * duas lado a lado no filtro do quadro).
+ *
+ * O funil usava um campo de texto livre ("vip, recompra") e cada pessoa digitava
+ * a sua variação; a etiqueta que não casa com a regra de automação faz a
+ * automação disparar para quem não devia. Trazer o editor para cá sem trazer o
+ * DESTINO junto seria pior: a etiqueta do negócio iria para o perfil do contato
+ * — silenciosamente, porque o PATCH responderia 200 do mesmo jeito. Por isso
+ * `entityType` decide a mutação, e não o que estiver disponível na tela.
+ *
+ * O nome do arquivo continua `ContactTagsEditor` (e não `TagsEditor`): renomear
+ * custaria o mesmo diff em cinco chamadores e três suítes, sem mudar um byte de
+ * comportamento. Quem lê o `entityType` sabe de quem são as etiquetas.
+ */
+export function ContactTagsEditor(props: Props) {
+  const { entityId, orgId, tags } = props;
   const t = useT();
   const [draft, setDraft] = useState("");
   // Issue #2718 — tom escolhido ANTES do "+": a etiqueta nasce colorida.
   const [cor, setCor] = useState<string | null>(null);
-  const mutation = useUpdateContact(contactId);
+  const noNegocio = props.entityType === "lead";
+  // Os DOIS hooks são chamados em toda renderização (regra dos hooks) e nenhum
+  // deles dispara nada enquanto `mutate` não for chamado — o id vazio do hook
+  // não escolhido é só o que impede um disparo acidental. Quem separa os
+  // caminhos é `apply()`, e só ele.
+  const daPessoa = useUpdateContact(noNegocio ? "" : entityId);
+  const doNegocio = useEditLead(noNegocio ? props.pipelineId : "");
+  const pendente = daPessoa.isPending || doNegocio.isPending;
+  // Os textos dizem de QUEM é a etiqueta: "Adicionar tag ao contato" num
+  // formulário de negócio ensinaria o operador a esperar o destino errado.
+  const rotuloVazio = noNegocio ? t("Sem tags no negócio.") : t("Sem tags no contato.");
+  const rotuloCampo = noNegocio ? t("Adicionar tag ao negócio") : t("Adicionar tag ao contato");
   const { definirCor } = useDefinirCorDaEtiqueta();
-  const { data: vocabulary } = useContactTagVocabulary(orgId);
+  const { data: vocabulary, isError: erroNoVocabulario } = useContactTagVocabulary(orgId);
+  // #2855 — com texto, pergunta também ao vocabulário inteiro (curado + em uso,
+  // sem o teto de contatos lidos). Sem texto é a MESMA chave da linha acima:
+  // uma requisição só.
+  const { data: encontradas, isError: erroNaBusca } = useContactTagVocabulary(orgId, draft.trim());
+  const vocabularyError = erroNoVocabulario || erroNaBusca;
   // A cor de quem JÁ está no contato vem do MESMO mapa que o chip usa (#2771):
   // uma leitura só, sem pergunta por tag, e o gatilho abre já com o tom atual
   // marcado — abrir a paleta de uma etiqueta colorida como se ela não tivesse
@@ -50,7 +119,13 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
     !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
 
   function apply(next: string[]) {
-    mutation.mutate({ tags: next });
+    if (noNegocio) {
+      // A MESMA lista de etiquetas, a OUTRA caixa: `crm_leads.tags`, por
+      // `PATCH /api/v1/leads/{id}` — nunca o perfil do contato.
+      doNegocio.mutate({ leadId: entityId, patch: { tags: next } });
+      return;
+    }
+    daPessoa.mutate({ tags: next });
   }
 
   /** Grava a etiqueta com o tom escolhido. Devolve a tag gravada, ou `null` se recusada (duplicada/cheia). */
@@ -84,10 +159,22 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
   // E o chip MOSTRA a forma normalizada, não a que a fonte mandou: o rótulo
   // precisa ser o que o clique grava mesmo que a lista chegue crua (a rota a
   // normaliza hoje, mas a fonte está marcada para trocar).
-  const jaTem = new Set(tags.map(normalizarTag));
-  const suggestions = [...new Set((vocabulary ?? []).map(normalizarTag))]
-    .filter((v) => v && !jaTem.has(v))
-    .slice(0, 8);
+  //
+  // #3180 — e o texto digitado ENTRA no filtro, com a MESMA chave larga da
+  // busca (sem caixa, sem acento, casando no meio da palavra) que a ficha do
+  // contato já usa (#2732): `sugestoesDeEtiqueta`. Sem texto, a lista sai na
+  // ordem da FONTE — as mais usadas primeiro —, nunca reordenada no alfabeto.
+  // #2855 — o que a busca no vocabulário inteiro achou entra DEPOIS das em uso:
+  // a ordem por uso do #3180 continua valendo para o que já estava na lista.
+  const conhecidas = normalizarTags([
+    ...(vocabulary ?? []),
+    ...(draft.trim() ? (encontradas ?? []) : []),
+  ]);
+  const suggestions = sugestoesDeEtiqueta({
+    conhecidas,
+    selecionadas: tags,
+    digitado: draft,
+  });
 
   return (
     <div className="mt-2 space-y-2 rounded-md border border-border p-2">
@@ -99,7 +186,7 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
                 <button
                   type="button"
                   onClick={() => remove(tag)}
-                  disabled={mutation.isPending}
+                  disabled={pendente}
                   aria-label={`${t("Remover tag")} ${tag}`}
                   className="rounded-sm hover:text-destructive"
                 >
@@ -116,12 +203,12 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
                 onChange={(tom) => void definirCor(tag, tom)}
                 tag={tag}
                 rotulo={`${t("Cor da etiqueta")} ${tag}`}
-                disabled={mutation.isPending}
+                disabled={pendente}
               />
             </Fragment>
           ))
         ) : (
-          <span className="text-xs text-muted-foreground">{t("Sem tags no contato.")}</span>
+          <span className="text-xs text-muted-foreground">{rotuloVazio}</span>
         )}
       </div>
 
@@ -137,28 +224,30 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
           }}
           placeholder={t("Nova tag…")}
           maxLength={TAMANHO_MAXIMO_DA_TAG}
-          disabled={mutation.isPending || tags.length >= 20}
+          disabled={pendente || tags.length >= 20}
           className="h-7 text-xs"
-          aria-label={t("Adicionar tag ao contato")}
+          aria-label={rotuloCampo}
         />
         <SeletorDeCorDaEtiqueta
           cor={cor}
           onChange={setCor}
           tag={draft.trim() || undefined}
-          disabled={mutation.isPending || tags.length >= 20}
+          disabled={pendente || tags.length >= 20}
         />
         <Button
+          type="button"
           size="sm"
           variant="outline"
           className="h-7 px-2"
           onClick={() => add(draft)}
-          disabled={mutation.isPending || !draft.trim() || tags.length >= 20}
+          disabled={pendente || !draft.trim() || tags.length >= 20}
           aria-label={t("Adicionar tag")}
         >
           <Plus size={12} weight="regular" aria-hidden />
         </Button>
       </div>
 
+      {vocabularyError && <p role="alert" className="text-xs text-destructive">{t("Não foi possível carregar as tags.")}</p>}
       {suggestions.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {suggestions.map((tag) => (
@@ -172,7 +261,7 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
                   ? setSugestao({ tag, corInicial: cores[chaveDaEtiqueta(tag)] ?? null })
                   : add(tag)
               }
-              disabled={mutation.isPending || tags.length >= 20}
+              disabled={pendente || tags.length >= 20}
               className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
             >
               <PontoDaEtiqueta tag={tag} />
@@ -196,7 +285,7 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
             if (gravada && tom !== sugestao.corInicial) void definirCor(gravada, tom);
             setSugestao(null);
           }}
-          disabled={mutation.isPending}
+          disabled={pendente}
         />
       ) : null}
     </div>
