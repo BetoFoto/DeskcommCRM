@@ -168,6 +168,7 @@ import { validarRespostaDoFluxo } from './flow-validate';
 import { moduloLigadoComMemo } from '@/lib/instalacao/modulos';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { turnoDisparaNasMensagens } from './palavra-chave-do-gatilho';
+import { agenteJaRespondeuNoAtendimento } from './agente-ja-respondeu';
 import { enviaAvisoForaDoHorario, portasDeProducao } from './aviso-fora-do-horario';
 import { enviarComSaidaConfiguravel } from "@/lib/prospecting/saida-configuravel";
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
@@ -2961,6 +2962,43 @@ async function executarTurnoDoAgente(
   // `corpoTemTexto` que faz a falha aberta da mídia rodar de verdade
   // (ponto 2).
   //
+  // O FILTRO DECIDE A ENTRADA, NÃO CADA MENSAGEM (#3142). O exemplo medido no
+  // #2696: o agente responde a "quero um orçamento", pergunta o produto, e o
+  // cliente responde "camiseta azul, tamanho M" — sem a palavra do filtro. Com
+  // o gate julgando cada mensagem, `turnoDisparaNasMensagens` devolvia false e o
+  // agente ficava CALADO no meio da conversa que ele mesmo começou. A tela
+  // promete "só entra quando a mensagem contiver uma dessas palavras": isso
+  // fala da ENTRADA do agente na conversa, não de cada turno seguinte.
+  //
+  // A âncora do "já engajado" é uma OUTBOUND DESTE AGENTE NESTE ATENDIMENTO
+  // (`agente-ja-respondeu.ts`): `messages` com `sent_via='ai'`,
+  // `metadata->>'ai_actor_id' = agentConfig.agentId` e dentro da fronteira do
+  // atendimento corrente — a MESMA linha que o caminho de envio grava DEPOIS
+  // deste portão, portanto a única testemunha que não existe antes de o agente
+  // responder. O sticky do roteador NÃO serve (CR do #3240): sem roteador ele
+  // nunca é gravado, e com roteador é gravado no INÍCIO do turno, antes deste
+  // portão — ali o filtro seguraria só a primeira mensagem, não a entrada. E a
+  // âncora é do agente que VAI responder, não da conversa: fala do suporte não
+  // engaja o agente de vendas que o roteador acabou de escolher (ponto 2).
+  //
+  // A leitura só acontece quando há filtro configurado — quem não usa o campo
+  // não paga a consulta. Erro de leitura sobe e o turno é re-tentado pela fila
+  // (`failJob` → `max_attempts` → `job_dead`): `false` ali calaria um cliente
+  // já engajado. Só a linha ausente vira `false`; nunca inventa engajamento.
+  const agenteJaEngajado =
+    !preview && liveJob().kind === 'inbound_turn' && agentConfig?.filtroDePalavraChave != null
+      ? await agenteJaRespondeuNoAtendimento(pool, {
+          organizationId: tenantId,
+          conversationId: input.conversationId,
+          agentId: agentConfig.agentId,
+        })
+      : false;
+  //
+  // O QUE NÃO MUDA: a janela logo abaixo segue valendo para o turno engajado
+  // (ela é sobre QUANDO o lojista atende, não sobre palavras), a ordem do início
+  // do turno fica intacta (detecções determinísticas → filtro → janela) e a
+  // falha aberta continua aberta. O miss na ENTRADA segue calando o turno.
+  //
   // Diferente da JANELA logo abaixo, um miss NÃO adia: não há "depois" em que
   // a mesma mensagem venha a casar. O turno é encerrado sem resposta (`return`,
   // o mesmo consumo do job de todo outro veto do início do turno — lead em
@@ -2969,7 +3007,12 @@ async function executarTurnoDoAgente(
   // tela. Regex quebrada, corpo sem texto ou nada a julgar ⇒ o turno SEGUE —
   // entrar de menos cala o cliente, e esta porta é a única que este gate
   // existe para não criar.
-  if (!preview && liveJob().kind === 'inbound_turn' && agentConfig?.filtroDePalavraChave != null) {
+  if (
+    !preview &&
+    liveJob().kind === 'inbound_turn' &&
+    agentConfig?.filtroDePalavraChave != null &&
+    !agenteJaEngajado
+  ) {
     const corposDoTurno =
       inboundsPendentes.length > 0
         ? inboundsPendentes
