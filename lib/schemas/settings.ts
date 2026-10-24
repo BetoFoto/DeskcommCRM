@@ -11,6 +11,7 @@ import { z } from "zod";
 import { ehHexValido } from "@/lib/branding/rampa";
 import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { IDIOMAS } from "@/lib/i18n/idiomas";
+import { DIAS_MAXIMO_DO_RECORTE } from "@/lib/kanban/recorte-de-encerrados";
 import { MOEDAS_SERVIDAS } from "@/lib/money";
 
 import { conversationTagSchema } from "./messaging";
@@ -408,6 +409,20 @@ export const pipelineConfigPatchSchema = z.object({
   reabertura: z.enum(["mesmo_registro", "novo_negocio"]).optional(),
   /** O que a retomada copia da origem; ausente é o piso (`custom_fields` e tags). */
   reabertura_campos: z.array(z.enum(CAMPOS_COPIAVEIS_NA_RETOMADA)).max(8).optional(),
+  /**
+   * O RECORTE DE ENCERRADOS ANTIGOS do quadro (#2995) — a opção POR FUNIL que
+   * deixa fora da tela os negócios encerrados há mais de N dias. Ausente ou `0`
+   * é DESLIGADO: o quadro continua trazendo tudo, como sempre trouxe.
+   *
+   * `0` E NÃO `null` PARA O "DESLIGUEI", e essa é a parte que importa: a action
+   * faz merge com o settings que está no banco gravando só as chaves que vêm no
+   * patch, então um `undefined` deixaria o valor antigo na linha — a pessoa
+   * desligaria a opção, salvaria, e os cards continuariam sumindo. O teto
+   * (`DIAS_MAXIMO_DO_RECORTE`, dez anos) vem do domínio
+   * (`lib/kanban/recorte-de-encerrados`), que é quem decide o que é um recorte
+   * válido: um número escrito aqui e outro lá divergiriam no primeiro ajuste.
+   */
+  ocultar_encerrados_dias: z.number().int().min(0).max(DIAS_MAXIMO_DO_RECORTE).optional(),
 });
 export type PipelineConfigPatch = z.infer<typeof pipelineConfigPatchSchema>;
 

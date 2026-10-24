@@ -7797,6 +7797,17 @@ export const DICIONARIO: Traducoes = {
   "Motivos de perda (separados por vírgula)": { es: "Motivos de pérdida (separados por comas)" },
   "Ex:": { es: "Ej.:" },
   "Salvar vocabulário e campos": { es: "Guardar vocabulario y campos" },
+  // #2995 — o recorte de encerrados antigos do quadro, na tela do funil.
+  "Esconder do quadro os negócios encerrados há mais de": {
+    es: "Ocultar del tablero los negocios cerrados hace más de",
+  },
+  "Dias de encerrado para esconder do quadro": { es: "Días de cerrado para ocultar del tablero" },
+  "Escolha de 1 a 3650 dias para esconder os negócios encerrados do quadro.": {
+    es: "Elige entre 1 y 3650 días para ocultar del tablero los negocios cerrados.",
+  },
+  "Negócios abertos nunca são escondidos, e negócios encerrados sem data de encerramento ficam no quadro. Nada é apagado ou arquivado: desligar a opção traz todos de volta.": {
+    es: "Los negocios abiertos nunca se ocultan, y los negocios cerrados sin fecha de cierre permanecen en el tablero. Nada se borra ni se archiva: al desactivar la opción vuelven todos.",
+  },
   "As etapas que serviriam para este passo já estão sendo usadas por outros passos. Libere uma delas para poder escolhê-la aqui.": {
     es: "Las etapas que servirían para este paso ya las usan otros pasos. Libera una para poder elegirla aquí.",
   },

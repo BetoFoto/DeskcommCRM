@@ -20,6 +20,12 @@ import { updatePipelineConfig } from "@/app/actions/settings/updatePipelineConfi
 import type { PipelineConfigPatch } from "@/lib/schemas/settings";
 import { camposDoFunil, escopoDoCampo } from "@/lib/leads/campos-do-funil";
 import {
+  DIAS_MAXIMO_DO_RECORTE,
+  DIAS_MINIMO_DO_RECORTE,
+  DIAS_PADRAO_DO_RECORTE,
+  diasDeRecorte,
+} from "@/lib/kanban/recorte-de-encerrados";
+import {
   buscarOpcoes,
   exportarOpcoesCsv,
   importarOpcoesCsv,
@@ -681,6 +687,16 @@ function PipelineEditor({
   const [retomaComoNovo, setRetomaComoNovo] = useState(
     modoDeReabertura(pipeline.settings) === "novo_negocio",
   );
+  // O recorte de encerrados antigos do quadro (#2995): opção POR FUNIL em
+  // `settings.ocultar_encerrados_dias`, desligada por padrão. O número relido é
+  // o que está gravado (`null` = desligado) e é ele que preenche o campo de
+  // dias, para ligar/desligar não exigir digitação; o campo já nasce com a
+  // sugestão de 30 dias, que NÃO é gravada enquanto ninguém ligar a opção.
+  const diasRelidos = diasDeRecorte(pipeline.settings);
+  const [ocultarEncerrados, setOcultarEncerrados] = useState(diasRelidos !== null);
+  const [diasDosEncerrados, setDiasDosEncerrados] = useState(
+    diasRelidos !== null ? String(diasRelidos) : String(DIAS_PADRAO_DO_RECORTE),
+  );
   // O texto CSV de importação de opções (#2521), por chave de campo — vive só
   // enquanto a pessoa cola; "Importar" o transforma em opções e o limpa.
   const [csvDeOpcoes, setCsvDeOpcoes] = useState<Record<string, string>>({});
@@ -750,6 +766,26 @@ function PipelineEditor({
       .map((s2) => s2.trim())
       .filter((s2) => s2.length > 0);
 
+    // #2995 — o recorte de encerrados antigos do quadro: os dias vêm de um
+    // campo de texto, e um número fora da faixa faria o schema recusar o save
+    // inteiro com a mensagem genérica de validação. Barrar aqui diz o que está
+    // errado — a mesma técnica dos campos logo acima. O `0` é o DESLIGADO, e
+    // vai explícito no patch: a action faz merge com o settings do banco, então
+    // omitir a chave deixaria o número antigo e a pessoa desligaria a opção
+    // para continuar vendo os cards sumirem. (O texto repete a faixa de
+    // `DIAS_MINIMO_DO_RECORTE`/`DIAS_MAXIMO_DO_RECORTE`, como o resto da tela
+    // repete os limites dos campos: a chave de tradução é o texto renderizado.)
+    const diasDigitados = Number(diasDosEncerrados.trim());
+    if (
+      ocultarEncerrados &&
+      (!Number.isInteger(diasDigitados) ||
+        diasDigitados < DIAS_MINIMO_DO_RECORTE ||
+        diasDigitados > DIAS_MAXIMO_DO_RECORTE)
+    ) {
+      toast.error(t("Escolha de 1 a 3650 dias para esconder os negócios encerrados do quadro."));
+      return;
+    }
+
     const patch: PipelineConfigPatch = {
       vocabulary: { lead, deal, won, lost },
       fields: ok,
@@ -758,6 +794,7 @@ function PipelineEditor({
       won_reason_required: wonRequired,
       comanda_no_ganho: comandaNoGanho,
       reabertura: retomaComoNovo ? "novo_negocio" : "mesmo_registro",
+      ocultar_encerrados_dias: ocultarEncerrados ? diasDigitados : 0,
     };
     startTransition(async () => {
       const r = await updatePipelineConfig(pipeline.id, patch);
@@ -874,6 +911,42 @@ function PipelineEditor({
         <p className="text-xs text-muted-foreground">
           {t(
             "Desligado, arrastar um negócio perdido ou ganho para uma etapa aberta reabre o mesmo negócio. Ligado, o encerrado fica como está e o quadro oferece criar uma nova tentativa com o mesmo contato.",
+          )}
+        </p>
+      </div>
+
+      {/* ─── O RECORTE DE ENCERRADOS ANTIGOS (#2995) ──────────────────────
+          O quadro traz TODO negócio não arquivado — ganhos e perdas de meses
+          atrás inclusive — e num funil com histórico longo ele fica ilegível.
+          A opção é POR FUNIL e vem DESLIGADA: quem não ligar continua vendo
+          exatamente o que via. O corte é por DATA DE ENCERRAMENTO, e não por
+          status: negócio aberto nunca sai (por antigo que seja) e encerrado sem
+          data de encerramento fica — a data não existe, e inventá-la tiraria do
+          quadro um negócio que ninguém sabe quando fechou. Vale só para o que a
+          TELA mostra: nenhum negócio é apagado ou arquivado. */}
+      <div className="space-y-1">
+        <label className="flex flex-wrap items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={ocultarEncerrados}
+            onChange={(e) => setOcultarEncerrados(e.target.checked)}
+          />
+          {t("Esconder do quadro os negócios encerrados há mais de")}
+          <Input
+            type="number"
+            min={DIAS_MINIMO_DO_RECORTE}
+            max={DIAS_MAXIMO_DO_RECORTE}
+            aria-label={t("Dias de encerrado para esconder do quadro")}
+            className="h-8 w-20 text-xs"
+            disabled={!ocultarEncerrados}
+            value={diasDosEncerrados}
+            onChange={(e) => setDiasDosEncerrados(e.target.value)}
+          />
+          {t("dias")}
+        </label>
+        <p className="text-xs text-muted-foreground">
+          {t(
+            "Negócios abertos nunca são escondidos, e negócios encerrados sem data de encerramento ficam no quadro. Nada é apagado ou arquivado: desligar a opção traz todos de volta.",
           )}
         </p>
       </div>
