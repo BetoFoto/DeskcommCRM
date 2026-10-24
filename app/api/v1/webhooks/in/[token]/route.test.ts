@@ -467,6 +467,27 @@ describe("as bordas do portão 3 (#3366)", () => {
     expect(res.status).toBe(200);
   });
 
+  it("envio SEM external_id não reusa o card de OUTRA fonte de webhook", async () => {
+    m.cardAberto = { ...CARD_ABERTO, webhook_source_id: "fonte-outra" };
+    const { external_id: _semId, ...semId } = ENVIO_DO_TRIAL;
+
+    await enviar(semId);
+
+    expect(h.criarLead).toHaveBeenCalledTimes(1);
+    expect(h.atualizarLead).not.toHaveBeenCalled();
+    expect(desfecho()).toBe("criado");
+  });
+
+  it("envio COM id não adota card de OUTRA fonte nem quando o card ainda não tem id", async () => {
+    m.cardAberto = { ...CARD_ABERTO, webhook_source_id: "fonte-outra" };
+
+    await enviar(ENVIO_DO_TRIAL);
+
+    expect(h.criarLead).toHaveBeenCalledTimes(1);
+    expect(carimbos()).toHaveLength(0);
+    expect(desfecho()).toBe("criado");
+  });
+
   it("⭐ card aberto que já tem ESTE id (o vencedor da corrida carimbou entre as duas leituras) é adotado, não duplicado", async () => {
     // Dois primeiros envios simultâneos do mesmo id: o perdedor leu o id como
     // inédito, e quando foi ler o card aberto o vencedor já o tinha carimbado.

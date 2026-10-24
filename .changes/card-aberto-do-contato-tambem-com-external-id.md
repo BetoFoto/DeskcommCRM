@@ -11,6 +11,7 @@ Com a opção ligada, o primeiro envio de um identificador que ainda não existe
 Duas perguntas que o review deste PR abriu, respondidas aqui:
 
 - **um segundo identificador diferente do mesmo contato adota o mesmo card?** Não. Cada identificador tem o seu card e a sua idempotência: o card que já responde por um identificador não é adotado por outro, e o envio do segundo identificador cria o card dele. Dois identificadores, dois cards — é o que valia antes, e a opção não muda isso;
+- **o card de outra fonte de webhook é reaproveitado?** Não: o reaproveitamento alcança o card que não veio de fonte nenhuma (o da conversa, o criado à mão) e o card da própria fonte. Vale com ou sem identificador;
 - **o envio seguinte obedece à opção "Atualizar o card existente"?** Sim, como todo envio que casa por identificador: com essa opção desligada, o reenvio do mesmo identificador recebe sucesso e o card fica intocado; com ela ligada, o que mudou é aplicado. É a mesma régua de sempre do reaproveitamento por identificador.
 
 Contribuição de @webtecnica (#3366).

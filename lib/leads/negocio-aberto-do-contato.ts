@@ -49,6 +49,8 @@ export interface NegocioAbertoNoFunil {
    * por outro. Quem chama e não precisa do campo simplesmente o ignora.
    */
   external_id: string | null;
+  /** A fonte de webhook dona do card, ou `null` (card da conversa, manual...). */
+  webhook_source_id: string | null;
 }
 
 export async function negocioAbertoDoContato(
@@ -59,7 +61,7 @@ export async function negocioAbertoDoContato(
 ): Promise<NegocioAbertoNoFunil | null> {
   const { data } = await admin
     .from("crm_leads")
-    .select("id, contact_id, title, custom_fields, stage_id, external_id")
+    .select("id, contact_id, title, custom_fields, stage_id, external_id, webhook_source_id")
     .eq("organization_id", organizationId)
     .eq("contact_id", contactId)
     .eq("pipeline_id", pipelineId)

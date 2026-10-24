@@ -908,8 +908,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
    *    aberto. O id identifica o card, e é esse card que a atualização alcança —
    *    reusar OUTRO card ali trocaria a idempotência por envio (um lead por
    *    `external_id`) por uma atualização inesperada;
-   * 3. **o card aberto não pode já responder por OUTRO id** (#3366; só no envio
-   *    COM id — o envio sem id reusa o card como no #3101). Dois ids
+   * 3. **o card aberto é desta fonte (ou de nenhuma) e não responde por OUTRO
+   *    id** (#3366; a pergunta do id só existe no envio COM id). Dois ids
    *    para o mesmo contato são DOIS cards por desenho (#2316): cada id tem a
    *    sua idempotência e o seu card. Um card carimbado com o id A não é
    *    adotado pelo envio do id B — o envio de B cria o card de B, como criava
@@ -949,13 +949,18 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     contactId: contactId ?? null,
     pipelineId: source.default_pipeline_id as string,
   });
-  // O portão 3 do comentário acima: o envio COM id só adota card sem identidade
-  // de integração — ou que já responde por ESTE id (a corrida de dois primeiros
-  // envios: o vencedor carimbou entre o `findLeadByExternalId` e esta leitura).
-  // O envio SEM id não tem identidade a comparar e reusa como sempre (#3101).
-  // `external_id` vem do `negocioAbertoDoContato`.
+  // O portão 3 do comentário acima, em duas perguntas (colunas lidas pelo
+  // `negocioAbertoDoContato`):
+  // - o card é desta fonte ou de nenhuma? Card de OUTRA fonte de webhook não é
+  //   reusado — com ou sem id no envio;
+  // - com id no envio: o card ainda não tem identidade de integração, ou já
+  //   responde por ESTE id (a corrida de dois primeiros envios: o vencedor
+  //   carimbou entre o `findLeadByExternalId` e esta leitura).
+  const daFonteOuDeNenhuma =
+    !cardAberto?.webhook_source_id || cardAberto.webhook_source_id === source.id;
   if (
     cardAberto &&
+    daFonteOuDeNenhuma &&
     (!externalId || !cardAberto.external_id || cardAberto.external_id === externalId)
   ) {
     /**
