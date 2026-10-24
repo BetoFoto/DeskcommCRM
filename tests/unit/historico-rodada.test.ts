@@ -30,6 +30,8 @@ const canal = vi.hoisted(() => ({
   maxPorPagina: Number.POSITIVE_INFINITY,
   /** Gancho chamado a cada página de mensagens (para simular cancelamento no meio). */
   aoLerMensagens: null as null | (() => void),
+  /** O que o canal resolve de lid para telefone (`/lids/{lid}`). */
+  telefoneDoLid: {} as Record<string, string>,
 }));
 vi.mock("@/lib/waha/client", () => ({
   getWahaClient: () => ({
@@ -40,6 +42,10 @@ vi.mock("@/lib/waha/client", () => ({
         .map((c, i) => ({ chatId: c.id as string, ultimaEm: (c.ultimaEm as number) ?? null, posicao: opts.offset + i }))
         .filter((c) => !c.chatId.endsWith("@g.us") && c.chatId !== "status@broadcast");
       return { conversas, lidas: fatia.length };
+    },
+    async resolvePhoneForLid(session: string, lid: string) {
+      canal.chamadas.push(`lid:${session}:${lid}`);
+      return canal.telefoneDoLid[lid] ?? null;
     },
     async paginaDeMensagens(session: string, chatId: string, opts: { limit: number; offset: number; desde: number }) {
       canal.chamadas.push(`msgs:${session}:${chatId}:${opts.offset}:${opts.limit}`);
@@ -267,6 +273,7 @@ beforeEach(() => {
   canal.chamadas = [];
   canal.maxPorPagina = Number.POSITIVE_INFINITY;
   canal.aoLerMensagens = null;
+  canal.telefoneDoLid = {};
   auditEspiao.mockReset();
   espioes.dispatch.mockReset();
   espioes.posEntrada.mockReset();
@@ -489,6 +496,63 @@ describe("rodarUmaRodada", () => {
     await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
     expect(db.rpcs.filter((x) => x.fn === "fn_upsert_wa_contact").map((x) => x.args.p_chat_id)).toEqual([TEL]);
     expect(db.messages.every((m) => !String(m.external_id).includes("B"))).toBe(true);
+  });
+
+  it("LGPD: conversa com dois telefones, só o segundo marcado, não entra", async () => {
+    (canal.mensagens[LID] ??= []).push({
+      id: `false_${LID}_B3`,
+      from: LID,
+      fromMe: false,
+      body: "sou eu de novo",
+      timestamp: agora - 3 * DIA,
+      _data: { key: { remoteJidAlt: "5511900000003@s.whatsapp.net" } },
+    });
+    const db = bancoDeMentira();
+    db.apagados.add("+5511900000003");
+    novaImportacao(db);
+    await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    const perguntas = db.rpcs.filter((x) => x.fn === "fn_titular_apagado_a_pedido").map((x) => x.args.p_telefone);
+    expect(perguntas).toEqual(expect.arrayContaining(["+5511900000002", "+5511900000003"]));
+    expect(db.rpcs.filter((x) => x.fn === "fn_upsert_wa_contact").map((x) => x.args.p_chat_id)).toEqual([TEL]);
+    expect(db.messages.some((m) => String(m.external_id).includes("B"))).toBe(false);
+  });
+
+  it("LGPD: identidade marcada que só aparece numa página posterior para a conversa ali", async () => {
+    canal.maxPorPagina = 1;
+    (canal.mensagens[LID] ??= []).push(
+      {
+        id: `false_${LID}_B3`,
+        from: LID,
+        fromMe: false,
+        body: "sou eu de novo",
+        timestamp: agora - 3 * DIA,
+        _data: { key: { remoteJidAlt: "5511900000003@s.whatsapp.net" } },
+      },
+      { id: `true_${LID}_B4`, from: "5511999999999@c.us", to: LID, fromMe: true, body: "ok", timestamp: agora - 2 * DIA },
+    );
+    const db = bancoDeMentira();
+    db.apagados.add("+5511900000003");
+    novaImportacao(db);
+    const r = await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(r.status).toBe("concluida");
+    const ids = db.messages.map((m) => String(m.external_id));
+    // B1 e B2 vieram antes de a identidade marcada aparecer; da página dela em diante, nada.
+    expect(ids.some((x) => x.includes("B3") || x.includes("B4"))).toBe(false);
+    // e a conversa não é mais lida depois da parada
+    expect(canal.chamadas.filter((c) => c.startsWith(`msgs:nome-no-canal:${LID}:`))).toHaveLength(3);
+  });
+
+  it("LGPD: chat @lid sem telefone no acervo é conferido pelo telefone que o canal resolve", async () => {
+    canal.mensagens[LID] = [
+      { id: `false_${LID}_B1`, from: LID, fromMe: false, body: "bom dia", timestamp: agora - 5 * DIA },
+    ];
+    canal.telefoneDoLid["111111111111111"] = "+5511900000009";
+    const db = bancoDeMentira();
+    db.apagados.add("+5511900000009");
+    novaImportacao(db);
+    await rodarUmaRodada(db.admin as never, IMP, SEM_TETO);
+    expect(db.rpcs.filter((x) => x.fn === "fn_upsert_wa_contact").map((x) => x.args.p_chat_id)).toEqual([TEL]);
+    expect(db.messages.some((m) => String(m.external_id).includes("B"))).toBe(false);
   });
 
   it("LGPD: erro na pergunta da marca para a rodada sem criar contato (falha fechada)", async () => {

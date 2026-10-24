@@ -60,7 +60,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 import { getWahaClient } from "@/lib/waha/client";
-import { ehReacao, notifyNameOf, type WahaPayload } from "@/lib/waha/ingest";
+import { ehReacao, notifyNameOf, parseChatId, type WahaPayload } from "@/lib/waha/ingest";
 import { MARGEM_PARA_CHAMADA_MS, TETO_DO_DOWNLOAD_MS } from "@/lib/channels/historico/prazo";
 import {
   candidatosDeExternalId,
@@ -286,8 +286,23 @@ export async function rodarUmaRodada(
         }
 
         let alvo: { contactId: string; conversationId: string } | null = null;
+        // Identidades desta conversa já conferidas na trava de apagamento (por rodada).
+        const conferidas = new Set<string>();
+        // Chat @lid: o telefone pode não vir em mensagem nenhuma do acervo, e quem
+        // foi apagado só com telefone voltaria pelo lid. O canal resolve, uma vez.
+        // ponytail: o cliente devolve null em falha de rede; aí só o lid é conferido.
+        let telefoneDoChat: string | null | undefined;
         for (;;) {
           if (noTeto()) return await encerrar("rodando");
+          if (telefoneDoChat === undefined) {
+            const lidDoChat = parseChatId(conversa.chatId).lid;
+            telefoneDoChat = null;
+            if (lidDoChat) {
+              chamadas += 1;
+              telefoneDoChat = await canal.resolvePhoneForLid(nomeNoCanal, lidDoChat);
+              continue;
+            }
+          }
           const limite = Math.min(PAGINA_DE_MENSAGENS, teto.mensagens - processadas);
           chamadas += 1;
           const { mensagens, lidas } = await canal.paginaDeMensagens(nomeNoCanal, conversa.chatId, {
@@ -308,11 +323,15 @@ export async function rodarUmaRodada(
             if (!p.id || ehReacao(p)) desta.ignoradas += 1;
             else validas.push(p);
           }
+          if (validas.length > 0 && (await titularApagadoNaPagina(admin, imp, conversa.chatId, telefoneDoChat, validas, conferidas))) {
+            // Apagado a pedido: esta página e o resto da conversa ficam de fora.
+            desta.ignoradas += validas.length;
+            break;
+          }
           if (validas.length > 0) {
             alvo ??= await garantirContatoEConversa(admin, imp, conversa.chatId, conversa.ultimaEm, validas);
             if (!alvo) {
-              // Chat que não é endereçável (nem telefone nem @lid), ou de quem foi
-              // apagado a pedido: nada a gravar nele.
+              // Chat que não é endereçável (nem telefone nem @lid): nada a gravar nele.
               desta.ignoradas += validas.length;
             } else {
               // Soma direto em `desta`: um erro no meio do linha a linha não perde
@@ -364,6 +383,66 @@ export async function rodarUmaRodada(
 }
 
 /**
+ * QUEM FOI APAGADO A PEDIDO NÃO VOLTA PELO HISTÓRICO (LGPD; doc 186, B). O
+ * celular ainda guarda as conversas de quem pediu para ser apagado; sem esta
+ * pergunta, a importação recriaria o contato e as mensagens.
+ *
+ * Pergunta por TODAS as identidades da página e do chat (cada telefone
+ * canônico, cada lid, os alternativos do `_data.key`, o telefone que o canal
+ * resolveu para o lid do chat), uma chamada por
+ * identidade ainda não conferida nesta conversa: qualquer uma marcada basta.
+ * Roda a cada página, antes do upsert, porque uma identidade pode aparecer só
+ * numa página posterior. Erro na pergunta para a rodada (falha fechada):
+ * importar na dúvida desfaria o apagamento.
+ */
+async function titularApagadoNaPagina(
+  admin: SupabaseClient,
+  imp: Importacao,
+  chatId: string,
+  telefoneDoChat: string | null,
+  mensagens: WahaPayload[],
+  conferidas: Set<string>,
+): Promise<boolean> {
+  const telefones = new Set<string>();
+  const lids = new Set<string>();
+  const anotar = (phone: string | null, lid: string | null) => {
+    if (phone) telefones.add(canonicalPhoneBR(phone));
+    if (lid) lids.add(lid);
+  };
+  const anotarJid = (jid: string | null | undefined) => {
+    if (!jid) return;
+    const p = parseChatId(jid);
+    anotar(p.phone, p.lid);
+  };
+  anotarJid(chatId);
+  anotar(telefoneDoChat, null);
+  for (const p of mensagens) {
+    const id = identidadeDoChat(p);
+    anotar(id.phone, id.lid);
+    anotarJid(id.chatId);
+    anotarJid(p._data?.key?.remoteJidAlt);
+    anotarJid(p._data?.key?.participantAlt);
+  }
+  const perguntas = [
+    ...[...telefones].map((t) => ({ chave: `t:${t}`, p_telefone: t, p_lid: null })),
+    ...[...lids].map((l) => ({ chave: `l:${l}`, p_telefone: null, p_lid: l })),
+  ].filter((q) => !conferidas.has(q.chave));
+  for (const { chave, p_telefone, p_lid } of perguntas) {
+    const { data: apagado, error } = await admin.rpc("fn_titular_apagado_a_pedido" as never, {
+      p_org: imp.organization_id,
+      p_telefone,
+      p_lid,
+    } as never);
+    if (error) throw new Error(`fn_titular_apagado_a_pedido: ${mensagemDeErro(error)}`);
+    // Resposta que não é sim/não também para a rodada: na dúvida, não importa.
+    if (typeof apagado !== "boolean") throw new Error("fn_titular_apagado_a_pedido: resposta sem booleano");
+    if (apagado) return true;
+    conferidas.add(chave);
+  }
+  return false;
+}
+
+/**
  * Contato pela MESMA RPC e com o MESMO telefone canônico do ingest ao vivo, e
  * conversa pela irmã que não reabre nem distribui. O nome só vem de mensagem
  * RECEBIDA: na enviada, o `pushName` é o do operador.
@@ -385,21 +464,6 @@ async function garantirContatoEConversa(
     .filter((p) => p.fromMe !== true)
     .map((p) => notifyNameOf(p)?.trim().slice(0, 200) || null)
     .find((n) => n) ?? null;
-  const telefone = identidades.find((x) => x.phone)?.phone ?? null;
-
-  // QUEM FOI APAGADO A PEDIDO NÃO VOLTA PELO HISTÓRICO (LGPD; doc 186, B). O
-  // celular ainda guarda as conversas de quem pediu para ser apagado; sem esta
-  // pergunta, a importação recriaria o contato e as mensagens. A marca é por
-  // telefone OU lid, e qualquer identidade do chat basta. Antes do upsert do
-  // contato: perguntar depois já teria recriado a ficha. Erro na pergunta para
-  // a rodada (falha fechada): importar na dúvida desfaria o apagamento.
-  const { data: apagado, error: erroDaMarca } = await admin.rpc("fn_titular_apagado_a_pedido" as never, {
-    p_org: imp.organization_id,
-    p_telefone: telefone ? canonicalPhoneBR(telefone) : null,
-    p_lid: identidades.find((x) => x.lid)?.lid ?? null,
-  } as never);
-  if (erroDaMarca) throw new Error(`fn_titular_apagado_a_pedido: ${mensagemDeErro(erroDaMarca)}`);
-  if (apagado === true) return null;
 
   const { data: contactId, error: erroDoContato } = await admin.rpc("fn_upsert_wa_contact" as never, {
     p_org: imp.organization_id,
