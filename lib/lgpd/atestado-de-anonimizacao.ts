@@ -57,13 +57,56 @@
  *
  * Decisão de produto de 2026-10-16, confirmada no CR do PR #3321 (item 3): no
  * Brasil nada muda por enquanto — nem o aviso do art. 12.º nem este atestado.
- * A guarda do país mora no worker (`avisaTitular`, de `perfil.codigo !==
- * PAIS_PADRAO`); este módulo não sabe de país nenhum, só compõe o documento.
+ * A regra é UMA, `exclusaoForaDoBrasil` (abaixo), e tem dois leitores: o worker
+ * (`avisaTitular`, que decide aviso e papel) e a rota de aprovação (que só grava
+ * a evidência do ato quando ela vai virar papel). Duas cópias da regra seriam
+ * duas respostas possíveis para a mesma pergunta.
  */
 import { createHash, createHmac } from "node:crypto";
 
+import { PAIS_PADRAO } from "@/lib/legal/perfil-do-pais";
+
 /** Versão do FORMATO. Entra na linha canônica: mudar o layout muda o código. */
 export const VERSAO_DO_ATESTADO = "atestado-de-anonimizacao.v1";
+
+/** Os tipos de pedido que APAGAM — os únicos que o worker de exclusão executa. */
+const TIPOS_DE_EXCLUSAO: readonly string[] = ["redact", "store_redact"];
+
+/**
+ * A guarda do país (decisão de 2026-10-16): só o pedido de exclusão de uma
+ * organização de FORA do Brasil avisa o titular e ganha atestado. No Brasil, e
+ * em todo pedido de dados, nada disso existe — e por isso a rota de aprovação
+ * também não grava quem aprovou nem de qual IP: sem papel, esse dado de quem
+ * opera não teria leitor.
+ */
+export function exclusaoForaDoBrasil(requestType: string, codigoDoPais: string): boolean {
+  return TIPOS_DE_EXCLUSAO.includes(requestType) && codigoDoPais !== PAIS_PADRAO;
+}
+
+/**
+ * O instante do ato como o papel o imprime: data e hora LOCAIS, no fuso da
+ * organização, com o fuso dito ao lado. O ISO em UTC continua na linha canônica
+ * (é o que um auditor reproduz); impresso, ele faria o titular de Lisboa ler uma
+ * hora que não é a dele. Fuso inválido no cadastro cai para UTC — e o rótulo diz
+ * UTC, em vez de pôr o nome do fuso ao lado de uma hora que não é dele.
+ */
+export function dataHoraNoFuso(iso: string, fuso: string): string {
+  const opcoes: Intl.DateTimeFormatOptions = {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  };
+  const instante = new Date(iso);
+  try {
+    return `${new Intl.DateTimeFormat("pt-BR", { ...opcoes, timeZone: fuso }).format(instante)} (${fuso})`;
+  } catch {
+    return `${new Intl.DateTimeFormat("pt-BR", { ...opcoes, timeZone: "UTC" }).format(instante)} (UTC)`;
+  }
+}
 
 /** Quem executou, de onde e quando — a evidência que o documento carrega. */
 export interface EvidenciaDaExecucao {
@@ -75,7 +118,6 @@ export interface EvidenciaDaExecucao {
   executor: { user_id: string | null; nome: string; email: string | null; papel: string } | null;
   /** IP do ato que executou. `null` = execução automática, sem ato humano. */
   ip: string | null;
-  user_agent: string | null;
   /** Instante ISO 8601 do ato de execução (não o do recebimento). */
   em: string;
   origem: "aprovacao_manual" | "automatica";
@@ -191,7 +233,7 @@ export function textoDaDeclaracao(d: DadosDoAtestado): string {
   return [
     `Declaramos, na condição de controlador, que em cumprimento ao pedido de exclusão protocolado sob o número ${d.request_id},`,
     `${escopo} foram ANONIMIZADOS nos sistemas desta organização,`,
-    `com a eliminação dos campos identificáveis, em ${d.evidencia.em}, por ${executor}${origem}.`,
+    `com a eliminação dos campos identificáveis, em ${dataHoraNoFuso(d.evidencia.em, d.fuso)}, por ${executor}${origem}.`,
     "Este documento não reproduz nome, documento nem contato do titular — o vínculo com o pedido é o protocolo acima.",
     "O registro desta execução é mantido em trilha de auditoria imutável para demonstração, e este documento é a prova",
     "que o requerente pode guardar. O código de autenticidade abaixo amarra este conjunto de informações ao registro.",
@@ -216,7 +258,7 @@ export function evidenciaDoPedido(
   instanteDaExecucao: string,
 ): EvidenciaDaExecucao {
   const bruto = execucaoGravada as
-    | { origem?: unknown; executor?: { user_id?: unknown; nome?: unknown; email?: unknown; papel?: unknown } | null; ip?: unknown; user_agent?: unknown; em?: unknown }
+    | { origem?: unknown; executor?: { user_id?: unknown; nome?: unknown; email?: unknown; papel?: unknown } | null; ip?: unknown; em?: unknown }
     | null
     | undefined;
   const executante = bruto && typeof bruto === "object" ? bruto.executor : null;
@@ -230,10 +272,9 @@ export function evidenciaDoPedido(
         papel: typeof executante?.papel === "string" ? executante.papel : "administrador",
       },
       ip: typeof bruto.ip === "string" ? bruto.ip : null,
-      user_agent: typeof bruto.user_agent === "string" ? bruto.user_agent : null,
       em: typeof bruto.em === "string" ? bruto.em : instanteDaExecucao,
       origem: "aprovacao_manual",
     };
   }
-  return { executor: null, ip: null, user_agent: null, em: instanteDaExecucao, origem: "automatica" };
+  return { executor: null, ip: null, em: instanteDaExecucao, origem: "automatica" };
 }

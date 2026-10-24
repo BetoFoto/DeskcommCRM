@@ -22,6 +22,7 @@
  * emissão que falhou (e então o motivo está em `result.atestado.erro` — a
  * resposta o traz, em vez de dizer só "não existe").
  */
+import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
@@ -47,7 +48,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
-  const requestId = id;
+  const requestId = randomUUID();
 
   // `permiteOrgSuspensa`: LGPD nunca é bloqueada por org suspensa (spec §1.3 —
   // o titular pede o dado dele, e a suspensão é do contrato, não do direito).

@@ -22,6 +22,8 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ipDoCliente } from "@/lib/http/ip-do-cliente";
+import { perfilDaOrganizacao } from "@/lib/legal/perfil-do-pais";
+import { exclusaoForaDoBrasil } from "@/lib/lgpd/atestado-de-anonimizacao";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -178,6 +180,14 @@ export async function POST(
   // onde o produto guarda o contexto, e o que o worker lê —, e NÃO na trilha de
   // auditoria: a auditoria segue sem PII, e IP de quem opera é dado de pessoa
   // identificável.
+  //
+  // E SÓ quando ela vai virar papel: pedido de exclusão fora do Brasil, a mesma
+  // regra (`exclusaoForaDoBrasil`) que o worker usa para emitir o atestado. No
+  // Brasil e em pedido de dados ninguém a lê, e dado de quem opera sem leitor
+  // não fica guardado. (Levar o IP para o `actor_ip` da auditoria de
+  // `lgpd.manually_approved` é dívida anotada no PR #3321.)
+  const perfil = await perfilDaOrganizacao(admin, orgId);
+  const geraAtestado = exclusaoForaDoBrasil(request.request_type, perfil.codigo);
   const evidenciaDaExecucao = {
     origem: "aprovacao_manual" as const,
     executor: {
@@ -192,7 +202,6 @@ export async function POST(
           : "administrador",
     },
     ip: ipDoCliente(req.headers),
-    user_agent: req.headers.get("user-agent"),
     em: new Date().toISOString(),
   };
 
@@ -202,12 +211,16 @@ export async function POST(
     .update({
       status: "processing",
       updated_at: new Date().toISOString(),
-      request_payload: {
-        ...(typeof request.request_payload === "object" && request.request_payload !== null
-          ? (request.request_payload as Record<string, unknown>)
-          : {}),
-        execucao: evidenciaDaExecucao,
-      },
+      ...(geraAtestado
+        ? {
+            request_payload: {
+              ...(typeof request.request_payload === "object" && request.request_payload !== null
+                ? (request.request_payload as Record<string, unknown>)
+                : {}),
+              execucao: evidenciaDaExecucao,
+            },
+          }
+        : {}),
     })
     .eq("organization_id", orgId)
     .eq("id", id);

@@ -32,6 +32,7 @@ import React from "react";
 
 import {
   VERSAO_DO_ATESTADO,
+  dataHoraNoFuso,
   textoDaDeclaracao,
   type AlgoritmoDoCodigo,
   type DadosDoAtestado,
@@ -119,7 +120,7 @@ export function AtestadoDeAnonimizacaoPdf({ dados, codigo, algoritmo }: PropsDoA
           <Text style={styles.sectionTitle}>Execução</Text>
           <View style={styles.row}>
             <Text style={styles.label}>Data e hora:</Text>
-            <Text style={styles.value}>{`${e.em} (${dados.fuso})`}</Text>
+            <Text style={styles.value}>{dataHoraNoFuso(e.em, dados.fuso)}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Executado por:</Text>

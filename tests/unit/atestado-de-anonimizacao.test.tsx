@@ -74,7 +74,6 @@ function dados(over: Partial<DadosDoAtestado> = {}): DadosDoAtestado {
     evidencia: {
       executor: { user_id: "u1", nome: "Ana Lima", email: "ana@loja.exemplo", papel: "administrador" },
       ip: "203.0.113.7",
-      user_agent: "Mozilla/5.0",
       em: "2026-10-22T15:04:05.000Z",
       origem: "aprovacao_manual",
     },
@@ -110,13 +109,37 @@ describe("o papel declara o que o pedido precisa provar", () => {
     expect(p).toMatch(/Protocolo #11111111/);
     expect(p).toContain("identificado apenas pelo protocolo do pedido");
     // O ato: quando, quem, de onde.
-    expect(p).toContain("2026-10-22T15:04:05.000Z (America/Sao_Paulo)");
+    expect(p).toContain("22/10/2026, 12:04:05 (America/Sao_Paulo)");
     expect(p).toContain("Ana Lima");
     expect(p).toContain("203.0.113.7");
     expect(p).toContain("aprovação no painel");
     // E o que amarra tudo.
     expect(p).toContain("A1B2-C3D4-E5F6-7890");
     expect(p).toContain(VERSAO_DO_ATESTADO);
+  });
+
+  it("a data e a hora saem no fuso da ORGANIZAÇÃO — no campo e na declaração", () => {
+    // 15:04:05 em UTC é 16:04:05 em Lisboa (WEST, UTC+1, até 25/10/2026). O ISO
+    // em UTC ao lado de "(Europe/Lisbon)" faria o titular ler uma hora que não
+    // é a dele.
+    const d = dados({ fuso: "Europe/Lisbon" });
+    const p = papel(d);
+    const declaracao = textoDaDeclaracao(d);
+
+    expect(p).toContain("22/10/2026, 16:04:05 (Europe/Lisbon)");
+    expect(declaracao).toContain("em 22/10/2026, 16:04:05 (Europe/Lisbon)");
+    for (const impresso of [p, declaracao]) {
+      expect(impresso, "o papel voltou a imprimir o ISO em UTC").not.toContain("2026-10-22T15:04:05");
+      expect(impresso).not.toMatch(/\d{2}:\d{2}:\d{2}(\.\d+)?Z/);
+    }
+    // A linha canônica segue com o ISO: é o que um auditor reproduz.
+    expect(linhaCanonica(d)).toContain("2026-10-22T15:04:05.000Z");
+  });
+
+  it("fuso inválido no cadastro cai para UTC — e diz UTC, não o nome do fuso", () => {
+    const p = papel(dados({ fuso: "Marte/Olympus" }));
+    expect(p).toContain("22/10/2026, 15:04:05 (UTC)");
+    expect(p).not.toContain("Marte/Olympus");
   });
 
   it("NÃO imprime nome, documento nem contato do titular — nem mascarados (item 1 do CR)", () => {
@@ -264,10 +287,11 @@ describe("a evidência vem do que o pedido guardou — nada é adivinhado", () =
       "2026-10-22T13:00:00.000Z",
     );
 
+    // O `user_agent` que um pedido antigo guardou NÃO é copiado: nada o imprime
+    // nem o consome, e dado de quem opera sem leitor não atravessa.
     expect(e).toEqual({
       executor: { user_id: "u9", nome: "Ana Lima", email: "ana@loja", papel: "owner" },
       ip: "198.51.100.9",
-      user_agent: "Firefox",
       em: "2026-10-22T12:00:00.000Z",
       origem: "aprovacao_manual",
     });

@@ -86,7 +86,11 @@ export async function emitirAtestadoDeAnonimizacao(
   const pdf = await renderAtestadoPdf({ dados, codigo: codigoCurto(codigo), algoritmo });
   const assinado = await signPdfPades(pdf);
 
-  const path = `atestados/${dados.organization_id}/${dados.request_id}.pdf`;
+  // A org vem PRIMEIRO no caminho, como no relatório do art. 18, II
+  // (`{org}/{pedido}/report.pdf`): é o prefixo que a exclusão da organização
+  // (`fn_arquivos_da_organizacao`, `name like org || '/%'`) e a policy de leitura
+  // do bucket (`split_part(name, '/', 1)::uuid`) usam para achar o arquivo.
+  const path = `${dados.organization_id}/${dados.request_id}/atestado.pdf`;
   const { error } = await admin.storage.from(BUCKET_DO_ATESTADO).upload(path, assinado.signed, {
     contentType: "application/pdf",
     // Regravar o mesmo caminho é o que torna a retomada do pedido idempotente

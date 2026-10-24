@@ -40,7 +40,6 @@ function dados(over: Partial<DadosDoAtestado> = {}): DadosDoAtestado {
     evidencia: {
       executor: { user_id: "u1", nome: "Ana Lima", email: "ana@loja.exemplo", papel: "administrador" },
       ip: "203.0.113.7",
-      user_agent: "Mozilla/5.0",
       em: "2026-10-22T15:04:05.000Z",
       origem: "aprovacao_manual",
     },
@@ -87,7 +86,11 @@ describe("a emissão do atestado", () => {
 
     expect(gravados).toHaveLength(1);
     expect(gravados[0]!.bucket).toBe(BUCKET_DO_ATESTADO);
-    expect(gravados[0]!.path).toBe("atestados/org-1/11111111-2222-3333-4444-555555555555.pdf");
+    expect(gravados[0]!.path).toBe("org-1/11111111-2222-3333-4444-555555555555/atestado.pdf");
+    // O contrato de `fn_arquivos_da_organizacao` (`name like org || '/%'`): sem a
+    // org no PRIMEIRO pedaço, a exclusão da organização não alcança o atestado e
+    // ele sobra no Storage depois que a empresa saiu.
+    expect(gravados[0]!.path.startsWith(`${dados().organization_id}/`)).toBe(true);
     // `upsert` é o que torna a retomada do pedido idempotente em vez de encher o
     // bucket de `atestado(1).pdf`.
     expect(gravados[0]!.opcoes).toMatchObject({ contentType: "application/pdf", upsert: true });

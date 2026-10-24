@@ -50,6 +50,10 @@ const h = vi.hoisted(() => {
   const estado = {
     /** O país que `perfilDaOrganizacao` responde: `PT` avisa (e emite), `BR` não. */
     pais: "PT",
+    /** O encarregado no cadastro da organização (`organizations.dpo_email`). */
+    dpoDaOrganizacao: "dpo@loja.exemplo" as string | null,
+    /** O piso da instalação (`LGPD_DPO_EMAIL`), o mesmo do relatório do art. 18, II. */
+    dpoDaInstalacao: null as string | null,
     /** O que existe na linha do contato no momento da leitura — o endereço do aviso. */
     contatoEmail: "" as string | null,
     /** Tudo que o worker fez, na ORDEM: é assim que a ordem vira asserção de comportamento. */
@@ -69,7 +73,7 @@ const h = vi.hoisted(() => {
           legal_name: "Loja Exemplo LTDA",
           display_name: "Loja Exemplo",
           cnpj: "12.345.678/0001-90",
-          dpo_email: "dpo@loja.exemplo",
+          dpo_email: estado.dpoDaOrganizacao,
           timezone: "America/Sao_Paulo",
         },
         error: null,
@@ -119,6 +123,9 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.criar() }));
+vi.mock("@/lib/instalacao/config", () => ({
+  valorDaInstalacao: vi.fn(async () => ({ valor: h.estado.dpoDaInstalacao })),
+}));
 vi.mock("@/lib/legal/perfil-do-pais", async (orig) => {
   const real = await orig<typeof import("@/lib/legal/perfil-do-pais")>();
   // O país vem do PERFIL REAL do repositório; só a leitura da coluna é substituída.
@@ -150,7 +157,6 @@ vi.mock("@/lib/lgpd/repository", () => ({
         origem: "aprovacao_manual",
         executor: { user_id: "u1", nome: "Ana Lima", email: "ana@loja.test", papel: "administrador" },
         ip: "203.0.113.7",
-        user_agent: "Mozilla/5.0",
         em: "2026-10-22T15:04:05.000Z",
       },
     },
@@ -217,6 +223,8 @@ function resultadoGravado(): Record<string, unknown> {
 
 beforeEach(() => {
   h.estado.pais = "PT";
+  h.estado.dpoDaOrganizacao = "dpo@loja.exemplo";
+  h.estado.dpoDaInstalacao = null;
   h.estado.contatoEmail = PII.email;
   h.estado.eventos.length = 0;
   h.estado.uploads.length = 0;
@@ -258,11 +266,11 @@ describe("a ordem no worker", () => {
   });
 
   it("o aviso do art. 12.º continua com a guarda do país — o atestado não a desfez", () => {
-    expect(fonte).toContain("const avisaTitular = perfil.codigo !== PAIS_PADRAO;");
+    expect(fonte).toContain("const avisaTitular = exclusaoForaDoBrasil(req.request_type, perfil.codigo);");
   });
 
   it("a guarda do país precede a leitura do contato E a emissão do papel (item 3 do CR)", () => {
-    const guarda = fonte.indexOf("const avisaTitular = perfil.codigo !== PAIS_PADRAO;");
+    const guarda = fonte.indexOf("const avisaTitular = exclusaoForaDoBrasil(req.request_type, perfil.codigo);");
     const condicionada = fonte.indexOf("if (avisaTitular) {");
     expect(guarda).toBeGreaterThan(-1);
     expect(condicionada, "nem a leitura nem a emissão estão atrás de `avisaTitular`").toBeGreaterThan(guarda);
@@ -294,7 +302,7 @@ describe("a guarda do país governa o atestado e a leitura do contato — os DOI
     // E o papel foi gravado no bucket do titular, uma vez.
     expect(h.estado.uploads).toHaveLength(1);
     expect(h.estado.uploads[0]!.bucket).toBe(BUCKET_DO_ATESTADO);
-    expect(h.estado.uploads[0]!.path).toBe(`atestados/${ORG}/${PEDIDO}.pdf`);
+    expect(h.estado.uploads[0]!.path).toBe(`${ORG}/${PEDIDO}/atestado.pdf`);
     // O resultado do pedido declara o papel (código + hash) e o aviso. O
     // algoritmo NÃO é fixado aqui: sem `LGPD_SIGNING_KEY` no ambiente do teste a
     // instalação degrada para SHA-256 (o caso que existe é o papel sair), e o
@@ -361,10 +369,38 @@ describe("a cópia GRAVADA no Storage não carrega o que a anonimização apagou
   });
 });
 
+describe("o encarregado do papel tem o mesmo piso do relatório do art. 18, II (item 6 do CR)", () => {
+  it("sem encarregado no cadastro da organização, o papel traz o da instalação", async () => {
+    h.estado.dpoDaOrganizacao = "   ";
+    h.estado.dpoDaInstalacao = " encarregado@instalacao.test ";
+
+    await processLgpdRedact(evento());
+
+    expect(h.estado.uploads).toHaveLength(1);
+    const texto = await extractPdfText(h.estado.uploads[0]!.corpo);
+    expect(texto).toContain("Loja Exemplo LTDA");
+    expect(texto, "o papel ignorou o encarregado da instalação").toContain("encarregado@instalacao.test");
+  });
+
+  it("com encarregado no cadastro, o da organização vence o da instalação", async () => {
+    h.estado.dpoDaInstalacao = "encarregado@instalacao.test";
+
+    await processLgpdRedact(evento());
+
+    const texto = await extractPdfText(h.estado.uploads[0]!.corpo);
+    expect(texto).toContain("dpo@loja.exemplo");
+    expect(texto).not.toContain("encarregado@instalacao.test");
+  });
+});
+
 describe("a evidência do ato é capturada onde ela existe: na requisição", () => {
   it("a rota de aprovação grava o IP, o autor e o instante no pedido", () => {
     expect(rotaAprovar).toContain("ip: ipDoCliente(req.headers),");
-    expect(rotaAprovar).toContain("user_agent: req.headers.get(\"user-agent\"),");
+    // O `user_agent` saiu: nada o imprime nem o consome (item 7 do CR).
+    expect(rotaAprovar).not.toContain("user_agent");
+    // E a evidência só é gravada onde vira papel — o comportamento nos dois
+    // sentidos está em `atestado-evidencia-so-onde-ha-papel.test.ts`.
+    expect(rotaAprovar).toContain("exclusaoForaDoBrasil(request.request_type, perfil.codigo)");
     expect(rotaAprovar).toContain("user_id: authUser.id,");
     expect(rotaAprovar).toContain("execucao: evidenciaDaExecucao,");
     // O IP é dado de pessoa identificável: entra no pedido, e NÃO na trilha.

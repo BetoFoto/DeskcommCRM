@@ -27,9 +27,10 @@ import { createHash } from "node:crypto";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { audit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
-import { perfilDaOrganizacao, PAIS_PADRAO } from "@/lib/legal/perfil-do-pais";
+import { valorDaInstalacao } from "@/lib/instalacao/config";
+import { perfilDaOrganizacao } from "@/lib/legal/perfil-do-pais";
 import { findContactByExternalId, findLgpdRequest } from "@/lib/lgpd/repository";
-import { evidenciaDoPedido, type DadosDoAtestado } from "@/lib/lgpd/atestado-de-anonimizacao";
+import { evidenciaDoPedido, exclusaoForaDoBrasil, type DadosDoAtestado } from "@/lib/lgpd/atestado-de-anonimizacao";
 import { avisarTitularAposApagamento } from "@/lib/lgpd/aviso-apos-apagar";
 import { emitirAtestadoDeAnonimizacao, type AtestadoEmitido } from "@/lib/lgpd/emitir-atestado";
 import { cascadeRedactContact } from "@/lib/lgpd/redact-cascade";
@@ -240,7 +241,9 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
       // RGPD). O payload do pedido serve de fallback para o pedido que veio de
       // plataforma, onde o contato pode nem ter e-mail.
       const perfil = await perfilDaOrganizacao(admin, orgId);
-      const avisaTitular = perfil.codigo !== PAIS_PADRAO;
+      // A regra mora em `exclusaoForaDoBrasil`, a mesma que a rota de aprovação
+      // lê para decidir se grava a evidência do ato: uma pergunta, uma resposta.
+      const avisaTitular = exclusaoForaDoBrasil(req.request_type, perfil.codigo);
 
       let emailTitular: string | null = null;
       if (avisaTitular) {
@@ -361,7 +364,10 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
             organization_id: orgId,
             organization_name: org?.legal_name ?? org?.display_name ?? "não informado",
             organization_document: org?.cnpj ?? null,
-            organization_email: org?.dpo_email ?? null,
+            // O mesmo piso do relatório do art. 18, II (`lgpd-export-worker.ts`):
+            // sem encarregado no cadastro da organização, vale o da instalação.
+            organization_email:
+              org?.dpo_email?.trim() || (await valorDaInstalacao("LGPD_DPO_EMAIL")).valor?.trim() || null,
             evidencia: evidenciaDoPedido(req.request_payload?.["execucao"], instanteDaExecucao),
             escopo: req.scope === "tenant" ? "tenant" : "contact",
             fuso: org?.timezone ?? "America/Sao_Paulo",
